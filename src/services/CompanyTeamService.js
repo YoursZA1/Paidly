@@ -66,21 +66,24 @@ export async function inviteCompanyMember({
   fullName,
   role = COMPANY_ROLES.EMPLOYEE,
   jobFunction = "general",
-}) {
+  source,
+} = {}) {
   const trimmed = String(email || "").trim().toLowerCase();
   if (!trimmed) throw new Error("Email is required");
 
   const headers = await authHeaders();
   const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
+  const payload = {
+    email: trimmed,
+    full_name: fullName?.trim() || null,
+    role: normalizeCompanyRole(role),
+    job_function: normalizeJobFunction(jobFunction),
+  };
+  if (source) payload.source = String(source).trim().toLowerCase();
   const res = await apiRequest(`${apiBase}/api/company/invite`, {
     method: "POST",
     headers,
-    body: JSON.stringify({
-      email: trimmed,
-      full_name: fullName?.trim() || null,
-      role: normalizeCompanyRole(role),
-      job_function: normalizeJobFunction(jobFunction),
-    }),
+    body: JSON.stringify(payload),
   });
   const raw = await res.text().catch(() => "");
   return parseApiJsonError(res, raw, "Invite failed");

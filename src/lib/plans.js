@@ -19,4 +19,5 @@ export {
   hasFeature,
   planIncludesFeature,
   priceForSlug,
+  POS_PLAN_FEATURE,
 } from "../../shared/plans.js";

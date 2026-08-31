@@ -79,13 +79,20 @@ serve(async (req) => {
 
     const emailSubject = subject || "Your Invoice";
     const attachmentFilename = filename || "invoice.pdf";
+    const idempotencyKey =
+      typeof payload?.idempotencyKey === "string" ? payload.idempotencyKey.trim().slice(0, 256) : "";
+
+    const resendHeaders: Record<string, string> = {
+      "Authorization": `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    };
+    if (idempotencyKey) {
+      resendHeaders["Idempotency-Key"] = idempotencyKey;
+    }
 
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: resendHeaders,
       body: JSON.stringify({
         from: RESEND_FROM,
         to: email,

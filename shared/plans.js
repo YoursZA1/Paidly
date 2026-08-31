@@ -13,9 +13,10 @@ import {
   familyHasFeature,
   normalizePlanFamily,
   PLAN_FAMILIES,
+  POS_PLAN_FEATURE,
 } from "./planFeatures.js";
 
-export { FAMILY_FEATURES, FAMILY_LIMITS, FAMILY_TIER_RANK, familyHasFeature, PLAN_FAMILIES };
+export { FAMILY_FEATURES, FAMILY_LIMITS, FAMILY_TIER_RANK, familyHasFeature, PLAN_FAMILIES, POS_PLAN_FEATURE };
 
 /** @deprecated Prefer plans.features — kept for EntityManager / older callers */
 export const base = ["invoices", "clients", "email"];

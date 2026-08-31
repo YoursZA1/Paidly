@@ -326,7 +326,7 @@ export default function RecurringInvoices() {
                                                     return (<>
                                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                             {pagedActive.map(ri => (
-                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("edit-recurring-invoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
+                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("EditRecurringInvoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
                                                             ))}
                                                         </div>
                                                         <TablePagination page={activePage} totalPages={Math.max(1, Math.ceil(allActive.length / RI_PAGE_SIZE))} onPageChange={setActivePage} totalItems={allActive.length} itemLabel="active templates" />
@@ -350,7 +350,7 @@ export default function RecurringInvoices() {
                                                     return (<>
                                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                             {pagedPaused.map(ri => (
-                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("edit-recurring-invoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
+                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("EditRecurringInvoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
                                                             ))}
                                                         </div>
                                                         <TablePagination page={pausedPage} totalPages={Math.max(1, Math.ceil(allPaused.length / RI_PAGE_SIZE))} onPageChange={setPausedPage} totalItems={allPaused.length} itemLabel="paused templates" />
@@ -374,7 +374,7 @@ export default function RecurringInvoices() {
                                                     return (<>
                                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                             {pagedEnded.map(ri => (
-                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("edit-recurring-invoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
+                                                                <RecurringInvoiceCard key={ri.id} recurringInvoice={ri} clientName={getClientName(ri.client_id)} onEdit={(inv) => navigate(createPageUrl("EditRecurringInvoice") + `?id=${inv.id}`)} onViewCycleHistory={handleViewCycleHistory} onRefresh={handleRefreshCard} />
                                                             ))}
                                                         </div>
                                                         <TablePagination page={endedPage} totalPages={Math.max(1, Math.ceil(allEnded.length / RI_PAGE_SIZE))} onPageChange={setEndedPage} totalItems={allEnded.length} itemLabel="ended templates" />

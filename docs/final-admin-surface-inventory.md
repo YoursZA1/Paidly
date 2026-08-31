@@ -14,7 +14,6 @@ These are the only real admin pages. All other admin paths are redirects to one 
 | `/admin-v2/users` | `UsersPage` | all staff | ✅ Active |
 | `/admin-v2/messages` | `AdminPlatformMessages` | all staff | ✅ Active |
 | `/admin-v2/subscriptions` | `SubscriptionsPage` | admin, management, sales | ✅ Active |
-| `/admin-v2/affiliates` | `AffiliatesPage` | admin, management, support | ✅ Active |
 | `/admin-v2/waitlist` | `WaitlistPage` | all staff | ✅ Active |
 | `/admin-v2/audit-log` | `AuditLogPage` | admin, management | ✅ Active |
 | `/admin-v2/settings` | `SettingsPage` | admin, management | ✅ Active |

@@ -72,7 +72,7 @@ export function checkoutErrorFromHttp(status, payload) {
     "";
 
   if (status === 401 || code === "AUTH_REQUIRED") {
-    return new SubscriptionCheckoutError("Please sign in to subscribe.", {
+    return new SubscriptionCheckoutError("Your session has expired. Please sign in again.", {
       code: "AUTH_REQUIRED",
       status: 401,
       retryable: true,
@@ -116,17 +116,79 @@ export function checkoutErrorFromHttp(status, payload) {
   });
 }
 
-function submitPayfastForm(payfastUrl, fields, fieldOrder) {
-  if (typeof document === "undefined") {
-    throw new SubscriptionCheckoutError(USER_RETRY_MESSAGE, { code: "PAYFAST_REDIRECT_FAILED" });
+function isPayfastProcessUrl(url) {
+  try {
+    const parsed = new URL(String(url || "").trim());
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (host !== "www.payfast.co.za" && host !== "sandbox.payfast.co.za") return false;
+    return parsed.pathname.replace(/\/$/, "") === "/eng/process";
+  } catch {
+    return false;
   }
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = payfastUrl;
-  form.acceptCharset = "utf-8";
-  form.style.display = "none";
+}
+
+const HANDOFF_RETRY_MESSAGE = "We couldn't open the PayFast payment page. Please try again.";
+
+function newCheckoutRequestId() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    /* ignore */
+  }
+  return `chk_${Date.now().toString(36)}`;
+}
+
+function logSubscription(requestId, message, extra) {
+  const prefix = `[SUBSCRIPTION][requestId=${requestId || "n/a"}]`;
+  if (extra && typeof extra === "object") {
+    console.info(prefix, message, extra);
+  } else {
+    console.info(prefix, message);
+  }
+}
+
+function isPlainCheckoutValue(value) {
+  if (value == null) return false;
+  const t = typeof value;
+  if (t === "string" || t === "number" || t === "boolean") return true;
+  return false;
+}
+
+/**
+ * Same-window POST to PayFast. Do not use window.open (popup blockers / iOS).
+ * Do not use display:none — WebKit can ignore submit on hidden forms after an async fetch.
+ * Do not encode values; the browser encodes the POST body once. Do not alter signature.
+ *
+ * @returns {true}
+ */
+export function submitPayfastCheckoutForm(payfastUrl, fields, fieldOrder, { requestId } = {}) {
+  if (typeof document === "undefined") {
+    throw new SubscriptionCheckoutError(HANDOFF_RETRY_MESSAGE, { code: "PAYFAST_REDIRECT_FAILED" });
+  }
+
+  const url = String(payfastUrl || "").trim();
+  if (!isPayfastProcessUrl(url)) {
+    logSubscription(requestId, "Checkout handoff failed", { reason: "invalid_url" });
+    throw new SubscriptionCheckoutError(HANDOFF_RETRY_MESSAGE, { code: "PAYFAST_REDIRECT_FAILED" });
+  }
 
   const src = fields && typeof fields === "object" ? fields : {};
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = url;
+  form.acceptCharset = "utf-8";
+  form.target = "_self";
+  form.setAttribute("data-paidly-payfast-checkout", "1");
+  // Off-screen but submittable. display:none is skipped by some iOS WebKit versions.
+  form.setAttribute(
+    "style",
+    "position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;margin:0;padding:0;border:0;"
+  );
+  form.setAttribute("aria-hidden", "true");
+
   const orderedKeys =
     Array.isArray(fieldOrder) && fieldOrder.length
       ? fieldOrder.filter((k) => k !== "signature")
@@ -135,28 +197,42 @@ function submitPayfastForm(payfastUrl, fields, fieldOrder) {
   orderedKeys.forEach((key) => {
     if (!Object.prototype.hasOwnProperty.call(src, key)) return;
     const value = src[key];
-    if (value == null || String(value).trim() === "") return;
+    if (!isPlainCheckoutValue(value)) return;
+    const asString = String(value);
+    if (asString.trim() === "") return;
     const input = document.createElement("input");
     input.type = "hidden";
-    input.name = key;
-    input.value = String(value);
+    input.name = String(key);
+    input.value = asString;
     form.appendChild(input);
   });
 
-  if (src.signature) {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = "signature";
-    input.value = String(src.signature);
-    form.appendChild(input);
+  if (!isPlainCheckoutValue(src.signature) || String(src.signature).trim() === "") {
+    logSubscription(requestId, "Checkout handoff failed", { reason: "missing_signature" });
+    throw new SubscriptionCheckoutError(HANDOFF_RETRY_MESSAGE, { code: "PAYFAST_REDIRECT_FAILED" });
   }
 
-  if (!form.querySelector('input[name="signature"]')) {
-    throw new SubscriptionCheckoutError(USER_RETRY_MESSAGE, { code: "PAYFAST_REDIRECT_FAILED" });
-  }
+  const sig = document.createElement("input");
+  sig.type = "hidden";
+  sig.name = "signature";
+  sig.value = String(src.signature);
+  form.appendChild(sig);
 
   document.body.appendChild(form);
-  form.submit();
+  logSubscription(requestId, "Checkout submitted");
+
+  try {
+    HTMLFormElement.prototype.submit.call(form);
+  } catch {
+    try {
+      form.submit();
+    } catch {
+      logSubscription(requestId, "Checkout handoff failed", { reason: "submit_threw" });
+      throw new SubscriptionCheckoutError(HANDOFF_RETRY_MESSAGE, { code: "PAYFAST_REDIRECT_FAILED" });
+    }
+  }
+
+  return true;
 }
 
 async function readJsonSafe(response) {
@@ -176,7 +252,7 @@ async function getCheckoutAccessToken() {
   }
   const stored = useAuthSessionStore.getState().session;
   if (stored?.accessToken) return stored.accessToken;
-  throw new SubscriptionCheckoutError("Please sign in to subscribe.", {
+  throw new SubscriptionCheckoutError("Your session has expired. Please sign in again.", {
     code: "AUTH_REQUIRED",
     status: 401,
   });
@@ -249,8 +325,10 @@ export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cance
 
   checkoutInFlight = true;
   let redirected = false;
+  let requestId = newCheckoutRequestId();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CHECKOUT_REQUEST_TIMEOUT_MS);
+  logSubscription(requestId, "Start");
 
   try {
     const accessToken = await getCheckoutAccessToken();
@@ -293,10 +371,15 @@ export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cance
     }
 
     const data = await readJsonSafe(response);
+    if (typeof data?.requestId === "string" && data.requestId.trim()) {
+      requestId = data.requestId.trim();
+    }
 
     if (!response.ok) {
       throw checkoutErrorFromHttp(response.status, data);
     }
+
+    logSubscription(requestId, "API success");
 
     const checkoutUrl = data?.checkout?.url || data?.redirectUrl || data?.payfastUrl;
     const fields = data?.checkout?.fields || data?.fields;
@@ -308,10 +391,25 @@ export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cance
       });
     }
 
+    logSubscription(requestId, "PayFast checkout generated", {
+      host: (() => {
+        try {
+          return new URL(checkoutUrl).host;
+        } catch {
+          return "invalid";
+        }
+      })(),
+    });
+
     rememberPendingSubscription(data.subscriptionId, slug);
-    submitPayfastForm(checkoutUrl, fields, fieldOrder);
+    submitPayfastCheckoutForm(checkoutUrl, fields, fieldOrder, { requestId });
     redirected = true;
-    return { ...data, redirected: true };
+    return { ...data, redirected: true, requestId };
+  } catch (err) {
+    if (err?.code === "PAYFAST_REDIRECT_FAILED") {
+      logSubscription(requestId, "Checkout handoff failed");
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
     if (!redirected) checkoutInFlight = false;

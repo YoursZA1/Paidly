@@ -2,18 +2,12 @@ import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import {
   UserPlus,
-  UserCheck,
   AlertCircle,
-  Loader2,
-  Mail,
-  CheckCircle,
-  XCircle,
   ChevronRight,
   FileText,
   ScrollText,
   Banknote,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { stableDirectoryRowKey, stableEntityRowKey } from '@/utils/stableListKey';
 import { formatCurrency } from '@/utils/currencyCalculations';
@@ -67,13 +61,6 @@ function semanticActivityKey(item) {
     if (id) return `signup:${id}`;
     return `signup-email:${String(item.user?.email || '').trim().toLowerCase()}`;
   }
-  if (item.kind === 'affiliate_pending' || item.kind === 'affiliate_approved') {
-    const appId = String(item.aff?.id || '').trim();
-    if (appId) return `${item.kind}:id:${appId}`;
-    const email = String(item.aff?.applicant_email || item.aff?.email || '').trim().toLowerCase();
-    if (email) return `${item.kind}:email:${email}`;
-    return `${item.kind}:fallback:${String(item.subtext || '').trim().toLowerCase()}`;
-  }
   if (item.kind === 'invoice') {
     const id = String(item.inv?.id || '').trim();
     if (id) return `invoice:${id}`;
@@ -92,12 +79,6 @@ function semanticActivityKey(item) {
 /**
  * @param {{
  *   users: object[],
- *   affiliates: object[],
- *   pendingAffiliateCount?: number,
- *   busyAffiliateId?: string | null,
- *   onApproveAffiliate?: (aff: object) => void | Promise<void>,
- *   onDeclineAffiliate?: (aff: object) => void | Promise<void>,
- *   onResendAffiliateLink?: (aff: object) => void | Promise<void>,
  *   invoices?: object[],
  *   quotes?: object[],
  *   payslips?: object[],
@@ -106,25 +87,11 @@ function semanticActivityKey(item) {
  */
 export default function RecentActivity({
   users,
-  affiliates,
   invoices,
   quotes,
   payslips,
-  pendingAffiliateCount,
-  busyAffiliateId = null,
-  onApproveAffiliate,
-  onDeclineAffiliate,
-  onResendAffiliateLink,
   className,
 }) {
-  const showAffiliateActions = Boolean(
-    onApproveAffiliate || onDeclineAffiliate || onResendAffiliateLink
-  );
-
-  const pendingList = (affiliates || []).filter((a) => normStatus(a.status) === 'pending');
-  const pendingCount =
-    typeof pendingAffiliateCount === 'number' ? pendingAffiliateCount : pendingList.length;
-
   const signupItems = (users || []).map((u) => {
     const at = activityTimestamp(u);
     const name = String(u?.full_name || '').trim();
@@ -141,46 +108,6 @@ export default function RecentActivity({
       iconClass: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
     };
   });
-
-  const pendingAffiliateItems = pendingList.map((aff) => {
-    const at = activityTimestamp(aff) || new Date(0);
-    return {
-      kind: 'affiliate_pending',
-      at,
-      sortAt: at.getTime(),
-      aff,
-      title: 'Affiliate review',
-      subtext: [String(aff.applicant_name || '').trim() || '—', String(aff.applicant_email || '').trim()]
-        .filter(Boolean)
-        .join(' · '),
-      icon: UserCheck,
-      iconClass: 'bg-amber-500/12 text-amber-700 dark:text-amber-400',
-    };
-  });
-
-  const approvedItems = (affiliates || [])
-    .filter((a) => {
-      const st = normStatus(a.status);
-      return st === 'approved' || st === 'accepted';
-    })
-    .map((aff) => {
-      const at = activityTimestamp(aff) || new Date(0);
-      return {
-        kind: 'affiliate_approved',
-        at,
-        sortAt: at.getTime(),
-        aff,
-        title: 'Affiliate approved',
-        subtext: [
-          String(aff.applicant_name || aff.applicant_email || '').trim() || '—',
-          aff.referral_code ? `Code ${aff.referral_code}` : '',
-        ]
-          .filter(Boolean)
-          .join(' · '),
-        icon: CheckCircle,
-        iconClass: 'bg-primary/10 text-primary',
-      };
-    });
 
   const invoiceItems = (invoices || [])
     .filter((inv) => {
@@ -274,8 +201,6 @@ export default function RecentActivity({
 
   const mergedRaw = [
     ...signupItems,
-    ...pendingAffiliateItems,
-    ...approvedItems,
     ...invoiceItems,
     ...quoteItems,
     ...payslipItems,
@@ -297,10 +222,7 @@ export default function RecentActivity({
 
   let viewAllHref = '/admin-v2/users';
   let viewAllTitle = 'Browse all users';
-  if (pendingCount > 0) {
-    viewAllHref = '/admin-v2/affiliates';
-    viewAllTitle = 'Open affiliate queue';
-  } else if (hasPaidInvoice) {
+  if (hasPaidInvoice) {
     viewAllHref = createPageUrl('Invoices');
     viewAllTitle = 'Open invoices';
   } else if (hasAcceptedQuote) {
@@ -323,16 +245,12 @@ export default function RecentActivity({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight text-foreground">Recent Activity</h2>
-            {pendingCount > 0 ? (
+            {hasDocLists ? (
               <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                {pendingCount} pending affiliate{pendingCount === 1 ? '' : 's'}
-              </p>
-            ) : hasDocLists ? (
-              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                Payments, quotes, payslips · signups &amp; partners
+                Payments, quotes, payslips · signups
               </p>
             ) : (
-              <p className="mt-0.5 text-[11px] text-muted-foreground">Latest signups &amp; partners</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">Latest signups</p>
             )}
           </div>
           <Link
@@ -360,9 +278,7 @@ export default function RecentActivity({
               const rowKey =
                 item.kind === 'signup'
                   ? stableDirectoryRowKey(item.user, idx)
-                  : item.kind === 'affiliate_pending' || item.kind === 'affiliate_approved'
-                    ? stableEntityRowKey(item.aff, idx)
-                    : item.kind === 'invoice'
+                  : item.kind === 'invoice'
                       ? stableEntityRowKey(item.inv, idx)
                       : item.kind === 'quote'
                         ? stableEntityRowKey(item.quote, idx)
@@ -402,60 +318,6 @@ export default function RecentActivity({
                         <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
                           {item.subtext}
                         </p>
-
-                        {item.kind === 'affiliate_pending' && showAffiliateActions ? (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {onApproveAffiliate ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="h-7 px-2 text-[11px] bg-emerald-600 text-white hover:bg-emerald-700"
-                                disabled={busyAffiliateId === item.aff?.id}
-                                onClick={() => onApproveAffiliate(item.aff)}
-                              >
-                                {busyAffiliateId === item.aff?.id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                                ) : (
-                                  <CheckCircle className="h-3 w-3" aria-hidden />
-                                )}
-                                <span className="ml-1">Approve</span>
-                              </Button>
-                            ) : null}
-                            {onDeclineAffiliate ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 border-destructive/25 px-2 text-[11px] text-destructive hover:bg-destructive/10"
-                                disabled={busyAffiliateId === item.aff?.id}
-                                onClick={() => onDeclineAffiliate(item.aff)}
-                              >
-                                <XCircle className="h-3 w-3" aria-hidden />
-                                <span className="ml-1">Decline</span>
-                              </Button>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {item.kind === 'affiliate_approved' && onResendAffiliateLink ? (
-                          <div className="mt-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              className="h-7 gap-1 px-2 text-[11px]"
-                              disabled={busyAffiliateId === item.aff?.id}
-                              onClick={() => onResendAffiliateLink(item.aff)}
-                            >
-                              {busyAffiliateId === item.aff?.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                              ) : (
-                                <Mail className="h-3 w-3" aria-hidden />
-                              )}
-                              Resend link
-                            </Button>
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   </div>

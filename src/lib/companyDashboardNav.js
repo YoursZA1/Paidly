@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Wallet,
   PlusCircle,
+  Store,
 } from "lucide-react";
 
 /**
@@ -24,6 +25,7 @@ import {
  *   url: string,
  *   icon: import('lucide-react').LucideIcon,
  *   requiredPermission?: string,
+ *   requiredFeature?: string,
  *   section?: string,
  *   hideWhenPermission?: string,
  * }} CompanyNavItem
@@ -31,6 +33,16 @@ import {
 
 /** @type {CompanyNavItem[]} */
 export const COMPANY_WORKSPACE_NAV = [
+  {
+    id: "company-nav-pos",
+    title: "POS",
+    description: "Open the till to take a sale.",
+    url: createPageUrl("POS"),
+    icon: Store,
+    requiredPermission: PERMISSIONS.POS_ACCESS,
+    requiredFeature: "pos",
+    section: "Me",
+  },
   {
     id: "company-nav-my-payslips",
     title: "My Payslips",
@@ -183,11 +195,15 @@ export const COMPANY_WORKSPACE_SECTIONS = ["Me", "Team", "Company"];
 
 /**
  * @param {(permission: string) => boolean} hasPermission
+ * @param {{ hasFeature?: (feature: string) => boolean }} [options]
  * @returns {CompanyNavItem[]}
  */
-export function filterCompanyWorkspaceNav(hasPermission) {
+export function filterCompanyWorkspaceNav(hasPermission, options = {}) {
+  const hasFeature =
+    typeof options.hasFeature === "function" ? options.hasFeature : () => true;
   return COMPANY_WORKSPACE_NAV.filter((item) => {
     if (item.hideWhenPermission && hasPermission(item.hideWhenPermission)) return false;
+    if (item.requiredFeature && !hasFeature(item.requiredFeature)) return false;
     if (!item.requiredPermission) return true;
     return hasPermission(item.requiredPermission);
   });
@@ -209,10 +225,11 @@ export function dedupeCompanyNavItems(items) {
 /**
  * Permission-filtered workspace items grouped by section (Me / Team / Company).
  * @param {(permission: string) => boolean} hasPermission
+ * @param {{ hasFeature?: (feature: string) => boolean }} [options]
  * @returns {Array<{ section: string, items: CompanyNavItem[] }>}
  */
-export function getCompanyWorkspaceSections(hasPermission) {
-  const items = dedupeCompanyNavItems(filterCompanyWorkspaceNav(hasPermission));
+export function getCompanyWorkspaceSections(hasPermission, options) {
+  const items = dedupeCompanyNavItems(filterCompanyWorkspaceNav(hasPermission, options));
   return COMPANY_WORKSPACE_SECTIONS.map((section) => ({
     section,
     items: items.filter((item) => item.section === section),

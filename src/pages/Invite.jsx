@@ -7,6 +7,7 @@ import { createPageUrl } from "@/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { storePendingInviteToken } from "@/services/TenantRoleService";
+import { isPosInviteDest, POS_JOB_FUNCTION } from "@shared/posStaffInvite.js";
 
 /**
  * Entry point for company invitation links: /invite?token=xxxxxxxx
@@ -67,8 +68,18 @@ export default function InvitePage() {
 
   const continueToSignup = () => {
     const email = invite?.email ? `&email=${encodeURIComponent(invite.email)}` : "";
-    navigate(`${createPageUrl("Signup")}?invite=1${email}`);
+    const posInvite =
+      isPosInviteDest(searchParams.get("next")) ||
+      String(invite?.job_function || "").toLowerCase() === POS_JOB_FUNCTION ||
+      String(invite?.source || "").toLowerCase() === "pos";
+    const next = posInvite ? "&next=POS" : "";
+    navigate(`${createPageUrl("Signup")}?invite=1${email}${next}`);
   };
+
+  const posInviteCopy =
+    isPosInviteDest(searchParams.get("next")) ||
+    String(invite?.job_function || "").toLowerCase() === POS_JOB_FUNCTION ||
+    String(invite?.source || "").toLowerCase() === "pos";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-primary/5 to-primary/5 flex items-center justify-center p-4">
@@ -77,9 +88,13 @@ export default function InvitePage() {
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Building2 className="w-8 h-8 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold">Company invitation</CardTitle>
+          <CardTitle className="text-2xl font-bold">
+            {posInviteCopy ? "POS staff invitation" : "Company invitation"}
+          </CardTitle>
           <p className="text-sm text-slate-500">
-            Join your team on Paidly with the role and company assigned by your administrator.
+            {posInviteCopy
+              ? "Join the till with this special link. You will only be able to use POS — not invoices or the rest of Paidly."
+              : "Join your team on Paidly with the role and company assigned by your administrator."}
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -111,7 +126,9 @@ export default function InvitePage() {
                 .
               </p>
               <p className="text-muted-foreground capitalize">
-                Role: {String(invite.role || "employee").replace(/_/g, " ")}
+                {posInviteCopy
+                  ? "Access: POS till only"
+                  : `Role: ${String(invite.role || "employee").replace(/_/g, " ")}`}
               </p>
             </div>
           )}

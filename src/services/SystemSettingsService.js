@@ -285,12 +285,6 @@ const DEFAULT_SETTINGS = {
     privacyPolicyUrl: ''
   },
 
-  /** Admin dashboard (Settings): defaults for affiliate program UI; persisted with system settings. */
-  affiliateProgram: {
-    defaultCommissionPercent: 15,
-    autoApproveApplications: false,
-  },
-
   // Last updated timestamp
   lastUpdated: new Date().toISOString(),
   updatedBy: null

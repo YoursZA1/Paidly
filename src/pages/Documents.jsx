@@ -34,10 +34,12 @@ import { PERMISSIONS } from "@/lib/companyPermissions";
 import { createPageUrl } from "@/utils";
 import {
   DOCUMENT_CATEGORIES,
-  DOCUMENT_TYPE_DEFS,
+  HUB_DOCUMENT_TYPE_DEFS,
   typeLabel,
   isFinancialType,
   getDedicatedCreatePath,
+  isCommercialDocumentType,
+  specialisedComposeUrl,
 } from "@/document-engine";
 import {
   Files,
@@ -182,8 +184,8 @@ export default function DocumentsPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const typeOptions = useMemo(() => {
-    if (filters.category === "all") return DOCUMENT_TYPE_DEFS;
-    return DOCUMENT_TYPE_DEFS.filter((t) => t.category === filters.category);
+    if (filters.category === "all") return HUB_DOCUMENT_TYPE_DEFS;
+    return HUB_DOCUMENT_TYPE_DEFS.filter((t) => t.category === filters.category);
   }, [filters.category]);
 
   const filtersActive =
@@ -207,7 +209,7 @@ export default function DocumentsPage() {
       const next = { ...f, [key]: value };
       // Changing category resets a now-incompatible type selection.
       if (key === "category" && value !== "all" && f.type !== "all") {
-        const stillValid = DOCUMENT_TYPE_DEFS.some((t) => t.key === f.type && t.category === value);
+        const stillValid = HUB_DOCUMENT_TYPE_DEFS.some((t) => t.key === f.type && t.category === value);
         if (!stillValid) next.type = "all";
       }
       return next;
@@ -223,6 +225,14 @@ export default function DocumentsPage() {
 
   const handleCreate = useCallback(
     async (type) => {
+      if (isCommercialDocumentType(type)) {
+        const dedicatedPath = getDedicatedCreatePath(type);
+        navigate(dedicatedPath || createPageUrl("Invoices"), {
+          state: { returnTo: createPageUrl("Documents") },
+        });
+        return;
+      }
+
       const dedicatedPath = getDedicatedCreatePath(type);
       if (dedicatedPath) {
         navigate(dedicatedPath, { state: { returnTo: createPageUrl("Documents") } });
@@ -284,7 +294,13 @@ export default function DocumentsPage() {
           return;
         }
         if (action === "convert") {
-          const targetType = row._convertTarget || "invoice";
+          const targetType = row._convertTarget;
+          if (!targetType) return;
+          const specialisedUrl = specialisedComposeUrl(targetType, row.id);
+          if (specialisedUrl) {
+            navigate(specialisedUrl, { state: { returnTo: createPageUrl("Documents") } });
+            return;
+          }
           const result = await DocumentService.convertDocument(row.id, targetType);
           const target = result?.target || result?.invoice;
           toast({
@@ -392,7 +408,7 @@ export default function DocumentsPage() {
               isEmployeeScope
                 ? "Your leave requests, expense claims, and personal company documents."
                 : canManageCompanyDocuments
-                  ? "Create, manage, track and organize every business document from one place."
+                  ? "Generic business documents — leave, expenses, contracts, and more. Invoices, quotes, and payslips stay on their own pages."
                   : "Company documents you can view and act on for your role."
             }
           />

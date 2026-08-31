@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { recordAffiliateClick, setPendingReferralCode } from "@/api/affiliateClient";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import Features from "@/components/Features";
@@ -12,7 +11,6 @@ import CTASection from "@/components/CTASection";
 import Footer from "@/components/Footer";
 import LandingLoginModal from "@/components/auth/LandingLoginModal";
 import WaitlistSection from "@/components/WaitlistSection";
-import AffiliateSection from "@/components/marketing/AffiliateSection";
 import JsonLd from "@/components/seo/JsonLd";
 import { buildHomeStructuredDataGraph } from "@/lib/seo/structuredData";
 
@@ -36,15 +34,7 @@ export default function Home({
     if (navActive === "login" || location.hash === "#sign-in") {
       setLoginOpen(true);
     }
-
-    const params = new URLSearchParams(location.search);
-    const ref = params.get("ref");
-    if (ref && ref.trim()) {
-      const code = ref.trim();
-      setPendingReferralCode(code);
-      recordAffiliateClick(code);
-    }
-  }, [location.search, location.hash, navActive]);
+  }, [location.hash, navActive]);
 
 
   return (
@@ -58,7 +48,6 @@ export default function Home({
       <ProductPreview />
       <Pricing />
       <ValueSection />
-      <AffiliateSection />
       <SocialProof />
       <CTASection />
       <Footer onLoginClick={openLogin} />

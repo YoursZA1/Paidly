@@ -5,11 +5,9 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, CheckCircle, FileText, Download, Send } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
-import { getStableSession } from "@/core/auth/SessionCoordinator";
-import { getBackendBaseUrl } from "@/api/backendClient";
+import { sendInvoicePdfEmailToClient } from "@/services/InvoiceSendService";
+import { documentSendSuccessDescription } from "@/components/shared/DocumentSendSuccessToast";
 import { createPageUrl } from "@/utils";
-import { generateInvoicePDF } from "@/components/pdf/generateInvoicePDF";
-import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
 import DocumentPreview from "@/components/DocumentPreview";
 import {
   buildInvoiceTemplatePdfCaptureProps,
@@ -20,7 +18,6 @@ import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
 import { DOCUMENT_TEMPLATE_KEY } from "@/utils/invoiceTemplateData";
 
 import { writeInvoiceDraft } from "@/utils/invoiceDraftStorage";
-import { documentSendSuccessDescription } from "@/components/shared/DocumentSendSuccessToast";
 
 function InvoicePreview({
   invoiceData,
@@ -92,16 +89,9 @@ function InvoicePreview({
     }
   };
 
-  const blobToDataURI = (blob) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
   const handleSendEmail = async () => {
-    const clientEmail = client?.email?.trim();
+    const sendClient = clientProp ?? clientResolved ?? client;
+    const clientEmail = sendClient?.email?.trim();
     if (!clientEmail) {
       toast({
         title: "No client email",
@@ -110,67 +100,17 @@ function InvoicePreview({
       });
       return;
     }
+    if (!invoiceData?.id) {
+      toast({
+        title: "Save the invoice first",
+        description: "Create the invoice before sending it by email.",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsSending(true);
     try {
-      const bank = effectiveBankingDetail(bankingDetail, pack.resolvedUser);
-      const blob = await generateInvoicePDF({
-        invoice: invoiceData,
-        client: clientProp ?? clientResolved ?? {},
-        user: pack.resolvedUser || user || {},
-        bankingDetail: bank,
-      });
-      const base64PDF = await blobToDataURI(blob);
-
-      const session = await getStableSession();
-      const token = session?.access_token;
-      if (!token) {
-        toast({ title: "Not signed in", description: "Please sign in to send the invoice.", variant: "destructive" });
-        return;
-      }
-      const invoiceNum = invoiceData?.invoice_number || invoiceData?.reference_number || "Draft";
-      const currency =
-        pack.resolvedUser?.currency || invoiceData?.currency || invoiceData?.owner_currency || "ZAR";
-      const amountDue = new Intl.NumberFormat("en-ZA", { style: "currency", currency }).format(
-        Number(invoiceData?.total_amount ?? invoiceData?.total ?? 0)
-      );
-      const dueDateRaw = invoiceData?.delivery_date || invoiceData?.due_date;
-      const dueDate = dueDateRaw
-        ? (() => {
-            try {
-              const d = typeof dueDateRaw === "string" ? new Date(dueDateRaw) : dueDateRaw;
-              return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-ZA", { year: "numeric", month: "long", day: "numeric" });
-            } catch {
-              return "";
-            }
-          })()
-        : "";
-      const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
-      const res = await fetch(`${apiBase}/api/send-invoice`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          base64PDF,
-          clientEmail,
-          invoiceNum,
-          fromName: pack.resolvedUser?.company_name || user?.company_name || "Paidly",
-          clientName: client?.name?.trim() || undefined,
-          amountDue: amountDue || undefined,
-          dueDate: dueDate || undefined,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({
-          title: "Send failed",
-          description: json?.error || res.statusText || "Could not send email",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (!json.success) {
-        toast({ title: "Send failed", description: json?.error || "Server error", variant: "destructive" });
-        return;
-      }
+      await sendInvoicePdfEmailToClient(invoiceData, sendClient, {});
       toast({
         title: "Invoice sent to email successfully!",
         description: documentSendSuccessDescription({
@@ -182,11 +122,11 @@ function InvoicePreview({
       });
     } catch (error) {
       console.error("Send invoice error:", error);
-      const isNetworkError = error?.message === "Failed to fetch" || error?.name === "TypeError";
-      const description = isNetworkError
-        ? "Could not reach the server. Ensure VITE_SERVER_URL points to your backend (e.g. https://paidly.co.za) when using www.paidly.co.za."
-        : error?.message || "Could not send email";
-      toast({ title: "Send failed", description, variant: "destructive" });
+      toast({
+        title: "Send failed",
+        description: error?.message || "Invoice could not be sent. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsSending(false);
     }

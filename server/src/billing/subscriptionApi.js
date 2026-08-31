@@ -556,6 +556,7 @@ export async function handleSubscriptionCreate(req, res) {
     status: SUBSCRIPTION_STATUS.PENDING,
     checkout: {
       url: redirectUrl,
+      method: "POST",
       fields: signed.fields,
       fieldOrder: signed.fieldOrder,
     },

@@ -37,13 +37,18 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { Client } from "@/api/entities";
 import { DOCUMENT_TYPES } from "@/document-engine/documentTypes";
 import {
+  leftoverHubCommercialMessage,
+  isDocumentsHubExcludedType,
+} from "@/document-engine/documentSystemOfRecord";
+import { specialisedListPath } from "@/document-engine/documentCreateFlow";
+import {
   QUOTE_STATUSES,
   INVOICE_STATUSES,
   PAYSLIP_STATUSES,
   allowedNextStatuses,
 } from "@/document-engine/documentStateMachine";
 import { aggregateFromItems } from "@/document-engine/documentTotals";
-import { isFinancialType, getConversionOptions, typeLabel } from "@/document-engine";
+import { isFinancialType, getConversionOptions, specialisedComposeUrl, typeLabel } from "@/document-engine";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +76,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -251,6 +266,7 @@ export default function DocumentDetailPage() {
   const [sendOpen, setSendOpen] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [leftoverDeleteOpen, setLeftoverDeleteOpen] = useState(false);
 
   // ── Delivery + signature data ──
   const [sends, setSends] = useState([]);
@@ -366,6 +382,7 @@ export default function DocumentDetailPage() {
 
   useEffect(() => {
     if (!documentId || loading || !doc?.id || doc.id !== documentId) return;
+    if (isDocumentsHubExcludedType(doc.type)) return;
     if (viewLoggedForId.current === documentId) return;
     viewLoggedForId.current = documentId;
     DocumentService.recordView(documentId, { surface: "app_document_detail" }).catch(() => {});
@@ -756,6 +773,13 @@ export default function DocumentDetailPage() {
 
   const handleConvert = async (targetType) => {
     if (!documentId) return;
+    const specialisedUrl = specialisedComposeUrl(targetType, documentId);
+    if (specialisedUrl) {
+      navigate(specialisedUrl, {
+        state: { returnTo: `${createPageUrl("Documents")}/${encodeURIComponent(documentId)}` },
+      });
+      return;
+    }
     setSaving(true);
     try {
       const result = await DocumentService.convertDocument(documentId, targetType);
@@ -767,6 +791,19 @@ export default function DocumentDetailPage() {
     } catch (e) {
       toast({ variant: "destructive", title: "Conversion failed", description: e?.message });
     } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveLeftover = async () => {
+    if (!documentId) return;
+    setSaving(true);
+    try {
+      await DocumentService.remove(documentId);
+      toast({ title: "Leftover hub record removed" });
+      navigate(createPageUrl("Documents"));
+    } catch (e) {
+      toast({ variant: "destructive", title: "Could not remove", description: e?.message });
       setSaving(false);
     }
   };
@@ -876,6 +913,74 @@ export default function DocumentDetailPage() {
             </Button>
           </CardContent>
         </Card>
+      </PageTemplate>
+    );
+  }
+
+  if (isDocumentsHubExcludedType(doc.type)) {
+    const listHref = specialisedListPath(doc.type);
+    const typeName = typeLabel(doc.type);
+    return (
+      <PageTemplate>
+        <Card className="mx-auto max-w-lg">
+          <CardHeader>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5" aria-hidden />
+            </div>
+            <CardTitle>Not a Documents Hub record</CardTitle>
+            <CardDescription>{leftoverHubCommercialMessage(doc.type)}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {doc.title?.trim() || doc.document_number || "Untitled"}
+              {doc.document_number && doc.title ? ` · ${doc.document_number}` : ""}
+              <span className="block capitalize">{typeName}</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link to={listHref}>Open {typeName === "Invoice" ? "Invoices" : `${typeName}s`}</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to={createPageUrl("Documents")}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to documents
+                </Link>
+              </Button>
+              {doc.archived_at ? (
+                <Button variant="outline" type="button" disabled={saving} onClick={handleArchiveToggle}>
+                  Restore leftover
+                </Button>
+              ) : (
+                <Button variant="outline" type="button" disabled={saving} onClick={handleArchiveToggle}>
+                  Archive leftover
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                type="button"
+                disabled={saving}
+                onClick={() => setLeftoverDeleteOpen(true)}
+              >
+                Remove leftover
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        <AlertDialog open={leftoverDeleteOpen} onOpenChange={setLeftoverDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove leftover hub record?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This deletes the leftover Documents Hub row only. It does not delete invoices, quotes,
+                or payslips on the specialised tables.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRemoveLeftover}>Remove</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </PageTemplate>
     );
   }

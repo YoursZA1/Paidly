@@ -21,6 +21,7 @@ import {
   checkoutErrorFromHttp,
   createSubscriptionAndRedirect,
   resetSubscriptionCheckoutGuardForTests,
+  submitPayfastCheckoutForm,
 } from "@/services/subscriptionCheckoutService";
 
 function jsonResponse(status, body) {
@@ -31,12 +32,41 @@ function jsonResponse(status, body) {
   };
 }
 
+function stubCheckoutDocument() {
+  const inputs = [];
+  const form = {
+    method: "",
+    action: "",
+    acceptCharset: "",
+    target: "",
+    style: {},
+    appendChild: vi.fn((el) => {
+      inputs.push(el);
+      return el;
+    }),
+    submit: vi.fn(),
+    querySelector: vi.fn(() => ({})),
+    setAttribute: vi.fn(),
+  };
+  vi.stubGlobal("document", {
+    createElement: vi.fn((tag) => {
+      if (tag === "form") return form;
+      return { type: "", name: "", value: "" };
+    }),
+    body: { appendChild: vi.fn() },
+  });
+  vi.stubGlobal("window", {
+    location: { origin: "https://www.paidly.co.za" },
+  });
+  return { form, inputs };
+}
+
 describe("checkoutErrorFromHttp", () => {
-  it("maps 401 to sign-in copy", () => {
+  it("maps 401 to session-expired copy", () => {
     const err = checkoutErrorFromHttp(401, { error: "Invalid or expired token" });
     expect(err.status).toBe(401);
     expect(err.code).toBe("AUTH_REQUIRED");
-    expect(err.message).toMatch(/sign in/i);
+    expect(err.message).toMatch(/session has expired/i);
   });
 
   it("maps 403 to permission copy", () => {
@@ -63,6 +93,56 @@ describe("checkoutErrorFromHttp", () => {
   });
 });
 
+describe("submitPayfastCheckoutForm", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("POSTs in the current window without display:none or encoding the signature", () => {
+    const { form, inputs } = stubCheckoutDocument();
+    submitPayfastCheckoutForm(
+      "https://sandbox.payfast.co.za/eng/process",
+      {
+        merchant_id: "10000100",
+        name_first: "Armando",
+        amount: 50,
+        nested: { nope: true },
+        empty: "",
+        signature: "abc+/=def",
+      },
+      ["merchant_id", "name_first", "amount", "nested", "empty", "signature"],
+      { requestId: "req-1" }
+    );
+
+    expect(form.method).toBe("POST");
+    expect(form.action).toBe("https://sandbox.payfast.co.za/eng/process");
+    expect(form.target).toBe("_self");
+    expect(form.style.display).not.toBe("none");
+    expect(form.setAttribute).toHaveBeenCalledWith("data-paidly-payfast-checkout", "1");
+
+    const sig = inputs.find((el) => el.name === "signature");
+    expect(sig.value).toBe("abc+/=def");
+    expect(sig.value).not.toMatch(/%/);
+
+    const name = inputs.find((el) => el.name === "name_first");
+    expect(name.value).toBe("Armando");
+
+    const amount = inputs.find((el) => el.name === "amount");
+    expect(amount.value).toBe("50");
+
+    expect(inputs.some((el) => el.name === "nested")).toBe(false);
+    expect(form.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a non-PayFast URL", () => {
+    stubCheckoutDocument();
+    expect(() =>
+      submitPayfastCheckoutForm("https://example.com/pay", { signature: "abc" }, ["signature"])
+    ).toThrow(/PayFast payment page/i);
+  });
+});
+
 describe("createSubscriptionAndRedirect", () => {
   beforeEach(() => {
     resetSubscriptionCheckoutGuardForTests();
@@ -71,25 +151,7 @@ describe("createSubscriptionAndRedirect", () => {
       access_token: "tok_test",
       user: { id: "11111111-2222-4333-a444-555555555555" },
     });
-
-    const form = {
-      method: "",
-      action: "",
-      style: {},
-      appendChild: vi.fn(),
-      submit: vi.fn(),
-      querySelector: vi.fn(() => ({})),
-    };
-    vi.stubGlobal("document", {
-      createElement: vi.fn((tag) => {
-        if (tag === "form") return form;
-        return { type: "", name: "", value: "" };
-      }),
-      body: { appendChild: vi.fn() },
-    });
-    vi.stubGlobal("window", {
-      location: { origin: "https://www.paidly.co.za" },
-    });
+    stubCheckoutDocument();
   });
 
   afterEach(() => {
@@ -105,9 +167,11 @@ describe("createSubscriptionAndRedirect", () => {
       vi.fn().mockResolvedValue(
         jsonResponse(200, {
           success: true,
+          requestId: "srv-1",
           subscriptionId: "sub-1",
           checkout: {
             url: "https://sandbox.payfast.co.za/eng/process",
+            method: "POST",
             fields: { merchant_id: "10000100", signature: "abc" },
             fieldOrder: ["merchant_id", "signature"],
           },

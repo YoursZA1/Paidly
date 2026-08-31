@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import CurrencySelector from "@/components/CurrencySelector";
+import BusinessTypePicker from "@/components/settings/BusinessTypePicker";
 import { User } from "@/api/entities";
 import { createPageUrl, clearQuickSetupEligible } from "@/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { updateOrganizationProfile } from "@/services/OrganizationProfileService";
+import { businessTypeIncludesPos, normalizeBusinessType } from "@shared/businessType.js";
 
 function splitName(fullName) {
   const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
@@ -26,6 +28,7 @@ function normalizeOnboardingBusiness(profile = {}) {
     business_name: profile?.company_name || "",
     registration_number: onboarding?.registration_number || "",
     industry: onboarding?.industry || business?.industry || "",
+    business_type: normalizeBusinessType(onboarding?.business_type || business?.business_type) || "",
     address: profile?.company_address || onboarding?.address || "",
     currency: profile?.currency || "ZAR",
     full_name: profile?.full_name || profile?.display_name || "",
@@ -56,7 +59,7 @@ const GOAL_OPTIONS = [
 export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true, profile, onClose, onProfileRefresh }) {
   const navigate = useNavigate();
   const { user: authUser } = useAuth();
-  const { companyId } = useCompanyContext();
+  const { companyId, refresh: refreshCompanyContext } = useCompanyContext();
   const [step, setStep] = useState("welcome");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => normalizeOnboardingBusiness(profile));
@@ -90,6 +93,9 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
           status: next.status || step,
           goal: next.goal || "",
           industry: isCompanyAdmin ? next.industry || "" : baseOnboarding?.industry || "",
+          business_type: isCompanyAdmin
+            ? normalizeBusinessType(next.business_type) || baseOnboarding?.business_type || ""
+            : baseOnboarding?.business_type || "",
           updated_at: new Date().toISOString(),
         };
 
@@ -101,6 +107,7 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
             currency: next.currency || "ZAR",
             business: {
               industry: next.industry || "",
+              business_type: normalizeBusinessType(next.business_type) || "",
               onboarding_v2: {
                 ...onboardingPayload,
                 registration_number: next.registration_number || "",
@@ -114,11 +121,13 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
               name: next.business_name?.trim(),
               registration_number: next.registration_number?.trim() || null,
               industry: next.industry?.trim() || null,
+              business_type: normalizeBusinessType(next.business_type),
               address: next.address?.trim() || null,
               phone: next.phone?.trim() || null,
               company_email: authUser?.email || null,
               tax_info: next.tax_info?.trim() ? { notes: next.tax_info.trim() } : {},
             }).catch(() => {});
+            await refreshCompanyContext?.({ invalidateCache: true }).catch(() => {});
           }
         } else {
           const userPayload = { business: { onboarding_v2: onboardingPayload } };
@@ -138,7 +147,7 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
         setSaving(false);
       }
     },
-    [form, step, isCompanyAdmin, companyId, authUser?.email, profile, onProfileRefresh]
+    [form, step, isCompanyAdmin, companyId, authUser?.email, profile, onProfileRefresh, refreshCompanyContext]
   );
 
   useEffect(() => {
@@ -153,7 +162,17 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
     };
   }, [isOpen, step, persistDraft]);
 
-  const selectedGoal = useMemo(() => GOAL_OPTIONS.find((o) => o.id === form.goal) || null, [form.goal]);
+  const goalOptions = useMemo(() => {
+    if (!businessTypeIncludesPos(form.business_type)) return GOAL_OPTIONS;
+    return [
+      ...GOAL_OPTIONS,
+      { id: "open_pos", label: "Open the till", route: createPageUrl("POS") },
+    ];
+  }, [form.business_type]);
+  const selectedGoal = useMemo(
+    () => goalOptions.find((o) => o.id === form.goal) || null,
+    [form.goal, goalOptions]
+  );
 
   const goNext = async () => {
     if (step === "welcome") {
@@ -163,6 +182,7 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
     if (step === "business") {
       if (isCompanyAdmin) {
         if (!form.business_name.trim()) return;
+        if (!normalizeBusinessType(form.business_type)) return;
         await persistDraft({ status: "goal" });
         setStep("goal");
         return;
@@ -196,12 +216,14 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
         : {};
     await User.updateMyUserData({
       business: {
+        business_type: normalizeBusinessType(form.business_type) || "",
         onboarding_v2: {
           ...baseOnboarding,
           status: "completed",
           completed_at: new Date().toISOString(),
           goal: form.goal || "",
           industry: form.industry || "",
+          business_type: normalizeBusinessType(form.business_type) || "",
           checklist: {
             ...prevChecklist,
             setup_business: true,
@@ -213,7 +235,9 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
     if (isCompanyAdmin && companyId) {
       await updateOrganizationProfile(companyId, {
         onboarding_completed_at: new Date().toISOString(),
+        business_type: normalizeBusinessType(form.business_type),
       }).catch(() => {});
+      await refreshCompanyContext?.({ invalidateCache: true }).catch(() => {});
     }
     clearQuickSetupEligible(authUser?.id);
     onProfileRefresh?.();
@@ -254,6 +278,17 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
                   value={form.business_name}
                   onChange={(e) => setForm((prev) => ({ ...prev, business_name: e.target.value }))}
                   placeholder="Your company name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>How do you sell?</Label>
+                <p className="text-xs text-muted-foreground">
+                  POS is optional. Service businesses stay on invoices — you can add a till later.
+                </p>
+                <BusinessTypePicker
+                  value={form.business_type || ""}
+                  onChange={(business_type) => setForm((prev) => ({ ...prev, business_type }))}
+                  disabled={saving}
                 />
               </div>
               <div className="space-y-2">
@@ -313,7 +348,7 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={goNext} disabled={!form.business_name.trim() || saving}>
+              <Button onClick={goNext} disabled={!form.business_name.trim() || !normalizeBusinessType(form.business_type) || saving}>
                 Continue
               </Button>
             </DialogFooter>
@@ -391,7 +426,7 @@ export default function FastActivationOnboarding({ isOpen, isCompanyAdmin = true
               <DialogDescription>Choose your first action and we will guide you there instantly.</DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
-              {GOAL_OPTIONS.map((option) => (
+              {goalOptions.map((option) => (
                 <button
                   type="button"
                   key={option.id}

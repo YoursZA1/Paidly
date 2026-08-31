@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Invoice } from '@/api/entities';
-import { Expense } from '@/api/entities';
+import { useQuery } from '@tanstack/react-query';
+import { getFocusPolicy } from '@/core/query/queryFocusPolicy';
 import { useAppStore } from '@/stores/useAppStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,61 +19,69 @@ import {
   DollarSign,
   Download,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter } from 'date-fns';
+import { format, startOfDay, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
-
-const REPORTS_LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
+import { CASHFLOW_PAGE_QUERY_KEY, fetchCashFlowPageData } from '@/utils/cashFlowData';
+import { buildMoneyTotals, getReportPeriodBounds, inDayRange } from '@/utils/cashFlowTruth';
+import { summarizePosSales } from '@/utils/posSalesTruth';
+import PosSalesReportCard from '@/components/reports/PosSalesReportCard';
 
 export default function Reports() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const storeInvoices = useAppStore((s) => s.invoices);
   const storeExpenses = useAppStore((s) => s.expenses);
+  const storePayments = useAppStore((s) => s.payments);
   const storeUser = useAppStore((s) => s.userProfile);
-  const { profile } = useAuth();
-  const hasStoreData = (storeInvoices?.length > 0) || (storeExpenses?.length > 0) || storeUser != null;
-  const hadDataOnMount = useRef(hasStoreData);
-  const [invoices, setInvoices] = useState(storeInvoices ?? []);
-  const [expenses, setExpenses] = useState(storeExpenses ?? []);
-  const [user, setUser] = useState(profile ?? storeUser ?? null);
-  const [isLoading, setIsLoading] = useState(!hasStoreData);
+  const setExpensesInStore = useAppStore((s) => s.setExpenses);
+  const setInvoicesInStore = useAppStore((s) => s.setInvoices);
+  const setPaymentsInStore = useAppStore((s) => s.setPayments);
+  const { profile, authUserId } = useAuth();
+  const hasStoreData = (storeInvoices?.length > 0) || (storeExpenses?.length > 0) || (storePayments?.length > 0) || storeUser != null;
   const [consolidatedFallbackUrl, setConsolidatedFallbackUrl] = useState(null);
   const [consolidatedFallbackName, setConsolidatedFallbackName] = useState("");
   const consolidatedFallbackUrlRef = useRef(null);
   consolidatedFallbackUrlRef.current = consolidatedFallbackUrl;
   useEffect(() => () => { if (consolidatedFallbackUrlRef.current) URL.revokeObjectURL(consolidatedFallbackUrlRef.current); }, []);
 
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional run once on mount
-  }, []);
+  const { data, isLoading, error } = useQuery({
+    queryKey: [...CASHFLOW_PAGE_QUERY_KEY, authUserId ?? null],
+    queryFn: () => fetchCashFlowPageData(profile),
+    staleTime: 60 * 1000,
+    refetchOnMount: true,
+    placeholderData: hasStoreData
+      ? {
+          expenses: storeExpenses ?? [],
+          invoices: storeInvoices ?? [],
+          payments: storePayments ?? [],
+          posSales: [],
+          user: profile ?? storeUser ?? null,
+        }
+      : undefined,
+    ...getFocusPolicy("cashflow-page"),
+  });
 
-  const loadData = async () => {
-    if (!hadDataOnMount.current) setIsLoading(true);
-    try {
-      const [invoicesData, expensesData] = await Promise.all([
-        Invoice.list('-created_date', REPORTS_LIST_OPTS),
-        Expense.list('-date', REPORTS_LIST_OPTS),
-      ]);
-      setInvoices(invoicesData || []);
-      setUser(profile ?? storeUser ?? null);
-      setExpenses(expensesData || []);
-    } catch (error) {
-      console.error('Error loading reports data:', error);
+  useEffect(() => {
+    if (error) {
       toast({
         title: 'Could not load reports',
         description: error?.message || 'Please check your connection and try again.',
         variant: 'destructive',
       });
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [error, toast]);
 
   useEffect(() => {
-    setUser(profile ?? storeUser ?? null);
-  }, [profile, storeUser]);
+    if (data?.expenses) setExpensesInStore(data.expenses);
+    if (data?.invoices) setInvoicesInStore(data.invoices);
+    if (data?.payments) setPaymentsInStore(data.payments);
+  }, [data?.expenses, data?.invoices, data?.payments, setExpensesInStore, setInvoicesInStore, setPaymentsInStore]);
+
+  const invoices = data?.invoices ?? storeInvoices ?? [];
+  const expenses = storeExpenses ?? data?.expenses ?? [];
+  const payments = data?.payments ?? storePayments ?? [];
+  const posSales = data?.posSales ?? [];
+  const user = data?.user ?? profile ?? storeUser ?? null;
 
   const openReport = (params) => {
     const search = new URLSearchParams(params).toString();
@@ -83,55 +91,55 @@ export default function Reports() {
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
   const thisMonthEnd = endOfMonth(now);
+  const monthBounds = getReportPeriodBounds('month', now);
+  const quarterBounds = getReportPeriodBounds('quarter', now);
 
-  const paidThisMonth = invoices.filter(
-    (inv) =>
-      (inv.status === 'paid' || inv.status === 'partial_paid') &&
-      inv.updated_date &&
-      new Date(inv.updated_date) >= thisMonthStart &&
-      new Date(inv.updated_date) <= thisMonthEnd
-  ).length;
+  const monthTotals = useMemo(
+    () => buildMoneyTotals({ payments, expenses, invoices, posSales, ...monthBounds }),
+    [payments, expenses, invoices, posSales, monthBounds.start, monthBounds.end]
+  );
+  const quarterTotals = useMemo(
+    () => buildMoneyTotals({ payments, expenses, invoices, posSales, ...quarterBounds }),
+    [payments, expenses, invoices, posSales, quarterBounds.start, quarterBounds.end]
+  );
+  const allTotals = useMemo(
+    () => buildMoneyTotals({ payments, expenses, invoices, posSales }),
+    [payments, expenses, invoices, posSales]
+  );
+
+  const posMonth = useMemo(
+    () => summarizePosSales(posSales, monthBounds),
+    [posSales, monthBounds.start, monthBounds.end]
+  );
+  const posToday = useMemo(() => {
+    const day = startOfDay(now);
+    return summarizePosSales(posSales, { start: day, end: day });
+  }, [posSales, thisMonthStart]);
+
+  const paidThisMonth = useMemo(() => {
+    const ids = new Set(
+      monthTotals.incomeEvents
+        .filter((row) => inDayRange(row.date, thisMonthStart, thisMonthEnd) && row.invoiceId)
+        .map((row) => row.invoiceId)
+    );
+    return ids.size;
+  }, [monthTotals.incomeEvents, thisMonthStart, thisMonthEnd]);
   const totalInvoices = invoices.length;
 
-  // Unified data for consolidated analytics (revenue from paid/partial invoices, expenses from Expense list)
-  const revenueAll = invoices
-    .filter((inv) => inv.status === 'paid' || inv.status === 'partial_paid')
-    .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
-  const expensesAll = expenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
-  const profitAll = revenueAll - expensesAll;
-  const marginPercentAll = revenueAll > 0 ? Math.round(((profitAll / revenueAll) * 100)) : 0;
+  const revenueAll = allTotals.income;
+  const expensesAll = allTotals.expenses;
+  const profitAll = allTotals.profit;
+  const marginPercentAll = allTotals.marginPercent;
 
-  const revenueMonth = invoices
-    .filter((inv) => {
-      const d = new Date(inv.updated_date || inv.created_date);
-      return (inv.status === 'paid' || inv.status === 'partial_paid') && d >= thisMonthStart && d <= thisMonthEnd;
-    })
-    .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
-  const expensesMonth = expenses
-    .filter((exp) => {
-      const d = new Date(exp.date);
-      return d >= thisMonthStart && d <= thisMonthEnd;
-    })
-    .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
-  const profitMonth = revenueMonth - expensesMonth;
-  const marginPercentMonth = revenueMonth > 0 ? Math.round(((profitMonth / revenueMonth) * 100)) : 0;
+  const revenueMonth = monthTotals.income;
+  const expensesMonth = monthTotals.expenses;
+  const profitMonth = monthTotals.profit;
+  const marginPercentMonth = monthTotals.marginPercent;
 
-  const thisQuarterStart = startOfQuarter(now);
-  const thisQuarterEnd = endOfQuarter(now);
-  const revenueQuarter = invoices
-    .filter((inv) => {
-      const d = new Date(inv.updated_date || inv.created_date);
-      return (inv.status === 'paid' || inv.status === 'partial_paid') && d >= thisQuarterStart && d <= thisQuarterEnd;
-    })
-    .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
-  const expensesQuarter = expenses
-    .filter((exp) => {
-      const d = new Date(exp.date);
-      return d >= thisQuarterStart && d <= thisQuarterEnd;
-    })
-    .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
-  const profitQuarter = revenueQuarter - expensesQuarter;
-  const marginPercentQuarter = revenueQuarter > 0 ? Math.round(((profitQuarter / revenueQuarter) * 100)) : 0;
+  const revenueQuarter = quarterTotals.income;
+  const expensesQuarter = quarterTotals.expenses;
+  const profitQuarter = quarterTotals.profit;
+  const marginPercentQuarter = quarterTotals.marginPercent;
 
   const userCurrency = user?.currency || 'ZAR';
 
@@ -160,7 +168,7 @@ export default function Reports() {
         <div className="mb-8">
           <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1 font-display">Reports</h1>
           <p className="text-sm text-muted-foreground">
-            View and download income, expense, and custom reports.
+            View and download income, expense, till, and custom reports.
           </p>
         </div>
 
@@ -191,7 +199,7 @@ export default function Reports() {
                   className="rounded-lg"
                   onClick={() => openReport({ range: 'quarter' })}
                 >
-                  Last quarter
+                  This quarter
                 </Button>
                 <Button
                   variant="outline"
@@ -267,6 +275,19 @@ export default function Reports() {
           </Card>
         </div>
 
+        <div className="mt-8">
+          {isLoading ? (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          ) : (
+            <PosSalesReportCard
+              title="POS sales"
+              subtitle="This month on the till. Today's sales is calendar today. Same pos_sales_events feed as cash flow — not a separate report engine."
+              summary={{ ...posMonth, today_sales: posToday.net_sales }}
+              currency={userCurrency}
+            />
+          )}
+        </div>
+
         {/* Consolidated report: unified KPIs and margin */}
         <Card className="mt-8 rounded-xl border border-border shadow-sm">
           <CardHeader>
@@ -277,7 +298,7 @@ export default function Reports() {
                   Consolidated analytics
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Unified revenue, expenses, profit and margin across periods. Data from invoices and expenses.
+                  Unified revenue, expenses, profit and margin across periods. Cash basis: settled invoice payments and till sales in, recorded expenses out. Optional POS tax-invoice copies are not counted twice.
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -363,7 +384,7 @@ export default function Reports() {
               onClick={() =>
                 openReport({
                   range: 'custom',
-                  from: format(subMonths(now, 1), 'yyyy-MM-dd'),
+                  from: format(subDays(now, 30), 'yyyy-MM-dd'),
                   to: format(now, 'yyyy-MM-dd'),
                 })
               }

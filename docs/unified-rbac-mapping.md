@@ -11,7 +11,7 @@
 | `admin` | Admin | ✅ | Full access + team management |
 | `management` | Management | ✅ | Full access + team management |
 | `sales` | Sales | ❌ | Users, subscriptions, waitlist, messages |
-| `support` | Support | ❌ | Users, affiliates, waitlist, messages |
+| `support` | Support | ❌ | Users, waitlist, messages |
 | `user` | User | ❌ | No dashboard access |
 
 `STAFF_ROLES = ['management', 'sales', 'support']`
@@ -28,7 +28,6 @@ This table is the single authoritative cross-reference. The three columns must a
 | Users | `/admin-v2/users` | admin, management, sales, support | admin, management, sales, support | `/users` |
 | Messages | `/admin-v2/messages` | admin, management, sales, support | admin, management, sales, support | `/messages` |
 | Subscriptions | `/admin-v2/subscriptions` | admin, management, sales | admin, management, sales | `/subscriptions` |
-| Affiliates | `/admin-v2/affiliates` | admin, management, support | admin, management, support | `/affiliates` |
 | Waitlist | `/admin-v2/waitlist` | admin, management, sales, support | admin, management, sales, support | `/waitlist` |
 | Audit Log | `/admin-v2/audit-log` | admin, management | admin, management | `/audit-log` |
 | Settings | `/admin-v2/settings` | admin, management | admin, management | `/settings` |
@@ -40,13 +39,13 @@ This table is the single authoritative cross-reference. The three columns must a
 ## Effective Access By Role
 
 ### admin + management (identical)
-Dashboard, Users, Messages, Subscriptions, Affiliates, Waitlist, Audit Log, Settings
+Dashboard, Users, Messages, Subscriptions, Waitlist, Audit Log, Settings
 
 ### sales
 Dashboard, Users, Messages, Subscriptions, Waitlist
 
 ### support
-Dashboard, Users, Messages, Affiliates, Waitlist
+Dashboard, Users, Messages, Waitlist
 
 ---
 
@@ -58,8 +57,6 @@ The server enforces its own role checks independently of the frontend. Frontend 
 |-----------------------|-------|
 | `INTERNAL_ADMIN_READ_ROLES` | admin, management, support, sales |
 | `TEAM_INVITE_PROFILE_ROLES` | admin, management |
-| `AFFILIATE_BUNDLE_READ_ROLES` | admin, management, support |
-| `AFFILIATE_MODERATION_ROLES` | admin, management, support |
 
 **Note:** `INTERNAL_ADMIN_READ_ROLES` includes all staff — consistent with the frontend "all staff" pages (Dashboard, Users, Messages, Waitlist). The server does not separately gate Messages; it's a general staff-read endpoint.
 
@@ -72,7 +69,6 @@ The server enforces its own role checks independently of the frontend. Frontend 
 | `/messages` missing from all permissions.js roles | Not in any role's pages | Added to admin, management, sales, support |
 | Sidebar showed all 8 items to all staff | No per-item role filter | Sidebar uses `getAdminNavForRole(role)` |
 | Layout.jsx showed Subscriptions to support | `ADMIN_V2_NAV_ROLES` for all items | Per-item roles from adminNavConfig |
-| Layout.jsx showed Affiliates to sales | `ADMIN_V2_NAV_ROLES` for all items | Per-item roles from adminNavConfig |
 | Layout.jsx showed Settings to sales + support | `ADMIN_V2_NAV_ROLES` for all items | `PRIVILEGED_ONLY` in adminNavConfig |
 | Layout.jsx showed Audit Log to sales + support | `ADMIN_V2_NAV_ROLES` for all items | `PRIVILEGED_ONLY` in adminNavConfig |
 | Layout.jsx missing Audit Log entirely | 7 items, Audit Log absent | Now 8 items via adminNavConfig |

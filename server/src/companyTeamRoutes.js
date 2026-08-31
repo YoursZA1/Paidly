@@ -14,6 +14,11 @@ import {
   companyInviteRedirectUrl,
   sendCompanyTeamInviteEmail,
 } from "./companyTeamInviteDelivery.js";
+import {
+  POS_INVITE_SOURCE,
+  POS_JOB_FUNCTION,
+  appendPosInviteNext,
+} from "../../shared/posStaffInvite.js";
 
 function jsonError(res, status, message) {
   return res.status(status).json({ error: message });
@@ -21,23 +26,31 @@ function jsonError(res, status, message) {
 
 const INVITE_TTL_DAYS = 14;
 
-function companyInviteAppUrl(token) {
+function companyInviteAppUrl(token, { source } = {}) {
   const origin =
     (process.env.CLIENT_ORIGIN && String(process.env.CLIENT_ORIGIN).split(",")[0]?.trim()) ||
     process.env.VITE_APP_URL ||
     process.env.APP_URL ||
     "https://www.paidly.co.za";
-  return `${String(origin).replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
+  const url = `${String(origin).replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
+  return source === POS_INVITE_SOURCE ? appendPosInviteNext(url) : url;
 }
 
 function generateInviteToken() {
   return crypto.randomBytes(32).toString("hex");
 }
 
-async function persistCompanyInvite({ orgId, email, role, createdBy, source = "company_admin" }) {
+async function persistCompanyInvite({
+  orgId,
+  email,
+  role,
+  createdBy,
+  source = "company_admin",
+  jobFunction = "general",
+}) {
   const token = generateInviteToken();
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const { error } = await supabaseAdmin.from("company_invites").insert({
+  const row = {
     email,
     role: role === COMPANY_ROLES.ADMIN ? "admin" : role,
     org_id: orgId,
@@ -46,9 +59,15 @@ async function persistCompanyInvite({ orgId, email, role, createdBy, source = "c
     expires_at: expiresAt,
     created_by: createdBy,
     source,
-  });
+    job_function: jobFunction,
+  };
+  let { error } = await supabaseAdmin.from("company_invites").insert(row);
+  if (error && /job_function/i.test(error.message || "")) {
+    const { job_function: _omit, ...withoutJobFunction } = row;
+    ({ error } = await supabaseAdmin.from("company_invites").insert(withoutJobFunction));
+  }
   if (error) throw new Error(error.message || "Could not store invite");
-  return { token, expiresAt, inviteLink: companyInviteAppUrl(token) };
+  return { token, expiresAt, inviteLink: companyInviteAppUrl(token, { source }) };
 }
 
 const COMPANY_ROLE_LABELS = {
@@ -115,8 +134,16 @@ export async function handleCompanyTeamInvite(req, res) {
       .trim()
       .toLowerCase();
     const fullName = String(body.full_name || body.fullName || "").trim();
-    const role = normalizeCompanyRole(body.role);
-    const jobFunction = normalizeJobFunction(body.job_function ?? body.jobFunction ?? "general");
+    const sourceRaw = String(body.source || "company_admin")
+      .trim()
+      .toLowerCase();
+    const source = sourceRaw === POS_INVITE_SOURCE ? POS_INVITE_SOURCE : "company_admin";
+    let role = normalizeCompanyRole(body.role);
+    let jobFunction = normalizeJobFunction(body.job_function ?? body.jobFunction ?? "general");
+    if (source === POS_INVITE_SOURCE) {
+      role = COMPANY_ROLES.EMPLOYEE;
+      jobFunction = POS_JOB_FUNCTION;
+    }
 
     if (!email) return jsonError(res, 400, "Email is required");
 
@@ -199,12 +226,16 @@ export async function handleCompanyTeamInvite(req, res) {
         email,
         role,
         createdBy: gate.user.id,
+        source,
+        jobFunction,
       });
     } catch (persistErr) {
       console.warn("[company/invite] persist company_invites failed:", persistErr?.message);
     }
 
     const inviteLink = persistedInvite?.inviteLink || authInviteLink;
+    const emailInviteLink =
+      source === POS_INVITE_SOURCE ? inviteLink : authInviteLink || inviteLink;
 
     const [{ data: inviterProfile }, { data: orgRow }] = await Promise.all([
       supabaseAdmin
@@ -227,10 +258,11 @@ export async function handleCompanyTeamInvite(req, res) {
 
     const emailResult = await sendCompanyTeamInviteEmail({
       to: email,
-      inviteLink: authInviteLink,
+      inviteLink: emailInviteLink,
       companyName,
       inviterName,
-      roleLabel: COMPANY_ROLE_LABELS[role] || "team member",
+      roleLabel:
+        source === POS_INVITE_SOURCE ? "POS staff" : COMPANY_ROLE_LABELS[role] || "team member",
     });
 
     return res.status(200).json({
@@ -239,6 +271,7 @@ export async function handleCompanyTeamInvite(req, res) {
       email,
       role,
       job_function: jobFunction,
+      source,
       user_id: linkData?.user?.id || null,
       invite_link: persistedInvite?.inviteLink || authInviteLink,
       auth_invite_link: authInviteLink,
@@ -459,7 +492,7 @@ export async function handleCompanyInviteResend(req, res) {
 
     const { data: row, error: fetchErr } = await supabaseAdmin
       .from("company_invites")
-      .select("id, email, role, status, token, org_id")
+      .select("id, email, role, status, token, org_id, source, job_function")
       .eq("id", inviteId)
       .eq("org_id", gate.membership.companyId)
       .maybeSingle();
@@ -477,7 +510,7 @@ export async function handleCompanyInviteResend(req, res) {
 
     if (updateErr) return jsonError(res, 500, updateErr.message || "Could not refresh invite");
 
-    const inviteLink = companyInviteAppUrl(newToken);
+    const inviteLink = companyInviteAppUrl(newToken, { source: row.source });
     const { data: orgRow } = await supabaseAdmin
       .from("organizations")
       .select("name")
@@ -489,7 +522,10 @@ export async function handleCompanyInviteResend(req, res) {
       inviteLink,
       companyName: orgRow?.name || "your company",
       inviterName: "Your team admin",
-      roleLabel: COMPANY_ROLE_LABELS[row.role] || "team member",
+      roleLabel:
+        row.source === POS_INVITE_SOURCE || row.job_function === POS_JOB_FUNCTION
+          ? "POS staff"
+          : COMPANY_ROLE_LABELS[row.role] || "team member",
     });
 
     return res.status(200).json({

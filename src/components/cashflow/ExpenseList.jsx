@@ -9,7 +9,7 @@ import { Edit, Trash2, Receipt, CheckCircle, XCircle, Clock } from "lucide-react
 import { formatCurrency } from "../CurrencySelector";
 import { format, parseISO } from "date-fns";
 import ConfirmationDialog from "../shared/ConfirmationDialog";
-import { Expense } from "@/api/entities";
+import { useAppStore } from "@/stores/useAppStore";
 import { useAuth } from "@/contexts/AuthContext";
 
 const ROW_HEIGHT = 56;
@@ -145,6 +145,7 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
     const [deleteExpenseId, setDeleteExpenseId] = useState(null);
     const tableScrollRef = useRef(null);
     const { profile: currentUser } = useAuth();
+    const updateExpenseInStore = useAppStore((s) => s.updateExpense);
 
     const handleDelete = useCallback(async () => {
         if (deleteExpenseId) {
@@ -155,7 +156,7 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
 
     const handleApproval = useCallback(async (expense, status) => {
         try {
-            await Expense.update(expense.id, {
+            await updateExpenseInStore(expense.id, {
                 approval_status: status,
                 approved_by: currentUser?.email,
                 approved_at: new Date().toISOString()
@@ -164,7 +165,7 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
         } catch (error) {
             console.error("Error updating approval status:", error);
         }
-    }, [currentUser?.email, onActionSuccess]);
+    }, [currentUser?.email, onActionSuccess, updateExpenseInStore]);
 
     const isAdmin = currentUser?.role === 'admin';
 

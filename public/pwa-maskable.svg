@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Full-bleed brand field so Android maskable crop stays Paidly orange. -->
+  <rect width="512" height="512" fill="#f24e00"/>
+  <defs>
+    <linearGradient id="paidly-maskable-gradient" x1="51.2" y1="51.2" x2="460.8" y2="460.8" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f24e00"/>
+      <stop offset="1" stop-color="#ff7c00"/>
+    </linearGradient>
+  </defs>
+  <!-- Safe zone: ~80% (maskable spec). Existing Paidly P mark, scaled into the centre. -->
+  <g transform="translate(51.2 51.2) scale(0.8)">
+    <rect width="512" height="512" rx="120" fill="url(#paidly-maskable-gradient)"/>
+    <rect x="88" y="88" width="336" height="336" rx="64" fill="white" fill-opacity="0.14"/>
+    <path d="M160 352V160h96c44 0 80 36 80 80s-36 80-80 80h-48v32h-48Zm48-128v64h48c18 0 32-14 32-32s-14-32-32-32h-48Z" fill="white"/>
+    <circle cx="336" cy="176" r="32" fill="white" fill-opacity="0.95"/>
+  </g>
+</svg>

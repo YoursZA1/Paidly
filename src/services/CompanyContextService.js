@@ -36,11 +36,18 @@ async function loadCompanyAccessContextInner(userId) {
     orgId = await ensureUserHasOrganization(userId);
   }
 
-  const { data: org, error: orgError } = await supabase
+  let { data: org, error: orgError } = await supabase
     .from("organizations")
-    .select("owner_id")
+    .select("owner_id, business_type")
     .eq("id", orgId)
     .maybeSingle();
+  if (orgError && /business_type/i.test(String(orgError.message || ""))) {
+    ({ data: org, error: orgError } = await supabase
+      .from("organizations")
+      .select("owner_id")
+      .eq("id", orgId)
+      .maybeSingle());
+  }
 
   const { data: membership, error } = await supabase
     .from("memberships")
@@ -64,6 +71,7 @@ async function loadCompanyAccessContextInner(userId) {
     companyId: orgId,
     membershipRole,
     jobFunction: membership?.job_function,
+    businessType: org?.business_type ?? null,
   });
 
   cachedContext = ctx;

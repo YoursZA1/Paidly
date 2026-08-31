@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import useTenantRole from "@/hooks/useTenantRole";
 import { staffDashboardHomePath } from "@/lib/staffDashboard";
 import { createPageUrl } from "@/utils";
+import { isPosTerminalPage } from "@/lib/posNavAccess";
 
 const REDIRECT_FLAG = "paidly_tenant_home_redirected";
 
@@ -11,7 +12,7 @@ const REDIRECT_FLAG = "paidly_tenant_home_redirected";
  * After authentication, redirect once per browser session to the role-appropriate home.
  * Does not alter login/signup — runs only when mounted on protected shell routes.
  */
-export default function usePostAuthHomeRedirect({ enabled = true } = {}) {
+export default function usePostAuthHomeRedirect({ enabled = true, posOnlyStaff = false } = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { authUserId, loading: authLoading } = useAuth();
@@ -35,6 +36,19 @@ export default function usePostAuthHomeRedirect({ enabled = true } = {}) {
     if (onAuthPage) return;
 
     ranRef.current = true;
+
+    if (posOnlyStaff) {
+      const posHome = createPageUrl("POS");
+      if (!isPosTerminalPage(location.pathname.replace(/^\//, "")) && !path.startsWith("/pos")) {
+        try {
+          window.sessionStorage.setItem(REDIRECT_FLAG, "1");
+        } catch {
+          /* ignore */
+        }
+        navigate(posHome, { replace: true });
+      }
+      return;
+    }
 
     if (saasRole === "platform_admin") {
       const adminHome = staffDashboardHomePath();
@@ -72,5 +86,6 @@ export default function usePostAuthHomeRedirect({ enabled = true } = {}) {
     homeRoute,
     location.pathname,
     navigate,
+    posOnlyStaff,
   ]);
 }

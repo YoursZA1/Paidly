@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { createPageUrl, createSignupUrl, createAffiliateLandingUrl } from "@/utils";
+import { createPageUrl, createSignupUrl } from "@/utils";
 
 /**
  * @param {{ active?: "login" | "signup" | null, onLoginClick: () => void }} props
@@ -56,12 +56,6 @@ export default function Navbar({ active = null, onLoginClick }) {
             className="transition-colors duration-150 hover:text-white"
           >
             How to
-          </Link>
-          <Link
-            to={createAffiliateLandingUrl()}
-            className="transition-colors duration-150 hover:text-white"
-          >
-            Affiliate
           </Link>
         </nav>
 

@@ -15,6 +15,7 @@ import {
   planIncludesFeature,
   priceForSlug,
   PUBLIC_PLAN_SLUGS,
+  POS_PLAN_FEATURE,
   base,
 } from "../../shared/plans.js";
 import { normalizePlanFamily } from "../../shared/planFeatures.js";
@@ -37,5 +38,6 @@ export {
   planIncludesFeature,
   priceForSlug,
   PUBLIC_PLAN_SLUGS,
+  POS_PLAN_FEATURE,
   base,
 };

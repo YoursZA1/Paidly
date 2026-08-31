@@ -22,7 +22,7 @@ import { getSharedRequestCoordinator } from "@/core/network/sharedRequestCoordin
  */
 /** Cap pause wait in Vitest so a leaked AUTH_RECOVERING cannot stall the suite. */
 const DEFAULT_PAUSE_WAIT_MS =
-  typeof process !== "undefined" && process.env?.VITEST_PAIDLY === "1" ? 5_000 : 120_000;
+  typeof globalThis.process !== "undefined" && globalThis.process.env?.VITEST_PAIDLY === "1" ? 5_000 : 120_000;
 
 export async function safeFetch(input, init = {}) {
   const { __paidlyCritical, ...fetchInit } = init || {};

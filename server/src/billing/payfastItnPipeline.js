@@ -18,7 +18,6 @@ import {
 import { getPayfastItnPayload } from "../payfastItnBody.js";
 import { isValidUuid, sanitizeOneLine } from "../inputValidation.js";
 import { processPayfastInvoiceItn } from "../payfastInvoiceItn.js";
-import { recordSubscriptionPaymentCommission } from "../affiliateSubscriptionCommission.js";
 import {
   upsertSubscriptionFromItn,
   resolvePayfastSubscriptionUserIdForExport,
@@ -502,24 +501,6 @@ export function createPayfastItnProductionHandler(deps) {
         await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.PAYMENT_FAILED, {
           payment_history_id: phRowId,
         });
-      }
-
-      const userId = resolvePayfastSubscriptionUserIdForExport(payload);
-      if (
-        paymentStatusUpper === "COMPLETE" &&
-        isValidUuid(userId) &&
-        Number.isFinite(amountCheck.gross) &&
-        amountCheck.gross > 0
-      ) {
-        try {
-          await recordSubscriptionPaymentCommission(supabase, {
-            userId,
-            grossAmountZar: amountCheck.gross,
-            source: `payfast_sub_itn:${pfPaymentId || payload.m_payment_id || ""}`,
-          });
-        } catch (e) {
-          console.error("[payfast-itn] affiliate commission failed", e?.message || e);
-        }
       }
 
       await logWebhook(supabase, {

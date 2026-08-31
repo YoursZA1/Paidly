@@ -5,7 +5,6 @@ import { format } from 'date-fns';
 import {
   Users,
   CreditCard,
-  UserCheck,
   Settings,
   Banknote,
   Shield,
@@ -38,11 +37,6 @@ const CATEGORY_META = {
     label: 'Subscriptions',
     icon: CreditCard,
     color: 'bg-primary/10 text-primary border-primary/20',
-  },
-  affiliates: {
-    label: 'Affiliates',
-    icon: UserCheck,
-    color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
   },
   payouts: { label: 'Payouts', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
   settings: { label: 'Settings', icon: Settings, color: 'bg-slate-500/10 text-slate-400 border-slate-500/20' },
@@ -293,7 +287,7 @@ export default function AuditLogPage() {
           <ScrollText className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
           <p className="leading-relaxed">
             <span className="font-medium text-foreground">Internal compliance view.</span>{' '}
-            Privileged changes—user access, subscriptions, affiliates, payouts, and platform settings—are
+            Privileged changes—user access, subscriptions, payouts, and platform settings—are
             listed below. This feed is read-only; expand a row when a before/after snapshot exists.
           </p>
         </div>

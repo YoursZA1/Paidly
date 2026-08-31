@@ -56,15 +56,91 @@
 </ul>
 <p><strong>Deployment note:</strong> Same-origin <code>/api</code> on Vercel is implemented by **<code>api/<em>.js</code> serverless functions<strong>; the optional </strong>Express<strong> app in <code>server/src/index.js</code> is a </strong>separate<strong> runtime (rate limits and middleware apply only where that process fronts <code>/api</code>). See </strong><code>docs/API_DEPLOYMENT_MODEL.md</code></em>* before tuning limits or tracing 429s.</p>
 <p><strong>Goal:</strong> Evolve Paidly from an <strong>invoicing tool</strong> into a full <strong>business operating system</strong>—same story as <strong>Positioning</strong> below.</p>
+<h3>Final surface architecture (canonical)</h3>
+<p>Paidly is one product with <strong>two workplaces</strong> on <strong>one core</strong>. The till is not a second app and not a second database.</p>
+<pre><code>PAIDLY
+│
+├── BACK OFFICE          (sidebar / Settings — issue, stock, AR, people)
+│   ├── Products / Catalog
+│   ├── Inventory
+│   ├── Customers
+│   ├── Suppliers
+│   ├── Purchase Orders
+│   ├── Budgets
+│   ├── Invoices
+│   ├── Quotes
+│   ├── Payslips
+│   ├── Reports
+│   └── Settings
+│
+└── RETAIL FRONT OFFICE  (dedicated `/POS` shell — no sidebar)
+    └── POS
+        ├── Product Search
+        ├── Barcode
+        ├── Cart
+        ├── Customer
+        ├── Discounts
+        ├── Cash
+        ├── Payment Intent
+        ├── Payment Provider
+        ├── Receipt
+        ├── Returns
+        └── Register
+
+SHARED CORE (not duplicated per workplace)
+├── Authentication
+├── Organizations
+├── Companies / Brands
+├── Products            → public.services
+├── Inventory           → services.stock_quantity + inventory_movements
+├── Customers           → public.clients
+├── Payment Intents     → payment_intents
+├── Payments / Settlement  (invoice payments vs till pos_sales_events vs SaaS payment_history)
+└── Reporting</code></pre>
+<p>Nav copy: <strong>Products</strong> (catalog page <code>Services</code>), <strong>Clients</strong> (customers). Staff open the till from back-office <strong>POS</strong>; they do not run invoices from till chrome.</p>
+<p><strong>Payment architecture — two completely separate domains:</strong></p>
+<pre><code>Paidly Subscription
+  → PayFast
+  → Paidly subscription billing     (subscriptions + payment_history)
+
+Customer POS Payment
+  → payment_intent
+  → POS payment rail                (cash | ozow | card_terminal)
+  → provider
+  → verified settlement
+  → POS sale completed              (pos_sales_events)</code></pre>
+<p>Do not route till money through PayFast. Do not write till sales into invoice <code>payments</code> or SaaS <code>payment_history</code>. Invoice customer capture (when used) is also not PayFast on <code>payment_intents</code> — Ozow for documents; PayFast stays SaaS.</p>
 <p>On-call session/runtime guardrails: see <code>docs/SESSION_RUNTIME_GUARDS.md</code>.</p>
 <p><strong>New to the codebase:</strong> see <strong><code>docs/HOW_EVERYTHING_CONNECTS.md</code></strong> (one-page diagrams: browser ↔ Supabase ↔ <code>/api</code> ↔ optional Express).</p>
 <p><strong>Runtime scalability &amp; coordination:</strong> <code>docs/runtime-audit-report.md</code>, <code>src/core/</code> (<code>RuntimeCoordinator</code>, <code>RealtimeManager</code> logical registry over <code>paidlyRealtimeManager</code>, query policies, mutation dedupe, request budgeting, error classification).</p>
 <p><strong>Marketing SEO / structured data:</strong> homepage JSON-LD (<code>Organization</code>, <code>WebSite</code>, <code>WebApplication</code> offers) follows <a href="https://developers.google.com/search/docs/appearance/structured-data/sd-policies">Google structured data policies</a> — visible content only, no fabricated ratings. See <code>docs/SEO_STRUCTURED_DATA.md</code>.</p>
 <hr />
 <h2>Positioning — real product advantage</h2>
-<p><strong>Paidly is not an invoicing app.</strong> It is a <strong>business operating system</strong> for SMBs: one place to <strong>issue</strong> commercial documents, <strong>run</strong> client and catalog relationships, <strong>see</strong> money and performance, and <strong>grow</strong> through channels like affiliates—without treating each area as a separate product bolted together in the UI only.</p>
+<p><strong>Paidly is not an invoicing app.</strong> It is <strong>Business Management + POS</strong> — not a POS product that happens to invoice. One organization can serve:</p>
+<table><thead><tr>
+<th>Business</th>
+<th>Paidly</th>
+</tr></thead><tbody>
+<tr>
+<td>Consultant / freelancer</td>
+<td>Invoices + quotes</td>
+</tr>
+<tr>
+<td>Service business</td>
+<td>Invoices + clients + expenses (no till; <code>business_type = service</code>)</td>
+</tr>
+<tr>
+<td>Retail</td>
+<td>POS + inventory + customers + payments (<code>retail</code>)</td>
+</tr>
+<tr>
+<td>Hybrid</td>
+<td>POS + invoices + quotes + inventory (<code>mixed</code>)</td>
+</tr>
+</tbody></table>
+<p>The hybrid path is the interesting one: a salon, clothing store, or agency can take <strong>walk-in till sales and normal invoicing</strong> on the same account. The platform loop is <strong>Catalog → POS → Payment Intent → Settlement → Inventory → Reporting</strong>. <strong>PayFast stays isolated</strong> as Paidly’s subscription billing rail.</p>
 <p><strong>Investor-facing framing:</strong> shift the story from “invoice app” to <strong>financial workflow platform for SMEs</strong>.</p>
-<p><strong>You already have (in shipped or advanced form):</strong> invoices, quotes, payslips (specialised commercial tables), Documents Hub (generic business documents), clients, reporting, affiliates, and the plumbing for payments, subscriptions, and cash visibility.</p>
+<p><strong>You already have (in shipped or advanced form):</strong> invoices, quotes, payslips (specialised commercial tables), Documents Hub (generic business documents), clients, catalog/inventory, <strong>native POS till</strong> (plus Yoco/Square adapters), reporting, and the plumbing for payments, subscriptions, and cash visibility.</p>
 <p><strong>Competitive edge:</strong> most tools <strong>excel at one slice</strong> (invoicing-only, or accounting-only, or a disconnected referral program). <strong>Few competitors unify</strong> issuance (document engine), relationship/catalog input, revenue/ops read models, and payment intelligence <strong>under one coherent architecture</strong> and vocabulary. That unification—<strong>Document → Payment Intent → Revenue System</strong> plus shared <strong>Experience</strong> and <strong>Payment Intelligence</strong>—is the defensible story: not “another invoice PDF,” but <strong>operating the business</strong> in one system.</p>
 <p><strong>Execution reality:</strong> roughly 70% of the SaaS architecture is already in place. The remaining value-defining 30% is: payment abstraction, event tracking, and experience consistency.</p>
 <hr />
@@ -115,12 +191,12 @@
 <tr>
 <td><strong>Organization / account</strong></td>
 <td>The Paidly tenant using the product</td>
-<td><code>organizations</code>; <code>CompanyContext.companyId</code> is this <strong>org id</strong> (product copy often says <code>company_id</code> for the tenant)</td>
+<td><code>organizations</code>; <code>CompanyContext.companyId</code> is this <strong>org id</strong> (product copy often says <code>company_id</code> for the tenant). <code>business_type</code> (<code>service</code> \</td>
 </tr>
 <tr>
 <td><strong>Company / brand</strong></td>
-<td>A trading identity that belongs to that organization, used for document branding</td>
-<td><code>public.companies</code> (<code>org_id</code>, <code>name</code>, <code>logo_url</code>); invoices set <strong><code>invoices.company_id</code> → <code>companies.id</code></strong></td>
+<td>A trading identity that belongs to that organization, used for document branding <strong>and POS till identity</strong></td>
+<td><code>public.companies</code> (<code>org_id</code>, <code>name</code>, <code>logo_url</code>); invoices set <strong><code>invoices.company_id</code> → <code>companies.id</code></strong>; POS registers and optional private catalog rows use the same id (<code>pos_registers.company_id</code>, <code>services.company_id</code>)</td>
 </tr>
 <tr>
 <td><strong>Team / membership</strong></td>
@@ -128,7 +204,7 @@
 <td><code>memberships</code> + org roles</td>
 </tr>
 </tbody></table>
-<p>Do not create a second tenant system. <code>CompanyContext</code> remains org RBAC. Active brand is a <strong>UI default for new documents</strong> (per-org localStorage); changing it must not rewrite existing invoices. Quotes have no <code>company_id</code> column (name/logo snapshot only). Payslips stay organization-profile scoped. See <code>docs/MULTIBRAND_COMPANIES.md</code>.</p>
+<p>Do not create a second tenant system. <code>CompanyContext</code> remains org RBAC. Active brand is a <strong>UI default for new documents</strong> (per-org localStorage); changing it must not rewrite existing invoices <strong>and must not change which products a POS till can sell</strong>. Quotes have no <code>company_id</code> column (name/logo snapshot only). Payslips stay organization-profile scoped. See <code>docs/MULTIBRAND_COMPANIES.md</code>.</p>
 <p><strong>Strategy:</strong> <strong>Stabilise, don’t expand.</strong> Harden session edge cases, org bootstrap, and role gates (<code>RequireAuth</code>) so every other system trusts Identity cheaply.</p>
 <p><strong>Auth + session stabilization (in flight):</strong> one coherent story for <strong>session read/write</strong> (<code>getStableSession</code> / SessionCoordinator vs reserved raw <code>getSession</code> in AuthContext / SupabaseAuthService / supabaseAuthRefresh), <strong>profile restore</strong> when local auth cache is cleared, <strong>invite / password / org bootstrap</strong> flows, and <strong>no silent “logged in but empty user”</strong> states. Client work touches <strong><code>customClient.js</code></strong> / <code>AuthManager</code>, <strong><code>RequireAuth</code></strong>, and Supabase Auth config—treat this as <strong>foundation</strong> before shipping net-new document features at scale.</p>
 <p><strong>Connection lifecycle (client OS):</strong> <code>ConnectionLifecycleManager</code> (<code>src/lib/connection/ConnectionLifecycleManager.js</code>) is the single ingress for <strong>auth, refresh, realtime, visibility, network, sleep/wake, and recovery</strong> signals; it updates a read model store and delegates terminal decisions to <code>SessionOrchestrator</code> only through one adapter (<code>registerSessionAuthority(...toSessionAuthorityAdapter())</code>). Subsystems <strong>report in</strong>; they do not apply parallel session health policies. Transport events use semantic types (<code>LifecycleSignalType</code>, e.g. <code>REALTIME_DISCONNECTED</code>, <code>REFRESH_SKIPPED</code>) and <strong><code>lifecyclePolicy</code></strong> chooses effects (ignore vs recover vs reconnect) so realtime/visibility noise does not escalate to logout. The same signals also feed <strong><code>RuntimeCoordinator</code></strong> (<code>runtimeCoordinatorBridge.js</code>) for <strong>phase + <code>pauseNonCriticalRequests</code></strong> so authenticated HTTP (<code>apiRequest</code> / <code>backendApi</code>) waits during AUTH_RECOVERING / RECONNECTING. <strong>Session health</strong> uses a degraded ladder (<code>sessionRecoveryEscalation.js</code> + <code>SESSION_STATUS</code>: <code>unstable</code> → <code>reconnecting</code> → <code>degraded</code> → <code>reauth_required</code>) before <code>transitionToExpired</code> for recoverable failures (reconnect, wake, reauth-class 401s); fatal refresh / explicit sign-out still expire immediately.</p>
@@ -240,39 +316,88 @@
 </ul>
 <p><strong>Technical anchor today:</strong> <code>Invoice</code> / <code>Quote</code> / <code>Payslip</code> entities + <code>InvoiceSendService</code>-style orchestration + <code>/api/send-email</code> + public share routes. <strong>In code:</strong> <code>src/document-engine/</code> exports <code>DOCUMENT_TYPES</code>, <code>normalizeDocumentType</code>, <code>parseRouteDocumentTypeStrict</code>, <code>getDocumentEntity</code>, <code>documentRef</code>—use these for routing, analytics, and new engine code. <strong>Roadmap:</strong> grow this module (shared send/PDF adapters, shared status vocabulary) so new document kinds plug in, not fork.</p>
 <h4>Critical addition: Payment Intent layer (Document Engine ↔ Revenue &amp; Ops)</h4>
-<p>Without a first-class <code>Payment Intent</code>, payments feel bolted on, Payfast-specific logic leaks across product surfaces, and the engine is harder to scale. Introduce a canonical handoff object between document delivery/observation and financial capture.</p>
+<p>Without a first-class <code>Payment Intent</code>, payments feel bolted on, Payfast-specific logic leaks across product surfaces, and the engine is harder to scale. Introduce a canonical handoff object between document delivery/observation (and native POS) and financial capture.</p>
 <p><strong>Why this matters:</strong></p>
 <ul>
 <li><strong>Without it:</strong> payments feel bolted on, provider logic leaks everywhere, and cross-surface consistency breaks.</li>
-<li><strong>With it:</strong> clean abstraction between document and payment rails, multi-provider readiness, and analytics-ready payment funneling.</li>
+<li><strong>With it:</strong> clean abstraction between document/POS and payment rails, multi-provider readiness, and analytics-ready payment funneling.</li>
 </ul>
-<p><strong>Payment intent contract (per payable document):</strong></p>
+<p><strong>Payment intent contract:</strong></p>
 <ul>
 <li><code>intent_id</code> (idempotent)</li>
-<li><code>document_ref</code> (<code>type</code>, <code>id</code>, <code>org_id</code>)</li>
+<li><code>source_kind</code> (<code>document</code> | <code>pos</code>)</li>
+<li><code>document_ref</code> (<code>type</code>, <code>id</code>, <code>org_id</code>) when <code>source_kind = document</code></li>
 <li><code>amount_snapshot</code> + <code>currency_snapshot</code></li>
-<li><code>payer_context</code> (public share, portal user, or signed-in actor)</li>
-<li><code>rail</code> (<code>payfast</code>, future rails), <code>expires_at</code></li>
-<li><code>status</code> (<code>pending</code>, <code>requires_action</code>, <code>paid</code>, <code>failed</code>, <code>cancelled</code>, <code>expired</code>, <code>refunded</code>)</li>
+<li><code>payer_context</code> (public share, portal user, signed-in cashier, or walk-in)</li>
+<li><code>provider</code> / rail: <strong>customer payments</strong> use <code>cash</code> (till-verified), <code>ozow</code> (Digital Payment), or <code>card_terminal</code> (physical reader — not click-to-paid). <strong>PayFast is only for Paidly platform subscriptions</strong> — never POS or invoice customer capture.</li>
+<li><code>expires_at</code></li>
+<li><code>status</code> (<code>pending</code>, <code>requires_action</code>, <code>processing</code>, <code>paid</code>, <code>failed</code>, <code>cancelled</code>, <code>expired</code>, <code>refunded</code>)</li>
 </ul>
-<p><strong>Schema upgrade (<code>payment_intents</code>):</strong></p>
+<p><strong>POS payment path (Cash | Card | Digital Payment):</strong></p>
+<p>The native till Pay sheet offers three architecture-ready methods. <strong>Cash</strong> is the only till-verified settlement: the cashier counts notes, POS computes change, and the intent is <code>paid</code> after that till check. <strong>Card</strong> and <strong>Digital Payment</strong> are not “tap to mark paid.” They stay unpaid until a real mechanism confirms.</p>
+<table><thead><tr>
+<th>Till method</th>
+<th><code>payment_intents.provider</code></th>
+<th>Completes sale when</th>
+<th>Must not</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Cash</strong></td>
+<td><code>cash</code></td>
+<td>Cashier tenders ≥ total (trusted till cash workflow)</td>
+<td>Route through Ozow or PayFast</td>
+</tr>
+<tr>
+<td><strong>Card</strong></td>
+<td><code>card_terminal</code></td>
+<td>Hardware reader / webhook confirms (<code>terminal_confirmed</code>)</td>
+<td>Cashier click, <code>manual_complete</code>, <code>force_paid</code>, or <code>mark_paid</code></td>
+</tr>
+<tr>
+<td><strong>Digital Payment</strong></td>
+<td><code>ozow</code></td>
+<td>Ozow charge/webhook confirms success</td>
+<td>Complete from a till click alone</td>
+</tr>
+</tbody></table>
+<p>There is <strong>no</strong> <code>MANAGE_POS_MANUAL_CARD</code> (or similar) permission. Paidly does not fake a card terminal. External Yoco/Square readers are adapters: they confirm completed sales through <code>/api/pos/webhook</code>, which is a real confirmation — not the native <strong>Card</strong> button. Do not write till money into invoice <code>payments</code> or SaaS <code>payment_history</code>.</p>
+<p><strong>POS inventory commit:</strong></p>
+<p>Stock lives on <code>services.stock_quantity</code> and the ledger <code>inventory_movements</code>. POS uses the existing RPCs <code>adjust_inventory_stock</code> → <code>apply_inventory_movement</code> (<code>source = pos</code>, <code>reference_id = pos_sales_events.id</code>). Inventory <strong>must not</strong> decrease because a product was added to the till cart, Pay was opened, or a <code>payment_intents</code> row was created. Those steps are local/pending only.</p>
+<pre><code>Cart (device state)
+  → Payment (intent pending)
+  → Verified payment / confirmed cash
+  → Sale completed (`pos_sales_events`)
+  → Inventory movement
+  → Stock decreases</code></pre>
+<p>Returns restock (<code>type = in</code>) only when the original sale already applied inventory. A return is a <strong>new</strong> <code>pos_sales_events</code> row (<code>sale_kind = return</code>, <code>parent_event_id</code> → original). The original sale is <strong>never deleted</strong> and its money columns are immutable (trigger). A failed inventory commit reverses any partial <code>out</code> so the catalog is not left half-moved. Failed return events do not consume remaining qty.</p>
+<p><strong>POS receipts:</strong> After a completed <code>pos_sales_events</code> sale (or return), the till issues a <strong>customer receipt</strong> — brand, sale number, date/time, staff, products/qty/prices, discount, tax, total, payment method, and change when cash. Staff can print, download PDF (same html2pdf / Anvil pipeline as other documents, without invoice templates), or email via <code>POST /api/pos/receipt/email</code> (Resend HTML + optional PDF). A receipt is not an invoice: checkout does <strong>not</strong> insert <code>invoices</code>, does not use <code>/api/send-invoice</code>, and does not treat a receipt as AR.</p>
+<p><strong>POS vs invoice (hard rule):</strong> A POS sale is an immediate retail transaction (<code>pos_sales_events</code>). An invoice is a receivable / payment request (<code>invoices</code> + <code>payments</code>). Do <strong>not</strong> auto-create an invoice for every till sale. After a completed sale, staff may optionally <strong>Customer requests invoice</strong> (<code>POST /api/pos/invoice</code>) if a named <code>clients</code> row is attached (walk-in cannot convert). That inserts a <strong>paid tax-invoice copy</strong> linked by <code>invoices.pos_sale_event_id</code> (unique) and <code>pos_sales_events.invoice_id</code>. It does not write invoice <code>payments</code>, does not send a Pay-now request, and does not move stock again (<code>handle_invoice_paid</code> / <code>handle_invoice_reversal</code> skip POS-origin rows). Cash flow ignores those invoices so till money is not counted as invoice income. Quote “Convert to Invoice” (unpaid compose from <code>?quoteId=</code>) is the wrong path for a settled till sale — that would ask the customer to pay again. Returns cannot convert. Migration: <code>supabase/migrations/20260828200000_pos_sale_invoice.sql</code>.</p>
+<p><strong>POS register:</strong> A register is a <strong>till identity</strong>, not a second sales ledger. It belongs to the organization and a <strong>brand</strong> (<code>public.companies</code> — the same trading identity as <code>invoices.company_id</code>). Paidly has <strong>no locations / stores table</strong>; do not invent a multi-site model. Fields: <code>name</code>, <code>status</code> (<code>active</code> \| <code>disabled</code>), <code>assigned_staff_id</code> (org member or owner — operational, not a second ACL), <code>opening_balance</code> (default cash float; not POS sale money and not invoice <code>payments</code>). Native checkout stamps <code>pos_sales_events.register_id</code> and <strong><code>company_id</code> from the register only</strong> (request body <code>company_id</code> is ignored so a till cannot spoof another brand). The device remembers the selected till in <code>localStorage</code>. Settings → Integrations → POS registers. Yoco/Square ingress can omit <code>register_id</code>. Do <strong>not</strong> duplicate <code>pos_sales</code> / <code>pos_payments</code> tables. Migration: <code>supabase/migrations/20260828210000_pos_registers.sql</code>.</p>
+<p><strong>POS catalog (multi-brand):</strong> Still one table (<code>public.services</code>). Optional <code>services.company_id</code> → <code>companies.id</code> (<code>ON DELETE SET NULL</code>). <strong>Null = org-shared</strong> (visible on every till). <strong>Set = private to that brand.</strong> <code>GET /api/pos/catalog</code> and native checkout load <code>item_type = product</code> for the org where <code>company_id IS NULL OR company_id = register.company_id</code>. A brandless register sees shared products only. Company A’s till cannot sell Company B’s private products — the header brand switcher is not a catalog scope. Returns restock against the original sale’s lines without re-checking brand (the original sale already passed the filter). Migration: <code>supabase/migrations/20260828240000_pos_multibrand_catalog.sql</code>.</p>
+<p><strong>POS session (cash drawer / shift):</strong> A register session is <strong>not</strong> Auth <code>getSession</code>. Table <code>pos_register_sessions</code>: one <strong>open</strong> shift per register (partial unique index). Lifecycle: OPEN (cashier starts shift, enters opening cash) → sales and returns stamp <code>pos_sales_events.session_id</code> → CLOSE (count closing cash). Tracked: <code>opening_balance</code>, <code>cash_sales</code>, <code>cash_refunds</code>, <code>expected_cash</code> (<code>opening + cash sales − cash refunds</code>), <code>closing_cash</code>, <code>variance</code> (<code>closing − expected</code>). Card / digital tenders do not move expected drawer cash. While open, cash totals are computed live from <code>pos_sales_events</code>; at close they are snapshotted. Closed rows are <strong>immutable</strong> (no PATCH; database trigger rejects UPDATE/DELETE). Native checkout/return requires an open session (<code>422 SESSION_REQUIRED</code>) unless the sessions migration is missing (degrade, do not block). External Yoco/Square ingress may omit <code>session_id</code>. APIs: <code>POST /api/pos/sessions</code>, <code>GET /api/pos/sessions</code>, <code>GET /api/pos/sessions/:id</code>, <code>POST /api/pos/sessions/:id/close</code>. Settings shows read-only closed-shift history. Migration: <code>supabase/migrations/20260828220000_pos_register_sessions.sql</code>.</p>
+<p><strong>POS returns / refunds (append-only):</strong> Reversing a till sale never deletes or rewrites the original <code>pos_sales_events</code> row. Flow: original sale → sale item (<code>items</code> jsonb, matched by <code>product_id</code>; <code>line_id</code> stamped for later) → return event (<code>sale_kind = return</code>, <code>parent_event_id</code>) → inventory <code>in</code> via <code>adjust_inventory_stock</code> (<code>source = pos</code>). Original <code>total_amount</code> / <code>items</code> stay the sale; <code>refund_status</code> (<code>none</code> \| <code>partial</code> \| <code>full</code>) and <code>refunded_amount</code> are snapshots of child returns. <strong>V1 money:</strong> <code>refund_rail = till_cash</code> takes cash out of the open drawer (session <code>cash_refunds</code>). Card / digital restock goods with <code>refund_rail = pending_provider</code> and copy <code>original_payment_intent_id</code>; they do <strong>not</strong> mark the original <code>payment_intents</code> row <code>refunded</code> and do not call Ozow or a card terminal. Staff may opt into <code>refund_as_cash</code> to pay a card/digital return from the drawer. <strong>Future (columns exist, no API):</strong> a new <code>payment_intents</code> row with <code>refund_of_intent_id</code> pointing at the original paid intent, then <code>refund_rail = provider</code>. Do not add <code>pos_sale_items</code>, <code>pos_refunds</code>, or dual-write invoice <code>payments</code> / SaaS <code>payment_history</code>. Permission: <code>pos_refund</code>. Migration: <code>supabase/migrations/20260828230000_pos_return_audit.sql</code>.</p>
+<p><strong>POS audit trail:</strong> Completed till transactions are not silently edited or erased. Money identity on <code>pos_sales_events</code> stays immutable (existing trigger). Disconnecting Yoco/Square <strong>SET NULL</strong>s <code>connection_id</code> — it does <strong>not</strong> delete sales. Lifecycle is an org-scoped append-only stream <code>pos_audit_events</code> (same pattern as <code>document_events</code> / <code>subscription_events</code>, not platform <code>audit_logs</code>): <code>sale_created</code>, <code>payment</code>, <code>completion</code>, <code>refund</code>, <code>cancellation</code>, <code>inventory_movement</code>. Unpaid checkout logs <code>cancellation</code> on the <code>payment_intents</code> row (no fake sale). Returns log <code>refund</code> on the <strong>original</strong> sale (<code>metadata.return_id</code>). Inventory still lives in <code>inventory_movements</code>. <code>GET /api/pos/sales/:id/audit</code> (<code>pos_access</code>) returns the timeline; the receipt dialog shows it. Missing table must not block checkout. Migration: <code>supabase/migrations/20260828250000_pos_audit_trail.sql</code>.</p>
+<p><strong>POS offline (V1 — not a full offline till):</strong> Retail POS needs a live connection to record money. The existing <strong>invoice SyncEngine</strong> queue (<code>CREATE_INVOICE</code> / <code>UPDATE_CLIENT</code> in <code>localStorage</code>) is <strong>not</strong> a POS outbox: checkout is <code>POST /api/pos/checkout</code> (payment intent, open shift, inventory RPC). V1 does <strong>not</strong> enqueue cash or card sales, does <strong>not</strong> store payment credentials on the device, and does <strong>not</strong> mark card/digital paid while offline. The till <strong>always shows</strong> connectivity (Online / Reconnecting / Offline). Cart build and device hold (<code>sessionStorage</code>) still work offline; Pay, cash take, card, digital, returns, shift open/close, and tax-invoice copy require Online. Cash queue is a future dedicated till outbox — not the invoice sync queue — and must never look like a completed <code>pos_sales_events</code> row until the server confirms.</p>
+<p><strong>POS staff permissions:</strong> Till access uses the existing org membership RBAC (<code>src/lib/companyPermissions.js</code> / <code>server/src/companyRouteAccess.js</code>) — Supabase Auth + <code>memberships</code> roles <code>employee</code> / <code>manager</code> / <code>admin</code> (owner maps to admin). Do <strong>not</strong> add a second POS login, JWT, or role table. Grants: <code>pos_access</code> (open till, catalog, today’s sales, receipts, sale audit timeline), <code>pos_sell</code> (checkout, open shift, optional tax-invoice copy), <code>pos_discount</code> (cart-level discount), <code>pos_refund</code> (returns), <code>pos_close_register</code> (close shift / cash-up), <code>pos_view_reports</code> (closed-session history and non-today sales lists). Employee: access + sell. Manager and admin: all six. Register CRUD stays <code>manage_company_settings</code>. <code>assigned_staff_id</code> on a register is operational, not a second ACL. There is still <strong>no</strong> <code>MANAGE_POS_MANUAL_CARD</code>. APIs return <code>403</code> <code>POS_FORBIDDEN</code> when the grant is missing. <code>/POS</code> is wrapped in <code>RequireCompanyPermission</code> (<code>pos_access</code>) plus FeatureGate <code>pos</code> (Business+; first-class plan key, not aliased to inventory). SQL helper <code>org_has_pos_permission(org_id, permission)</code> mirrors those grants for RLS.</p>
+<p><strong>POS staff invite (till-only link):</strong> From the <strong>front-facing till</strong> (<code>/POS</code>), a manager or admin (<code>manage_employees</code>) can <strong>Invite staff</strong>. That uses the existing company invite API (<code>POST /api/company/invite</code>) — not a second till login. The invite is always RBAC <code>employee</code> plus <code>memberships.job_function = pos</code> (<code>source = pos</code>). Cashiers cannot invite others. After invite, the till shows a <strong>special shareable link</strong> <code>/invite?token=…&amp;next=POS</code>. Accepting it (and <code>accept_company_invite_token</code>) copies <code>job_function</code> onto <code>memberships</code>. POS-only staff land on <code>/POS</code>, have no back-office nav (invoices, dashboard, settings), and the till back-arrow is Sign out. Enforcement is the job function, not the URL. Settings → Team can still pick job function <strong>POS only</strong>. Migration: <code>supabase/migrations/20260828290000_pos_staff_invite.sql</code>.</p>
+<p><strong>POS URL / access (back-office entry):</strong> The till is only <code>/POS</code> (alias <code>/pos</code>). Staff reach it from <strong>Paidly navigation</strong>, not from chrome on the till itself. Primary sidebar Overview order: <strong>Dashboard → Invoices → Quotes → Clients → Products → POS</strong> (then Documents, Purchase Orders, Reports, Settings). The <strong>POS</strong> item is shown only when the org <strong>opted into POS</strong> (<code>organizations.business_type</code> is <code>retail</code> or <code>mixed</code>), the plan includes the <code>pos</code> feature (Business+), <strong>and</strong> the user has <code>pos_access</code>. Service orgs (and unset type) never see POS in the sidebar — it is not an upgrade teaser. Company members also get <strong>POS</strong> as a Me-section workspace link when those same gates pass. Dashboard <strong>Open POS</strong> stays visible even when there are no sales today. Mobile bottom nav stays Home / Invoices / FAB / Clients / Menu; POS lives in the sidebar Menu drawer. <code>canShowPosNav</code> (<code>src/lib/posNavAccess.js</code>) is the single visibility helper.</p>
+<p><strong>Business type (POS is optional):</strong> Paidly is not a POS product that happens to invoice. Every tenant is a <strong>service</strong>, <strong>retail</strong>, or <strong>mixed</strong> business (<code>organizations.business_type</code>; NULL = service). <strong>Service</strong> → normal Paidly (invoices, quotes, clients) — no till. <strong>Retail / product</strong> → Paidly + POS. <strong>Mixed</strong> → invoices plus a till for walk-in sales. Invoices stay available for every type (retail is still Paidly). Onboarding and Settings → Company Profile pick the type; Settings → Integrations shows registers only when POS is on. APIs return <code>403</code> <code>POS_NOT_ENABLED</code> for checkout/registers/connections when the type is service. Existing orgs that already have <code>pos_registers</code> or <code>pos_sales_events</code> are backfilled to <code>mixed</code>. Migration: <code>supabase/migrations/20260828270000_organizations_business_type.sql</code>. Helper: <code>shared/businessType.js</code>.</p>
+<p><strong>POS feature entitlement:</strong> Till enablement uses the existing SaaS feature map — not a second flag table and not hard-coded user or org IDs. Canonical key <code>pos</code> (<code>POS_PLAN_FEATURE</code> in <code>shared/planFeatures.js</code>) sits on <strong>Business+</strong> (<code>FAMILY_FEATURES</code>, same tier as inventory but a separate key so POS can be packaged independently later). Server till operations call <code>requirePosPlan</code> → <code>requireFeature('pos')</code> after membership/RBAC and before business-type (<code>requirePosCapability</code>). That covers catalog, checkout, return, registers, sessions, connections, POS <code>payment-intents</code>, receipt email, and tax-invoice copy. <strong>Do not</strong> gate GET sales lists, Cash Flow, or provider webhooks on <code>pos</code> — those are historical money and callbacks. SPA uses <code>hasFeature</code> / <code>hasFeatureAccess('pos')</code> / FeatureGate; nav hides POS when the plan lacks <code>pos</code> rather than showing an upgrade teaser. Catalog display: append <code>pos</code> to <code>plans.features</code> jsonb (<code>supabase/migrations/20260828280000_plans_pos_feature.sql</code>). Enforcement SoR remains subscriptions family → <code>FAMILY_FEATURES</code>, not the jsonb list and not <code>profiles</code>.</p>
+<p><strong>POS acceptance tests (Task 28):</strong> The till contract is <code>tests/unit/posTask28Acceptance.test.js</code> (TESTs 1–15: open till, search, cart, quantity, cash change, digital paid vs not paid, inventory commit point, receipt, attach customer, register brand, RBAC, persistence vs held cart, tenant isolation, duplicate payment). Supporting modules: <code>tests/unit/posSaleProcessor.test.js</code> (webhook idempotency), <code>tests/pos.spec.ts</code> (guest cannot open <code>/POS</code>; entitled session may exercise the till). Do not treat a held <code>sessionStorage</code> cart as a sale. Digital checkout writes <code>pos_sales_events</code> only when <code>posSaleCompletesWhenPaid</code> (<code>payment_intents.status = paid</code>).</p>
+<p><strong>POS tenancy, RLS, and money identity:</strong> Every POS row is <code>org_id</code>-scoped. Org members may <strong>SELECT</strong> sales, sessions, registers, connections, and audit events (Cash Flow / Reports read <code>pos_sales_events</code> under RLS). <strong>Writes</strong> of sales, sessions, registers, connections, audit events, and <code>payment_intents</code> are <strong>service_role / API only</strong> — the browser must not insert a sale. Triggers reject cross-tenant FKs: register <code>company_id</code> and sale <code>company_id</code> must be a <code>companies</code> row in that org; sale <code>client_id</code>, <code>register_id</code>, <code>session_id</code>, <code>connection_id</code>, and <code>parent_event_id</code> must match <code>org_id</code>. Native checkout does <strong>not</strong> trust client totals: catalog price × quantity, server discount (capped, <code>pos_discount</code>), tax_amount 0 on the till, payable total written to <code>payment_intents.amount</code> and <code>pos_sales_events.total_amount</code>. Client <code>unit_price</code> / <code>total</code> / <code>tax_amount</code> / <code>company_id</code> are ignored or rejected on mismatch. Cash tendered is validated against that server total; change is computed on the server. Yoco/Square webhook adapters still ingest the provider’s completed amount (external till). Migration: <code>supabase/migrations/20260828260000_pos_rls_tenant_integrity.sql</code>. To apply the full native POS chain in the SQL Editor in one paste, use <code>scripts/apply-native-pos.sql</code> (idempotent; starts with webhook POS tables if they are missing).</p>
+<p><strong>Schema (<code>payment_intents</code>):</strong></p>
 <ul>
-<li><code>id</code></li>
-<li><code>document_id</code></li>
-<li><code>provider</code> (<code>payfast</code> | <code>stripe</code>)</li>
-<li><code>amount</code></li>
-<li><code>currency</code></li>
-<li><code>status</code></li>
-<li><code>external_id</code></li>
-<li><code>created_at</code></li>
+<li><code>id</code>, <code>org_id</code>, <code>source_kind</code>, <code>document_id</code> (nullable), <code>pos_sale_event_id</code> (nullable), <code>provider</code>, <code>amount</code>, <code>currency</code>, <code>status</code> (includes unused-in-V1 <code>refunded</code>), <code>external_id</code>, <code>idempotency_key</code>, <code>refund_of_intent_id</code> (nullable; future provider refund pointing at the original paid intent), <code>created_at</code></li>
+<li>Migrations: <code>supabase/migrations/20260828180000_payment_intents.sql</code>, <code>supabase/migrations/20260828190000_payment_intents_card_terminal.sql</code>, <code>supabase/migrations/20260828230000_pos_return_audit.sql</code>, <code>supabase/migrations/20260828250000_pos_audit_trail.sql</code>, <code>supabase/migrations/20260828260000_pos_rls_tenant_integrity.sql</code></li>
 </ul>
 <p><strong>Boundary of ownership:</strong></p>
 <ul>
 <li><strong>Document Engine owns:</strong> payable snapshot creation, due/expiry semantics, and <code>document_ref</code> identity.</li>
-<li><strong>Revenue &amp; Ops owns:</strong> provider orchestration, webhook verification, settlement/reconciliation, and ledger-like payment records.</li>
-<li><strong>Experience System owns:</strong> one payment-status language and CTA behavior across document detail, public links, and portal views.</li>
+<li><strong>Native POS owns:</strong> cart snapshot (no stock movement), <strong>till cash</strong> (tendered + change, independent of online rails), writing <code>pos_sales_events</code> only after the intent is <code>paid</code>, then inventory via <code>adjust_inventory_stock</code>.</li>
+<li><strong>Revenue &amp; Ops owns:</strong> provider orchestration, webhook verification, settlement/reconciliation. Invoice settlement still uses <code>payments</code>; SaaS billing still uses PayFast ITN → <code>payment_history</code>.</li>
+<li><strong>Experience System owns:</strong> one payment-status language and CTA behavior across document detail, public links, portal views, and the till Pay sheet.</li>
 </ul>
-<p><strong>Result:</strong> no direct “mark paid” shortcuts from UI paths; all payable settlement flows through <code>Payment Intent</code> + verified payment events.</p>
+<p><strong>Result:</strong> no direct “mark paid” shortcuts from UI paths; all payable settlement flows through <code>Payment Intent</code> + verified payment events. Ozow is the first intended customer online rail; the provider interface is registered now — full Ozow charge/webhook wiring waits on merchant credentials.</p>
 <h4>Product upgrade: one compose surface, many kinds</h4>
 <p>The <strong>big upgrade</strong> is not more list pages—it is <strong>one mental journey</strong> with honest persistence:</p>
 <ol>
@@ -289,17 +414,31 @@
 <li><strong>Clients</strong> (CRM): contact, terms, portal access</li>
 <li><strong>Catalog</strong> (<code>services</code>): products &amp; services, pricing, inventory where relevant</li>
 <li><strong>Line items</strong> on documents: snapshots + links back to catalog when useful</li>
+<li><strong>Native POS till</strong> (<code>/POS</code> or <code>/pos</code>): a <strong>front-facing till</strong> (not the admin dashboard). Layout skips sidebar/header/footer; the page is catalog + cart + pay. Staff open it from back-office <strong>POS</strong> nav (after Products) when inventory and <code>pos_access</code> allow — the till has no app chrome of its own. Search is scan-first: USB/Bluetooth wedge or camera barcode → catalog lookup (name, SKU / product code, barcode) → cart. Customer is optional (<strong>Walk-in Customer</strong> default); staff can search/select or create on the same <code>clients</code> table without leaving the till. Reads the same catalog and customers; it does <strong>not</strong> own a second product or client store. Back office remains the master for products, stock, pricing, and customers.</li>
 </ul>
 <p><strong>Strategy:</strong> Treat this as the <strong>input graph</strong> to commerce—not a separate “Contacts app.” List screens are views; the system is <strong>relationship + SKU/rate intelligence</strong>. Growth-oriented <strong>CRM behaviour</strong> (follow-ups, nudges, sequences) lives primarily in the <strong>Growth Engine</strong>; this system owns <strong>master data</strong> and what gets embedded on documents.</p>
+<p><strong>One catalog (hard rule):</strong> <code>public.services</code> is the only product/service master (<code>item_type</code>: <code>product</code> | <code>service</code> | <code>labor</code> | <code>material</code> | <code>expense</code>). Purchase orders, deliveries, <code>inventory_movements</code>, invoices, and POS all resolve to <code>services.id</code>. Optional <code>services.company_id</code> scopes <strong>private</strong> brand products for POS; it is not a second catalog. Do <strong>not</strong> revive <code>public.products</code>, add <code>products_v2</code>, or a parallel SKU store. Legacy <code>public.products</code> / <code>stock_transactions</code> were dropped in <code>supabase/migrations/20260804121000_inventory_movements_fk_and_legacy_cleanup.sql</code>. <code>entities/Product.json</code> is unused schema — do not wire a Product entity against a second table.</p>
+<p><strong>Known gaps (real, but not a second catalog):</strong></p>
+<ul>
+<li><strong>No product variants</strong> — one SKU and one barcode per <code>services</code> row. A child table is justified only if retail needs size/color SKUs, and it must still parent to <code>services</code>.</li>
+<li><strong>No <code>pos_sale_items</code> / <code>pos_refunds</code> tables</strong> — sale lines stay jsonb on <code>pos_sales_events</code>. Checkout merges by <code>product_id</code>; returns match those lines. <code>line_id</code> is stamped for a later split-line model. Till lifecycle is <code>pos_audit_events</code>, not a second sales ledger and not platform <code>audit_logs</code> / <code>document_events</code>.</li>
+<li><strong>POS provider refunds are not V1</strong> — Ozow / <code>card_terminal</code> money-back is not called. Return events stamp <code>refund_rail = pending_provider</code> and <code>original_payment_intent_id</code>. Future: <code>payment_intents.refund_of_intent_id</code> + <code>refund_rail = provider</code>. Cash returns (<code>till_cash</code>) are V1.</li>
+<li><strong>No category master</strong> — <code>services.category</code> is free text. A later <code>categories</code> table would FK from <code>services</code>, not from a new products table.</li>
+<li><strong>No locations / stores table</strong> — a POS <strong>register</strong> (<code>pos_registers</code>) is a till identity on the org + brand (<code>companies</code>). Catalog visibility is <code>(services.company_id IS NULL OR services.company_id = pos_registers.company_id)</code>. It is not a sales ledger and not a multi-site model. Sale SoR stays <code>pos_sales_events</code> (<code>register_id</code>).</li>
+<li><strong>No offline POS ledger</strong> — V1 till checkout is online-only. Invoice SyncEngine is not used for POS. Cart hold is device <code>sessionStorage</code> only. Do not fake completed sales while offline.</li>
+<li><strong>No online store / cart / e-commerce orders table</strong> — till cart is device <code>sessionStorage</code>; B2B sale is <code>invoices</code>; retail sale is <code>pos_sales_events</code>. Do not add a generic <code>orders</code> table that dual-writes invoices.</li>
+<li><strong><code>payment_intents</code> exists</strong> as the customer handoff (POS cash / Ozow / <code>card_terminal</code>, document Ozow). <strong>Settlement stays three rails:</strong> invoice <code>payments</code>, SaaS <code>payment_history</code>, POS <code>pos_sales_events</code>. Do not merge those into one payments table. PayFast never appears on <code>payment_intents</code>.</li>
+<li><strong>Reports / Accounting / Cash Flow</strong> read invoices, expenses, <code>payments</code>, and <code>pos_sales_events</code> (<code>src/utils/cashFlowTruth.js</code>, <code>src/utils/posSalesTruth.js</code>). Optional POS tax-invoice copies (<code>invoices.pos_sale_event_id</code>) are excluded from invoice income so converting a sale does not double-count till cash.</li>
+</ul>
 <hr />
 <h3>4. Revenue System (Revenue &amp; Ops)</h3>
 <p><strong>Job:</strong> Everything that turns <strong>issued documents</strong> (especially invoices) into <strong>cash, visibility, and tenant billing</strong>—without re-implementing document authoring here.</p>
 <ul>
 <li><strong>Payments:</strong> Payfast, invoice payment state, webhooks (<code>api/payfast-handler</code>)</li>
-<li><strong>POS integrations:</strong> Generic webhook + Yoco/Square ingress (<code>api/pos/*</code>), normalized <code>pos_sales_events</code>, optional catalog stock decrement via <code>adjust_inventory_stock</code> (source <code>pos</code>). <strong>Connect flows:</strong> Square OAuth (<code>/api/pos/oauth/square/start</code> → callback); Yoco secure connect (API secret → auto webhook registration). Settings → Integrations; dashboard <strong>POS sales today</strong> card.</li>
+<li><strong>POS (native till + integrations):</strong> Paidly POS (<code>/POS</code>) is a front-facing checkout on the <strong>same</strong> catalog, inventory, customers, and <code>pos_sales_events</code> table — not a separate app or database. Checkout creates a <code>payment_intents</code> row. Cash is settled on the till (tendered + change). Digital Payment uses <code>ozow</code> and is completed only after provider confirmation. Card is <code>card_terminal</code> — architecture-ready, not a fake terminal; the sale is not marked paid on click. <code>pos_sales_events</code> is written only after the intent is <code>paid</code>. Stock does not decrease for cart, Pay, or unpaid intents; after the sale row exists, checkout calls <code>adjust_inventory_stock</code> (<code>source = pos</code>). Returns go through <code>POST /api/pos/return</code> (session auth, <code>pos_refund</code>, <code>pos</code> plan entitlement): append-only <code>sale_kind = return</code> against <code>parent_event_id</code> — the original sale is not deleted. Stock moves only via <code>adjust_inventory_stock</code> (<code>source = pos</code>). Cash returns use <code>refund_rail = till_cash</code>. Card/digital V1 restocks with <code>pending_provider</code> (no Ozow/terminal refund). Checkout never creates an invoice. Optional <strong>Customer requests invoice</strong> (<code>POST /api/pos/invoice</code>) writes a paid tax-invoice copy linked by <code>invoices.pos_sale_event_id</code> — not a new receivable and not invoice <code>payments</code>. PayFast is not used for POS. External tills (Yoco/Square/generic webhook) remain <strong>adapters</strong> into the same sale stream. Append-only <code>pos_audit_events</code> records sale created, payment, completion, refund, cancellation, and inventory movement; disconnecting a POS connection does not delete completed sales. Dashboard <strong>POS sales today</strong>; Settings → Integrations for registers and hardware connect. Migrations: <code>supabase/migrations/20260828160000_native_pos_checkout.sql</code>, <code>supabase/migrations/20260828180000_payment_intents.sql</code>, <code>supabase/migrations/20260828190000_payment_intents_card_terminal.sql</code>, <code>supabase/migrations/20260828200000_pos_sale_invoice.sql</code>, <code>supabase/migrations/20260828210000_pos_registers.sql</code>, <code>supabase/migrations/20260828220000_pos_register_sessions.sql</code>, <code>supabase/migrations/20260828230000_pos_return_audit.sql</code>, <code>supabase/migrations/20260828240000_pos_multibrand_catalog.sql</code>, <code>supabase/migrations/20260828250000_pos_audit_trail.sql</code>, <code>supabase/migrations/20260828260000_pos_rls_tenant_integrity.sql</code>, <code>supabase/migrations/20260828270000_organizations_business_type.sql</code>, <code>supabase/migrations/20260828280000_plans_pos_feature.sql</code>.</li>
 <li><strong>Payment intents:</strong> capture/retry/expiry orchestration and provider status normalization</li>
-<li><strong>Cash flow:</strong> timelines and balances built from documents + payments</li>
-<li><strong>Reports:</strong> read models and exports on top of documents + payments + catalog where relevant</li>
+<li><strong>Cash flow:</strong> timelines and balances built from <strong>settled invoice payments</strong> (income), <strong>completed POS <code>pos_sales_events</code></strong> (till sales in, till-cash refunds out), and recorded expenses, plus open invoice remainders for outstanding/upcoming cash. The Cash Flow page paginates entity lists so totals are not capped at the default 100-row fetch. Paid invoices with <code>pos_sale_event_id</code> are skipped so an optional tax-invoice copy does not appear as invoice income; the till event is the cash-in row. Card/digital <code>pending_provider</code> returns restock goods but do not reduce cash-flow income until a provider refund exists.</li>
+<li><strong>Reports:</strong> same cash-flow truth helpers as Cash Flow (<code>src/utils/cashFlowTruth.js</code> + <code>src/utils/posSalesTruth.js</code>) — settled invoice payments and till sales in, recorded (non-rejected) expenses out, calendar-day periods. Paginated fetches; do not dual-write Documents Hub expense <em>claims</em> into <code>expenses</code>. POS retail metrics (today, cash/digital, refunds, top products, units, gross/discount/tax/net) are a <strong>view</strong> over <code>pos_sales_events</code>, not a second reporting engine.</li>
 <li><strong>Subscriptions &amp; dunning:</strong> how Paidly bills the customer (packaging, crons in <code>vercel.json</code> → <code>/api/cron/...</code>)</li>
 <li><strong>SaaS subscription SoR (billing v2):</strong> <code>plans</code> catalog (<code>amount</code>, <code>billing_cycle</code>, <code>plan_family</code>, <code>payfast_item_name</code>, <code>features</code>, <code>active</code> — <strong>not hardcoded in React</strong>) + public tiers Starter R50 / Business R150 / Growth R350 (+ annual 2 months free) + Enterprise contact-sales; legacy Individual/SME/Corporate grandfathered. <code>subscriptions</code> core (<code>company_id</code>, <code>plan_id</code>, <code>plan_family</code>, <code>grace_ends_at</code>, PayFast ids, period bounds, <code>cancelled_at</code>, <code>created_by</code>, <code>trial_started_at</code> / <code>trial_ends_at</code>, <code>subscription_source</code> (<code>system_trial</code> \| <code>payfast</code> \| <code>admin</code>), <code>admin_override</code>; status allow-list only: <code>pending</code> \| <code>processing</code> \| <code>active</code> \| <code>past_due</code> \| <code>failed</code> \| <code>cancelled</code> \| <code>expired</code> \| <code>suspended</code> \| <code>trialing</code>) + append-only <code>payment_history</code> + <code>subscription_events</code> + <code>payfast_itn_logs</code> + <code>subscription_invoices</code> + <code>webhook_logs</code>. <strong>New org-owner accounts created on/after 2026-08-20 00:00:00 UTC</strong> get a <strong>7-day server-side trial</strong> (<code>trialing</code>); invited members do not. Access is <code>hasSubscriptionAccess</code> (trial not expired, <code>active</code>, or admin-managed). Activation to paid only after verified PayFast ITN (never from the SPA). Admin PATCH <code>/api/admin/subscriptions</code> can extend/grant/suspend/cancel and always sets <code>admin_override</code> so expiry jobs cannot revert it; changes write <code>audit_logs</code>. <strong>Payment/revenue reporting</strong> counts only <code>payment_history.payment_status = completed</code> with transaction/created time <strong>≥ 2026-08-20T00:00:00.000Z</strong> (UTC) — not trials, admin grants, pending/failed, or pre-cutoff rows. <strong>APIs:</strong> <code>GET /api/subscriptions/plans</code>, <code>POST /api/subscriptions/create|change|cancel</code>, <code>GET …/status|current</code>, <code>POST /api/payfast/itn</code>, <code>GET /api/admin/subscriptions</code> (overview + reporting), <code>GET /api/admin/payments</code>, <code>PATCH /api/admin/subscriptions</code> (legacy client-priced <code>POST /api/payfast/subscription</code> returns 410). Schema: <code>docs/SUBSCRIPTION_BILLING_SCHEMA.md</code>. Profiles (<code>plan</code> / <code>subscription_status</code> / <code>is_pro</code>) remain a cache (mirrored as <code>plan_family</code>).</li>
 </ul>
@@ -335,7 +474,6 @@
 <h3>Growth loops (implemented within Revenue, Relationship, and Experience systems)</h3>
 <p><strong>Job:</strong> How Paidly <strong>acquires, retains, and scales</strong>—loops that sit beside day-to-day issuing.</p>
 <ul>
-<li><strong>Affiliates:</strong> acquisition + admin moderation (<code>api/affiliates</code>, …)</li>
 <li><strong>Emails:</strong> transactional and campaign-style sends from <code>/api</code> and app-triggered flows</li>
 <li><strong>Notifications:</strong> in-app + scheduled nudges (crons, reminders, due-date services)</li>
 <li><strong>CRM behaviour:</strong> follow-ups, client engagement, portal nudges—<strong>behaviour</strong> on top of Relationship data, not a duplicate CRM product</li>
@@ -374,8 +512,13 @@
 <td><strong>Page template</strong></td>
 <td>List/index pages share one <strong>three-zone</strong> shell (below)—visual consistency reads as <strong>premium</strong>.</td>
 </tr>
+<tr>
+<td><strong>Installable app</strong></td>
+<td>Same SPA, installable as a PWA (<code>display: standalone</code>). Service worker caches the <strong>application shell</strong> (HTML/JS/CSS/icons) only. <strong>Never</strong> cache invoices, quotes, payslips, clients, payments, or Supabase/<code>/api</code> responses. Auth stays on live GoTrue + <code>localStorage</code> (<code>paidly-auth</code>).</td>
+</tr>
 </tbody></table>
 <p><strong>Strategy:</strong> Treat “Experience” as <strong>governed</strong>: a short <strong>layout + form checklist</strong> for any new surface that touches Identity or the Document Engine—same as you’d gate API changes.</p>
+<p><strong>Installable PWA (same codebase, same auth):</strong> Chromium can show <strong>Install Paidly</strong> (<code>beforeinstallprompt</code>). iOS/iPadOS uses <strong>Share → Add to Home Screen</strong>. Launch uses <code>display: standalone</code> (no browser chrome). The service worker precaches the shell and uses <strong>NetworkOnly</strong> for Supabase and <code>/api</code>. A waiting worker surfaces an Update toast — it must not force-reload while the user is editing a document. This is not a second desktop app (no Electron/Tauri).</p>
 <h4>Experience upgrade: make the editor pattern universal</h4>
 <p>The editor shell is a product advantage only if it is consistent across <strong>documents and money actions</strong>. Standardize the same right-side sticky panel pattern for invoice payment actions, not just compose/edit forms.</p>
 <p><strong>Universal right panel contract (sticky):</strong></p>
@@ -422,10 +565,6 @@
 <td><strong>Services</strong></td>
 <td>Catalog / inventory — header + content; industry/templates/search → side where possible</td>
 </tr>
-<tr>
-<td><strong>Affiliates</strong></td>
-<td>Growth admin — <code>PageHeader</code> already; align body to <strong>content + sticky side</strong> for search/status</td>
-</tr>
 </tbody></table>
 <p>Refactors can be <strong>incremental</strong>: introduce <code>PageTemplate</code> first, then move filters/summary into <code>sidePanel</code> per page without changing data logic.</p>
 <h3>Standardize UI layout (everything same structure)</h3>
@@ -435,7 +574,7 @@
 <th>Structure</th>
 </tr></thead><tbody>
 <tr>
-<td><strong>List / index</strong> (Invoices, Quotes, Clients, Services, Affiliates, …)</td>
+<td><strong>List / index</strong> (Invoices, Quotes, Clients, Services, …)</td>
 <td><strong><code>PageTemplate</code></strong>: Header (title + actions) → Content (table/grid) → Side panel (filters / summary)</td>
 </tr>
 <tr>
@@ -445,6 +584,10 @@
 <tr>
 <td><strong>Payment touchpoints</strong> (document detail, public invoice, portal)</td>
 <td>Shared payment state model driven by <code>Payment Intent</code> status; same CTA order and error/retry messaging</td>
+</tr>
+<tr>
+<td><strong>Retail POS till</strong> (<code>/POS</code>, <code>/pos</code>)</td>
+<td><strong>Dedicated till shell</strong> — not <code>PageTemplate</code>. No dashboard sidebar, header, footer, or mobile bottom nav. Staff enter from back-office <strong>POS</strong> (sidebar after Products; company workspace Me link; Dashboard Open POS). Full-viewport catalog + cart, large touch targets, scan-first search. Header always shows <strong>connectivity</strong> (Online / Reconnecting / Offline) and selects a <strong>register</strong> (till identity on a brand; opening float shown; catalog is that brand’s shared + private products only). Cart: add/remove, qty ± / edit, cart-level discount (invoice identity: listed price due; tax not invented on the till), clear, device hold in <code>sessionStorage</code> (not a sale). <strong>Checkout requires Online</strong> — cash is not queued; card/digital never complete offline. Cart and Pay do not decrement stock. Inventory moves only after verified payment writes <code>pos_sales_events</code>, via <code>adjust_inventory_stock</code>. Customer is optional: default <strong>Walk-in Customer</strong>; search/select or create on the existing <code>clients</code> table without leaving the till. Pay: <strong>Cash</strong> (till-verified), <strong>Card</strong> (architecture-ready, not click-to-paid), <strong>Digital Payment</strong> (Ozow; paid only when Ozow confirms). After a completed sale: print / download / email a <strong>receipt</strong> (not an invoice) branded from the <strong>register’s</strong> company, not the header document-brand switcher. The receipt dialog shows the append-only audit timeline. Optional <strong>Customer requests invoice</strong> creates a paid tax-invoice copy of that sale (named customer required) — it does not ask them to pay again. <strong>Return</strong> (managers, <code>pos_refund</code>): pick remaining qty per original line; original sale stays; cash leaves the drawer; card/digital restock with pending provider refund. Back office remains the product/customer master.</td>
 </tr>
 <tr>
 <td><strong>Admin / settings-style</strong></td>
@@ -484,7 +627,7 @@
         │                       ▼
         │            ┌───────────────────────┐
         │            │   Revenue &amp; Ops       │
-        │            │ Payfast/Stripe · subs │
+        │            │ PayFast SaaS · Ozow   │
         │            │ cash flow · reports   │
         │            └──────────┬────────────┘
         │                       │
@@ -504,17 +647,21 @@
                                 ▼                       │
                     ┌───────────────────────┐           │
                     │    Growth Engine       │◄──────────┘
-                    │ affiliates · email ·  │  (also uses
-                    │ notifications · CRM   │   relationship data)
+                    │ email · notifications │  (also uses
+                    │ CRM behaviour         │   relationship data)
                     └───────────────────────┘</code></pre>
 <p><strong>Money loop (explicit):</strong></p>
-<p><code>Document Engine</code> → <code>Payment Intent Layer</code> → <code>Revenue &amp; Ops</code> (Payfast/Stripe) → <code>Webhook</code> → <code>Document Engine (Settle)</code></p>
+<p>Customer money and SaaS billing are <strong>completely separate domains</strong>.</p>
+<p><code>Document Engine</code> / <code>POS till</code> → <code>Payment Intent Layer</code> → customer rail (<code>cash</code> | <code>ozow</code> | <code>card_terminal</code>) → verified event → settle (<code>payments</code> for invoices, <code>pos_sales_events</code> for till).</p>
+<p><strong>SaaS billing (not a customer rail):</strong> Paidly subscription → PayFast → <code>subscriptions</code> + <code>payment_history</code>. Never POS. Never till <code>payment_intents</code>.</p>
 <p><strong>Get Paid loop (differentiator):</strong></p>
 <p><code>Observe</code> (<code>document_events</code>) + <code>Payment Intent</code> state → <code>Payment Intelligence Layer</code> → smart reminders/CTA/retry strategy → <code>Revenue &amp; Ops</code> + <code>Experience System</code></p>
+<p><strong>Retail POS loop:</strong></p>
+<p><code>Relationship (catalog + customers)</code> → <code>POS till (select register → cart → Cash | Card | Digital Payment)</code> → confirmed payment intent → <code>pos_sales_events</code> (<code>register_id</code>) → <code>adjust_inventory_stock</code> (<code>source = pos</code>) → <strong>retail receipt</strong> (print / PDF download / email) + append-only <code>pos_audit_events</code>. Till <strong>must be Online</strong> for checkout (V1 does not queue cash on the invoice sync queue). Optional <strong>Customer requests invoice</strong> → paid <code>invoices</code> row with <code>pos_sale_event_id</code> (tax copy only; no invoice <code>payments</code>, no second stock movement). <strong>Return:</strong> original sale stays → append <code>sale_kind = return</code> (<code>parent_event_id</code>) → restock <code>in</code> → cash <code>till_cash</code> or card/digital <code>pending_provider</code>. Cart, Pay sheet, and unpaid intents do not move stock. Checkout does <strong>not</strong> write <code>invoices</code>. Cash is till settlement. Digital is Ozow (paid only when Ozow confirms). Card is not click-to-paid; Yoco/Square hardware confirms via webhook adapters. PayFast stays on SaaS billing.</p>
 <hr />
 <h1>Part B — Technical blueprint (stack &amp; flow)</h1>
 <h2>B.1 What Paidly is (product one-liner)</h2>
-<p>Paidly is a <strong>business operating system for SMBs</strong>—not a narrow invoicing tool: <strong>documents</strong> (invoice / quote / payslip), <strong>relationships &amp; catalog</strong>, <strong>revenue visibility &amp; payments</strong>, and <strong>growth</strong> (e.g. affiliates) in one product story. <strong>South Africa–first</strong> (Payfast, ZAR defaults). <strong>Stack:</strong> <strong>Vite + React</strong> SPA on <strong>Vercel</strong>, <strong>Supabase</strong> as system of record.</p>
+<p>Paidly is a <strong>business operating system for SMBs</strong>—not a narrow invoicing tool: <strong>documents</strong> (invoice / quote / payslip), <strong>relationships &amp; catalog</strong>, and <strong>revenue visibility &amp; payments</strong> in one product story. <strong>South Africa–first</strong> (Payfast, ZAR defaults). <strong>Stack:</strong> <strong>Vite + React</strong> SPA on <strong>Vercel</strong>, <strong>Supabase</strong> as system of record.</p>
 <h2>B.2 What runs where</h2>
 <table><thead><tr>
 <th>Layer</th>
@@ -544,7 +691,7 @@
 <tr>
 <td><strong>APIs</strong></td>
 <td>Vercel <code>/api/*</code></td>
-<td>Email, shares, Payfast, crons, affiliates</td>
+<td>Email, shares, Payfast, crons</td>
 </tr>
 <tr>
 <td><strong>Optional</strong></td>
@@ -712,7 +859,7 @@
 <li><strong>Standardize UI layout</strong> — execute <strong>Foundation §5</strong> + <strong>A.2</strong> table (<code>PageTemplate</code>, editor shell, embedded admin).</li>
 <li><strong>Publish an “Experience checklist”</strong> (1 page) for new screens touching documents or money — include the <strong>Page Template</strong> three-zone rule (<code>PageTemplate</code>) and <strong>layout grammar</strong> row picker (<strong>closes Foundation §5</strong>).</li>
 <li><strong>Identity / role matrix doc</strong> — admin vs management vs support capabilities (complements §4).</li>
-<li><strong>Roll out <code>PageTemplate</code></strong> on Invoices, Quotes, Clients, Services, and Affiliates — move filters/summary into <strong><code>sidePanel</code></strong> where they still live inside the main card.</li>
+<li><strong>Roll out <code>PageTemplate</code></strong> on Invoices, Quotes, Clients, and Services — move filters/summary into <strong><code>sidePanel</code></strong> where they still live inside the main card.</li>
 <li><strong>Extend the hook → service → entity pattern</strong> — add <code>*ListService</code> / query modules for Quotes, Clients, and other high-traffic reads; keep <strong><code>api/InvoiceService</code>-style</strong> modules for non-CRUD delivery concerns.</li>
 <li><strong>Implement Client Timeline</strong> — query + UI on <strong>Client detail</strong> per <strong>High impact §2</strong>; consider a small <code>ClientTimelineService</code> for aggregation and caching keys.</li>
 <li><strong>Implement quote → invoice conversion</strong> — server or client path that creates draft invoice from accepted quote per <strong>High impact §3</strong>; validate RLS and idempotency (no duplicate drafts on double-accept).</li>
@@ -728,13 +875,13 @@
 <h2>v1 implementation contract (direct build plan)</h2>
 <h3>Tables (Supabase)</h3>
 <ul>
-<li><code>payment_intents</code> (new): <code>id</code>, <code>document_id</code>, <code>provider</code>, <code>amount</code>, <code>currency</code>, <code>status</code>, <code>external_id</code>, <code>created_at</code></li>
+<li><code>payment_intents</code>: <code>id</code>, <code>org_id</code>, <code>source_kind</code> (<code>document</code> | <code>pos</code>), <code>document_id</code>, <code>pos_sale_event_id</code>, <code>provider</code> (<code>cash</code> | <code>ozow</code> | <code>card_terminal</code>), <code>amount</code>, <code>currency</code>, <code>status</code>, <code>external_id</code>, <code>idempotency_key</code>, <code>created_at</code></li>
 <li><code>document_events</code> (expand): ensure canonical events <code>sent</code>, <code>opened</code>, <code>clicked</code>, <code>paid</code>, <code>reminded</code> with <code>occurred_at</code>, <code>actor_type</code>, <code>metadata</code></li>
-<li><code>payments</code> (existing): keep as settlement/reconciliation records linked to provider/webhook outcomes</li>
+<li><code>payments</code> (existing): invoice settlement/reconciliation only — not POS till money, not SaaS <code>payment_history</code></li>
 </ul>
 <h3>Services (app/server orchestration)</h3>
 <ul>
-<li><code>DocumentPaymentIntentService</code> (new): create/update intent from document snapshot; enforce idempotency by <code>document_id + provider + status window</code></li>
+<li><code>PaymentIntentService</code> (<code>server/src/payments/</code>): create/confirm customer intents; POS checkout confirms through the provider registry. Idempotency by <code>org_id + idempotency_key</code>. PayFast is excluded.</li>
 <li><code>DocumentEventService</code> (expand): append normalized document/payment lifecycle events; provide query helpers for timeline/reminders</li>
 <li><code>PaymentWebhookReconciliationService</code> (new or expanded from current Payfast handler): verify provider payloads, map to canonical statuses, write <code>payments</code> + <code>document_events</code>, trigger settle transition</li>
 <li><code>PaymentIntelligenceService</code> (v1 basic): evaluate reminder triggers (e.g., viewed-not-paid, due/overdue windows) and emit follow-up actions</li>
@@ -747,15 +894,22 @@
 </ul>
 <h3>API endpoints (<code>/api/*</code>)</h3>
 <ul>
-<li><code>POST /api/payment-intents</code> (new): create intent for payable document</li>
-<li><code>GET /api/payment-intents/:id</code> (new): fetch intent status for sticky panel + public views</li>
-<li><code>POST /api/payments/webhook/:provider</code> (new canonical route; may proxy existing <code>payfast-handler</code>)</li>
+<li><code>POST /api/payment-intents</code> (create customer intent; POS or document)</li>
+<li><code>GET /api/payment-intents/:id</code> (intent status)</li>
+<li><code>GET /api/payment-intents/providers</code> (registered customer rails)</li>
+<li><code>POST /api/payments/webhook/:provider</code> (customer rails, e.g. <code>ozow</code>; PayFast ITN stays on <code>/api/payfast-handler</code>)</li>
 <li><code>POST /api/pos/webhook/:token</code> (POS sale ingress — generic, Yoco, Square parsers)</li>
 <li><code>POST /api/pos/webhook/provider/square</code> (Square application webhook — routes by merchant_id)</li>
 <li><code>POST /api/pos/oauth/square/start</code> · <code>GET /api/pos/oauth/callback/square</code> (Square OAuth connect)</li>
 <li><code>POST /api/pos/oauth/yoco/connect</code> (Yoco API key connect + auto webhook)</li>
 <li><code>GET|POST|PATCH|DELETE /api/pos/connections</code> (org settings managers / company admins); RLS mirrors this via <code>is_company_admin_for_org</code> (members may SELECT only)</li>
-<li><code>GET /api/pos/sales</code> (org members — dashboard read model)</li>
+<li><code>GET /api/pos/sales</code> (<code>pos_access</code> for today; <code>pos_view_reports</code> for broader lists)</li>
+<li><code>GET /api/pos/catalog</code> (<code>pos_access</code>; optional <code>register_id</code> — catalog is register-brand scoped)</li>
+<li><code>POST /api/pos/checkout</code> (<code>pos_sell</code>; <code>pos_discount</code> if discount is applied)</li>
+<li><code>POST /api/pos/return</code> (<code>pos_refund</code>; append-only return event; never deletes the original sale)</li>
+<li><code>POST /api/pos/receipt/email</code> (till receipt email; not an invoice)</li>
+<li><code>POST /api/pos/invoice</code> (optional tax-invoice copy of a completed sale; paid; no invoice payments)</li>
+<li><code>GET|POST /api/pos/registers</code> · <code>PATCH|DELETE /api/pos/registers/:id</code> (till identity; org members list; settings managers write)</li>
 <li><code>POST /api/documents/:type/:id/events</code> (new internal endpoint) or service-only ingestion path for <code>document_events</code></li>
 <li><code>POST /api/reminders/dispatch</code> (new internal endpoint used by cron workers)</li>
 </ul>

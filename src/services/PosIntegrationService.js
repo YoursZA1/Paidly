@@ -30,7 +30,9 @@ function parseApiJsonError(res, raw, fallbackMessage) {
     (raw && !raw.trim().startsWith("{") ? raw.trim().slice(0, 240) : "") ||
     res.statusText ||
     `${fallbackMessage} (HTTP ${res.status})`;
-  throw new Error(detail);
+  const err = new Error(detail);
+  if (json?.code) err.code = json.code;
+  throw err;
 }
 
 function apiBase() {
@@ -109,6 +111,209 @@ export async function listPosSales(opts = {}) {
     sales: Array.isArray(json.sales) ? json.sales : [],
     totalToday: Number(json.total_today) || 0,
   };
+}
+
+export async function fetchPosSaleAudit(saleId) {
+  const headers = await authHeaders({ includeJsonContentType: false });
+  const res = await apiRequest(`${apiBase()}/api/pos/sales/${encodeURIComponent(saleId)}/audit`, { headers });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not load POS audit");
+  return Array.isArray(json.events) ? json.events : [];
+}
+
+export async function fetchPosCatalog({ registerId } = {}) {
+  const headers = await authHeaders();
+  const qs = registerId ? `?register_id=${encodeURIComponent(registerId)}` : "";
+  const res = await apiRequest(`${apiBase()}/api/pos/catalog${qs}`, { headers });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not load POS catalog");
+  return Array.isArray(json.products) ? json.products : [];
+}
+
+export async function listPosRegisters() {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/registers`, { headers });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not load registers");
+  return {
+    registers: Array.isArray(json.registers) ? json.registers : [],
+    members: Array.isArray(json.members) ? json.members : [],
+  };
+}
+
+/**
+ * @param {{ name: string, status?: string, company_id?: string|null, assigned_staff_id?: string|null, opening_balance?: number }} payload
+ */
+export async function createPosRegister(payload) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/registers`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not create register");
+}
+
+/**
+ * @param {string} registerId
+ * @param {{ name?: string, status?: string, company_id?: string|null, assigned_staff_id?: string|null, opening_balance?: number }} updates
+ */
+export async function updatePosRegister(registerId, updates) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/registers/${encodeURIComponent(registerId)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(updates),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not update register");
+}
+
+export async function disablePosRegister(registerId) {
+  const headers = await authHeaders({ includeJsonContentType: false });
+  const res = await apiRequest(`${apiBase()}/api/pos/registers/${encodeURIComponent(registerId)}`, {
+    method: "DELETE",
+    headers,
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not disable register");
+}
+
+/**
+ * @param {{ register_id?: string, status?: "open"|"closed", limit?: number }} [opts]
+ */
+export async function listPosSessions(opts = {}) {
+  const headers = await authHeaders();
+  const params = new URLSearchParams();
+  if (opts.register_id) params.set("register_id", String(opts.register_id));
+  if (opts.status) params.set("status", String(opts.status));
+  if (opts.limit) params.set("limit", String(opts.limit));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await apiRequest(`${apiBase()}/api/pos/sessions${qs}`, { headers });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not load POS sessions");
+  return Array.isArray(json.sessions) ? json.sessions : [];
+}
+
+export async function getPosSession(sessionId) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/sessions/${encodeURIComponent(sessionId)}`, { headers });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not load POS session");
+  return json.session || null;
+}
+
+/**
+ * @param {{ register_id: string, opening_balance?: number, notes?: string }} payload
+ */
+export async function openPosSession(payload) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/sessions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not start shift");
+  return json.session || null;
+}
+
+/**
+ * @param {string} sessionId
+ * @param {{ closing_cash: number, notes?: string }} payload
+ */
+export async function closePosSession(sessionId, payload) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/sessions/${encodeURIComponent(sessionId)}/close`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not close shift");
+  return json.session || null;
+}
+
+/**
+ * @param {{
+ *   items: Array<{ product_id: string, quantity: number, unit_price?: number }>,
+ *   payment_method: "cash"|"card"|"digital"|"other",
+ *   discount_amount?: number,
+ *   amount_tendered?: number,
+ *   client_id?: string|null,
+ *   company_id?: string|null,
+ *   register_id?: string|null,
+ *   currency?: string,
+ *   idempotency_key?: string,
+ *   brand_name?: string,
+ *   cashier_name?: string,
+ *   customer_name?: string,
+ *   customer_email?: string,
+ * }} payload
+ */
+export async function checkoutPosSale(payload) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/checkout`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not complete sale");
+}
+
+/**
+ * @param {{
+ *   sale_id: string,
+ *   items?: Array<{ product_id: string, quantity: number }>,
+ *   refund_as_cash?: boolean,
+ *   payment_method?: string,
+ *   idempotency_key?: string,
+ * }} payload
+ */
+export async function returnPosSale(payload) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/return`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not process return");
+}
+
+/**
+ * Optional tax-invoice copy of a settled till sale. Does not create a receivable.
+ * @param {{ sale_id: string, client_id?: string }} payload
+ */
+export async function convertPosSaleToInvoice(payload) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/invoice`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      sale_id: payload.sale_id,
+      client_id: payload.client_id || undefined,
+    }),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not convert sale to invoice");
+}
+
+/**
+ * Email a till receipt. Does not create an invoice.
+ * @param {{ sale_id: string, to: string, brand_name?: string, cashier_name?: string, customer_name?: string, base64PDF?: string }} payload
+ */
+export async function emailPosReceipt(payload) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/pos/receipt/email`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not email receipt");
 }
 
 export function buildGenericWebhookExample() {

@@ -1,4 +1,5 @@
 import { PERMISSIONS, hasCompanyPermission, buildCompanyAccessContext } from "@/lib/companyPermissions";
+import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 
 /** Nav item ids visible to each company role (admin sees full app nav). */
 const EMPLOYEE_NAV_IDS = new Set([
@@ -33,9 +34,18 @@ export function filterNavigationForCompanyRole(items, membership) {
     userId: membership.userId || "",
     companyId: membership.companyId || "",
     companyRole: membership.companyRole,
+    jobFunction: membership.jobFunction,
   });
 
+  if (isPosOnlyStaff({ ...membership, jobFunction: ctx.jobFunction })) {
+    return items.filter((item) => item.type === "section" || item.id === "nav-pos");
+  }
+
   const allowed = new Set(EMPLOYEE_NAV_IDS);
+
+  if (hasCompanyPermission(ctx, PERMISSIONS.POS_ACCESS)) {
+    allowed.add("nav-pos");
+  }
 
   if (membership.companyRole === "manager" || membership.companyRole === "admin") {
     for (const id of MANAGER_EXTRA_NAV_IDS) allowed.add(id);

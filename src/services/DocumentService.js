@@ -12,6 +12,12 @@ import {
 import { getConversionOptions, usesLegacyQuoteToInvoice } from "@/document-engine/documentConversions";
 import { getTemplatePreset } from "@/document-engine/documentTemplatePresets";
 import {
+  assertHubWritableType,
+  hubWriteForbiddenMessage,
+  isDocumentsHubExcludedType,
+  postgrestExcludeCommercialHubTypes,
+} from "@/document-engine/documentSystemOfRecord";
+import {
   assertTransition,
   INVOICE_STATUSES,
   QUOTE_STATUSES,
@@ -97,6 +103,9 @@ function isDocumentTypeConstraintError(error) {
 const HUB_MIGRATION_HINT =
   "Apply the documents hub migration (supabase db push), then reload the API schema cache in Supabase Dashboard → Settings → API.";
 
+/** Session-scoped probe of hub schema (templates + archive column). */
+let hubCapabilitiesCache = null;
+
 function throwWithCause(message, cause) {
   const err = new Error(message);
   if (cause != null) err.cause = cause;
@@ -115,12 +124,6 @@ function sentStatusForType(type) {
   if (type === DOCUMENT_TYPES.quote) return QUOTE_STATUSES.sent;
   if (type === DOCUMENT_TYPES.payslip) return PAYSLIP_STATUSES.sent;
   return INVOICE_STATUSES.sent;
-}
-
-function defaultStatusForType(type) {
-  if (type === DOCUMENT_TYPES.quote) return QUOTE_STATUSES.draft;
-  if (type === DOCUMENT_TYPES.payslip) return PAYSLIP_STATUSES.draft;
-  return INVOICE_STATUSES.draft;
 }
 
 /**
@@ -306,6 +309,11 @@ function applyAssigneeFilter(q, assignedUserId) {
   return q;
 }
 
+/** Exclude specialised commercial types from hub list/KPI queries. */
+function applyExcludeCommercialHubTypes(q) {
+  return q.not("type", "in", postgrestExcludeCommercialHubTypes());
+}
+
 /** Core list filters safe before the full documents hub migration. */
 function applyCoreListFilters(q, { type, status, search, assignedUserId, includeAssignee = false } = {}) {
   if (type && type !== "all") q = q.eq("type", type);
@@ -363,15 +371,19 @@ function applyHubSort(q, sort) {
 }
 
 /**
- * Unified document persistence (Supabase `documents` + `document_items` + `document_events`).
- * Legacy `invoices` / `quotes` / `payslips` rows are unchanged; this is the v2 document store.
+ * Documents Hub persistence (Supabase `documents` + `document_items` + `document_events`).
+ *
+ * Owns generic business documents (leave, expenses, contracts, …).
+ * Does not own invoices, quotes, payslips, or recurring invoices — those stay on
+ * specialised tables. See `documentSystemOfRecord.js`.
  */
 export const DocumentService = {
-  /**
-   * Returns the unified invoice id for this quote, if one was already converted (same org).
-   * @param {string} quoteDocumentId
-   * @returns {Promise<string | null>}
-   */
+/**
+ * Legacy lookup for hub invoice rows converted from a hub quote.
+ * New conversions must not create hub invoices; this remains for existing rows only.
+ * @param {string} quoteDocumentId
+ * @returns {Promise<string | null>}
+ */
   async findInvoiceBySourceQuoteId(quoteDocumentId) {
     const { orgId } = await getActorContext();
     return findInvoiceIdBySourceQuoteId(orgId, quoteDocumentId);
@@ -445,6 +457,9 @@ export const DocumentService = {
 
   async list({ type, status, limit = 100 } = {}) {
     const { orgId } = await getActorContext();
+    if (type && type !== "all" && isDocumentsHubExcludedType(type)) {
+      return [];
+    }
     let q = supabase
       .from("documents")
       .select(
@@ -454,7 +469,9 @@ export const DocumentService = {
       .order("created_at", { ascending: false })
       .limit(Math.min(Math.max(Number(limit) || 100, 1), 500));
     if (type && type !== "all") {
-      q = q.eq("type", normalizeDocumentType(type));
+      q = q.eq("type", isCatalogType(type) ? type : resolveCatalogType(type));
+    } else {
+      q = applyExcludeCommercialHubTypes(q);
     }
     if (status && status !== "all") {
       q = q.eq("status", status);
@@ -492,6 +509,10 @@ export const DocumentService = {
     }
     const limit = Math.min(Math.max(Number(params.limit) || 25, 1), 100);
     const offset = Math.max(Number(params.offset) || 0, 0);
+    if (params.type && params.type !== "all" && isDocumentsHubExcludedType(params.type)) {
+      return { rows: [], total: 0, limit, offset };
+    }
+    const excludeCommercial = !params.type || params.type === "all";
     const hubSelect =
       "id, org_id, type, category_key, status, document_number, title, total_amount, currency, base_currency, exchange_rate, client_id, assigned_user_id, archived_at, created_at, updated_at, client:clients ( id, name )";
     const assigneeSelect =
@@ -502,6 +523,7 @@ export const DocumentService = {
     const runQuery = (selectFields, filterTier) => {
       let q = supabase.from("documents").select(selectFields, { count: "exact" }).eq("org_id", orgId);
       q = applyCompanyRoleDocumentScope(q, userId, companyCtx);
+      if (excludeCommercial) q = applyExcludeCommercialHubTypes(q);
       if (filterTier === "hub") q = applyHubFilters(q, params);
       else if (filterTier === "assignee") q = applyCoreListFilters(q, { ...params, includeAssignee: true });
       else q = applyCoreListFilters(q, params);
@@ -562,7 +584,8 @@ export const DocumentService = {
     }
     const base = () => {
       let q = supabase.from("documents").select("id", { count: "exact", head: true }).eq("org_id", orgId);
-      return applyCompanyRoleDocumentScope(q, userId, companyCtx);
+      q = applyCompanyRoleDocumentScope(q, userId, companyCtx);
+      return applyExcludeCommercialHubTypes(q);
     };
 
     const runHubKpis = async () => {
@@ -677,6 +700,7 @@ export const DocumentService = {
   async create(payload) {
     const { userId, orgId } = await getActorContext();
     const type = resolveCatalogType(payload?.type);
+    assertHubWritableType(type);
     const defaultStatus = defaultStatusForCatalogType(type);
     const requested = payload?.status != null ? String(payload.status) : defaultStatus;
     if (requested !== defaultStatus) {
@@ -687,27 +711,9 @@ export const DocumentService = {
     const currency = normalizeCurrencyCode(payload?.currency, DEFAULT_BASE_CURRENCY);
     const baseCurrency = normalizeCurrencyCode(payload?.base_currency, DEFAULT_BASE_CURRENCY);
     if (source_quote_id) {
-      if (type !== DOCUMENT_TYPES.invoice) {
-        throw new Error("source_quote_id can only be set when creating an invoice.");
-      }
-      const { data: srcQuote, error: srcErr } = await supabase
-        .from("documents")
-        .select("id, type")
-        .eq("id", source_quote_id)
-        .eq("org_id", orgId)
-        .maybeSingle();
-      if (srcErr) {
-        throw throwWithCause(getSupabaseErrorMessage(srcErr, "Could not verify source quote"), srcErr);
-      }
-      if (!srcQuote || srcQuote.type !== DOCUMENT_TYPES.quote) {
-        throw new Error("source_quote_id must reference an existing quote document in your organization.");
-      }
-      const existingInvoiceId = await findInvoiceIdBySourceQuoteId(orgId, source_quote_id);
-      if (existingInvoiceId) {
-        throw new Error(
-          "An invoice already exists for this quote (duplicate conversion). Open the existing invoice from the documents list."
-        );
-      }
+      throw new Error(
+        "source_quote_id is only valid on specialised invoices. Convert quotes from the Quotes page."
+      );
     }
     const tax_rate = Number(payload?.tax_rate ?? 0);
     const discount_amount = Number(payload?.discount_amount ?? 0);
@@ -799,6 +805,9 @@ export const DocumentService = {
     const { userId, orgId } = await getActorContext();
     const existing = await this.get(documentId);
     if (!existing) throw new Error("Document not found");
+    if (isDocumentsHubExcludedType(existing.type)) {
+      throw new Error(hubWriteForbiddenMessage(existing.type));
+    }
 
     const nextStatus = patch.status != null ? String(patch.status) : existing.status;
     if (nextStatus !== existing.status) {
@@ -984,6 +993,8 @@ export const DocumentService = {
    * Option A (current): no separate `document_sends` table for unified docs.
    * We keep delivery metadata in event payload until multi-recipient / resend / delivery-state is needed.
    *
+   * Invoice/quote/payslip send lives on the specialised tables — never mark those hub rows sent here.
+   *
    * @param {string} documentId
    * @param {{ channel?: string, recipient?: string|null }} [options]
    */
@@ -991,6 +1002,9 @@ export const DocumentService = {
     const { userId, orgId } = await getActorContext();
     const existing = await this.get(documentId);
     if (!existing) throw new Error("Document not found");
+    if (isDocumentsHubExcludedType(existing.type)) {
+      throw new Error(hubWriteForbiddenMessage(existing.type));
+    }
     const next = sentStatusForType(existing.type);
     assertTransition(existing.type, existing.status, next);
     const { error } = await supabase
@@ -1018,101 +1032,40 @@ export const DocumentService = {
   },
 
   /**
-   * Creates a draft invoice from an accepted quote document and marks the quote `converted`.
+   * Quote→invoice belongs on specialised `quotes` / `invoices` tables.
+   * The hub must not create `documents.type=invoice` rows.
    * @param {string} quoteDocumentId
    */
   async convertToInvoice(quoteDocumentId) {
+    void quoteDocumentId;
+    throw new Error(
+      "Quotes convert to invoices from Quotes or Create Invoice. Job cards and reports convert via New Invoice (specialised table), not the Documents Hub."
+    );
+  },
+
+  /**
+   * Record that a hub document was used to start a specialised invoice/quote.
+   * Does not write a commercial row into `documents`.
+   */
+  async noteSpecialisedConversion(sourceDocumentId, { targetType, targetId = null } = {}) {
+    const source = await this.get(sourceDocumentId);
+    if (!source || isDocumentsHubExcludedType(source.type)) return null;
+    if (!isDocumentsHubExcludedType(targetType)) return null;
     const { userId, orgId } = await getActorContext();
-    const quote = await this.get(quoteDocumentId);
-    if (!quote) throw new Error("Quote document not found");
-    if (quote.type !== DOCUMENT_TYPES.quote) {
-      throw new Error("convertToInvoice requires a quote document");
-    }
-    if (quote.status !== QUOTE_STATUSES.accepted) {
-      throw new Error(`Quote must be accepted before conversion (current: ${quote.status})`);
-    }
-
-    const existingInvoiceId = await findInvoiceIdBySourceQuoteId(orgId, quote.id);
-    if (existingInvoiceId) {
-      throw new Error(
-        "This quote has already been converted to an invoice. Open that invoice from the documents list, or contact support if you need a duplicate."
-      );
-    }
-
-    const items = (quote.document_items || []).map((row) => ({
-      description: row.description,
-      quantity: row.quantity,
-      unit_price: row.unit_price,
-      total_price: row.total_price,
-      line_order: row.line_order,
-      metadata: row.metadata,
-    }));
-
-    let invoice;
-    try {
-      // Conversion = new draft invoice + canonical quote FK (see unique index on source_quote_id).
-      // Equivalent: await DocumentService.create({ type: "invoice", source_quote_id: quote.id, ... })
-      invoice = await this.create({
-        type: DOCUMENT_TYPES.invoice,
-        source_quote_id: quote.id,
-        client_id: quote.client_id,
-        title: quote.title ? `Invoice — ${quote.title}` : null,
-        currency: quote.currency,
-        base_currency: quote.base_currency || DEFAULT_BASE_CURRENCY,
-        exchange_rate: asPositiveNumber(quote.exchange_rate, 1),
-        tax_rate: quote.tax_rate,
-        discount_amount: quote.discount_amount,
-        issue_date: quote.issue_date,
-        due_date: quote.due_date,
-        metadata: {
-          ...(typeof quote.metadata === "object" && quote.metadata ? quote.metadata : {}),
-          converted_from_document_id: quote.id,
-        },
-        source_document_id: quote.id,
-        items,
-      });
-    } catch (e) {
-      const code = e?.cause?.code ?? e?.code;
-      const msg = String(e?.message ?? "");
-      if (code === "23505" || /duplicate key|unique constraint/i.test(msg)) {
-        throw new Error(
-          "This quote already has a converted invoice. Open it from the documents list, or contact support if the quote status looks wrong."
-        );
-      }
-      throw e;
-    }
-
-    assertTransition(DOCUMENT_TYPES.quote, quote.status, QUOTE_STATUSES.converted);
-    const { error: qErr } = await supabase
-      .from("documents")
-      .update({ status: QUOTE_STATUSES.converted })
-      .eq("id", quoteDocumentId)
-      .eq("org_id", orgId);
-    if (qErr) {
-      throw throwWithCause(getSupabaseErrorMessage(qErr, "Failed to mark quote as converted"), qErr);
-    }
-    await insertDocumentEvent({
+    await insertDocumentEventBestEffort({
       orgId,
-      documentId: quote.id,
+      documentId: source.id,
       userId,
       eventType: DOCUMENT_EVENT_TYPES.converted,
       payload: {
         action: DOCUMENT_EVENT_TYPES.converted,
-        new_invoice_document_id: invoice.id,
-        source_quote_id: quote.id,
+        specialised: true,
+        target_type: targetType,
+        target_id: targetId,
+        relation: "converted_to",
       },
     });
-    await insertDocumentEvent({
-      orgId,
-      documentId: invoice.id,
-      userId,
-      eventType: DOCUMENT_EVENT_TYPES.created_from_quote,
-      payload: {
-        action: DOCUMENT_EVENT_TYPES.created_from_quote,
-        source_quote_id: quote.id,
-      },
-    });
-    return { invoice, quote: await this.get(quoteDocumentId) };
+    return true;
   },
 
   /** Soft-archive a document (sets archived_at; keeps the row and its history). */
@@ -1192,7 +1145,6 @@ export const DocumentService = {
   async getDetail(documentId) {
     const full = await this.getFull(documentId);
     if (!full) return null;
-    const { orgId } = await getActorContext();
     const [clientRes, attachments, comments, linkedDocuments] = await Promise.all([
       full.client_id
         ? supabase.from("clients").select("id, name, email, company").eq("id", full.client_id).maybeSingle()
@@ -1376,8 +1328,12 @@ export const DocumentService = {
       throw new Error(`Cannot convert ${source.type} to ${targetType}.`);
     }
 
-    if (usesLegacyQuoteToInvoice(source.type, targetType)) {
-      return this.convertToInvoice(sourceDocumentId);
+    if (
+      isDocumentsHubExcludedType(targetType) ||
+      match.persistence === "commercial" ||
+      usesLegacyQuoteToInvoice(source.type, targetType)
+    ) {
+      throw new Error(hubWriteForbiddenMessage(targetType));
     }
 
     const { userId, orgId } = await getActorContext();
@@ -1479,7 +1435,7 @@ export const DocumentService = {
    * Cached for the browser session after first successful check.
    */
   async getHubCapabilities() {
-    if (getHubCapabilities._cache) return getHubCapabilities._cache;
+    if (hubCapabilitiesCache) return hubCapabilitiesCache;
     const { orgId } = await getActorContext();
     const [templatesProbe, archiveProbe] = await Promise.all([
       supabase.from("document_templates").select("id", { count: "exact", head: true }).eq("org_id", orgId).limit(1),
@@ -1491,12 +1447,15 @@ export const DocumentService = {
       assignees: !archiveProbe.error || !isSupabaseMissingColumnError(archiveProbe.error),
       newTypes: !archiveProbe.error || !isSupabaseMissingColumnError(archiveProbe.error),
     };
-    getHubCapabilities._cache = caps;
+    hubCapabilitiesCache = caps;
     return caps;
   },
 
   async listTemplates({ type } = {}) {
     const { orgId } = await getActorContext();
+    if (type && type !== "all" && isDocumentsHubExcludedType(type)) {
+      return { rows: [], tableReady: true };
+    }
     let q = supabase
       .from("document_templates")
       .select("id, type, category_key, name, description, is_default, created_at, updated_at")
@@ -1504,6 +1463,7 @@ export const DocumentService = {
       .order("is_default", { ascending: false })
       .order("updated_at", { ascending: false });
     if (type && type !== "all") q = q.eq("type", type);
+    else q = applyExcludeCommercialHubTypes(q);
     const { data, error } = await q;
     if (error) {
       if (isSupabaseMissingRelationError(error)) {
@@ -1516,6 +1476,7 @@ export const DocumentService = {
 
   /** Default template for a document type in the current org, if one is marked. */
   async getDefaultTemplateForType(type) {
+    if (isDocumentsHubExcludedType(type)) return null;
     const { orgId } = await getActorContext();
     const { data, error } = await supabase
       .from("document_templates")
@@ -1535,6 +1496,7 @@ export const DocumentService = {
   async createTemplateFromPreset(presetKey, { isDefault = false } = {}) {
     const preset = getTemplatePreset(presetKey);
     if (!preset) throw new Error("Unknown template preset.");
+    assertHubWritableType(preset.type);
     const { userId, orgId } = await getActorContext();
     if (isDefault) {
       const { error: clearErr } = await supabase
@@ -1576,6 +1538,7 @@ export const DocumentService = {
     const { userId, orgId } = await getActorContext();
     const doc = await this.get(documentId);
     if (!doc) throw new Error("Document not found");
+    assertHubWritableType(doc.type);
     const templateName = String(name || "").trim() || `${doc.title || "Document"} template`;
     if (isDefault) {
       const { error: clearErr } = await supabase

@@ -54,8 +54,6 @@ export function queueUpdateInvoice(invoiceId, invoiceData, meta = {}) {
 export function queueSendInvoice(invoiceId, options = {}, meta = {}) {
   if (invoiceId) {
     useAppStore.getState().setInvoice(invoiceId, {
-      status: "sent",
-      sent_date: new Date().toISOString(),
       sync_state: "sending",
     });
   }

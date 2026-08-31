@@ -9,6 +9,7 @@
 export {
   canEditInvoice,
   canRecordPayment,
+  isPosOriginInvoice,
   getInvoiceDisplayStatus,
   getInvoiceAutoStatusUpdate,
   isInvoiceStatusTransitionAllowed,

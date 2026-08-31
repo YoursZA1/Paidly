@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Paidly — Application Wiring Overview</title>
+  <style>
+    @page { size: A4; margin: 16mm 14mm 18mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 10.5px;
+      color: #0f172a;
+      line-height: 1.45;
+      margin: 0;
+    }
+    h1 { font-size: 22px; margin: 0 0 4px; color: #0f172a; letter-spacing: -0.02em; }
+    h2 {
+      font-size: 14px;
+      margin: 22px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #2563eb;
+      color: #1e3a8a;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11.5px;
+      margin: 16px 0 6px;
+      color: #1e293b;
+      page-break-after: avoid;
+    }
+    h4 { font-size: 10.5px; margin: 12px 0 4px; color: #334155; page-break-after: avoid; }
+    p { margin: 0 0 8px; }
+    .meta { color: #64748b; margin-bottom: 14px; font-size: 10.5px; }
+    .lede { font-size: 12px; color: #1e293b; margin-bottom: 14px; }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 12px; page-break-inside: avoid; }
+    th {
+      background: #f1f5f9;
+      text-align: left;
+      padding: 5px 7px;
+      border: 1px solid #e2e8f0;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #475569;
+    }
+    td { padding: 5px 7px; border: 1px solid #e2e8f0; vertical-align: top; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    code { font-size: 9px; background: #e2e8f0; padding: 1px 4px; border-radius: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    ul, ol { margin: 0 0 10px; padding-left: 18px; }
+    li { margin-bottom: 3px; }
+    .callout {
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin: 0 0 14px;
+      page-break-inside: avoid;
+    }
+    .callout.warn { border-color: #fcd34d; background: #fffbeb; }
+    .callout.danger { border-color: #fecaca; background: #fef2f2; }
+    .callout.ok { border-color: #86efac; background: #f0fdf4; }
+    .badge {
+      display: inline-block;
+      font-size: 8.5px;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #334155;
+      white-space: nowrap;
+    }
+    .badge.full { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .badge.mostly { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+    .badge.partial { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+    .badge.stub { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+    .badge.p0 { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+    .badge.p1 { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+    .badge.p2 { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+    .badge.p3 { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .card {
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 10px;
+      page-break-inside: avoid;
+    }
+    .card h4 { margin-top: 0; }
+    .muted { color: #64748b; }
+    .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .toc a { color: #1e40af; text-decoration: none; }
+    .toc li { margin-bottom: 2px; }
+    .path { font-size: 8.5px; color: #475569; }
+    .cover-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 16px; }
+    .kpi { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; text-align: center; }
+    .kpi .n { font-size: 18px; font-weight: 700; color: #1e3a8a; }
+    .kpi .l { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+    footer.note { margin-top: 18px; font-size: 9px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; }
+    pre.flow {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 9px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      page-break-inside: avoid;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Paidly — Application Wiring Overview</h1>
+  <p class="meta">Deep assessment · 26 August 2026 · Codebase + blueprint · Confidential internal briefing</p>
+  <p class="lede">
+    Paidly is a <strong>business operating system for SMEs</strong> (South Africa–first: PayFast, ZAR).
+    It is not an invoicing-only tool. Roughly <strong>70–75%</strong> of the intended SaaS architecture
+    is production-wired. The commercial loop works end to end. Remaining value is concentrated in
+    <strong>document-model unification</strong>, a first-class <strong>Payment Intent</strong> layer,
+    and a short list of broken or stub surfaces.
+  </p>
+
+  <div class="cover-kpis">
+    <div class="kpi"><div class="n">~74%</div><div class="l">Avg domain wiring</div></div>
+    <div class="kpi"><div class="n">8</div><div class="l">Fully wired domains</div></div>
+    <div class="kpi"><div class="n">7</div><div class="l">Mostly wired</div></div>
+    <div class="kpi"><div class="n">3</div><div class="l">Partial / stub</div></div>
+  </div>
+
+  <div class="callout">
+    <strong>Headline.</strong> Auth → clients/catalog → invoices/quotes/payslips → PDF/send → PayFast SaaS billing → admin-v2
+    is a live product. The highest-severity gaps are (1) recurring invoice edit 404, (2) sync-queue send that marks invoices
+    sent without emailing, (3) dual document persistence, (4) missing <code>payment_intents</code> as system of record.
+  </div>
+
+  <h2>1. Contents</h2>
+  <ol class="toc">
+    <li>What Paidly is, and what it is becoming</li>
+    <li>Runtime architecture (browser, Supabase, API)</li>
+    <li>Blueprint systems vs shipped reality</li>
+    <li>Canonical data flow and entity layer</li>
+    <li>Session, realtime, and sync spine</li>
+    <li>Domain wiring deep-dive (18 surfaces)</li>
+    <li>Route map and admin consolidation</li>
+    <li>Scheduled jobs and dual-path debt</li>
+    <li>Improvement programme (P0–P3)</li>
+    <li>Recommended execution sequence</li>
+  </ol>
+
+  <h2>2. Product</h2>
+  <p>
+    Positioning in <code>docs/Paidly-Application-Blueprint.md</code>: shift from “invoice app” to
+    <strong>financial workflow platform</strong>. Competitive edge is unification, not a single PDF:
+  </p>
+  <p><strong>Document → Payment Intent → Revenue System</strong>, plus shared Experience and Payment Intelligence.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>Shipped (advanced)</h4>
+      <ul>
+        <li>Invoices, quotes, payslips (logical document engine, physical tables still split)</li>
+        <li>Clients, catalog/inventory, cash flow, reports</li>
+        <li>Public share tokens + client portal</li>
+        <li>SaaS billing v2 (plans catalog, trials, PayFast ITN, admin override)</li>
+        <li>Affiliates, waitlist, platform admin-v2</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Blueprint remaining (~25–30%)</h4>
+      <ul>
+        <li>Canonical <code>payment_intents</code> (not yet a table)</li>
+        <li>Single persistence for document kinds</li>
+        <li>Observe stream used as Get Paid intelligence, not just logs</li>
+        <li>Experience consistency (PageTemplate + money CTA contract everywhere)</li>
+        <li>Multi-provider payment rails (PayFast still leaks into UI)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>3. Runtime architecture</h2>
+  <p>Three legs from the browser. They are not the same server.</p>
+  <table>
+    <thead>
+      <tr><th>Leg</th><th>Code</th><th>Typical use</th><th>Config</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>SPA</td>
+        <td><code>src/</code> (Vite + React 18 + Router 7)</td>
+        <td>UI, TanStack Query, Zustand, EntityManager CRUD</td>
+        <td><code>VITE_SUPABASE_*</code></td>
+      </tr>
+      <tr>
+        <td>Supabase</td>
+        <td>Auth, Postgres + RLS, Realtime, Storage</td>
+        <td>System of record for tenants, documents, catalog, subscriptions</td>
+        <td>Project URL + anon / service role</td>
+      </tr>
+      <tr>
+        <td>Vercel <code>api/*.js</code></td>
+        <td>Serverless catch-alls</td>
+        <td>Email, cron, PayFast, admin, portal, public shares</td>
+        <td>Same-origin <code>/api</code></td>
+      </tr>
+      <tr>
+        <td>Express <code>server/</code></td>
+        <td><code>server/src/index.js</code></td>
+        <td>Local/long-running API; rate limits apply only here</td>
+        <td><code>VITE_SERVER_URL</code> when used</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout warn">
+    <strong>Deployment split.</strong> Express middleware and rate limits do <em>not</em> apply to traffic that only hits
+    Vercel <code>api/*.js</code>. See <code>docs/API_DEPLOYMENT_MODEL.md</code> before diagnosing 429s.
+  </div>
+
+  <h3>3.1 What runs where (policy)</h3>
+  <ul>
+    <li><strong>Entity CRUD</strong> — browser → Supabase (RLS). Org scoped via <code>EntityManager</code>.</li>
+    <li><strong>Privileged / secret work</strong> — <code>/api</code>: email, ITN, admin, public tokens, cron, POS OAuth.</li>
+    <li><strong>Never trust the SPA</strong> for paid SaaS activation. PayFast ITN + DB is source of truth.</li>
+  </ul>
+
+  <h3>3.2 External services</h3>
+  <table>
+    <thead><tr><th>Service</th><th>Role</th><th>Wiring</th></tr></thead>
+    <tbody>
+      <tr><td>Supabase</td><td>DB, Auth, RLS, Realtime, Storage</td><td>Fully</td></tr>
+      <tr><td>Vercel</td><td>Host, serverless, crons, redirects</td><td>Fully (Hobby cron budget)</td></tr>
+      <tr><td>PayFast</td><td>Tenant SaaS subscriptions + invoice once-off paths</td><td>Mostly (ITN verified; no Payment Intent abstraction)</td></tr>
+      <tr><td>Resend / SMTP</td><td>Transactional email</td><td>Mostly (live send + stub send coexist)</td></tr>
+      <tr><td>Anvil / react-pdf</td><td>Invoice/quote PDF generation</td><td>Fully</td></tr>
+      <tr><td>Yoco / Square POS</td><td>Sales ingress + optional stock decrement</td><td>Mostly (Settings + <code>api/pos</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>4. Blueprint systems vs shipped reality</h2>
+  <table>
+    <thead><tr><th>System</th><th>Job</th><th>Maturity</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Identity</td>
+        <td>Who acts, for which org, with what authority</td>
+        <td><span class="badge full">Strong</span></td>
+        <td>Supabase Auth, <code>profiles</code> / <code>organizations</code> / <code>memberships</code>, RLS, <code>RequireAuth</code>, ConnectionLifecycle, RuntimeCoordinator</td>
+      </tr>
+      <tr>
+        <td>Document Engine</td>
+        <td>Issue, deliver, observe commercial documents</td>
+        <td><span class="badge partial">Advanced / dual</span></td>
+        <td>Code unification in <code>src/document-engine/</code>; persistence still <code>invoices</code> / <code>quotes</code> / <code>payslips</code> plus hub <code>documents</code></td>
+      </tr>
+      <tr>
+        <td>Payment Intent Layer</td>
+        <td>Canonical handoff document → rails</td>
+        <td><span class="badge stub">Not built</span></td>
+        <td>Specified in blueprint; no <code>payment_intents</code> table; PayFast logic still surface-adjacent</td>
+      </tr>
+      <tr>
+        <td>Relationship</td>
+        <td>Clients + catalog feeding compose</td>
+        <td><span class="badge full">Strong</span></td>
+        <td>Clients CRM, services/inventory, <code>adjust_inventory_stock</code></td>
+      </tr>
+      <tr>
+        <td>Revenue &amp; Ops</td>
+        <td>Capture, SaaS billing, cash, reports</td>
+        <td><span class="badge mostly">Strong billing</span></td>
+        <td>Plans catalog, ITN, trial cron, admin override; cash flow/reports read legacy tables</td>
+      </tr>
+      <tr>
+        <td>Payment Intelligence</td>
+        <td>Reminders, nudges, Get Paid funnel</td>
+        <td><span class="badge partial">Partial</span></td>
+        <td>Client scheduler + cron stub; <code>document_events</code> exists for hub docs, not full invoice observe stream</td>
+      </tr>
+      <tr>
+        <td>Experience</td>
+        <td>One product feel (shell, money UX)</td>
+        <td><span class="badge mostly">Improving</span></td>
+        <td><code>PageTemplate</code>, CreateDocument, still page-fork residue and dual send UX</td>
+      </tr>
+      <tr>
+        <td>Growth / platform</td>
+        <td>Affiliates, waitlist, admin-v2</td>
+        <td><span class="badge mostly">Mostly</span></td>
+        <td>Apply/dashboard + admin moderation; Excel/Base44 leftovers remain</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. Canonical data flow</h2>
+<pre class="flow">UI (pages / components)
+  → Hooks (TanStack Query, local UI)
+    → Services (src/services/* — orchestration, timeouts, gating)
+      → Entity facades (@/api/entities → EntityManager)
+        → Supabase (+ RLS)  |  optional localStorage for unmapped entities
+  → axios / fetch → /api/*  (email, billing, admin, public tokens)</pre>
+  <p>
+    <strong>Policy:</strong> pages should not call <code>Invoice.list()</code> directly for list screens.
+    Reference: <code>useInvoices</code> → <code>InvoiceListService</code> → <code>Invoice</code> entity → Supabase.
+    Delivery (PDF/email/share) lives in <code>InvoiceService</code> / send APIs — a different concern from list reads.
+  </p>
+  <h3>5.1 Entity → table map (truth)</h3>
+  <p><code>getSupabaseTableForEntityName</code> in <code>src/api/entity/entityShared.js</code> is the gate. Unmapped names return <code>null</code> and fall back to local/broken persistence.</p>
+  <table>
+    <thead><tr><th>Entity</th><th>Table</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Client, Service, Invoice, Quote, Payment</td><td>matching plurals / <code>banking_details</code></td><td>Mapped</td></tr>
+      <tr><td>RecurringInvoice</td><td><code>recurring_invoices</code></td><td>Mapped</td></tr>
+      <tr><td>Payroll / Payslip</td><td><code>payslips</code></td><td>Mapped</td></tr>
+      <tr><td>Expense, Task, Note</td><td>matching tables</td><td>Mapped</td></tr>
+      <tr><td>Supplier, PurchaseOrder (+ items)</td><td><code>suppliers</code>, <code>purchase_orders</code></td><td>Mapped</td></tr>
+      <tr><td>DocumentSend, MessageLog</td><td><code>document_sends</code>, <code>message_logs</code></td><td>Mapped</td></tr>
+      <tr><td><strong>Vendor, Budget</strong></td><td><strong>null</strong></td><td><span class="badge stub">Unmapped</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>6. Session, realtime, sync</h2>
+  <p>This is one of the most heavily engineered parts of the product. Treat it as foundation, not a feature.</p>
+  <div class="grid2">
+    <div class="card">
+      <h4>Session / connection</h4>
+      <ul>
+        <li><code>AuthContext.impl.jsx</code> — single auth owner; profile via <code>useAuth</code></li>
+        <li><code>sessionRefreshScheduler</code> — coalesced refresh (visibility, online, heartbeat)</li>
+        <li><code>ConnectionLifecycleManager</code> — auth, realtime, wake, network signals</li>
+        <li><code>RuntimeCoordinator</code> — pauses HTTP while AUTH_RECOVERING / RECONNECTING</li>
+        <li><code>AppRecoveryLock</code> — sleep/wake: auth first, then realtime, then unlock UI</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Live + offline</h4>
+      <ul>
+        <li>Single multiplex Realtime channel: <code>paidlyRealtimeManager</code></li>
+        <li>JWT rotation: remove + recreate channel (no stale-auth join)</li>
+        <li><code>SyncEngine</code> + <code>useSyncQueueStore</code> for deferred writes</li>
+        <li><code>MutationCoordinator</code> + <code>client_operation_id</code> on invoices</li>
+        <li>Logout purges persisted TanStack Query (IDB)</li>
+      </ul>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>ID</th><th>Risk</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>R-01</td><td>Direct <code>supabase.auth.getSession()</code> bypasses SessionCoordinator (~40 sites). High-risk: connectionHealth, affiliateClient, ActivityNotificationService.</td><td>Open, medium</td></tr>
+      <tr><td>R-02</td><td>Client-domain invalidation always cascades to invoices (correct for names; noisy for other edits).</td><td>Open, low</td></tr>
+      <tr><td>R-03</td><td>Broad <code>["invoices"]</code> query invalidation still present for legacy hooks.</td><td>Open, low</td></tr>
+    </tbody>
+  </table>
+
+  <h2>7. Domain wiring deep-dive</h2>
+  <p>Score is completeness of UI → hook/service → API/DB → edge cases, not automated test coverage. Wiring legend:
+    <span class="badge full">Fully</span>
+    <span class="badge mostly">Mostly</span>
+    <span class="badge partial">Partial</span>
+    <span class="badge stub">Stub / broken</span>
+  </p>
+
+  <h3>7.1 Identity — Auth, signup, session <span class="badge full">92</span></h3>
+  <p class="path">Signup / Home → SupabaseAuthService + AuthContext → optional /api/auth/* → Auth + profiles + org bootstrap</p>
+  <ul>
+    <li>Invite / password / AcceptInvite routes live. Team RBAC: <code>CompanyContext</code>, <code>CompanyTeamService</code>, <code>/api/company</code>.</li>
+    <li>Roles: <code>RequireAuth</code>, <code>RequireBusinessOwner</code>, <code>PERMISSIONS</code> for payroll/reports.</li>
+    <li><strong>Gaps:</strong> R-01 getSession bypasses; Excel signup side-path still imported (<code>ExcelUserService</code>).</li>
+  </ul>
+
+  <h3>7.2 Relationship — Clients <span class="badge full">95</span></h3>
+  <p class="path">Clients / ClientDetail / EditClient → useClients* → Client entity → clients</p>
+  <ul>
+    <li>Timeline: <code>ClientTimelineService</code>. Portal access fields exist. CSV mapping documented.</li>
+  </ul>
+
+  <h3>7.3 Relationship — Catalog &amp; inventory <span class="badge mostly">78–93</span></h3>
+  <p class="path">/Services (Inventory.jsx) · /Inventory redirects here · EditCatalogItem · RPC adjust_inventory_stock</p>
+  <ul>
+    <li>Catalog CRUD and CSV import are live. Stock movements via shared RPC + <code>inventory_movements</code>.</li>
+    <li>POS: <code>api/pos</code>, Square OAuth, Yoco connect, dashboard “POS sales today”.</li>
+    <li><strong>Gap:</strong> <code>ItemUsageService.js</code> still TODO (usage counts return 0; deletion-safety not real).</li>
+  </ul>
+
+  <h3>7.4 Document Engine — Invoices <span class="badge mostly">82</span></h3>
+  <table>
+    <thead><tr><th>Subflow</th><th>Wiring</th><th>Path</th></tr></thead>
+    <tbody>
+      <tr><td>Create</td><td>Fully</td><td><code>/CreateInvoice</code> → <code>/CreateDocument/invoice</code></td></tr>
+      <tr><td>List / edit / view</td><td>Fully</td><td><code>useInvoices</code>, EditInvoice, ViewInvoice / ViewDocument</td></tr>
+      <tr><td>Payments (AR)</td><td>Fully</td><td><code>usePaymentActions</code> → Payment.create; inventory hooks on paid</td></tr>
+      <tr><td>PDF</td><td>Fully</td><td>Anvil / react-pdf; <code>/InvoicePDF</code> guest-safe with token</td></tr>
+      <tr><td>Interactive send</td><td>Mostly</td><td>InvoiceActions → Supabase edge <code>send-invoice-email</code> then fallback <code>POST /api/send-invoice</code></td></tr>
+      <tr><td>Sync-queue send</td><td>Stub</td><td><code>syncJobProcessor</code> → <code>sendInvoiceToClient</code> marks status sent only (TODO comment)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout danger">
+    <strong>P0 — silent false send.</strong> <code>InvoiceSendService.sendInvoiceToClient</code> updates <code>status: 'sent'</code>
+    and records a document send, then comments <code>TODO: Implement actual email sending via API</code>.
+    Offline/sync <code>SEND_INVOICE</code> jobs use this function. The interactive UI path emails; the queue path may not.
+  </div>
+
+  <h3>7.5 Document Engine — Recurring invoices <span class="badge partial">55</span></h3>
+  <ul>
+    <li>List, create, pause/resume: wired to <code>recurring_invoices</code>.</li>
+    <li>Generation: <code>RecurringInvoiceService.checkAndGenerateDueInvoices()</code> runs in the browser when the list page loads. <strong>No Vercel cron</strong> for this. Invoices only generate if an owner opens the app.</li>
+    <li><strong>Broken edit:</strong> <code>src/pages/EditRecurringInvoice.jsx</code> exists. It is <em>not</em> registered in <code>src/pages/index.jsx</code>. List navigates with <code>createPageUrl("edit-recurring-invoice")</code> → <code>/Edit-recurring-invoice</code> (404 / NotFound).</li>
+  </ul>
+
+  <h3>7.6 Document Engine — Quotes <span class="badge full">90</span></h3>
+  <p class="path">Quotes / CreateQuote / EditQuote / QuotePDF / PublicQuote · convert-to-invoice in QuoteActions</p>
+  <ul>
+    <li>Send helpers share InvoiceSendService tracking pixels. Public token loaders: <code>api/_publicQuoteShared.js</code>.</li>
+    <li>Quote → invoice conversion is implemented (dedicated path + <code>source_quote_id</code>), not just marketing copy.</li>
+  </ul>
+
+  <h3>7.7 Document Engine — Payslips <span class="badge full">88</span></h3>
+  <p class="path">Payslips CRUD + PDF + PublicPayslip · RBAC MANAGE_PAYROLL / VIEW_OWN_PAYSLIPS</p>
+  <ul>
+    <li>Still a separate table. Hub also has leave / expense-claim typed documents with different depth.</li>
+  </ul>
+
+  <h3>7.8 Documents hub <span class="badge mostly">72</span></h3>
+  <p class="path">Documents.jsx / DocumentDetail → DocumentService → public.documents + document_items + document_events</p>
+  <ul>
+    <li>Migrations: <code>20260418220000_documents_engine_core.sql</code>, hub backfill <code>20260603120000_documents_business_hub.sql</code>.</li>
+    <li>Leave request and expense claim create routes exist. Import marked coming soon.</li>
+    <li><strong>Structural risk:</strong> production invoices/quotes/payslips still live in legacy tables. Hub is additive. Dual-write can diverge.</li>
+  </ul>
+
+  <h3>7.9 Revenue — SaaS subscriptions &amp; trials <span class="badge full">91</span></h3>
+  <p>This is one of the most complete subsystems.</p>
+  <ul>
+    <li>Plans catalog in DB (Starter R50 / Business R150 / Growth R350 + annual). SPA does not set price.</li>
+    <li><code>POST /api/subscriptions/create|change|cancel</code>; status from verified PayFast ITN only.</li>
+    <li>7-day server-side trial for org owners created on/after 2026-08-20 UTC. Invited members do not get a trial.</li>
+    <li>Admin PATCH can extend/grant/suspend/cancel and sets <code>admin_override</code> so expiry jobs cannot revert it. Migration <code>20260820200000_trial_lifecycle_admin_override.sql</code>.</li>
+    <li>Legacy <code>POST /api/payfast/subscription</code> returns 410.</li>
+    <li>Reporting counts only <code>payment_history.payment_status = completed</code> after cutoff — not trials or admin grants.</li>
+  </ul>
+
+  <h3>7.10 Revenue — Expenses, cash flow, accounting, budgets <span class="badge mostly">80 / stub budgets</span></h3>
+  <ul>
+    <li>Expenses persist via CashFlow + ExpenseForm → <code>expenses</code>. Used by Reports and AccountingDashboard.</li>
+    <li>Accounting is FeatureGate-wrapped; not a first-class nav product.</li>
+    <li><strong>Budgets</strong> page exists; Budget entity is <em>not</em> in the Supabase table map → local/broken.</li>
+    <li><strong>Vendors</strong> admin page similarly unmapped; overlap with live <code>suppliers</code> + purchase orders.</li>
+  </ul>
+
+  <h3>7.11 Experience — Portal, public shares, settings <span class="badge full">90</span></h3>
+  <ul>
+    <li>Public: <code>/PublicInvoice</code>, <code>/view/:token</code>, quote/payslip public routes; <code>api/public-share.js</code>.</li>
+    <li>Portal: <code>ClientPortal.jsx</code> → <code>clientPortalClient</code> → <code>/api/client-portal</code> (login, data, payment, messages).</li>
+    <li>User Settings: profile, logo storage, banking, templates, reminders tab, team, POS.</li>
+    <li>Day-to-day branding is profile logo + <code>document_brand_*</code>, not full multi-company UI.</li>
+  </ul>
+
+  <h3>7.12 Multi-brand / companies <span class="badge partial">45</span></h3>
+  <ul>
+    <li>Schema: <code>companies</code>, <code>invoices.company_id</code>, <code>attachInvoiceCompany</code> in entityShared.</li>
+    <li>Team/workspace is more complete than brand picker. Product UI for managing brands / choosing <code>company_id</code> on create is thin.</li>
+    <li><strong>Recommendation:</strong> ship the picker or stop claiming multi-brand in positioning.</li>
+  </ul>
+
+  <h3>7.13 Growth — Affiliates <span class="badge mostly">80</span></h3>
+  <p class="path">Landing / apply / dashboard · affiliateClient · server affiliate admin · api/affiliates · referral on signup</p>
+
+  <h3>7.14 Platform — Admin-v2 <span class="badge mostly">84</span></h3>
+  <p>Single UI shell. Dozens of legacy <code>/Admin*</code> and <code>/admin/*</code> routes redirect into:</p>
+  <table>
+    <thead><tr><th>Route</th><th>Roles</th><th>Backing</th></tr></thead>
+    <tbody>
+      <tr><td><code>/admin-v2</code></td><td>admin, management, sales, support</td><td>Dashboard KPIs via admin APIs</td></tr>
+      <tr><td><code>/admin-v2/users</code></td><td>same</td><td><code>api/admin</code> platform users</td></tr>
+      <tr><td><code>/admin-v2/messages</code></td><td>same</td><td>Broadcast + platform user messages</td></tr>
+      <tr><td><code>/admin-v2/subscriptions</code></td><td>admin, management, sales</td><td>Plans, ITN reporting, PATCH override</td></tr>
+      <tr><td><code>/admin-v2/affiliates</code></td><td>admin, management, support</td><td>Application moderation</td></tr>
+      <tr><td><code>/admin-v2/waitlist</code></td><td>same as dashboard</td><td>Waitlist table</td></tr>
+      <tr><td><code>/admin-v2/settings</code></td><td>admin, management</td><td><code>admin_settings</code> via API (not localStorage)</td></tr>
+      <tr><td><code>/admin-v2/audit-log</code></td><td>admin, management</td><td>Hybrid local/server</td></tr>
+    </tbody>
+  </table>
+  <p>Dead AdminDataService chain removed. Some docs (reality matrix) are stale vs code. System-health probes remain soft.</p>
+
+  <h3>7.15 Email, tracking, reminders <span class="badge mostly">75</span></h3>
+  <table>
+    <thead><tr><th>Path</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Interactive invoice/quote email (edge + <code>/api/send-invoice</code>)</td><td>Wired</td></tr>
+      <tr><td>Open / link tracking (<code>/api/email-track</code>, <code>_emailTrackShared.js</code>)</td><td>Wired</td></tr>
+      <tr><td>In-app ActivityNotificationService</td><td>Wired (direct getSession)</td></tr>
+      <tr><td>Admin broadcast email cron (10:00 UTC)</td><td>Wired</td></tr>
+      <tr><td>Browser PaymentReminderScheduler</td><td>Best-effort while app is open</td></tr>
+      <tr><td><code>/api/cron/payment-reminders</code></td><td>Handler returns <code>skipped: not_scheduled</code> — explicitly waiting on Payment Intelligence Wave 4. Not in vercel.json crons.</td></tr>
+      <tr><td>Sync-queue sendInvoiceToClient</td><td>Status-only stub</td></tr>
+    </tbody>
+  </table>
+
+  <h2>8. Scorecard (all assessed domains)</h2>
+  <table>
+    <thead>
+      <tr><th>Domain</th><th>System</th><th>Status</th><th>Score</th><th>Primary gap</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Clients</td><td>Relationship</td><td><span class="badge full">Fully</span></td><td class="score">95</td><td>—</td></tr>
+      <tr><td>Catalog</td><td>Relationship</td><td><span class="badge full">Fully</span></td><td class="score">93</td><td>ItemUsageService stub</td></tr>
+      <tr><td>Auth / session</td><td>Identity</td><td><span class="badge full">Fully</span></td><td class="score">92</td><td>getSession bypasses</td></tr>
+      <tr><td>SaaS billing / trials</td><td>Revenue</td><td><span class="badge full">Fully</span></td><td class="score">91</td><td>—</td></tr>
+      <tr><td>Quotes</td><td>Document</td><td><span class="badge full">Fully</span></td><td class="score">90</td><td>—</td></tr>
+      <tr><td>Portal / public shares</td><td>Experience</td><td><span class="badge full">Fully</span></td><td class="score">90</td><td>—</td></tr>
+      <tr><td>User settings / branding</td><td>Experience</td><td><span class="badge full">Fully</span></td><td class="score">90</td><td>Not multi-brand</td></tr>
+      <tr><td>Payslips</td><td>Document</td><td><span class="badge full">Fully</span></td><td class="score">88</td><td>Separate table vs hub</td></tr>
+      <tr><td>Admin-v2</td><td>Platform</td><td><span class="badge mostly">Mostly</span></td><td class="score">84</td><td>Health / stale docs</td></tr>
+      <tr><td>Invoices (create/pay/PDF)</td><td>Document</td><td><span class="badge mostly">Mostly</span></td><td class="score">82</td><td>Dual send + dual store</td></tr>
+      <tr><td>Expenses / cash flow</td><td>Revenue</td><td><span class="badge mostly">Mostly</span></td><td class="score">80</td><td>Not a product nav item</td></tr>
+      <tr><td>Affiliates</td><td>Growth</td><td><span class="badge mostly">Mostly</span></td><td class="score">80</td><td>—</td></tr>
+      <tr><td>Inventory / stock</td><td>Relationship</td><td><span class="badge mostly">Mostly</span></td><td class="score">78</td><td>Usage analytics stub</td></tr>
+      <tr><td>Email / reminders</td><td>Intelligence</td><td><span class="badge mostly">Mostly</span></td><td class="score">75</td><td>Cron skipped; queue stub</td></tr>
+      <tr><td>Documents hub</td><td>Document</td><td><span class="badge mostly">Mostly</span></td><td class="score">72</td><td>Parallel model</td></tr>
+      <tr><td>Recurring invoices</td><td>Document</td><td><span class="badge partial">Partial</span></td><td class="score">55</td><td>Edit 404; client-only gen</td></tr>
+      <tr><td>Multi-brand</td><td>Identity</td><td><span class="badge partial">Partial</span></td><td class="score">45</td><td>Schema without UX</td></tr>
+      <tr><td>Vendors / budgets</td><td>Revenue</td><td><span class="badge stub">Stub</span></td><td class="score">25</td><td>No table map</td></tr>
+    </tbody>
+  </table>
+
+  <h2>9. Dual-path debt</h2>
+  <p>These are the structural reasons the product can feel “wired twice” or disagree with itself.</p>
+  <table>
+    <thead><tr><th>Area</th><th>Path A (live)</th><th>Path B (parallel)</th><th>Risk</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Documents</td>
+        <td>invoices / quotes / payslips tables</td>
+        <td>public.documents hub</td>
+        <td>Double truth; reports vs hub lists diverge</td>
+      </tr>
+      <tr>
+        <td>Invoice send</td>
+        <td>Edge function + POST /api/send-invoice</td>
+        <td>InvoiceSendService TODO used by sync queue</td>
+        <td>Marked sent without email</td>
+      </tr>
+      <tr>
+        <td>API host</td>
+        <td>Vercel api/*.js</td>
+        <td>Express server/</td>
+        <td>Rate-limit / middleware mismatch</td>
+      </tr>
+      <tr>
+        <td>Reminders</td>
+        <td>Browser scheduler</td>
+        <td>Cron endpoint disabled on purpose</td>
+        <td>Reminders only if user is online</td>
+      </tr>
+      <tr>
+        <td>Recurring generation</td>
+        <td>On RecurringInvoices page load</td>
+        <td>No cron job</td>
+        <td>Missed cycles when owners are idle</td>
+      </tr>
+      <tr>
+        <td>Admin docs</td>
+        <td>admin_settings in DB</td>
+        <td>Reality-matrix still mentions localStorage / deleted services</td>
+        <td>Onboarding confusion</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>10. Scheduled jobs (Vercel)</h2>
+  <p>Hobby plan uses a single <code>/api/cron?job=</code> dispatcher. Auth: <code>Authorization: Bearer CRON_SECRET</code>.</p>
+  <table>
+    <thead><tr><th>Job</th><th>Schedule (UTC)</th><th>In vercel.json crons?</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td>expire-trials</td><td>07:00</td><td>Yes</td><td>Expire trials; respect admin_override</td></tr>
+      <tr><td>subscription-dunning</td><td>08:30</td><td>Yes</td><td>Tenant billing dunning</td></tr>
+      <tr><td>subscription-prebill-invoices</td><td>09:00</td><td>Yes</td><td>Pre-bill SaaS invoices</td></tr>
+      <tr><td>admin-broadcast-email</td><td>10:00</td><td>Yes</td><td>Queued platform broadcasts</td></tr>
+      <tr><td>payment-reminders</td><td>—</td><td>Rewrite only, not scheduled</td><td>Returns skipped until Wave 4</td></tr>
+      <tr><td>recurring invoice generation</td><td>—</td><td>No</td><td>Client-only</td></tr>
+    </tbody>
+  </table>
+
+  <h2>11. Improvement programme</h2>
+
+  <h3>P0 — User-visible correctness</h3>
+  <table>
+    <thead><tr><th></th><th>Item</th><th>Evidence</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="badge p0">P0</span></td>
+        <td>Register recurring edit route</td>
+        <td>Page file exists; missing from index.jsx; createPageUrl capitalizes only first letter → /Edit-recurring-invoice</td>
+        <td>Add /EditRecurringInvoice (+ aliases); change navigate to createPageUrl("EditRecurringInvoice")</td>
+      </tr>
+      <tr>
+        <td><span class="badge p0">P0</span></td>
+        <td>Unify invoice send</td>
+        <td>sendInvoiceToClient TODO; syncJobProcessor SEND_INVOICE</td>
+        <td>Call the same path as InvoiceActions (/api/send-invoice or edge function); never mark sent without provider success</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>P1 — Architecture / product truth</h3>
+  <table>
+    <thead><tr><th></th><th>Item</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="badge p1">P1</span></td>
+        <td>Choose a documents system of record</td>
+        <td>Either migrate invoice/quote/payslip reads to documents, or fence hub types (leave, claims, contracts) so dual-write cannot diverge. Blueprint still lists single persistence as roadmap.</td>
+      </tr>
+      <tr>
+        <td><span class="badge p1">P1</span></td>
+        <td>Add payment_intents</td>
+        <td>Blueprint v1 contract: intent_id, document_ref, amount/currency snapshot, rail, status. Without it, PayFast leaks, multi-rail is hard, sticky payment CTAs stay page-specific.</td>
+      </tr>
+      <tr>
+        <td><span class="badge p1">P1</span></td>
+        <td>Server cron for recurring generation</td>
+        <td>Same pattern as expire-trials. Owners should not need to open the app for cycles to fire.</td>
+      </tr>
+      <tr>
+        <td><span class="badge p1">P1</span></td>
+        <td>Multi-brand UX or retire the claim</td>
+        <td>Schema is ready; compose picker is not. Positioning currently oversells this.</td>
+      </tr>
+      <tr>
+        <td><span class="badge p1">P1</span></td>
+        <td>Vendors / Budgets persistence</td>
+        <td>Map to Supabase or remove routes. Align Vendors with suppliers to avoid two supplier concepts.</td>
+      </tr>
+      <tr>
+        <td><span class="badge p1">P1</span></td>
+        <td>Expand document_events on legacy invoices</td>
+        <td>Hub already inserts events. Invoice observe (sent/opened/clicked/paid/reminded) should be one stream for Get Paid.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>P2 — Hardening</h3>
+  <ul>
+    <li><span class="badge p2">P2</span> Migrate bursty getSession callers to getStableSession (R-01).</li>
+    <li><span class="badge p2">P2</span> Finish queryPolicies keys; drop bare <code>["invoices"]</code> invalidation (R-03).</li>
+    <li><span class="badge p2">P2</span> Enable or delete payment-reminders cron; stop documenting it as scheduled if it is not.</li>
+    <li><span class="badge p2">P2</span> Admin system-health real probes; refresh stale admin markdown.</li>
+    <li><span class="badge p2">P2</span> Split AuthContext stable vs volatile to cut re-renders on token refresh.</li>
+    <li><span class="badge p2">P2</span> Sync queue max-size + failed-job TTL; org_id on jobs for future multi-org replay.</li>
+  </ul>
+
+  <h3>P3 — Cleanup</h3>
+  <ul>
+    <li><span class="badge p3">P3</span> Remove Excel/Base44 leftovers from shell/signup/dashboard.</li>
+    <li><span class="badge p3">P3</span> Implement or delete ItemUsageService TODOs.</li>
+    <li><span class="badge p3">P3</span> Documents Import; debounce Zustand persist writes; move large collections off localStorage to IDB.</li>
+    <li><span class="badge p3">P3</span> Roll PageTemplate remaining list pages; Experience checklist for new screens.</li>
+  </ul>
+
+  <h2>12. Blueprint v1 contract (still open)</h2>
+  <p>From the Application Blueprint “immediate execution order” — none of these five are fully done:</p>
+  <ol>
+    <li>Add <code>payment_intents</code> table.</li>
+    <li>Integrate intents into document lifecycle (Deliver → Observe → Intent → Settle).</li>
+    <li>Expand <code>document_events</code> coverage and ingestion (especially for invoices, not only hub docs).</li>
+    <li>Sticky right panel CTAs driven by intent status (Pay now / Retry / Send reminder) — one contract.</li>
+    <li>Event- and due-date-driven reminders as a real scheduled job (currently skipped).</li>
+  </ol>
+  <p class="muted">Acceptance: invoice settlement only from provider-verified events; no “mark paid” shortcuts that skip the intent.</p>
+
+  <h2>13. Recommended sequence</h2>
+  <ol>
+    <li><strong>Week 0 — P0 fixes.</strong> Recurring edit route + send-path unification. User-visible correctness; small PR surface.</li>
+    <li><strong>Then — documents SoR decision.</strong> Written ADR: hub-for-new-types-only vs migrate commercial docs. Do not keep growing both.</li>
+    <li><strong>Then — payment_intents + webhook reconciliation.</strong> Wrap PayFast; keep payments as settlement records.</li>
+    <li><strong>Then — intelligence crons.</strong> Recurring generation + payment-reminders with reminder_settings in DB.</li>
+    <li><strong>Then — product honesty.</strong> Multi-brand UI or drop; Vendors/Budgets map or retire.</li>
+    <li><strong>Ongoing — runtime hygiene.</strong> R-01 / R-03, AuthContext split, Excel leftover removal.</li>
+  </ol>
+
+  <div class="callout ok">
+    <strong>What not to do next.</strong> Do not add another document kind, another payment provider, or another admin page
+    until P0 send/recurring bugs are closed and a documents SoR is chosen. The architecture is already ~70% there;
+    more surface area without those decisions increases dual-path debt.
+  </div>
+
+  <h2>14. Key file index</h2>
+  <table>
+    <thead><tr><th>Concern</th><th>Start here</th></tr></thead>
+    <tbody>
+      <tr><td>Product strategy</td><td><code>docs/Paidly-Application-Blueprint.md</code></td></tr>
+      <tr><td>Connection map</td><td><code>docs/HOW_EVERYTHING_CONNECTS.md</code></td></tr>
+      <tr><td>Routes</td><td><code>src/pages/index.jsx</code></td></tr>
+      <tr><td>Entities</td><td><code>src/api/entity/EntityManager.js</code>, <code>entityShared.js</code></td></tr>
+      <tr><td>Document types</td><td><code>src/document-engine/</code></td></tr>
+      <tr><td>Send (stub vs live)</td><td><code>src/services/InvoiceSendService.js</code>, <code>InvoiceActions.jsx</code>, <code>server/src/index.js</code></td></tr>
+      <tr><td>Sync queue</td><td><code>src/lib/syncJobProcessor.js</code></td></tr>
+      <tr><td>Runtime</td><td><code>src/core/runtime/RuntimeCoordinator.ts</code></td></tr>
+      <tr><td>Billing</td><td><code>api/subscriptions/</code>, <code>api/payfast-handler.js</code>, <code>docs/SUBSCRIPTION_BILLING_SCHEMA.md</code></td></tr>
+      <tr><td>Cron</td><td><code>api/cron.js</code>, <code>vercel.json</code></td></tr>
+      <tr><td>Hub documents</td><td><code>src/services/DocumentService.js</code></td></tr>
+    </tbody>
+  </table>
+
+  <footer class="note">
+    Generated 26 August 2026 from the Paidly repository (SPA + api/ + server/ + supabase migrations + blueprint).
+    Scores are engineering judgment of wiring completeness, not automated coverage.
+    Companion interactive canvas: paidly-app-overview.canvas.tsx.
+    HTML source: docs/Paidly-Application-Wiring-Overview.html · regenerate with scripts/generate-wiring-overview-pdf.mjs.
+  </footer>
+</body>
+</html>

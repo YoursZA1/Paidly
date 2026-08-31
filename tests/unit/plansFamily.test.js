@@ -39,9 +39,12 @@ describe("plan slug / family aliases", () => {
   it("feature gating is additive by family and default-denies unknown", () => {
     expect(hasFeature("starter_monthly", "invoices")).toBe(true);
     expect(hasFeature("starter_monthly", "inventory")).toBe(false);
+    expect(hasFeature("starter_monthly", "pos")).toBe(false);
     expect(hasFeature("business_monthly", "inventory")).toBe(true);
+    expect(hasFeature("business_monthly", "pos")).toBe(true);
     expect(hasFeature("growth_monthly", "multi_company")).toBe(true);
     expect(hasFeature("sme", "inventory")).toBe(true);
+    expect(hasFeature("sme", "pos")).toBe(true);
     expect(familyHasFeature("starter", "not_a_real_feature")).toBe(false);
     expect(normalizePlanFamily("BUSINESS")).toBe("business");
   });

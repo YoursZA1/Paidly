@@ -15,6 +15,7 @@ export const COMPANY_JOB_FUNCTIONS = Object.freeze({
   SUPPORT: "support",
   MARKETING: "marketing",
   IT: "it",
+  POS: "pos",
 });
 
 export const JOB_FUNCTION_OPTIONS = [
@@ -26,6 +27,7 @@ export const JOB_FUNCTION_OPTIONS = [
   { value: COMPANY_JOB_FUNCTIONS.SUPPORT, label: "Support" },
   { value: COMPANY_JOB_FUNCTIONS.MARKETING, label: "Marketing" },
   { value: COMPANY_JOB_FUNCTIONS.IT, label: "IT" },
+  { value: COMPANY_JOB_FUNCTIONS.POS, label: "POS only" },
 ];
 
 export const JOB_FUNCTION_LABELS = Object.freeze(
@@ -45,6 +47,9 @@ export function formatCompanyMemberRoleLabel(companyRole, jobFunction) {
 
   const roleLabel = COMPANY_ROLE_LABELS[role] || COMPANY_ROLE_LABELS.employee;
   const fn = normalizeJobFunction(jobFunction);
+  if (fn === COMPANY_JOB_FUNCTIONS.POS && role === COMPANY_ROLES.EMPLOYEE) {
+    return "POS staff";
+  }
   if (fn === COMPANY_JOB_FUNCTIONS.GENERAL) return roleLabel;
 
   const fnLabel = JOB_FUNCTION_LABELS[fn] || fn;

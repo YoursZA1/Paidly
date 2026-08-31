@@ -19,6 +19,17 @@ import { LineChart, Line, BarChart, Bar, PieChart as PieChartComponent, Pie, Cel
 import { formatCurrency } from '../CurrencySelector';
 import TaxService from '@/services/TaxService';
 import PropTypes from 'prop-types';
+import {
+  buildCashFlowChartRows,
+  buildCashFlowSnapshot,
+  expenseOccurredAt,
+  isCashExpense,
+  listAllCashFlowRecords,
+  toDayKey,
+} from '@/utils/cashFlowTruth';
+import { listAllPosSalesEvents } from '@/utils/cashFlowData';
+import { summarizePosSales } from '@/utils/posSalesTruth';
+import PosSalesReportCard from '@/components/reports/PosSalesReportCard';
 
 export default function AccountingDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -26,6 +37,7 @@ export default function AccountingDashboard({ user }) {
   const [invoices, setInvoices] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [posSales, setPosSales] = useState([]);
 
   const COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
   const userCurrency = user?.currency || 'USD';
@@ -34,14 +46,16 @@ export default function AccountingDashboard({ user }) {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const [invoiceData, expenseData, paymentData] = await Promise.all([
-          Invoice.list('-created_date'),
-          Expense.list('-date'),
-          Payment.list('-payment_date').catch(() => []),
+        const [invoiceData, expenseData, paymentData, posData] = await Promise.all([
+          listAllCashFlowRecords(Invoice, '-created_date'),
+          listAllCashFlowRecords(Expense, '-date'),
+          listAllCashFlowRecords(Payment, '-paid_at').catch(() => []),
+          listAllPosSalesEvents().catch(() => []),
         ]);
         setInvoices(invoiceData || []);
         setExpenses(expenseData || []);
         setPayments(paymentData || []);
+        setPosSales(posData || []);
       } catch (error) {
         console.error('Failed to load accounting data:', error);
       } finally {
@@ -51,30 +65,34 @@ export default function AccountingDashboard({ user }) {
     loadData();
   }, []);
 
+  const cashSnap = useMemo(
+    () => buildCashFlowSnapshot({ payments, expenses, invoices, posSales, now: new Date() }),
+    [payments, expenses, invoices, posSales]
+  );
+
+  const posSummary = useMemo(() => {
+    const now = new Date();
+    const month = summarizePosSales(posSales, {
+      start: new Date(now.getFullYear(), now.getMonth(), 1),
+      end: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+    });
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = summarizePosSales(posSales, { start: day, end: day });
+    return { ...month, today_sales: today.net_sales };
+  }, [posSales]);
+
   const financialData = useMemo(() => {
-    const paidStatuses = new Set(['paid', 'partial_paid']);
-    const outstandingStatuses = new Set(['sent', 'overdue']);
-    const revenue = invoices
-      .filter((inv) => paidStatuses.has(inv.status))
-      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-    const outstandingInvoices = invoices
-      .filter((inv) => outstandingStatuses.has(inv.status))
-      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-    const expenseTotal = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-    
-    // Calculate tax information
     const taxSummary = TaxService.getTaxSummaryFromInvoices(invoices);
     const vatCashBasis = TaxService.getVatLiabilityFromPaymentsCashBasis({ invoices, payments });
-    
-    const profit = revenue - expenseTotal;
-    const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
+    const profit = cashSnap.currentBalance;
+    const profitMargin = cashSnap.allTimeIncome > 0 ? (profit / cashSnap.allTimeIncome) * 100 : 0;
 
     return {
-      revenue,
-      expenses: expenseTotal,
+      revenue: cashSnap.allTimeIncome,
+      expenses: cashSnap.allTimeExpenses,
       profit,
       profitMargin,
-      outstandingInvoices,
+      outstandingInvoices: cashSnap.outstandingTotal,
       accountsPayable: 0,
       totalTax: taxSummary.totalTax,
       totalBeforeTax: taxSummary.totalBeforeTax,
@@ -83,43 +101,25 @@ export default function AccountingDashboard({ user }) {
       vatCashBasisGrossPayments: vatCashBasis.grossPayments,
       vatCashBasisNetPayments: vatCashBasis.netPayments,
     };
-  }, [invoices, expenses, payments]);
+  }, [invoices, payments, cashSnap]);
 
   const chartData = useMemo(() => {
-    const byMonth = {};
-    const now = new Date();
-
-    for (let i = 5; i >= 0; i -= 1) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = format(date, 'MMM');
-      byMonth[key] = { month: key, revenue: 0, expenses: 0, profit: 0 };
-    }
-
-    invoices.forEach((inv) => {
-      const date = new Date(inv.created_date || inv.date || Date.now());
-      const key = format(date, 'MMM');
-      if (!byMonth[key]) return;
-      if (inv.status === 'paid' || inv.status === 'partial_paid') {
-        byMonth[key].revenue += inv.total_amount || 0;
-      }
-    });
-
-    expenses.forEach((exp) => {
-      const date = new Date(exp.date || exp.created_date || Date.now());
-      const key = format(date, 'MMM');
-      if (!byMonth[key]) return;
-      byMonth[key].expenses += exp.amount || 0;
-    });
-
-    Object.values(byMonth).forEach((entry) => {
-      entry.profit = entry.revenue - entry.expenses;
-    });
-
-    return Object.values(byMonth);
-  }, [invoices, expenses]);
+    return buildCashFlowChartRows({
+      incomeEvents: cashSnap.incomeEvents,
+      expenseEvents: cashSnap.expenseEvents,
+      timeRange: '6M',
+      now: new Date(),
+    }).map((row) => ({
+      month: row.label.replace(/ \d{4}$/, ''),
+      revenue: row.income,
+      expenses: row.expenses,
+      profit: row.net,
+    }));
+  }, [cashSnap]);
 
   const categoryData = useMemo(() => {
     const categoryTotals = expenses.reduce((acc, exp) => {
+      if (!isCashExpense(exp)) return acc;
       const key = exp.category || 'other';
       acc[key] = (acc[key] || 0) + (exp.amount || 0);
       return acc;
@@ -137,7 +137,7 @@ export default function AccountingDashboard({ user }) {
   );
 
   const recentExpenses = useMemo(
-    () => expenses.slice(0, 5),
+    () => expenses.filter(isCashExpense).slice(0, 5),
     [expenses]
   );
 
@@ -191,7 +191,7 @@ export default function AccountingDashboard({ user }) {
               <div className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 sm:text-base">
                 {formatCurrency(financialData.revenue, userCurrency)}
               </div>
-              <p className="text-xs text-emerald-600 mt-1">+12% from last month</p>
+              <p className="text-xs text-emerald-600 mt-1">Settled payments (cash basis)</p>
             </CardContent>
           </Card>
 
@@ -206,7 +206,7 @@ export default function AccountingDashboard({ user }) {
               <div className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 sm:text-base">
                 {formatCurrency(financialData.expenses, userCurrency)}
               </div>
-              <p className="text-xs text-red-600 mt-1">+5% from last month</p>
+              <p className="text-xs text-red-600 mt-1">Recorded expenses (rejected excluded)</p>
             </CardContent>
           </Card>
 
@@ -253,6 +253,12 @@ export default function AccountingDashboard({ user }) {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
+            <PosSalesReportCard
+              title="POS sales (this month)"
+              subtitle="Till totals from pos_sales_events. Revenue on this page includes till sales minus till-cash refunds."
+              summary={posSummary}
+              currency={userCurrency}
+            />
             <Card>
               <CardHeader>
                 <CardTitle>Revenue vs Expenses Trend</CardTitle>
@@ -622,7 +628,7 @@ export default function AccountingDashboard({ user }) {
                     <div key={exp.id} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
                       <div>
                         <p className="font-semibold text-slate-900">{exp.description || 'Expense'}</p>
-                        <p className="text-xs text-slate-500">{format(new Date(exp.date), 'MMM d, yyyy')} · {exp.category || 'other'}</p>
+                        <p className="text-xs text-slate-500">{toDayKey(expenseOccurredAt(exp)) || 'No date'} · {exp.category || 'other'}</p>
                       </div>
                       <div className="text-right">
                         <p className="font-semibold text-slate-900">{formatCurrency(exp.amount || 0, userCurrency)}</p>

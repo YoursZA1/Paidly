@@ -21,6 +21,14 @@ export function invalidateInvoiceDomain(queryClient, opts = {}) {
   queryClient.invalidateQueries({ queryKey: ["invoices", "list"], exact: false });
   /** Legacy roots — remove after hook migration completes */
   queryClient.invalidateQueries({ queryKey: ["invoices"], exact: false });
+  invalidateRevenueReadModels(queryClient);
+}
+
+/**
+ * Cash Flow + Reports share the `cashflow-page` read model.
+ * Call after expense/payment mutations so KPIs, ledgers, and reports stay aligned.
+ */
+export function invalidateRevenueReadModels(queryClient) {
   queryClient.invalidateQueries({ queryKey: ["cashflow-page"], exact: false });
 }
 

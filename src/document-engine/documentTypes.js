@@ -1,12 +1,14 @@
 /**
- * Paidly Document Engine — canonical types
+ * Paidly Document Engine — commercial type vocabulary
  *
- * Product model: separate features (Invoices, Quotes, Payslips) are views on one concept:
- *   document({ type: "invoice" | "quote" | "payslip", ... })
+ * Shared compose/routing helpers for invoices, quotes, and payslips. Persistence is NOT
+ * the Documents Hub: see `documentSystemOfRecord.js`.
  *
- * Persistence: legacy tables (`invoices`, `quotes`, `payslips`) remain in use for production flows;
- * the unified v2 store is `public.documents` (+ `document_items`, `document_events`) via `DocumentService`.
- * This module is the shared vocabulary and resolver for entities, routing params, and engine code.
+ *   Invoice  → invoices
+ *   Quote    → quotes
+ *   Payslip  → payslips
+ *
+ * Generic business documents (leave, contracts, …) live in `public.documents`.
  */
 
 import { Invoice, Quote, Payslip } from "@/api/entities";

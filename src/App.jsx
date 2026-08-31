@@ -3,6 +3,7 @@ import '@/styles/animations.css'
 import { Analytics } from "@vercel/analytics/react"
 import Pages from "@/pages/index.jsx"
 import UpgradeModalHost from "@/components/subscription/UpgradeModalHost"
+import PwaLifecycle from "@/components/pwa/PwaLifecycle"
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 function App() {
@@ -12,6 +13,7 @@ function App() {
       <UpgradeModalHost />
       <Toaster />
       <SonnerToaster position="top-center" closeButton />
+      {import.meta.env.PROD ? <PwaLifecycle /> : null}
       {/* Vercel Web Analytics: production bundles only (avoids extra scripts/noise in local dev). */}
       {import.meta.env.PROD ? <Analytics /> : null}
     </>

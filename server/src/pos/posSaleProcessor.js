@@ -1,5 +1,49 @@
 import { parsePosSale } from "./posSaleParsers.js";
 import { applyPosSaleInventory } from "./posInventorySync.js";
+import { recordPosAuditEvents } from "./posAudit.js";
+import {
+  POS_AUDIT_ACTOR,
+  posAuditInventoryAndCompletion,
+  posAuditSaleCreatedAndPayment,
+} from "./posAuditMath.js";
+
+async function auditWebhookSale({
+  connection,
+  saleEventId,
+  normalized,
+  inventoryApplied,
+  inventoryFailed,
+  duplicate,
+  inventoryJustApplied,
+}) {
+  if (!duplicate) {
+    await recordPosAuditEvents(
+      posAuditSaleCreatedAndPayment({
+        orgId: connection.org_id,
+        saleId: saleEventId,
+        actorType: POS_AUDIT_ACTOR.WEBHOOK,
+        receiptNumber: normalized.externalId,
+        saleKind: "sale",
+        amount: normalized.totalAmount,
+        currency: normalized.currency,
+        method: normalized.paymentMethod,
+      })
+    );
+  }
+  if (!duplicate || inventoryJustApplied) {
+    await recordPosAuditEvents(
+      posAuditInventoryAndCompletion({
+        orgId: connection.org_id,
+        saleId: saleEventId,
+        actorType: POS_AUDIT_ACTOR.WEBHOOK,
+        direction: "out",
+        applied: inventoryApplied,
+        failed: Boolean(inventoryFailed),
+        skip: !inventoryJustApplied,
+      })
+    );
+  }
+}
 
 /**
  * Ingest a normalized POS sale: idempotent insert + optional inventory decrement.
@@ -18,7 +62,7 @@ export async function processPosWebhookSale(supabase, { connection, payload }) {
 
   const { data: existing, error: existingError } = await supabase
     .from("pos_sales_events")
-    .select("id, inventory_applied")
+    .select("id, inventory_applied, items")
     .eq("connection_id", connection.id)
     .eq("external_id", normalized.externalId)
     .maybeSingle();
@@ -28,6 +72,46 @@ export async function processPosWebhookSale(supabase, { connection, payload }) {
   }
 
   if (existing?.id) {
+    if (!existing.inventory_applied && normalized.items.length > 0) {
+      const inventory = await applyPosSaleInventory(
+        supabase,
+        connection.org_id,
+        existing.id,
+        normalized.items
+      );
+      const { error: inventoryUpdateError } = await supabase
+        .from("pos_sales_events")
+        .update({
+          inventory_applied: inventory.applied,
+          inventory_result: inventory.results,
+        })
+        .eq("id", existing.id);
+      if (inventoryUpdateError) {
+        return {
+          ok: false,
+          status: 500,
+          error: inventoryUpdateError.message || "Could not save inventory result",
+          saleEventId: existing.id,
+        };
+      }
+      await auditWebhookSale({
+        connection,
+        saleEventId: existing.id,
+        normalized,
+        inventoryApplied: inventory.applied,
+        inventoryFailed: inventory.failed,
+        duplicate: true,
+        inventoryJustApplied: true,
+      });
+      return {
+        ok: true,
+        status: 200,
+        duplicate: true,
+        saleEventId: existing.id,
+        inventoryApplied: inventory.applied,
+        inventoryResult: inventory.results,
+      };
+    }
     return {
       ok: true,
       status: 200,
@@ -66,6 +150,7 @@ export async function processPosWebhookSale(supabase, { connection, payload }) {
   const saleEventId = inserted.id;
   let inventoryApplied = false;
   let inventoryResult = null;
+  let inventoryFailed = false;
 
   if (normalized.items.length > 0) {
     const inventory = await applyPosSaleInventory(
@@ -76,6 +161,7 @@ export async function processPosWebhookSale(supabase, { connection, payload }) {
     );
     inventoryApplied = inventory.applied;
     inventoryResult = inventory.results;
+    inventoryFailed = Boolean(inventory.failed);
 
     const { error: inventoryUpdateError } = await supabase
       .from("pos_sales_events")
@@ -95,6 +181,16 @@ export async function processPosWebhookSale(supabase, { connection, payload }) {
       };
     }
   }
+
+  await auditWebhookSale({
+    connection,
+    saleEventId,
+    normalized,
+    inventoryApplied,
+    inventoryFailed,
+    duplicate: false,
+    inventoryJustApplied: normalized.items.length > 0,
+  });
 
   const { error: connectionUpdateError } = await supabase
     .from("pos_connections")

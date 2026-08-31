@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { normalizeBusinessType } from "@shared/businessType.js";
 
 /**
  * Update tenant company profile on organizations (company_id = org_id).
@@ -17,6 +18,7 @@ export async function updateOrganizationProfile(orgId, patch) {
     "phone",
     "industry",
     "address",
+    "business_type",
     "payroll_settings",
     "tax_info",
     "onboarding_completed_at",
@@ -26,13 +28,17 @@ export async function updateOrganizationProfile(orgId, patch) {
     if (patch[key] !== undefined) payload[key] = patch[key];
   }
 
+  if (payload.business_type !== undefined) {
+    payload.business_type = normalizeBusinessType(payload.business_type);
+  }
+
   if (!Object.keys(payload).length) return null;
 
   const { data, error } = await supabase
     .from("organizations")
     .update(payload)
     .eq("id", orgId)
-    .select("id, name, registration_number, company_email, phone, industry, address")
+    .select("id, name, registration_number, company_email, phone, industry, address, business_type")
     .maybeSingle();
 
   if (error) throw new Error(getSupabaseErrorMessage(error, "Could not save company profile"));
@@ -47,7 +53,7 @@ export async function fetchOrganizationProfile(orgId) {
   const { data, error } = await supabase
     .from("organizations")
     .select(
-      "id, name, registration_number, company_email, phone, industry, address, payroll_settings, tax_info, onboarding_completed_at"
+      "id, name, registration_number, company_email, phone, industry, address, business_type, payroll_settings, tax_info, onboarding_completed_at"
     )
     .eq("id", orgId)
     .maybeSingle();

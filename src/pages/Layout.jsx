@@ -43,6 +43,7 @@ import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import Logo from "@/components/shared/Logo";
 import { useCompanyBrand } from "@/hooks/useCompanyBrand";
 import BrandSwitcher from "@/components/brands/BrandSwitcher";
+import InstallPaidlyMenuItem from "@/components/pwa/InstallPaidlyMenuItem";
 import { useAppStore } from "@/stores/useAppStore";
 import { useShallow } from "zustand/shallow";
 import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
@@ -54,6 +55,9 @@ import useOnboardingRole from "@/hooks/useOnboardingRole";
 import usePostAuthHomeRedirect from "@/hooks/usePostAuthHomeRedirect";
 import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
+import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
+import { isPosTerminalPage } from "@/lib/posNavAccess";
+import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
 import UpgradeScreen from "@/components/subscription/UpgradeScreen";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
@@ -79,9 +83,9 @@ import {
   Activity,
   Briefcase,
   Receipt,
-  Handshake,
   Layers,
-  ShoppingCart
+  ShoppingCart,
+  Store
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -96,6 +100,7 @@ const navItemShape = PropTypes.shape({
   requiredPlan: PropTypes.string,
   hasRoleAccess: PropTypes.bool,
   type: PropTypes.string,
+  requiredPermission: PropTypes.string,
   children: PropTypes.arrayOf(PropTypes.any),
 });
 
@@ -148,12 +153,12 @@ const PAGE_DISPLAY_NAMES = {
   Vendors: "Vendors",
   Services: "Services",
   PurchaseOrders: "Purchase Orders",
+  POS: "POS",
+  Pos: "POS",
   RecurringInvoices: "Recurring",
   CreateRecurringInvoice: "New Recurring",
   EditRecurringInvoice: "Edit Recurring",
   BillingAndInvoices: "Billing",
-  AffiliateDashboard: "Affiliate",
-  AffiliatesPage: "Affiliates",
   UsersPage: "Users",
   SubscriptionsPage: "Subscriptions",
   AuditLogPage: "Audit Log",
@@ -169,14 +174,6 @@ const allNavigationItems = [
     id: "nav-dashboard",
   },
   { type: "section", title: "Overview", id: "nav-section-overview" },
-  {
-    title: "Clients",
-    url: createPageUrl("Clients"),
-    icon: Users,
-    feature: null,
-    roles: MAIN_APP_NAV_ROLES,
-    id: "nav-clients",
-  },
   {
     title: "Invoices",
     url: createPageUrl("Invoices"),
@@ -194,12 +191,12 @@ const allNavigationItems = [
     id: "nav-quotes",
   },
   {
-    title: "Documents",
-    url: createPageUrl("Documents"),
-    icon: Layers,
+    title: "Clients",
+    url: createPageUrl("Clients"),
+    icon: Users,
     feature: null,
     roles: MAIN_APP_NAV_ROLES,
-    id: "nav-documents",
+    id: "nav-clients",
   },
   {
     title: "Products",
@@ -208,6 +205,23 @@ const allNavigationItems = [
     feature: null,
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-services",
+  },
+  {
+    title: "POS",
+    url: createPageUrl("POS"),
+    icon: Store,
+    feature: "pos",
+    roles: MAIN_APP_NAV_ROLES,
+    id: "nav-pos",
+    requiredPermission: "pos_access",
+  },
+  {
+    title: "Documents",
+    url: createPageUrl("Documents"),
+    icon: Layers,
+    feature: null,
+    roles: MAIN_APP_NAV_ROLES,
+    id: "nav-documents",
   },
   {
     title: "Purchase Orders",
@@ -266,14 +280,6 @@ const allNavigationItems = [
     feature: null,
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-messages",
-  },
-  {
-    title: "Affiliate",
-    url: "/dashboard/affiliate",
-    icon: Handshake,
-    feature: null,
-    roles: MAIN_APP_NAV_ROLES,
-    id: "nav-affiliate",
   },
   { type: "section", title: "Settings", id: "nav-section-settings" },
   {
@@ -407,6 +413,8 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   const isActive = item.url && location.pathname === item.url.split("?")[0];
 
   if (item.hasAccess === false) {
+    // POS is plan-gated: hide rather than showing “Upgrade to Business” in the sidebar.
+    if (item.id === "nav-pos") return null;
     return <LockedNavItem title={item.title} requiredPlan={item.requiredPlan} />;
   }
 
@@ -482,7 +490,7 @@ const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme,
   const MAIN_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-quotes", "nav-services"]);
   const managementIds = new Set([
     "nav-clients", "nav-cashflow", "nav-reports", "nav-notes",
-    "nav-calendar", "nav-messages", "nav-affiliate", "nav-settings"
+    "nav-calendar", "nav-messages", "nav-settings"
   ]);
   const mainItems = items.filter((i) => i.id && MAIN_IDS.has(i.id));
   let managementItems = items.filter((i) => i.id && managementIds.has(i.id));
@@ -565,6 +573,7 @@ const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme,
               <Settings className="mr-2 size-4" />
               Settings
             </DropdownMenuItem>
+            <InstallPaidlyMenuItem onAfterClick={onClose} />
             <DropdownMenuItem onClick={() => { navigate(createPageUrl("Settings") + "?tab=subscription"); onClose?.(); }} className="cursor-pointer">
               <Bell className="mr-2 size-4" />
               Subscription
@@ -627,8 +636,6 @@ const STANDALONE_PAGE_NAMES = [
   "ForgotPassword",
   "ResetPassword",
   "AcceptInvite",
-  "Affiliate",
-  "Affiliate/apply",
 ];
 
 /** Trust persisted Zustand + Dexie/RQ seeds — full bootstrap at most every {@link PAIDLY_STALE_MS.appStoreBootstrap}. */
@@ -639,6 +646,7 @@ export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdminV2Route = location.pathname.startsWith("/admin-v2");
+  const isPosTerminal = isPosTerminalPage(currentPageName);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);
@@ -668,16 +676,33 @@ export default function Layout({ children, currentPageName }) {
     isOrgOwner,
     showBusinessDashboard,
   } = useCompanyContext();
+  const posOnlyStaff = isPosOnlyStaff(companyCtx);
+  const showPosNav = useCanShowPosNav();
   const { loading: onboardingRoleLoading, isAdminOnboarding } = useOnboardingRole();
   const inviteAcceptRef = useRef(false);
 
-  usePostAuthHomeRedirect({ enabled: !isAdminV2Route });
+  usePostAuthHomeRedirect({ enabled: !isAdminV2Route, posOnlyStaff });
 
   useEffect(() => {
     if (!user?.id || inviteAcceptRef.current) return;
     inviteAcceptRef.current = true;
     void tryAcceptStoredInviteToken();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (companyContextLoading || !posOnlyStaff) return;
+    if (isPosTerminal || isAdminV2Route) return;
+    const path = String(location.pathname || "").toLowerCase();
+    if (/\/(login|signup|forgotpassword|resetpassword|home|invite)(\/|$)/i.test(path)) return;
+    navigate(createPageUrl("POS"), { replace: true });
+  }, [
+    companyContextLoading,
+    posOnlyStaff,
+    isPosTerminal,
+    isAdminV2Route,
+    location.pathname,
+    navigate,
+  ]);
 
   const navigationItems = useMemo(() => {
     let items = getNavigationItems(planForNavFeatures, user?.role);
@@ -687,16 +712,24 @@ export default function Layout({ children, currentPageName }) {
         userId: companyCtx.userId,
         companyId: companyCtx.companyId,
         isOrgOwner: companyCtx.isOrgOwner,
+        jobFunction: companyCtx.jobFunction,
       });
     }
+    if (!showPosNav) {
+      items = items.filter((item) => item.id !== "nav-pos");
+    }
     return items;
-  }, [planForNavFeatures, user?.role, companyCtx]);
+  }, [planForNavFeatures, user?.role, companyCtx, showPosNav]);
 
   useEffect(() => {
     if (!user?.id || !layoutProfile?.id) return;
     if (currentPageName !== "Dashboard") return;
     // Platform staff (admin/management/sales/support) use the /admin-v2 shell, not company onboarding.
     if (isStaffDashboardRole(user?.role)) {
+      setShowActivationOnboarding(false);
+      return;
+    }
+    if (posOnlyStaff) {
       setShowActivationOnboarding(false);
       return;
     }
@@ -718,7 +751,7 @@ export default function Layout({ children, currentPageName }) {
     const dismissedKey = `paidly_onboarding_v2_dismissed_${user.id}`;
     const dismissed = typeof window !== "undefined" && window.sessionStorage.getItem(dismissedKey) === "1";
     if (!dismissed) setShowActivationOnboarding(true);
-  }, [user?.id, user?.role, layoutProfile?.id, layoutProfile?.business, currentPageName, companyContextLoading, onboardingRoleLoading]);
+  }, [user?.id, user?.role, layoutProfile?.id, layoutProfile?.business, currentPageName, companyContextLoading, onboardingRoleLoading, posOnlyStaff]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -917,6 +950,15 @@ export default function Layout({ children, currentPageName }) {
       >
         {children}
       </motion.div>
+    );
+  }
+
+  // Dedicated till: no sidebar, dashboard header, footer, or mobile bottom nav.
+  if (isPosTerminal) {
+    return (
+      <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-background">
+        {children}
+      </div>
     );
   }
 
@@ -1169,6 +1211,7 @@ export default function Layout({ children, currentPageName }) {
                     <Settings className="size-4 mr-2" />
                     Settings
                   </DropdownMenuItem>
+                  <InstallPaidlyMenuItem onAfterClick={() => setIsMobileMenuOpen(false)} />
                   <DropdownMenuItem onClick={() => navigate(createPageUrl("Settings") + "?tab=subscription")}>
                     <Bell className="size-4 mr-2" />
                     Subscription
@@ -1185,7 +1228,7 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Desktop (lg+): Search, theme, notifications, profile */}
           <div className="hidden lg:flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-            <AppQuickSearchDesktop />
+            <AppQuickSearchDesktop includePos={showPosNav} />
           </div>
 
           <div className="hidden lg:flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -1260,6 +1303,7 @@ export default function Layout({ children, currentPageName }) {
                     <Settings className="size-4 mr-2" />
                     Settings
                   </DropdownMenuItem>
+                  <InstallPaidlyMenuItem />
                   <DropdownMenuItem onClick={() => navigate(createPageUrl("Settings") + "?tab=subscription")}>
                     <Bell className="size-4 mr-2" />
                     Subscription
@@ -1341,7 +1385,11 @@ export default function Layout({ children, currentPageName }) {
         <SetupWizard isOpen={showWizard} onComplete={handleWizardComplete} />
         <MobileBottomNav onOpenMenu={() => setIsMobileMenuOpen(true)} />
         {user?.id && isCompactLayout ? (
-          <AppQuickSearchMobileDialog open={quickSearchOpen} onOpenChange={setQuickSearchOpen} />
+          <AppQuickSearchMobileDialog
+            open={quickSearchOpen}
+            onOpenChange={setQuickSearchOpen}
+            includePos={showPosNav}
+          />
         ) : null}
         </div>
         </div>

@@ -17,6 +17,8 @@ export default [
       '.vercel/**',
       '.claude/worktrees/**',
       '.playwright-browsers/**',
+      // macOS AppleDouble resource forks (external volumes). Already gitignored.
+      '**/._*',
     ],
   },
   {

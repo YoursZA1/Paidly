@@ -2,7 +2,7 @@ import { backendApi } from "./backendClient";
 
 /**
  * Permanently delete the signed-in user's auth account and linked data (requires Node API).
- * Server purges storage, then deletes auth user; DB trigger removes subscriptions / affiliate apps / waitlist PII;
+ * Server purges storage, then deletes auth user; DB trigger removes subscriptions / waitlist PII;
  * owned organizations cascade with invoices, clients, etc.
  *
  * @param {string} accessToken - JWT from getStableSession() / session.access_token

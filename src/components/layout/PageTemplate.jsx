@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
  * 3. Side panel — filters, counts, summary (`PageTemplate.Body` `sidePanel` prop)
  *
  * Use `embedded` inside shells that already provide padding/background (e.g. `AdminLayout`).
- * Target adoption: Invoices, Quotes, Clients, Services, Affiliates (and new list pages).
+ * Target adoption: Invoices, Quotes, Clients, Services (and new list pages).
  *
  * @param {{ children: React.ReactNode, className?: string, embedded?: boolean }} props
  */

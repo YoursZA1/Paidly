@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import { Plug, ArrowRight } from "lucide-react";
+import { ArrowRight, Store } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,23 +40,24 @@ export default function PosSalesCard({ currency = "ZAR" }) {
     };
   }, []);
 
-  if (!loading && !error && sales.length === 0 && totalToday === 0) {
-    return null;
-  }
-
   return (
     <Card className="border-border/70">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
-          <Plug className="h-4 w-4 text-primary" />
-          POS sales today
+          <Store className="h-4 w-4 text-primary" />
+          POS
         </CardTitle>
-        <Button variant="ghost" size="sm" asChild className="h-8 px-2 text-xs">
-          <Link to={`${createPageUrl("Settings")}?tab=integrations`}>
-            Manage
-            <ArrowRight className="h-3.5 w-3.5 ml-1" />
-          </Link>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button size="sm" asChild className="h-8 px-3 text-xs">
+            <Link to={createPageUrl("POS")}>Open POS</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild className="h-8 px-2 text-xs">
+            <Link to={`${createPageUrl("Settings")}?tab=integrations`}>
+              Manage
+              <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         {loading ? (
@@ -70,6 +71,7 @@ export default function PosSalesCard({ currency = "ZAR" }) {
         ) : (
           <>
             <p className="text-2xl font-bold tracking-tight">{formatCurrency(totalToday, currency)}</p>
+            <p className="text-xs text-muted-foreground">Sales today</p>
             {sales.length > 0 ? (
               <ul className="space-y-2">
                 {sales.map((sale) => (
@@ -90,7 +92,7 @@ export default function PosSalesCard({ currency = "ZAR" }) {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">No POS sales recorded today yet.</p>
+              <p className="text-sm text-muted-foreground">No sales recorded today. Open POS to take a sale.</p>
             )}
           </>
         )}

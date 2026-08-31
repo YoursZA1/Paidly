@@ -9,6 +9,9 @@ export const SYNC_JOB_TYPES = {
   UPDATE_CLIENT: "UPDATE_CLIENT",
 };
 
+// POS checkout is not a sync-queue job. Till money needs /api/pos/checkout
+// (payment intent + inventory). Do not add CREATE_POS_SALE here.
+
 export async function processSyncJob(job) {
   switch (job.type) {
     case SYNC_JOB_TYPES.CREATE_INVOICE: {
@@ -42,8 +45,18 @@ export async function processSyncJob(job) {
     case SYNC_JOB_TYPES.SEND_INVOICE: {
       const invoiceId = job.payload?.invoiceId;
       if (!invoiceId) throw new Error("Missing invoiceId for SEND_INVOICE");
-      const result = await sendInvoiceToClient(invoiceId, job.payload?.options || {});
-      return result || { invoiceId };
+      const operationId = job.meta?.operationId;
+      const runSend = async () => {
+        const result = await sendInvoiceToClient(invoiceId, {
+          ...(job.payload?.options || {}),
+          sendOperationId: operationId || job.payload?.options?.sendOperationId,
+        });
+        return result || { invoiceId };
+      };
+      if (operationId) {
+        return syncMutationCoordinator.runOnce(operationId, runSend);
+      }
+      return runSend();
     }
     case SYNC_JOB_TYPES.UPDATE_CLIENT: {
       const clientId = job.payload?.clientId;

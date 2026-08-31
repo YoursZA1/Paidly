@@ -8,7 +8,6 @@ Allow: /Home
 Allow: /home
 Allow: /HowTo
 Allow: /how-to
-Allow: /Affiliate
 Disallow: /Dashboard
 Disallow: /Settings
 Disallow: /admin

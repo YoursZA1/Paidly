@@ -5,13 +5,17 @@
 
 import { Invoice, Quote, Client, BankingDetail, DocumentSend, MessageLog, User } from '@/api/entities';
 import { supabase } from '@/lib/supabaseClient';
-import { getStableSession } from '@/core/auth/SessionCoordinator';
+import { getStableSession, getStableSessionResult } from '@/core/auth/SessionCoordinator';
 import { generateQuotePDF } from '@/components/pdf/generateQuotePDF';
+import { generateInvoicePDF } from '@/components/pdf/generateInvoicePDF';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
+import { generateInvoiceEmailHtml } from '@/utils/invoiceEmailHtml';
+import { getPublicApiBase } from '@/api/backendClient';
 import { createPageUrl } from '@/utils';
 import { retryOnAbort, isAbortError, retryOnTransientFetch } from '@/utils/retryOnAbort';
 import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from '@/lib/sessionTimeoutControls';
+import { isValidEmail } from '@/utils/inputSanitization';
 
 /**
  * Base URL for trackable links and email pixel (client: window.origin; server: pass explicitly).
@@ -51,21 +55,33 @@ export const getTrackedLinkUrl = (trackingToken, destinationUrl, baseUrl) => {
 };
 
 /**
- * Log the send to message_logs and return a trackable link (and token for optional pixel).
- * Every send action (email or WhatsApp) should call this so the message is logged.
- * Inserts: document_type, document_id, client_id, channel, recipient, sent_at, tracking_token
- * @param {object} invoice - { id, public_share_token, client_id }
- * @param {string} channel - 'email' | 'whatsapp'
- * @param {string} recipient - Email address or phone (for message_logs.recipient)
- * @returns {Promise<{ url: string, trackingToken: string }>} url = view link; trackingToken = for email pixel
+ * Build a trackable invoice view URL without writing message_logs.
+ * Persist the log only after the email provider accepts the send.
+ * @param {object} invoice - { public_share_token }
+ * @param {string} [trackingToken]
+ * @returns {{ url: string, trackingToken: string }}
  */
-export const createTrackableInvoiceLink = async (invoice, channel, recipient) => {
+export function prepareInvoiceTrackingLink(invoice, trackingToken) {
   const shareToken = invoice?.public_share_token;
   if (!shareToken) {
     throw new Error('Invoice has no share token. Generate a share link first.');
   }
-  const token = crypto.randomUUID();
-  const sentAt = new Date().toISOString();
+  const token = trackingToken || crypto.randomUUID();
+  const origin = getTrackableBaseUrl();
+  const url = `${origin}/view/${shareToken}?token=${token}`;
+  return { url, trackingToken: token };
+}
+
+/**
+ * Log a confirmed send (WhatsApp share, or email after provider success).
+ * @param {object} invoice
+ * @param {string} channel
+ * @param {string} recipient
+ * @param {string} trackingToken
+ * @param {string} [sentAt]
+ */
+export async function persistInvoiceTrackingLog(invoice, channel, recipient, trackingToken, sentAt) {
+  if (!trackingToken) return;
   await retryOnTransientFetch(() =>
     MessageLog.create({
       document_type: 'invoice',
@@ -73,13 +89,24 @@ export const createTrackableInvoiceLink = async (invoice, channel, recipient) =>
       client_id: invoice.client_id || null,
       channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
       recipient: recipient || null,
-      sent_at: sentAt,
-      tracking_token: token,
+      sent_at: sentAt || new Date().toISOString(),
+      tracking_token: trackingToken,
     })
   );
-  const origin = getTrackableBaseUrl();
-  const url = `${origin}/view/${shareToken}?token=${token}`;
-  return { url, trackingToken: token };
+}
+
+/**
+ * WhatsApp share uses this at confirm time. Email preview must use prepareInvoiceTrackingLink
+ * and persist only after provider success.
+ * @param {object} invoice - { id, public_share_token, client_id }
+ * @param {string} channel - 'email' | 'whatsapp'
+ * @param {string} recipient
+ * @returns {Promise<{ url: string, trackingToken: string }>}
+ */
+export const createTrackableInvoiceLink = async (invoice, channel, recipient) => {
+  const prepared = prepareInvoiceTrackingLink(invoice);
+  await persistInvoiceTrackingLog(invoice, channel, recipient, prepared.trackingToken);
+  return prepared;
 };
 
 /**
@@ -148,6 +175,167 @@ function pdfBlobToBase64(blob) {
     reader.onerror = () => reject(new Error('Failed to read PDF blob.'));
     reader.readAsDataURL(blob);
   });
+}
+
+function redactSendErrorDetails(raw) {
+  const text = typeof raw === 'string' ? raw : raw == null ? '' : JSON.stringify(raw);
+  return text
+    .replace(/Bearer\s+\S+/gi, '[redacted]')
+    .replace(/re_[A-Za-z0-9_]+/g, '[redacted]')
+    .slice(0, 400);
+}
+
+function userFacingInvoiceSendError(raw, fallback) {
+  const s = redactSendErrorDetails(raw);
+  if (/no email|missing client email/i.test(s)) return 'Client has no email address.';
+  if (/invalid email/i.test(s)) return 'Client email address is invalid.';
+  if (/share token/i.test(s)) return 'Public invoice URL could not be generated. Please try again.';
+  if (/pdf/i.test(s) && /fail|generat|read/i.test(s)) return 'Invoice PDF generation failed. Please try again.';
+  if (/not configured|misconfigured|RESEND/i.test(s)) {
+    return 'Email service is unavailable. Please try again later.';
+  }
+  if (/unauthorized|not signed in|logged in/i.test(s)) {
+    return 'You must be logged in to send emails.';
+  }
+  if (/too large|413/i.test(s)) {
+    return 'Invoice PDF is too large to email. Please try again or share a link.';
+  }
+  if (!s || s.trim().startsWith('{') || s.length > 180) {
+    return fallback || 'Invoice could not be sent. Please try again.';
+  }
+  return s;
+}
+
+async function readFetchBody(res) {
+  const text = await res.text().catch(() => '');
+  let json = null;
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+  }
+  return { text, json };
+}
+
+function assertProviderAccepted(res, body, label) {
+  const errorPayload = body.json?.error || body.json?.message || body.text;
+  if (!res.ok) {
+    throw new Error(userFacingInvoiceSendError(errorPayload, `${label} rejected the request.`));
+  }
+  if (body.json && body.json.success === false) {
+    throw new Error(userFacingInvoiceSendError(errorPayload, `${label} rejected the request.`));
+  }
+}
+
+function normalizeIdempotencyKey(raw) {
+  const key = String(raw || '').trim();
+  if (!key) return '';
+  return key.slice(0, 256);
+}
+
+async function findMessageLogByTrackingToken(token) {
+  const trackingToken = String(token || '').trim();
+  if (!trackingToken) return null;
+  try {
+    const { data, error } = await supabase
+      .from('message_logs')
+      .select('id, document_id')
+      .eq('tracking_token', trackingToken)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Canonical invoice email dispatch used by interactive send and the sync queue.
+ * Primary: Supabase edge `send-invoice-email` (Resend). Fallback: POST /api/send-invoice.
+ * Success requires HTTP 2xx and, when JSON is present, `success !== false`.
+ */
+export async function dispatchInvoiceEmailViaCanonicalPath({
+  pdfBase64,
+  email,
+  subject,
+  html,
+  filename,
+  invoiceNum,
+  fromName,
+  clientName,
+  amountDue,
+  dueDate,
+  idempotencyKey,
+}) {
+  const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const supabaseUrl = String(rawSupabaseUrl).replace(/\.supabase\.com/gi, '.supabase.co').trim();
+  if (!supabaseUrl) throw new Error('Email service is unavailable. Please try again later.');
+
+  const sessionResult = await getStableSessionResult();
+  if (sessionResult?.error) throw sessionResult.error;
+  const accessToken =
+    sessionResult?.data?.session?.access_token || (await getStableSession())?.access_token;
+  if (!accessToken) throw new Error('You must be logged in to send emails.');
+
+  const idempotency = normalizeIdempotencyKey(idempotencyKey);
+
+  let primaryError = null;
+  try {
+    const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        pdfBase64,
+        email,
+        subject,
+        html,
+        filename,
+        ...(idempotency ? { idempotencyKey: idempotency } : {}),
+      }),
+    });
+    const body = await readFetchBody(sendRes);
+    assertProviderAccepted(sendRes, body, 'Email service');
+    return { channel: 'edge', provider: body.json || { success: true } };
+  } catch (edgeErr) {
+    primaryError = edgeErr;
+  }
+
+  const apiBase = getPublicApiBase() || '';
+  const fallbackRes = await fetch(`${apiBase}/api/send-invoice`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      base64PDF: pdfBase64,
+      clientEmail: email,
+      invoiceNum: String(invoiceNum || ''),
+      fromName: String(fromName || 'Paidly'),
+      clientName: String(clientName || 'there'),
+      amountDue: String(amountDue ?? ''),
+      dueDate: String(dueDate || ''),
+      ...(idempotency ? { idempotencyKey: idempotency } : {}),
+    }),
+  });
+  const fallbackBody = await readFetchBody(fallbackRes);
+  try {
+    assertProviderAccepted(fallbackRes, fallbackBody, 'Email service');
+  } catch (fallbackErr) {
+    const primaryMsg = primaryError?.message || 'Email service failed';
+    throw new Error(
+      userFacingInvoiceSendError(
+        `${primaryMsg} | ${fallbackErr.message}`,
+        'Invoice could not be sent. Please try again.'
+      )
+    );
+  }
+  return { channel: 'api', provider: fallbackBody.json || { success: true } };
 }
 
 /**
@@ -267,59 +455,177 @@ export const sendQuoteToClient = async (quoteId, options = {}) => {
 };
 
 /**
- * Send invoice to client
- * @param {string} invoiceId - Invoice ID
- * @param {object} options - Send options
- * @returns {Promise} Send result
+ * Send invoice PDF to the client via the same edge function + /api/send-invoice fallback
+ * as InvoiceActions. Does not mark the invoice sent until the provider/API accepts the email.
+ *
+ * @param {object} invoice
+ * @param {object} client
+ * @param {{ html?: string, markSent?: boolean, trackingToken?: string, sendOperationId?: string }} [options]
  */
-export const sendInvoiceToClient = async (invoiceId, options = {}) => {
+export async function sendInvoicePdfEmailToClient(invoice, client, options = {}) {
   beginCriticalSessionOperation();
   try {
-    // Options are preserved for future API implementation
-    // Currently: emailSubject, emailMessage, cc, bcc, sendSMS, sendNotification
-    void options;
-
-    const me = await User.me().catch(() => null);
-    const brandPatch = me ? snapshotDocumentBrandForPersist(me) : {};
-
-    // Update invoice status to 'sent' (with retry on spurious AbortError)
-    await retryOnAbort(() =>
-      Invoice.update(invoiceId, {
-        status: 'sent',
-        sent_date: new Date().toISOString(),
-        ...brandPatch,
-      })
-    );
-
-    // Record send for Messages page (channel = email when sent from app)
-    const invoice = await retryOnAbort(() => Invoice.get(invoiceId)).catch(() => null);
-    if (invoice?.client_id) {
-      recordDocumentSend('invoice', invoiceId, invoice.client_id, 'email');
+    const email = String(client?.email || '').trim();
+    if (!email) {
+      throw new Error('Client has no email address.');
+    }
+    if (!isValidEmail(email)) {
+      throw new Error('Client email address is invalid.');
+    }
+    if (!invoice?.id) {
+      throw new Error('Invoice not found.');
     }
 
-    // TODO: Implement actual email sending via API
-    // await breakApi.post(`/api/invoices/${invoiceId}/send`, {
-    //   emailSubject,
-    //   emailMessage,
-    //   cc,
-    //   bcc,
-    //   sendSMS,
-    //   sendNotification,
-    // });
+    const userData = await retryOnAbort(() => User.me());
+    let invoiceForSend = invoice;
+    if (!invoiceForSend.public_share_token) {
+      const shareToken = crypto.randomUUID();
+      await retryOnAbort(() => Invoice.update(invoiceForSend.id, { public_share_token: shareToken }));
+      invoiceForSend = { ...invoiceForSend, public_share_token: shareToken };
+    }
+
+    const sendOperationId = String(options.sendOperationId || options.trackingToken || crypto.randomUUID()).trim();
+    let trackingToken = options.trackingToken || null;
+    let html = options.html;
+    if (!html) {
+      const prepared = prepareInvoiceTrackingLink(invoiceForSend, trackingToken || sendOperationId);
+      trackingToken = prepared.trackingToken;
+      const pixelUrl = getEmailOpenTrackingPixelUrl(trackingToken);
+      const ctaHref = getTrackedLinkUrl(trackingToken, prepared.url);
+      const invoiceForHtml = {
+        ...invoiceForSend,
+        delivery_date:
+          invoiceForSend.delivery_date || invoiceForSend.due_date || new Date().toISOString(),
+      };
+      html = generateInvoiceEmailHtml(invoiceForHtml, client, userData, ctaHref, pixelUrl);
+    } else if (!trackingToken) {
+      trackingToken = sendOperationId;
+    }
+
+    const idempotencyKey = sendOperationId || trackingToken;
+    const existingLog = await findMessageLogByTrackingToken(idempotencyKey);
+    const alreadyDelivered = Boolean(existingLog);
+    const sentAt = new Date().toISOString();
+
+    if (!alreadyDelivered) {
+      const bid = invoiceForSend.banking_detail_id && String(invoiceForSend.banking_detail_id).trim();
+      let bankingRow = null;
+      if (bid) {
+        try {
+          bankingRow = await BankingDetail.get(bid);
+        } catch {
+          bankingRow = null;
+        }
+      }
+
+      let pdfBlob;
+      try {
+        pdfBlob = await generateInvoicePDF({
+          invoice: invoiceForSend,
+          client,
+          user: userData,
+          bankingDetail: bankingRow,
+        });
+      } catch (pdfErr) {
+        console.error('Invoice PDF generation failed:', pdfErr);
+        throw new Error('Invoice PDF generation failed. Please try again.');
+      }
+      const pdfBase64 = await pdfBlobToBase64(pdfBlob);
+      if (!pdfBase64) {
+        throw new Error('Invoice PDF generation failed. Please try again.');
+      }
+
+      const subject = `Invoice #${invoiceForSend.invoice_number || ''} from ${invoiceForSend.owner_company_name || userData?.company_name || 'Us'}`;
+      const filename = `invoice-${invoiceForSend.invoice_number || invoiceForSend.reference_number || invoiceForSend.id || 'invoice'}.pdf`;
+
+      await dispatchInvoiceEmailViaCanonicalPath({
+        pdfBase64,
+        email,
+        subject,
+        html,
+        filename,
+        invoiceNum: invoiceForSend.invoice_number || invoiceForSend.reference_number || invoiceForSend.id,
+        fromName: userData?.company_name || userData?.full_name || 'Paidly',
+        clientName: client?.name || 'there',
+        amountDue: invoiceForSend.total_amount ?? '',
+        dueDate: invoiceForSend.delivery_date || invoiceForSend.due_date || '',
+        idempotencyKey,
+      });
+
+      try {
+        await persistInvoiceTrackingLog(
+          { ...invoiceForSend, client_id: client?.id || invoiceForSend.client_id },
+          'email',
+          email,
+          trackingToken || idempotencyKey,
+          sentAt
+        );
+      } catch (e) {
+        console.warn('Failed to record message log after send:', e);
+      }
+    }
+
+    const brandPatch = userData ? snapshotDocumentBrandForPersist(userData) : {};
+    const persistPatch = {
+      sent_date: sentAt,
+      sent_to_email: email,
+      last_sent_date: sentAt,
+      ...brandPatch,
+    };
+    if (options.markSent !== false && invoiceForSend.status === 'draft') {
+      persistPatch.status = 'sent';
+    }
+    await retryOnAbort(() => Invoice.update(invoiceForSend.id, persistPatch));
+    if (!alreadyDelivered) {
+      await recordDocumentSend('invoice', invoiceForSend.id, client?.id || invoiceForSend.client_id, 'email');
+    }
 
     return {
       success: true,
-      sentAt: new Date().toISOString(),
-      invoiceId,
+      sentAt,
+      invoiceId: invoiceForSend.id,
+      idempotentReplay: alreadyDelivered,
     };
+  } catch (error) {
+    console.error('Error sending invoice email:', error);
+    if (isAbortError(error)) {
+      throw new Error('Request was interrupted. Please try again.');
+    }
+    throw error instanceof Error
+      ? error
+      : new Error(userFacingInvoiceSendError(error, 'Invoice could not be sent. Please try again.'));
+  } finally {
+    endCriticalSessionOperation();
+  }
+}
+
+/**
+ * Load invoice + client and send via the canonical email path.
+ * Used by the sync queue (SEND_INVOICE) and sendDraftInvoice.
+ *
+ * @param {string} invoiceId
+ * @param {object} [options]
+ */
+export const sendInvoiceToClient = async (invoiceId, options = {}) => {
+  try {
+    const invoice = await retryOnAbort(() => Invoice.get(invoiceId));
+    if (!invoice) {
+      throw new Error('Invoice not found.');
+    }
+    if (!invoice.client_id) {
+      throw new Error('Invoice has no client.');
+    }
+    const client = await retryOnAbort(() => Client.get(invoice.client_id));
+    if (!client) {
+      throw new Error('Client not found.');
+    }
+    return await sendInvoicePdfEmailToClient(invoice, client, options);
   } catch (error) {
     console.error('Error sending invoice:', error);
     if (isAbortError(error)) {
       throw new Error('Request was interrupted. Please try again.');
     }
     throw error;
-  } finally {
-    endCriticalSessionOperation();
   }
 };
 
@@ -439,27 +745,29 @@ export const deleteDraftInvoice = async (invoiceId) => {
  * @returns {Promise} Send result
  */
 export const resendInvoice = async (invoiceId, options = {}) => {
-  // Note: options parameter is preserved for future API implementation
-  void options;
   try {
-    const invoice = await Invoice.get(invoiceId);
-
+    const invoice = await retryOnAbort(() => Invoice.get(invoiceId));
+    if (!invoice) {
+      throw new Error('Invoice not found.');
+    }
     if (invoice.status === 'draft') {
       throw new Error('Cannot resend a draft invoice. Send it first.');
     }
 
-    // Update last sent date
-    await Invoice.update(invoiceId, {
-      last_sent_date: new Date().toISOString(),
-      resend_count: (invoice.resend_count || 0) + 1,
-    });
-
-    // TODO: Implement actual email resending via API
-    // await breakApi.post(`/api/invoices/${invoiceId}/resend`, options);
+    const result = await sendInvoiceToClient(invoiceId, { ...options, markSent: false });
+    try {
+      await retryOnAbort(() =>
+        Invoice.update(invoiceId, {
+          resend_count: (invoice.resend_count || 0) + 1,
+        })
+      );
+    } catch (e) {
+      console.warn('Failed to increment resend_count after successful resend:', e);
+    }
 
     return {
       success: true,
-      resentAt: new Date().toISOString(),
+      resentAt: result?.sentAt || new Date().toISOString(),
       invoiceId,
     };
   } catch (error) {
@@ -494,6 +802,10 @@ export const scheduleInvoiceSend = async (invoiceId, scheduledDate) => {
 
 export default {
   sendInvoiceToClient,
+  sendInvoicePdfEmailToClient,
+  dispatchInvoiceEmailViaCanonicalPath,
+  prepareInvoiceTrackingLink,
+  persistInvoiceTrackingLog,
   sendDraftInvoice,
   saveInvoiceAsDraft,
   updateDraftInvoice,

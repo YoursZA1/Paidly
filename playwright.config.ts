@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 
 /**
  * Product-style E2E defaults:
- * - Loads `.env.e2e` when present (same as admin affiliate config); shell exports win
+ * - Loads `.env.e2e` when present; shell exports win
  * - Strict timeouts, retries in CI, traces on retry
  * - Optional webServer (Vite) unless PLAYWRIGHT_SKIP_WEBSERVER=1
  * - Global auth: tests/auth.setup.ts → playwright/.auth/user.json
@@ -47,7 +47,7 @@ const launchOptions = chromiumExecutablePath
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/unit/**', '**/*.test.{js,jsx,ts,tsx}', '**/admin-affiliate-e2e.spec.ts'],
+  testIgnore: ['**/unit/**', '**/*.test.{js,jsx,ts,tsx}'],
   timeout: 30_000,
   expect: {
     timeout: 30_000,

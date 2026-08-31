@@ -269,8 +269,9 @@ export default function PosIntegrationSettings() {
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">Connect your point of sale</p>
           <p className="text-sm text-muted-foreground">
-            Use one-click connect for Square and Yoco, or a generic webhook for other systems.
-            Sales sync to your dashboard and inventory updates when line items match product SKU or barcode.
+            Paidly POS is a till inside the app (sidebar → POS). These connections are for external
+            hardware — Square, Yoco, or a generic webhook. All of them write the same sales events
+            and decrement catalog stock when SKU or barcode matches.
           </p>
         </div>
       </div>

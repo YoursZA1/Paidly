@@ -1,5 +1,6 @@
 import { addDays, isAfter, isBefore, parseISO } from "date-fns";
 import { formatCurrency } from "@/components/CurrencySelector";
+import { isCashExpense, isOpenInvoice, outstandingInvoiceAmount } from "@/utils/cashFlowTruth";
 
 export function buildCashFlowKpis({
   netCashFlow,
@@ -20,13 +21,13 @@ export function buildCashFlowKpis({
     },
     {
       id: "moneyIn",
-      title: "Money In (This Month)",
+      title: "Income (This Month)",
       value: monthlyIncome,
       tone: "positive",
     },
     {
       id: "moneyOut",
-      title: "Money Out (This Month)",
+      title: "Expenses (This Month)",
       value: monthlyExpenses,
       tone: "negative",
     },
@@ -53,25 +54,37 @@ export function buildCashPositionModel({
   };
 }
 
-export function buildUpcomingCashEvents({ invoices = [], expenses = [], now = new Date(), windowDays = 30 }) {
+export function buildUpcomingCashEvents({
+  invoices = [],
+  expenses = [],
+  payments = [],
+  now = new Date(),
+  windowDays = 30,
+}) {
   const end = addDays(now, windowDays);
   const inEvents = invoices
     .filter((inv) => {
       const raw = inv.due_date || inv.delivery_date;
-      if (!raw) return false;
+      if (!raw || !isOpenInvoice(inv)) return false;
       const dt = parseISO(raw);
-      return isAfter(dt, now) && isBefore(dt, end) && String(inv.status || "").toLowerCase() !== "paid";
+      return isAfter(dt, now) && isBefore(dt, end) && outstandingInvoiceAmount(inv, payments) > 0;
     })
     .map((inv) => ({
       id: `in-${inv.id}`,
       type: "income",
       name: inv.client_name || `Invoice #${inv.invoice_number || inv.id}`,
       date: inv.due_date || inv.delivery_date,
-      amount: Number(inv.total_amount ?? inv.grand_total ?? 0) || 0,
+      amount: outstandingInvoiceAmount(inv, payments),
     }));
 
   const outEvents = expenses
-    .filter((exp) => exp.date && isAfter(parseISO(exp.date), now) && isBefore(parseISO(exp.date), end))
+    .filter(
+      (exp) =>
+        isCashExpense(exp) &&
+        exp.date &&
+        isAfter(parseISO(exp.date), now) &&
+        isBefore(parseISO(exp.date), end)
+    )
     .map((exp) => ({
       id: `out-${exp.id}`,
       type: "expense",

@@ -1,0 +1,2266 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { format } from "date-fns";
+import {
+  Minus,
+  Plus,
+  Search,
+  ShoppingCart,
+  Trash2,
+  Banknote,
+  CreditCard,
+  Smartphone,
+  RotateCcw,
+  Printer,
+  Download,
+  Mail,
+  User,
+  X,
+  Package,
+  Loader2,
+  ArrowLeft,
+  Check,
+  ScanBarcode,
+  Pause,
+  Play,
+  FileText,
+  Store,
+  Clock,
+  UserPlus,
+  LogOut,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import ProductThumbnail from "@/components/inventory/ProductThumbnail";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOrgBrands } from "@/hooks/useOrgBrands";
+import { useCompanyContext } from "@/hooks/useCompanyContext";
+import { PERMISSIONS } from "@/lib/companyPermissions";
+import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
+import PosStaffInviteSheet from "@/components/pos/PosStaffInviteSheet";
+import { useClientsList } from "@/hooks/useClientsList";
+import { formatCurrency } from "@/utils/currencyCalculations";
+import { createPageUrl, triggerHaptic } from "@/utils";
+import {
+  checkoutPosSale,
+  convertPosSaleToInvoice,
+  emailPosReceipt,
+  fetchPosCatalog,
+  listPosRegisters,
+  listPosSales,
+  listPosSessions,
+  getPosSession,
+  openPosSession,
+  closePosSession,
+  returnPosSale,
+  fetchPosSaleAudit,
+} from "@/services/PosIntegrationService";
+import { cn } from "@/lib/utils";
+import PosConnectivityBar from "@/components/pos/PosConnectivityBar";
+import { usePosConnectivity } from "@/hooks/usePosConnectivity";
+import BarcodeScannerDialog from "@/components/inventory/BarcodeScannerDialog";
+import {
+  buildPosCodeIndex,
+  filterPosProducts,
+  isPosScanQuery,
+  listPosCatalogCategories,
+  lookupPosProductByCode,
+} from "@/lib/pos/posProductSearch";
+import { applyPosSaleDiscount, catalogUnitPrice, computeCashChange } from "../../../server/src/pos/posCheckoutMath.js";
+import { addPosCartLine, posCartSubtotal, posProductStock, setPosCartQty } from "@/lib/pos/posCart";
+import { refundRailForSale, remainingLinesForTill } from "../../../server/src/pos/posReturnMath.js";
+import { clearHeldCart, hydrateHeldCart, readHeldCart, writeHeldCart } from "@/lib/pos/posHeldCart";
+import { pickActiveRegister, readActiveRegisterId, writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
+import { WALK_IN_CUSTOMER_LABEL } from "@/lib/pos/posCustomerSearch";
+import { invalidateClientDomain, invalidateRevenueReadModels } from "@/lib/queryInvalidation";
+import PosCustomerDialog from "@/components/pos/PosCustomerDialog";
+import PosReceiptSheet from "@/components/pos/PosReceiptSheet";
+import {
+  buildPosReceiptView,
+  openPosReceiptPrint,
+  receiptPdfFilename,
+} from "../../../server/src/pos/posReceipt.js";
+import generatePdfFromElement, { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
+
+function roundMoney(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+async function blobToBase64(blob) {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function cashSuggestions(total) {
+  const due = roundMoney(total);
+  const roundTo = (step) => Math.ceil(due / step) * step;
+  const candidates = [due, roundTo(10), roundTo(20), roundTo(50), 50, 100, 200, 500];
+  const seen = new Set();
+  return candidates
+    .map((n) => roundMoney(n))
+    .filter((n) => n >= due && !seen.has(n) && seen.add(n))
+    .slice(0, 6);
+}
+
+function CartLineList({ cart, currency, onQty }) {
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState("");
+
+  const commitEdit = (line) => {
+    setEditingId(null);
+    const n = Math.trunc(Number(draft));
+    if (!Number.isFinite(n) || n <= 0) {
+      onQty(line.product_id, 0);
+      return;
+    }
+    onQty(line.product_id, n);
+  };
+
+  if (cart.length === 0) {
+    return <p className="px-4 py-6 text-sm text-muted-foreground">Tap a product or scan a barcode.</p>;
+  }
+  return (
+    <ul className="divide-y divide-border">
+      {cart.map((line) => (
+        <li key={line.product_id} className="flex items-center gap-2 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{line.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {formatCurrency(line.unit_price, currency)} × {line.quantity}
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="size-10 min-h-10 min-w-10 touch-manipulation"
+              onClick={() => onQty(line.product_id, line.quantity - 1)}
+              aria-label={`Decrease ${line.name}`}
+            >
+              <Minus className="size-3.5" />
+            </Button>
+            {editingId === line.product_id ? (
+              <Input
+                autoFocus
+                inputMode="numeric"
+                className="h-10 w-14 px-1 text-center text-sm font-semibold tabular-nums"
+                value={draft}
+                aria-label={`Quantity for ${line.name}`}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => commitEdit(line)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitEdit(line);
+                  }
+                  if (e.key === "Escape") setEditingId(null);
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="h-10 w-10 rounded-input text-sm font-semibold tabular-nums hover:bg-muted"
+                onClick={() => {
+                  setEditingId(line.product_id);
+                  setDraft(String(line.quantity));
+                }}
+                aria-label={`Edit quantity for ${line.name}`}
+              >
+                {line.quantity}
+              </button>
+            )}
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="size-10 min-h-10 min-w-10 touch-manipulation"
+              onClick={() => onQty(line.product_id, line.quantity + 1)}
+              aria-label={`Increase ${line.name}`}
+            >
+              <Plus className="size-3.5" />
+            </Button>
+          </div>
+          <span className="w-16 text-right text-sm font-semibold tabular-nums">
+            {formatCurrency(line.unit_price * line.quantity, currency)}
+          </span>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-10 min-h-10 min-w-10 touch-manipulation"
+            onClick={() => onQty(line.product_id, 0)}
+            aria-label={`Remove ${line.name}`}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function PosTerminal() {
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user, profile, logout } = useAuth();
+  const { hasPermission, jobFunction, companyRole, isOrgOwner } = useCompanyContext();
+  const canSell = hasPermission(PERMISSIONS.POS_SELL);
+  const canDiscount = hasPermission(PERMISSIONS.POS_DISCOUNT);
+  const canRefund = hasPermission(PERMISSIONS.POS_REFUND);
+  const canCloseRegister = hasPermission(PERMISSIONS.POS_CLOSE_REGISTER);
+  const canInvitePosStaff = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
+  const posOnlyStaff = isPosOnlyStaff({ isOrgOwner, companyRole, jobFunction });
+  const { checkoutAllowed, serverWriteAllowed, blockedReason, state: connectivityState } =
+    usePosConnectivity();
+  const { brands, orgId } = useOrgBrands();
+  const { clients, refetch: refetchClients, fetchNextPage } = useClientsList(user);
+  const currency = profile?.currency || user?.currency || "ZAR";
+  const cashierName = profile?.full_name || user?.email || "";
+
+  const searchRef = useRef(null);
+  const receiptPdfRef = useRef(null);
+  const [products, setProducts] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("all");
+  const [cart, setCart] = useState([]);
+  const [clientId, setClientId] = useState("");
+  const [clientQuery, setClientQuery] = useState("");
+  const [attachedCustomer, setAttachedCustomer] = useState(null);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [cashOpen, setCashOpen] = useState(false);
+  const [cardOpen, setCardOpen] = useState(false);
+  const [digitalOpen, setDigitalOpen] = useState(false);
+  const [payMethodOpen, setPayMethodOpen] = useState(false);
+  const [tendered, setTendered] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [completedSale, setCompletedSale] = useState(null);
+  const [receiptEmailTo, setReceiptEmailTo] = useState("");
+  const [receiptBusy, setReceiptBusy] = useState(null);
+  const [todayOpen, setTodayOpen] = useState(false);
+  const [cartSheetOpen, setCartSheetOpen] = useState(false);
+  const [todaySales, setTodaySales] = useState([]);
+  const [todayTotal, setTodayTotal] = useState(0);
+  const [todayLoading, setTodayLoading] = useState(false);
+  const [saleAudit, setSaleAudit] = useState([]);
+  const [returnSale, setReturnSale] = useState(null);
+  const [returnQtys, setReturnQtys] = useState({});
+  const [refundAsCash, setRefundAsCash] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [discountDraft, setDiscountDraft] = useState("0");
+  const [heldCart, setHeldCart] = useState(null);
+  const [invoiceClientPick, setInvoiceClientPick] = useState(false);
+  const [convertBusy, setConvertBusy] = useState(false);
+  const [registers, setRegisters] = useState([]);
+  const [activeRegister, setActiveRegister] = useState(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [openSession, setOpenSession] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionDegraded, setSessionDegraded] = useState(false);
+  const [startShiftOpen, setStartShiftOpen] = useState(false);
+  const [closeShiftOpen, setCloseShiftOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [openingDraft, setOpeningDraft] = useState("0");
+  const [closingDraft, setClosingDraft] = useState("");
+  const [shiftBusy, setShiftBusy] = useState(false);
+  const registerBrand = useMemo(
+    () => brands.find((row) => row.id === activeRegister?.company_id) || null,
+    [brands, activeRegister?.company_id]
+  );
+  const tillBrandName =
+    registerBrand?.name || activeRegister?.company_name || profile?.company_name || "Paidly";
+  const tillLogoUrl = registerBrand?.logo_url || profile?.logo_url || null;
+
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    try {
+      const rows = await fetchPosCatalog({ registerId: activeRegister?.id || undefined });
+      setProducts(rows);
+      const ids = new Set(rows.map((row) => row.id));
+      setCart((prev) => prev.filter((line) => ids.has(line.product_id)));
+    } catch (err) {
+      toast({
+        title: "Could not load products",
+        description: err?.message || "Check inventory in the back office.",
+        variant: "destructive",
+      });
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, [activeRegister?.id, toast]);
+
+  const loadToday = useCallback(async () => {
+    setTodayLoading(true);
+    try {
+      const result = await listPosSales({ limit: 100, today: true });
+      setTodaySales(result.sales);
+      setTodayTotal(result.totalToday);
+    } catch {
+      setTodaySales([]);
+      setTodayTotal(0);
+    } finally {
+      setTodayLoading(false);
+    }
+  }, []);
+
+  const loadRegisters = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const data = await listPosRegisters();
+      setRegisters(data.registers);
+      const next = pickActiveRegister(data.registers, readActiveRegisterId(orgId));
+      setActiveRegister(next);
+      if (next?.id) writeActiveRegisterId(orgId, next.id);
+    } catch {
+      setRegisters([]);
+    }
+  }, [orgId]);
+
+  const loadSession = useCallback(async (register) => {
+    if (!register?.id) {
+      setOpenSession(null);
+      setSessionLoading(false);
+      return;
+    }
+    setSessionLoading(true);
+    try {
+      const rows = await listPosSessions({ register_id: register.id, status: "open", limit: 1 });
+      setOpenSession(rows[0] || null);
+      setSessionDegraded(false);
+    } catch (err) {
+      const msg = String(err?.message || "");
+      setOpenSession(null);
+      setSessionDegraded(/database update|pos_register_sessions/i.test(msg));
+    } finally {
+      setSessionLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCatalog();
+    void loadToday();
+  }, [loadCatalog, loadToday]);
+
+  useEffect(() => {
+    if (!completedSale?.id) {
+      setSaleAudit([]);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchPosSaleAudit(completedSale.id)
+      .then((events) => {
+        if (!cancelled) setSaleAudit(events);
+      })
+      .catch(() => {
+        if (!cancelled) setSaleAudit([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [completedSale?.id]);
+
+  useEffect(() => {
+    void loadRegisters();
+  }, [loadRegisters]);
+
+  useEffect(() => {
+    void loadSession(activeRegister);
+  }, [activeRegister, loadSession]);
+
+  useEffect(() => {
+    setHeldCart(readHeldCart(orgId));
+  }, [orgId]);
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!customerOpen) return;
+    void fetchNextPage();
+  }, [customerOpen, fetchNextPage]);
+
+  useEffect(() => {
+    if (checkoutAllowed) return;
+    setPayMethodOpen(false);
+    setCashOpen(false);
+    setCardOpen(false);
+    setDigitalOpen(false);
+  }, [checkoutAllowed]);
+
+  const categories = useMemo(() => listPosCatalogCategories(products), [products]);
+
+  useEffect(() => {
+    if (category === "all") return;
+    if (!categories.some((row) => row.name === category)) setCategory("all");
+  }, [categories, category]);
+
+  const codeIndex = useMemo(() => buildPosCodeIndex(products), [products]);
+
+  const filteredProducts = useMemo(
+    () => filterPosProducts(products, { query, category, codeIndex }),
+    [products, query, category, codeIndex]
+  );
+
+  const subtotal = useMemo(() => posCartSubtotal(cart), [cart]);
+  const totals = useMemo(() => applyPosSaleDiscount(subtotal, discountAmount), [subtotal, discountAmount]);
+  const cartTotal = totals.total;
+  const needsShift = Boolean(
+    canSell && activeRegister?.id && !openSession && !sessionDegraded && !sessionLoading
+  );
+  const closePreviewVariance = useMemo(() => {
+    if (!openSession || closingDraft === "") return null;
+    const counted = roundMoney(Number(closingDraft));
+    if (!Number.isFinite(counted) || counted < 0) return null;
+    return roundMoney(counted - (Number(openSession.expected_cash) || 0));
+  }, [openSession, closingDraft]);
+  const receiptLogoUrl = completedSale?.brand_logo_url || tillLogoUrl;
+  const receiptView = useMemo(() => {
+    if (!completedSale) return null;
+    return buildPosReceiptView(completedSale, {
+      brandName: completedSale.brand_name || tillBrandName,
+      logoUrl: receiptLogoUrl,
+      cashierName,
+      currency: completedSale.currency || currency,
+    });
+  }, [completedSale, tillBrandName, receiptLogoUrl, cashierName, currency]);
+  const cartCount = useMemo(() => cart.reduce((sum, line) => sum + line.quantity, 0), [cart]);
+
+  const returnPriorEvents = useMemo(
+    () => (returnSale ? todaySales.filter((row) => row.parent_event_id === returnSale.id) : []),
+    [returnSale, todaySales]
+  );
+  const returnLines = useMemo(
+    () => (returnSale ? remainingLinesForTill(returnSale, returnPriorEvents) : []),
+    [returnSale, returnPriorEvents]
+  );
+  const returnTotal = useMemo(
+    () =>
+      roundMoney(
+        returnLines.reduce((sum, line) => {
+          const qty = Math.min(Math.max(0, Math.trunc(Number(returnQtys[line.product_id]) || 0)), line.remaining);
+          return sum + line.unit_price * qty;
+        }, 0)
+      ),
+    [returnLines, returnQtys]
+  );
+  const returnRail = returnSale
+    ? refundRailForSale(returnSale.payment_method, { refundAsCash })
+    : null;
+  const cashTender = useMemo(() => computeCashChange(cartTotal, tendered), [cartTotal, tendered]);
+  const tenderChips = useMemo(() => cashSuggestions(cartTotal), [cartTotal]);
+
+  useEffect(() => {
+    if (discountAmount > subtotal) setDiscountAmount(subtotal);
+  }, [discountAmount, subtotal]);
+
+  const addProduct = useCallback(
+    (product, qty = 1) => {
+      const stock = posProductStock(product);
+      if (stock <= 0) {
+        toast({ title: "Out of stock", description: product.name, variant: "destructive" });
+        return;
+      }
+      triggerHaptic(10);
+      setCart((prev) => {
+        const result = addPosCartLine(prev, product, qty);
+        if (result.error === "INSUFFICIENT_STOCK") {
+          toast({
+            title: "Not enough stock",
+            description: `${product.name} has ${stock} left.`,
+            variant: "destructive",
+          });
+        }
+        return result.cart;
+      });
+    },
+    [toast]
+  );
+
+  const applyScannedCode = useCallback(
+    (raw) => {
+      const product = lookupPosProductByCode(codeIndex, raw);
+      setQuery("");
+      setScannerOpen(false);
+      if (!product) {
+        toast({
+          title: "No matching product",
+          description: `Nothing in the catalog for “${String(raw || "").trim()}”.`,
+          variant: "destructive",
+        });
+        searchRef.current?.focus();
+        return false;
+      }
+      addProduct(product);
+      searchRef.current?.focus();
+      return true;
+    },
+    [addProduct, codeIndex, toast]
+  );
+
+  const setQty = (productId, quantity) => {
+    setCart((prev) => setPosCartQty(prev, productId, quantity));
+  };
+
+  const clearCart = () => {
+    setCart([]);
+    setDiscountAmount(0);
+    setCartSheetOpen(false);
+  };
+
+  const holdCart = () => {
+    if (!orgId || cart.length === 0) return;
+    const ok = writeHeldCart(orgId, {
+      cart: cart.map((line) => ({
+        product_id: line.product_id,
+        quantity: line.quantity,
+        name: line.name,
+        sku: line.sku,
+      })),
+      discount_amount: totals.discount_amount,
+      client_id: clientId || null,
+      client_query: clientQuery || "",
+      held_at: new Date().toISOString(),
+    });
+    if (!ok) {
+      toast({ title: "Could not hold sale", description: "This browser blocked session storage.", variant: "destructive" });
+      return;
+    }
+    setHeldCart(readHeldCart(orgId));
+    setCart([]);
+    setDiscountAmount(0);
+    setClientId("");
+    setClientQuery("");
+    setAttachedCustomer(null);
+    setCartSheetOpen(false);
+    triggerHaptic(10);
+    toast({ title: "Sale held on this device", description: "Not saved to the server. Resume before you close the tab." });
+  };
+
+  const resumeHeldCart = () => {
+    if (!orgId) return;
+    if (cart.length > 0) {
+      toast({ title: "Cart has items", description: "Clear or hold this sale before resuming." });
+      return;
+    }
+    const restored = hydrateHeldCart(readHeldCart(orgId), products);
+    if (!restored.ok) {
+      clearHeldCart(orgId);
+      setHeldCart(null);
+      toast({ title: "Held sale is empty", description: "Those products are no longer in stock or in the catalog." });
+      return;
+    }
+    setCart(restored.cart);
+    setDiscountAmount(restored.discount_amount);
+    setClientId(restored.client_id);
+    setClientQuery(restored.client_query);
+    setAttachedCustomer(
+      restored.client_id ? { id: restored.client_id, name: restored.client_query || "Customer" } : null
+    );
+    clearHeldCart(orgId);
+    setHeldCart(null);
+    triggerHaptic(10);
+    if (restored.skipped > 0) {
+      toast({ title: "Some held items were skipped", description: "Stock or catalog changed since the hold." });
+    }
+  };
+
+  const applyDiscountDraft = () => {
+    const next = applyPosSaleDiscount(subtotal, discountDraft);
+    setDiscountAmount(next.discount_amount);
+    setDiscountOpen(false);
+  };
+
+  const handleSearchSubmit = (event) => {
+    event.preventDefault();
+    if (!query.trim()) return;
+    if (lookupPosProductByCode(codeIndex, query) || isPosScanQuery(query)) {
+      applyScannedCode(query);
+    }
+  };
+
+  const handleSearchPaste = (event) => {
+    const text = event.clipboardData?.getData("text") || "";
+    if (!lookupPosProductByCode(codeIndex, text)) return;
+    event.preventDefault();
+    applyScannedCode(text);
+  };
+
+  useEffect(() => {
+    let buffer = "";
+    let lastAt = 0;
+    const RESET_MS = 50;
+    const MIN_LEN = 4;
+
+    const onKeyDown = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (scannerOpen || cashOpen || payMethodOpen || customerOpen || discountOpen || cardOpen || digitalOpen) return;
+
+      const el = document.activeElement;
+      const tag = el?.tagName?.toLowerCase();
+      const typingElsewhere =
+        (tag === "input" || tag === "textarea" || el?.isContentEditable) && el !== searchRef.current;
+      if (typingElsewhere) return;
+      if (el === searchRef.current) return;
+
+      const now = Date.now();
+      if (now - lastAt > RESET_MS) buffer = "";
+      lastAt = now;
+
+      if (e.key === "Enter") {
+        if (buffer.length >= MIN_LEN) {
+          e.preventDefault();
+          applyScannedCode(buffer);
+        }
+        buffer = "";
+        return;
+      }
+      if (e.key.length === 1) buffer += e.key;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [applyScannedCode, scannerOpen, cashOpen, payMethodOpen, customerOpen, discountOpen, cardOpen, digitalOpen]);
+
+  const applyInventory = (inventoryResult) => {
+    if (!Array.isArray(inventoryResult)) return;
+    setProducts((prev) =>
+      prev.map((product) => {
+        const hit = inventoryResult.find((row) => row.product_id === product.id && row.status === "applied");
+        if (!hit || hit.new_stock == null) return product;
+        return { ...product, stock_quantity: hit.new_stock };
+      })
+    );
+  };
+
+  const completeCheckout = async ({ paymentMethod, amountTendered }) => {
+    if (!canSell || submitting || cart.length === 0) return;
+    if (!checkoutAllowed) {
+      toast({
+        title: "Checkout needs a connection",
+        description: blockedReason,
+        variant: "destructive",
+      });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = await checkoutPosSale({
+        items: cart.map((line) => ({
+          product_id: line.product_id,
+          quantity: line.quantity,
+          unit_price: line.unit_price,
+        })),
+        payment_method: paymentMethod,
+        discount_amount: totals.discount_amount,
+        amount_tendered: paymentMethod === "cash" ? Number(amountTendered) : undefined,
+        client_id: clientId || null,
+        company_id: activeRegister?.company_id || null,
+        register_id: activeRegister?.id || null,
+        currency,
+        idempotency_key: crypto.randomUUID(),
+        brand_name: tillBrandName,
+        cashier_name: cashierName,
+        customer_name: attachedCustomer?.name || undefined,
+        customer_email: attachedCustomer?.email || undefined,
+      });
+      const sale = result.sale;
+      setCompletedSale(sale);
+      setReceiptEmailTo(sale.customer_email || attachedCustomer?.email || "");
+      setCart([]);
+      setDiscountAmount(0);
+      setClientId("");
+      setClientQuery("");
+      setAttachedCustomer(null);
+      setCustomerOpen(false);
+      setCashOpen(false);
+      setDigitalOpen(false);
+      setPayMethodOpen(false);
+      setCartSheetOpen(false);
+      triggerHaptic(20);
+      applyInventory(result.inventory_result);
+      void loadToday();
+      void loadSession(activeRegister);
+      invalidateRevenueReadModels(queryClient);
+    } catch (err) {
+      if (err?.code === "SESSION_REQUIRED") {
+        setStartShiftOpen(true);
+        setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
+      }
+      toast({
+        title: "Sale failed",
+        description: err?.message || "Could not complete checkout",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const waitForReceiptNode = async () => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return receiptPdfRef.current;
+  };
+
+  const printCurrentReceipt = () => {
+    if (!receiptView) return;
+    openPosReceiptPrint(receiptView);
+  };
+
+  const downloadCurrentReceipt = async () => {
+    if (!receiptView || receiptBusy) return;
+    setReceiptBusy("download");
+    try {
+      const el = await waitForReceiptNode();
+      if (!el) throw new Error("Receipt is not ready");
+      await generatePdfFromElement(el, receiptPdfFilename(receiptView), {
+        includeInvoiceBaseCss: false,
+        title: receiptView.saleNumber,
+      });
+    } catch (err) {
+      toast({
+        title: "Could not download receipt",
+        description: err?.message || "PDF generation failed",
+        variant: "destructive",
+      });
+    } finally {
+      setReceiptBusy(null);
+    }
+  };
+
+  const emailCurrentReceipt = async () => {
+    if (!completedSale?.id || receiptBusy) return;
+    const to = String(receiptEmailTo || "").trim();
+    if (!to) {
+      toast({ title: "Enter an email address", variant: "destructive" });
+      return;
+    }
+    setReceiptBusy("email");
+    try {
+      let base64PDF;
+      try {
+        const el = await waitForReceiptNode();
+        if (el) {
+          const blob = await generatePdfBlobFromElement(el, receiptPdfFilename(receiptView));
+          base64PDF = await blobToBase64(blob);
+        }
+      } catch {
+        base64PDF = undefined;
+      }
+      await emailPosReceipt({
+        sale_id: completedSale.id,
+        to,
+        brand_name: tillBrandName,
+        cashier_name: cashierName,
+        customer_name: receiptView?.customerName,
+        base64PDF,
+      });
+      toast({ title: "Receipt sent", description: to });
+    } catch (err) {
+      toast({
+        title: "Could not email receipt",
+        description: err?.message || "Email failed",
+        variant: "destructive",
+      });
+    } finally {
+      setReceiptBusy(null);
+    }
+  };
+
+  const openPay = () => {
+    if (!canSell) {
+      toast({
+        title: "No permission to sell",
+        description: "Your company role cannot complete till sales.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!serverWriteAllowed) {
+      toast({
+        title: "Checkout needs a connection",
+        description: blockedReason,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (needsShift) {
+      setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
+      setStartShiftOpen(true);
+      return;
+    }
+    if (cart.length === 0) return;
+    setPayMethodOpen(true);
+  };
+
+  const startShift = async () => {
+    if (!activeRegister?.id || shiftBusy) return;
+    if (!serverWriteAllowed) {
+      toast({
+        title: "Shift needs a connection",
+        description: blockedReason,
+        variant: "destructive",
+      });
+      return;
+    }
+    setShiftBusy(true);
+    try {
+      const session = await openPosSession({
+        register_id: activeRegister.id,
+        opening_balance: Number(openingDraft),
+      });
+      setOpenSession(session);
+      setStartShiftOpen(false);
+      toast({ title: "Shift started" });
+    } catch (err) {
+      toast({
+        title: "Could not start shift",
+        description: err?.message || "Try again",
+        variant: "destructive",
+      });
+    } finally {
+      setShiftBusy(false);
+    }
+  };
+
+  const openCloseShift = async () => {
+    if (!openSession?.id) return;
+    try {
+      const fresh = await getPosSession(openSession.id);
+      if (fresh) setOpenSession(fresh);
+    } catch {
+      /* keep current totals */
+    }
+    setClosingDraft("");
+    setCloseShiftOpen(true);
+  };
+
+  const confirmCloseShift = async () => {
+    if (!openSession?.id || shiftBusy) return;
+    if (!serverWriteAllowed) {
+      toast({
+        title: "Close shift needs a connection",
+        description: blockedReason,
+        variant: "destructive",
+      });
+      return;
+    }
+    setShiftBusy(true);
+    try {
+      const closed = await closePosSession(openSession.id, {
+        closing_cash: Number(closingDraft),
+      });
+      setOpenSession(null);
+      setCloseShiftOpen(false);
+      const variance = Number(closed?.variance);
+      toast({
+        title: "Shift closed",
+        description: Number.isFinite(variance)
+          ? `Variance ${formatCurrency(variance, currency)}`
+          : "Cash counted and locked.",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not close shift",
+        description: err?.message || "Completed sessions cannot be edited.",
+        variant: "destructive",
+      });
+    } finally {
+      setShiftBusy(false);
+    }
+  };
+
+  const openCash = () => {
+    if (cart.length === 0) return;
+    setPayMethodOpen(false);
+    setTendered(String(cartTotal));
+    setCashOpen(true);
+  };
+
+  const openDigital = () => {
+    if (cart.length === 0) return;
+    setPayMethodOpen(false);
+    setDigitalOpen(true);
+  };
+
+  const openCard = () => {
+    if (cart.length === 0) return;
+    setPayMethodOpen(false);
+    setCardOpen(true);
+  };
+
+  const convertSaleToInvoice = async (sale, clientOverrideId) => {
+    if (!sale?.id || convertBusy) return;
+    if (!serverWriteAllowed) {
+      toast({
+        title: "Invoice copy needs a connection",
+        description: blockedReason,
+        variant: "destructive",
+      });
+      return;
+    }
+    if ((sale.sale_kind || "sale") === "return") {
+      toast({
+        title: "Returns cannot become invoices",
+        description: "Convert the original sale if the customer needs a tax invoice.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (sale.invoice_id) {
+      navigate(`${createPageUrl("ViewInvoice")}?id=${encodeURIComponent(sale.invoice_id)}`);
+      return;
+    }
+    const namedClientId = clientOverrideId || sale.client_id;
+    if (!namedClientId) {
+      setInvoiceClientPick(true);
+      setCustomerOpen(true);
+      return;
+    }
+    setConvertBusy(true);
+    try {
+      const result = await convertPosSaleToInvoice({
+        sale_id: sale.id,
+        client_id: namedClientId,
+      });
+      const nextSale = result.sale || { ...sale, invoice_id: result.invoice?.id, client_id: namedClientId };
+      setCompletedSale(nextSale);
+      setInvoiceClientPick(false);
+      toast({
+        title: result.already_converted ? "Invoice already exists" : "Tax invoice created",
+        description: `${result.invoice?.invoice_number || "Invoice"} is a copy of this settled sale — not a new payment request.`,
+      });
+      if (result.invoice?.id) {
+        navigate(`${createPageUrl("ViewInvoice")}?id=${encodeURIComponent(result.invoice.id)}`);
+      }
+    } catch (err) {
+      if (err?.code === "CLIENT_REQUIRED") {
+        setInvoiceClientPick(true);
+        setCustomerOpen(true);
+        return;
+      }
+      toast({
+        title: "Could not create invoice",
+        description: err?.message || "Try again",
+        variant: "destructive",
+      });
+    } finally {
+      setConvertBusy(false);
+    }
+  };
+
+  const submitReturn = async (sale) => {
+    if (!canRefund || submitting || !sale?.id) return;
+    if (!serverWriteAllowed) {
+      toast({
+        title: "Return needs a connection",
+        description: blockedReason,
+        variant: "destructive",
+      });
+      return;
+    }
+    const items = returnLines
+      .map((line) => ({
+        product_id: line.product_id,
+        quantity: Math.min(Math.max(0, Math.trunc(Number(returnQtys[line.product_id]) || 0)), line.remaining),
+      }))
+      .filter((line) => line.quantity > 0);
+    if (items.length === 0) {
+      toast({ title: "Select items to return", description: "Set a quantity greater than zero." });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = await returnPosSale({
+        sale_id: sale.id,
+        items,
+        refund_as_cash: refundAsCash,
+        idempotency_key: crypto.randomUUID(),
+      });
+      setReturnSale(null);
+      setReturnQtys({});
+      setRefundAsCash(false);
+      setCompletedSale(result.sale);
+      setReceiptEmailTo(result.sale.customer_email || "");
+      applyInventory(result.inventory_result);
+      void loadToday();
+      void loadSession(activeRegister);
+      invalidateRevenueReadModels(queryClient);
+    } catch (err) {
+      if (err?.code === "SESSION_REQUIRED") {
+        setStartShiftOpen(true);
+        setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
+      }
+      toast({
+        title: "Return failed",
+        description: err?.message || "Could not process return",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openReturnDialog = (sale) => {
+    const prior = todaySales.filter((row) => row.parent_event_id === sale.id);
+    const lines = remainingLinesForTill(sale, prior);
+    if (sale.refund_status === "full" || lines.length === 0) {
+      toast({
+        title: "Already returned",
+        description: "Every item on this sale has already been returned. The original sale was not deleted.",
+      });
+      return;
+    }
+    const qtys = {};
+    for (const line of lines) qtys[line.product_id] = line.remaining;
+    setReturnQtys(qtys);
+    setRefundAsCash(false);
+    setReturnSale(sale);
+  };
+
+  const selectedClient =
+    clientId && attachedCustomer?.id === clientId
+      ? attachedCustomer
+      : (Array.isArray(clients) ? clients : []).find((c) => c.id === clientId) || attachedCustomer;
+
+  const customerLabel = selectedClient?.name || (clientId ? clientQuery : "") || WALK_IN_CUSTOMER_LABEL;
+
+  const handlePosLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      navigate(`${createPageUrl("Login")}#sign-in`, { replace: true });
+    }
+  };
+
+  const moneyRows = [
+    { label: "Subtotal", amount: totals.subtotal },
+    { label: "Discount", amount: totals.discount_amount, action: cart.length > 0 && canDiscount ? "discount" : null },
+    { label: "Tax", amount: totals.tax_amount },
+  ];
+
+  return (
+    <div className="flex h-[100dvh] min-h-0 flex-col bg-background">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-2 sm:px-4">
+        {posOnlyStaff ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="touch-manipulation"
+            aria-label="Sign out"
+            onClick={() => void handlePosLogout()}
+          >
+            <LogOut className="size-5" />
+          </Button>
+        ) : (
+          <Button type="button" variant="ghost" size="icon" className="touch-manipulation" asChild>
+            <Link to={createPageUrl("Dashboard")} aria-label="Back to dashboard">
+              <ArrowLeft className="size-5" />
+            </Link>
+          </Button>
+        )}
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary">
+            <img src="/logo.svg" alt="" className="size-7" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-base font-semibold leading-tight sm:text-lg">Paidly POS</h1>
+            <p className="truncate text-xs text-muted-foreground">{tillBrandName}</p>
+          </div>
+        </div>
+        <div className="hidden items-center gap-3 text-sm sm:flex">
+          <button
+            type="button"
+            className="max-w-[11rem] text-right hover:opacity-80"
+            onClick={() => setRegisterOpen(true)}
+          >
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Till</p>
+            <p className="truncate font-medium">{activeRegister?.name || "Main till"}</p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {activeRegister?.company_name || tillBrandName}
+            </p>
+            {openSession ? (
+              <p className="truncate text-[11px] text-emerald-600">Shift open</p>
+            ) : needsShift ? (
+              <p className="truncate text-[11px] text-amber-700">Start shift</p>
+            ) : null}
+          </button>
+          <div className="h-8 w-px bg-border" />
+          <div className="max-w-[10rem] text-right">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Staff</p>
+            <p className="truncate font-medium">
+              {activeRegister?.assigned_staff_name || cashierName || "—"}
+            </p>
+          </div>
+        </div>
+        <PosConnectivityBar state={connectivityState} className="shrink-0" />
+        {openSession && canCloseRegister ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="hidden h-11 touch-manipulation px-3 sm:inline-flex"
+            onClick={() => void openCloseShift()}
+          >
+            <Clock className="size-4" />
+            Close shift
+          </Button>
+        ) : needsShift ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="hidden h-11 touch-manipulation px-3 sm:inline-flex"
+            onClick={() => {
+              setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
+              setStartShiftOpen(true);
+            }}
+          >
+            <Clock className="size-4" />
+            Start shift
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-11 w-11 sm:hidden"
+          onClick={() => setRegisterOpen(true)}
+          aria-label={`Register ${activeRegister?.name || "Main till"}`}
+        >
+          <Store className="size-4" />
+        </Button>
+        {openSession && canCloseRegister ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 sm:hidden"
+            onClick={() => void openCloseShift()}
+            aria-label="Close shift"
+          >
+            <Clock className="size-4" />
+          </Button>
+        ) : needsShift ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 sm:hidden"
+            onClick={() => {
+              setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
+              setStartShiftOpen(true);
+            }}
+            aria-label="Start shift"
+          >
+            <Clock className="size-4" />
+          </Button>
+        ) : null}
+        {canInvitePosStaff ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 touch-manipulation px-3"
+            onClick={() => setInviteOpen(true)}
+            aria-label="Invite staff"
+          >
+            <UserPlus className="size-4" />
+            <span className="hidden sm:inline">Invite staff</span>
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 touch-manipulation px-3 tabular-nums"
+          onClick={() => {
+            setTodayOpen(true);
+            void loadToday();
+          }}
+        >
+          Today
+          <span className="hidden font-semibold sm:inline">{formatCurrency(todayTotal, currency)}</span>
+        </Button>
+      </header>
+      {blockedReason ? (
+        <div
+          className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-950 dark:text-amber-100 sm:text-sm"
+          role="status"
+        >
+          {blockedReason} You can still build a cart; hold stays on this device only.
+        </div>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1 flex-col">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="shrink-0 space-y-3 p-3 sm:p-4">
+            <div className="flex gap-2">
+              <form onSubmit={handleSearchSubmit} className="min-w-0 flex-1">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    ref={searchRef}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Scan barcode or search"
+                    className="h-12 pl-12 pr-12 text-base"
+                    autoComplete="off"
+                    inputMode="search"
+                    enterKeyHint="go"
+                    aria-label="Scan barcode or search products by name, SKU, or code"
+                    onPaste={handleSearchPaste}
+                  />
+                  {query ? (
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-input text-muted-foreground hover:bg-muted"
+                      onClick={() => {
+                        setQuery("");
+                        searchRef.current?.focus();
+                      }}
+                      aria-label="Clear search"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-12 w-12 shrink-0 touch-manipulation"
+                onClick={() => setScannerOpen(true)}
+                aria-label="Scan barcode with camera"
+                title="Scan barcode"
+              >
+                <ScanBarcode className="size-5" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 max-w-[11rem] shrink-0 touch-manipulation px-3"
+                onClick={() => setCustomerOpen(true)}
+                aria-label={customerLabel}
+              >
+                <User className="size-4 shrink-0" />
+                <span className="truncate">{customerLabel}</span>
+              </Button>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Categories</p>
+              <div
+                className="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                role="tablist"
+                aria-label="Product categories"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={category === "all"}
+                  onClick={() => {
+                    triggerHaptic(8);
+                    setCategory("all");
+                  }}
+                  className={cn(
+                    "h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
+                    category === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                  )}
+                >
+                  All
+                  <span className={cn("ml-1.5 tabular-nums", category === "all" ? "opacity-90" : "text-muted-foreground")}>
+                    {products.length}
+                  </span>
+                </button>
+                {categories.map((row) => {
+                  const selected = category === row.name;
+                  return (
+                    <button
+                      key={row.name}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => {
+                        triggerHaptic(8);
+                        setCategory(row.name);
+                      }}
+                      className={cn(
+                        "h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
+                        selected ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                      )}
+                    >
+                      {row.name}
+                      <span className={cn("ml-1.5 tabular-nums", selected ? "opacity-90" : "text-muted-foreground")}>
+                        {row.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {catalogLoading ? (
+            <div className="flex flex-1 items-center justify-center text-muted-foreground">
+              <Loader2 className="mr-2 size-6 animate-spin" /> Loading products
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+              <Package className="size-10 text-muted-foreground" />
+              <p className="text-lg font-semibold">
+                {category !== "all" || query.trim() ? "No products in this view" : "No products to sell"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {category !== "all"
+                  ? `Nothing in ${category}${query.trim() ? " matches this search" : ""}.`
+                  : query.trim()
+                    ? "Try a different name, SKU, or barcode."
+                    : "Add physical products with stock in the catalog. Private brand products only appear on that brand’s till."}
+              </p>
+              {category !== "all" || query.trim() ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12"
+                  onClick={() => {
+                    setCategory("all");
+                    setQuery("");
+                    searchRef.current?.focus();
+                  }}
+                >
+                  Show all products
+                </Button>
+              ) : (
+                <Button asChild className="h-12">
+                  <Link to={createPageUrl("Services")}>Open catalog</Link>
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {filteredProducts.map((product) => {
+                  const stock = posProductStock(product);
+                  const out = stock <= 0;
+                  const inCart = cart.find((line) => line.product_id === product.id);
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      disabled={out}
+                      aria-label={`Add ${product.name} to cart`}
+                      onClick={() => addProduct(product)}
+                      className={cn(
+                        "flex min-h-[7.5rem] flex-col items-stretch gap-2 rounded-xl border border-border bg-card p-3 text-left touch-manipulation select-none active:scale-[0.98]",
+                        out ? "opacity-45" : "hover:border-primary hover:bg-muted/40",
+                        inCart ? "border-primary bg-primary/5" : ""
+                      )}
+                    >
+                      <div className="flex items-start gap-2">
+                        <ProductThumbnail
+                          imageUrl={product.image_url}
+                          name={product.name}
+                          className="h-12 w-12 rounded-xl"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 text-sm font-semibold leading-tight">{product.name}</p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {product.sku || product.barcode || " "}
+                          </p>
+                        </div>
+                        {inCart ? (
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                            {inCart.quantity}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-auto flex items-end justify-between gap-2">
+                        <span className="text-sm font-semibold tabular-nums">
+                          {formatCurrency(catalogUnitPrice(product), currency)}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-xs font-medium",
+                            out ? "text-destructive" : stock <= 5 ? "text-status-pending" : "text-muted-foreground"
+                          )}
+                        >
+                          {out ? "Out" : `${stock} left`}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <div className="grid shrink-0 grid-cols-1 border-t border-border bg-card md:grid-cols-2 md:h-[min(38vh,22rem)]">
+          <section className="flex min-h-0 flex-col border-border md:border-r">
+            <div className="hidden items-center justify-between gap-2 px-4 py-2.5 md:flex">
+              <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+                <ShoppingCart className="size-4" />
+                Cart
+                {cartCount > 0 ? (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                    {cartCount}
+                  </span>
+                ) : null}
+              </h2>
+              <div className="flex shrink-0 items-center gap-1">
+                {orgId && heldCart && cart.length === 0 ? (
+                  <Button type="button" variant="ghost" className="h-10 px-2 text-xs" onClick={resumeHeldCart}>
+                    <Play className="size-3.5" />
+                    Resume
+                  </Button>
+                ) : null}
+                {orgId && cart.length > 0 ? (
+                  <Button type="button" variant="ghost" className="h-10 px-2 text-xs" onClick={holdCart}>
+                    <Pause className="size-3.5" />
+                    Hold
+                  </Button>
+                ) : null}
+                {cart.length > 0 ? (
+                  <Button type="button" variant="ghost" className="h-10 px-2 text-xs" onClick={clearCart}>
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <div className="hidden min-h-0 flex-1 overflow-y-auto md:block">
+              <CartLineList cart={cart} currency={currency} onQty={setQty} />
+            </div>
+            {orgId && heldCart && cart.length === 0 ? (
+              <button
+                type="button"
+                className="flex h-12 items-center justify-between px-4 text-sm md:hidden"
+                onClick={resumeHeldCart}
+              >
+                <span className="text-muted-foreground">Held sale on this device</span>
+                <span className="font-semibold">Resume</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="flex h-12 items-center justify-between px-4 text-sm md:hidden"
+                onClick={() => setCartSheetOpen(true)}
+              >
+                <span className="text-muted-foreground">
+                  {cartCount === 0 ? "Cart is empty" : `${cartCount} items`}
+                </span>
+                <span className="font-semibold tabular-nums">{formatCurrency(cartTotal, currency)}</span>
+              </button>
+            )}
+          </section>
+
+          <section className="flex flex-col justify-between p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div>
+              <h2 className="mb-3 text-sm font-semibold">Checkout</h2>
+              <button
+                type="button"
+                className="mb-3 flex h-10 w-full items-center justify-between gap-2 rounded-input border border-border px-3 text-sm"
+                onClick={() => setCustomerOpen(true)}
+              >
+                <span className="text-muted-foreground">Customer</span>
+                <span className="truncate font-medium">{customerLabel}</span>
+              </button>
+              <dl className="space-y-1.5 text-sm">
+                {moneyRows.map((row) => (
+                  <div key={row.label} className="flex items-center justify-between gap-4">
+                    <dt className="text-muted-foreground">{row.label}</dt>
+                    <dd className="tabular-nums">
+                      {row.action === "discount" ? (
+                        <button
+                          type="button"
+                          className="rounded-input px-1 font-medium underline-offset-2 hover:underline"
+                          onClick={() => {
+                            setDiscountDraft(String(totals.discount_amount || 0));
+                            setDiscountOpen(true);
+                          }}
+                        >
+                          {formatCurrency(row.amount, currency)}
+                        </button>
+                      ) : (
+                        formatCurrency(row.amount, currency)
+                      )}
+                    </dd>
+                  </div>
+                ))}
+                <div className="mt-2 flex items-baseline justify-between gap-4 border-t border-border pt-2">
+                  <dt className="text-sm font-semibold">Total</dt>
+                  <dd className="font-display text-2xl font-bold tabular-nums tracking-tight">
+                    {formatCurrency(cartTotal, currency)}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+            <Button
+              type="button"
+              className="mt-4 h-14 w-full text-base font-semibold touch-manipulation"
+              disabled={
+                submitting ||
+                sessionLoading ||
+                !serverWriteAllowed ||
+                (!needsShift && (cart.length === 0 || !canSell))
+              }
+              onClick={openPay}
+            >
+              {submitting || sessionLoading ? <Loader2 className="size-5 animate-spin" /> : null}
+              {!serverWriteAllowed
+                ? connectivityState === "reconnecting"
+                  ? "Reconnecting…"
+                  : "Offline"
+                : needsShift
+                  ? "Start shift"
+                  : canSell
+                    ? "Pay"
+                    : "No sell access"}
+            </Button>
+          </section>
+        </div>
+      </div>
+
+      <BarcodeScannerDialog
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        title="Scan barcode"
+        onDetected={(code) => applyScannedCode(code)}
+      />
+
+      <Sheet open={cartSheetOpen} onOpenChange={setCartSheetOpen}>
+        <SheetContent side="bottom" className="flex max-h-[85dvh] flex-col rounded-t-2xl p-0">
+          <SheetHeader className="px-4 pt-4">
+            <SheetTitle>Cart</SheetTitle>
+            <SheetDescription>{cartCount} items</SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <CartLineList cart={cart} currency={currency} onQty={setQty} />
+          </div>
+          {cart.length > 0 || (orgId && heldCart) ? (
+            <div className="space-y-2 border-t border-border p-4">
+              {orgId && heldCart && cart.length === 0 ? (
+                <Button type="button" variant="outline" className="h-11 w-full" onClick={resumeHeldCart}>
+                  <Play className="size-4" />
+                  Resume held sale
+                </Button>
+              ) : null}
+              {orgId && cart.length > 0 ? (
+                <Button type="button" variant="outline" className="h-11 w-full" onClick={holdCart}>
+                  <Pause className="size-4" />
+                  Hold on this device
+                </Button>
+              ) : null}
+              {cart.length > 0 ? (
+                <Button type="button" variant="ghost" className="h-11 w-full" onClick={clearCart}>
+                  Clear cart
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+
+      <Dialog
+        open={discountOpen}
+        onOpenChange={(open) => {
+          setDiscountOpen(open);
+          if (open) setDiscountDraft(String(totals.discount_amount || 0));
+        }}
+      >
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Discount</DialogTitle>
+            <DialogDescription>
+              Cart-level amount, same as invoices: total is subtotal minus discount. Cannot exceed{" "}
+              {formatCurrency(subtotal, currency)}. Listed prices stay unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="number"
+            min={0}
+            max={subtotal}
+            step="0.01"
+            value={discountDraft}
+            onChange={(e) => setDiscountDraft(e.target.value)}
+            className="h-14 text-center text-2xl font-bold tabular-nums"
+            aria-label="Discount amount"
+            inputMode="decimal"
+          />
+          <DialogFooter className="gap-2 sm:justify-stretch">
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-12"
+              onClick={() => {
+                setDiscountAmount(0);
+                setDiscountOpen(false);
+              }}
+            >
+              Remove
+            </Button>
+            <Button type="button" className="h-12 flex-1" onClick={applyDiscountDraft}>
+              Apply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={payMethodOpen} onOpenChange={setPayMethodOpen}>
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl">Pay</DialogTitle>
+            <DialogDescription>
+              {formatCurrency(cartTotal, currency)} · {customerLabel}. Cash is counted on the till. Card and Digital
+              Payment complete only when the real rail confirms — not from this tap. Checkout needs an online
+              connection; cash is not queued on this device.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2">
+            <Button type="button" className="h-14 text-base touch-manipulation" disabled={!checkoutAllowed} onClick={openCash}>
+              <Banknote className="size-5" />
+              Cash
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-14 text-base touch-manipulation"
+              disabled={!checkoutAllowed}
+              onClick={openCard}
+            >
+              <CreditCard className="size-5" />
+              Card
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-14 text-base touch-manipulation"
+              disabled={submitting || !checkoutAllowed}
+              onClick={openDigital}
+            >
+              {submitting ? <Loader2 className="size-5 animate-spin" /> : <Smartphone className="size-5" />}
+              Digital Payment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cardOpen} onOpenChange={setCardOpen}>
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Card terminal</DialogTitle>
+            <DialogDescription>
+              This till has no physical card machine. Tapping Card does not mark the sale paid.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Card-present readers (Yoco / Square) confirm through their webhook when those integrations are
+            connected in Settings. Digital Payment uses Ozow and also waits for a real confirmation.
+            There is no trusted click-to-paid card workflow on this till.
+          </p>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button type="button" className="h-12 w-full" asChild>
+              <Link to={`${createPageUrl("Settings")}?tab=integrations`}>Open Integrations</Link>
+            </Button>
+            <Button type="button" variant="ghost" className="h-12 w-full" onClick={() => setCardOpen(false)}>
+              Back
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={digitalOpen} onOpenChange={setDigitalOpen}>
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Digital Payment</DialogTitle>
+            <DialogDescription>
+              Ozow confirms this sale. Tapping Continue does not mark it paid unless Ozow succeeds.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            There is no trusted click-to-paid digital workflow. If Ozow is not configured, the cart stays unpaid.
+          </p>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              type="button"
+              className="h-12 w-full"
+              disabled={submitting || !checkoutAllowed}
+              onClick={() => void completeCheckout({ paymentMethod: "digital" })}
+            >
+              {submitting ? <Loader2 className="size-5 animate-spin" /> : <Smartphone className="size-5" />}
+              Request Ozow payment
+            </Button>
+            <Button type="button" variant="ghost" className="h-12 w-full" onClick={() => setDigitalOpen(false)}>
+              Back
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cashOpen} onOpenChange={setCashOpen}>
+        <DialogContent className="max-w-md gap-4 sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl">Cash</DialogTitle>
+            <DialogDescription>
+              Counted on the till. Not sent to Ozow or PayFast.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-muted-foreground">Total</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(cartTotal, currency)}</span>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Customer pays</p>
+              <Input
+                type="number"
+                min={cartTotal}
+                step="0.01"
+                value={tendered}
+                onChange={(e) => setTendered(e.target.value)}
+                className="h-16 text-center text-3xl font-bold tabular-nums"
+                aria-label="Customer pays"
+                inputMode="decimal"
+              />
+              <div className="grid grid-cols-3 gap-2">
+                {tenderChips.map((amount) => (
+                  <Button
+                    key={amount}
+                    type="button"
+                    variant={roundMoney(Number(tendered)) === amount ? "default" : "outline"}
+                    className="h-12 touch-manipulation tabular-nums"
+                    onClick={() => setTendered(String(amount))}
+                  >
+                    {amount === cartTotal ? "Exact" : formatCurrency(amount, currency)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3">
+              <span className="text-sm text-muted-foreground">Change</span>
+              <span className="font-display text-3xl font-bold tabular-nums">
+                {formatCurrency(cashTender.ok ? cashTender.changeDue : 0, currency)}
+              </span>
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-stretch">
+            <Button
+              type="button"
+              className="h-14 w-full text-base touch-manipulation"
+              disabled={submitting || !cashTender.ok || !checkoutAllowed}
+              onClick={() => void completeCheckout({ paymentMethod: "cash", amountTendered: tendered })}
+            >
+              {submitting ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
+              Take cash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(completedSale)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCompletedSale(null);
+            setSaleAudit([]);
+            searchRef.current?.focus();
+          }
+        }}
+      >
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl">
+              {completedSale?.sale_kind === "return" ? "Returned" : "Receipt"}
+            </DialogTitle>
+            <DialogDescription>
+              {completedSale?.receipt_number} · retail receipt, not an invoice
+            </DialogDescription>
+          </DialogHeader>
+          <p className="font-display text-4xl font-bold tabular-nums">
+            {formatCurrency(Math.abs(Number(completedSale?.total_amount) || 0), completedSale?.currency || currency)}
+          </p>
+          {completedSale?.payment_method === "cash" && completedSale?.amount_tendered != null ? (
+            <dl className="space-y-1 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Customer paid</dt>
+                <dd className="tabular-nums">{formatCurrency(completedSale.amount_tendered, currency)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Change</dt>
+                <dd className="text-lg font-semibold tabular-nums">
+                  {formatCurrency(Number(completedSale.change_due) || 0, currency)}
+                </dd>
+              </div>
+            </dl>
+          ) : completedSale?.change_due != null ? (
+            <p className="text-lg">
+              Change <span className="font-semibold">{formatCurrency(completedSale.change_due, currency)}</span>
+            </p>
+          ) : null}
+          {saleAudit.length > 0 ? (
+            <ol className="space-y-1.5 border-t pt-3 text-sm">
+              {saleAudit.map((event) => (
+                <li key={event.id} className="flex items-baseline justify-between gap-3">
+                  <span>{event.label}</span>
+                  {event.occurred_at ? (
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
+                      {format(new Date(event.occurred_at), "HH:mm")}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">Email receipt</p>
+            <Input
+              type="email"
+              value={receiptEmailTo}
+              onChange={(e) => setReceiptEmailTo(e.target.value)}
+              placeholder="customer@email"
+              className="h-12"
+              autoComplete="email"
+            />
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              type="button"
+              className="h-14 w-full text-base"
+              onClick={() => {
+                setCompletedSale(null);
+                searchRef.current?.focus();
+              }}
+            >
+              Next sale
+            </Button>
+            <Button type="button" variant="outline" className="h-12 w-full" onClick={printCurrentReceipt}>
+              <Printer className="size-4" /> Print
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 w-full"
+              disabled={receiptBusy === "download"}
+              onClick={() => void downloadCurrentReceipt()}
+            >
+              {receiptBusy === "download" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              Download
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 w-full"
+              disabled={receiptBusy === "email"}
+              onClick={() => void emailCurrentReceipt()}
+            >
+              {receiptBusy === "email" ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+              Email
+            </Button>
+            {(completedSale?.sale_kind || "sale") === "sale" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 w-full"
+                disabled={convertBusy}
+                onClick={() => void convertSaleToInvoice(completedSale)}
+              >
+                {convertBusy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
+                {completedSale?.invoice_id ? "View invoice" : "Customer requests invoice"}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <PosCustomerDialog
+        open={customerOpen}
+        onOpenChange={(open) => {
+          setCustomerOpen(open);
+          if (!open) setInvoiceClientPick(false);
+        }}
+        clients={clients}
+        orgId={orgId}
+        selectedId={clientId}
+        allowWalkIn={!invoiceClientPick}
+        onSelectWalkIn={() => {
+          setClientId("");
+          setClientQuery("");
+          setAttachedCustomer(null);
+        }}
+        onSelectClient={(client) => {
+          setClientId(client.id);
+          setClientQuery(client.name || "");
+          setAttachedCustomer(client);
+          if (invoiceClientPick && completedSale?.id) {
+            void convertSaleToInvoice(completedSale, client.id);
+          }
+        }}
+        onCreated={(created) => {
+          invalidateClientDomain(queryClient, { scopeKey: user?.id || null, skipInvoiceCascade: true });
+          void refetchClients();
+          toast({ title: "Customer saved", description: created.name });
+        }}
+      />
+
+      <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Register</DialogTitle>
+            <DialogDescription>
+              Choose the till for this device. Products follow this register’s brand — private items from another brand will not appear.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-72 space-y-2 overflow-auto">
+            {registers.filter((row) => (row.status || "active") === "active").length === 0 ? (
+              <li className="rounded-xl border border-border px-3 py-4 text-sm text-muted-foreground">
+                No active register yet. Add one in Settings → Integrations after running the POS registers
+                migration.
+              </li>
+            ) : null}
+            {registers.filter((row) => (row.status || "active") === "active").map((row) => (
+              <li key={row.id}>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex w-full flex-col rounded-xl border border-border px-3 py-3 text-left hover:bg-muted",
+                    activeRegister?.id === row.id ? "bg-muted/60" : ""
+                  )}
+                  onClick={() => {
+                    setActiveRegister(row);
+                    if (orgId) writeActiveRegisterId(orgId, row.id);
+                    setRegisterOpen(false);
+                  }}
+                >
+                  <span className="flex items-center justify-between gap-2 text-sm font-medium">
+                    <span className="truncate">{row.name}</span>
+                    {activeRegister?.id === row.id ? <Check className="size-4 shrink-0" /> : null}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {row.company_name || "Shared catalog"}
+                    {" · "}
+                    {row.assigned_staff_name || cashierName || "Unassigned"}
+                    {" · Float "}
+                    {formatCurrency(Number(row.opening_balance) || 0, currency)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={startShiftOpen}
+        onOpenChange={(open) => {
+          if (open) setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
+          setStartShiftOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Start shift</DialogTitle>
+            <DialogDescription>
+              Count opening cash into {activeRegister?.name || "this till"} before sales. Card payments do
+              not change expected drawer cash.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="pos-opening-cash">Opening cash</Label>
+            <Input
+              id="pos-opening-cash"
+              inputMode="decimal"
+              value={openingDraft}
+              onChange={(e) => setOpeningDraft(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setStartShiftOpen(false)}>
+              Later
+            </Button>
+            <Button
+              type="button"
+              disabled={shiftBusy || Number(openingDraft) < 0 || openingDraft === "" || !serverWriteAllowed}
+              onClick={() => void startShift()}
+            >
+              {shiftBusy ? <Loader2 className="size-4 animate-spin" /> : null}
+              Open drawer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={closeShiftOpen} onOpenChange={setCloseShiftOpen}>
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Close shift</DialogTitle>
+            <DialogDescription>
+              Count the drawer. This session becomes history and cannot be edited.
+            </DialogDescription>
+          </DialogHeader>
+          <dl className="space-y-2 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Opening</dt>
+              <dd className="tabular-nums">{formatCurrency(Number(openSession?.opening_balance) || 0, currency)}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Cash sales</dt>
+              <dd className="tabular-nums">{formatCurrency(Number(openSession?.cash_sales) || 0, currency)}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Cash refunds</dt>
+              <dd className="tabular-nums">{formatCurrency(Number(openSession?.cash_refunds) || 0, currency)}</dd>
+            </div>
+            <div className="flex justify-between gap-4 border-t border-border pt-2 font-medium">
+              <dt>Expected cash</dt>
+              <dd className="tabular-nums">{formatCurrency(Number(openSession?.expected_cash) || 0, currency)}</dd>
+            </div>
+          </dl>
+          <div className="space-y-2">
+            <Label htmlFor="pos-closing-cash">Closing cash counted</Label>
+            <Input
+              id="pos-closing-cash"
+              inputMode="decimal"
+              value={closingDraft}
+              onChange={(e) => setClosingDraft(e.target.value)}
+            />
+          </div>
+          {closePreviewVariance != null ? (
+            <p
+              className={
+                closePreviewVariance === 0
+                  ? "text-sm text-emerald-600"
+                  : closePreviewVariance > 0
+                    ? "text-sm text-amber-700"
+                    : "text-sm text-destructive"
+              }
+            >
+              Variance {formatCurrency(closePreviewVariance, currency)}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setCloseShiftOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={shiftBusy || closingDraft === "" || Number(closingDraft) < 0 || !serverWriteAllowed}
+              onClick={() => void confirmCloseShift()}
+            >
+              {shiftBusy ? <Loader2 className="size-4 animate-spin" /> : null}
+              Close and lock
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {receiptView ? (
+        <div className="pointer-events-none fixed -left-[120vw] top-0 w-[210mm] bg-white" aria-hidden>
+          <div ref={receiptPdfRef}>
+            <PosReceiptSheet view={receiptView} />
+          </div>
+        </div>
+      ) : null}
+
+      <Sheet open={todayOpen} onOpenChange={setTodayOpen}>
+        <SheetContent className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Today</SheetTitle>
+            <SheetDescription>{formatCurrency(todayTotal, currency)} including returns</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 space-y-2 overflow-y-auto pb-8">
+            {todayLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : todaySales.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No sales yet today.</p>
+            ) : (
+              todaySales.map((sale) => (
+                <div key={sale.id} className="rounded-xl border border-border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {sale.receipt_number || sale.external_id}
+                        {sale.sale_kind === "return" ? " · Return" : ""}
+                        {sale.refund_status === "partial" ? " · Partial return" : ""}
+                        {sale.refund_status === "full" ? " · Returned" : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {sale.occurred_at ? format(new Date(sale.occurred_at), "HH:mm") : ""} ·{" "}
+                        {sale.payment_method || "POS"}
+                      </p>
+                    </div>
+                    <span className="text-base font-semibold tabular-nums">
+                      {formatCurrency(Number(sale.total_amount) || 0, sale.currency || currency)}
+                    </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11"
+                      onClick={() => {
+                        setCompletedSale(sale);
+                        setReceiptEmailTo(sale.customer_email || sale.raw_payload?.customer_email || "");
+                        setTodayOpen(false);
+                      }}
+                    >
+                      Receipt
+                    </Button>
+                    {(sale.sale_kind || "sale") === "sale" && canRefund && sale.refund_status !== "full" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11"
+                        onClick={() => openReturnDialog(sale)}
+                      >
+                        <RotateCcw className="size-4" /> Return
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog
+        open={Boolean(returnSale)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReturnSale(null);
+            setReturnQtys({});
+            setRefundAsCash(false);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Return items</DialogTitle>
+            <DialogDescription>
+              Restock selected lines from {returnSale?.receipt_number || "this sale"}. The original sale stays on
+              the ledger.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-3">
+            {returnLines.map((line) => {
+              const qty = Math.min(
+                Math.max(0, Math.trunc(Number(returnQtys[line.product_id]) || 0)),
+                line.remaining
+              );
+              return (
+                <li key={line.product_id} className="flex items-center gap-2 rounded-xl border border-border p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{line.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatCurrency(line.unit_price, currency)} · {line.remaining} left of {line.sold_quantity}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="size-10 min-h-10 min-w-10 touch-manipulation"
+                      onClick={() =>
+                        setReturnQtys((prev) => ({
+                          ...prev,
+                          [line.product_id]: Math.max(0, qty - 1),
+                        }))
+                      }
+                      aria-label={`Decrease return quantity for ${line.name}`}
+                    >
+                      <Minus className="size-3.5" />
+                    </Button>
+                    <span className="w-8 text-center text-sm font-semibold tabular-nums">{qty}</span>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="size-10 min-h-10 min-w-10 touch-manipulation"
+                      onClick={() =>
+                        setReturnQtys((prev) => ({
+                          ...prev,
+                          [line.product_id]: Math.min(line.remaining, qty + 1),
+                        }))
+                      }
+                      aria-label={`Increase return quantity for ${line.name}`}
+                    >
+                      <Plus className="size-3.5" />
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {returnSale && (returnSale.payment_method || "cash") !== "cash" ? (
+            <label className="flex items-start gap-3 rounded-xl border border-border p-3 text-sm">
+              <Checkbox
+                className="mt-0.5 size-5"
+                checked={refundAsCash}
+                onCheckedChange={(checked) => setRefundAsCash(checked === true)}
+              />
+              <span>
+                Refund as cash from the drawer
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Card and digital money-back is not wired yet. Leave unchecked to restock only and mark the
+                  refund as pending.
+                </span>
+              </span>
+            </label>
+          ) : null}
+          <p className="text-sm text-muted-foreground">
+            {returnRail === "till_cash"
+              ? `Cash refund ${formatCurrency(returnTotal, currency)} leaves the drawer.`
+              : `Goods come back. ${formatCurrency(returnTotal, currency)} stays pending until a provider refund exists.`}
+          </p>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12"
+              onClick={() => {
+                setReturnSale(null);
+                setReturnQtys({});
+                setRefundAsCash(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-12"
+              disabled={submitting || returnTotal <= 0 || !serverWriteAllowed}
+              onClick={() => void submitReturn(returnSale)}
+            >
+              {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
+              Confirm return
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <PosStaffInviteSheet open={inviteOpen} onOpenChange={setInviteOpen} />
+    </div>
+  );
+}

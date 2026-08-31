@@ -11,7 +11,7 @@ const uiRoots = [
 ];
 const codeExt = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const forbiddenPattern =
-  /\bpaidly\s*\.\s*entities\s*\.\s*(AffiliateSubmission\s*\.\s*update|Subscription\s*\.\s*(?:create|update|delete))\s*\(/g;
+  /\bpaidly\s*\.\s*entities\s*\.\s*Subscription\s*\.\s*(?:create|update|delete)\s*\(/g;
 
 function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out;
@@ -46,7 +46,7 @@ if (violations.length > 0) {
     console.error(`- ${v.file}:${v.line} -> ${v.match}`);
   }
   console.error(
-    "\nUse backend-secured admin routes (for example `/api/admin/subscriptions` or `/api/admin/affiliate-commission`) " +
+    "\nUse backend-secured admin routes (for example `/api/admin/subscriptions`) " +
       "via API clients in `src/api/*`.\n"
   );
   process.exit(1);

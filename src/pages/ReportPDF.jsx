@@ -1,11 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Invoice, Expense, Payroll, User, Client } from '@/api/entities';
+import { Invoice, Expense, Payroll, Payment, User, Client } from '@/api/entities';
 import { formatCurrency } from '../components/CurrencySelector';
-import { format, parseISO, isValid, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, isWithinInterval } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { Printer, Download, FileSpreadsheet } from 'lucide-react';
+import { Printer, FileSpreadsheet } from 'lucide-react';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
+import {
+    collectExpenseEvents,
+    collectIncomeEvents,
+    expenseOccurredAt,
+    getReportPeriodBounds,
+    inDayRange,
+    isCashExpense,
+    listAllCashFlowRecords,
+    moneyAmount,
+    toDayKey,
+} from '@/utils/cashFlowTruth';
+import { listAllPosSalesEvents } from '@/utils/cashFlowData';
+
+function eventDate(value) {
+    const key = toDayKey(value);
+    if (!key) return null;
+    const parsed = parseISO(`${key}T00:00:00`);
+    return isValid(parsed) ? parsed : null;
+}
+
+function isCashPayroll(pay) {
+    const amount = moneyAmount(pay?.net_pay ?? pay?.amount);
+    if (amount <= 0) return false;
+    const status = String(pay?.status || '').trim().toLowerCase();
+    if (['draft', 'cancelled', 'canceled', 'void'].includes(status)) return false;
+    return true;
+}
 
 export default function ReportPDF() {
     const location = useLocation();
@@ -37,192 +64,165 @@ export default function ReportPDF() {
             const categoryParam = params.get('category');
             const vendorParam = params.get('vendor');
 
-            const [invoices, expenses, payrolls, userData, clients] = await Promise.all([
-                Invoice.list(),
-                Expense.list(),
-                Payroll.list(),
+            const payrollResult = await Promise.allSettled([
+                listAllCashFlowRecords(Invoice, '-created_date'),
+                listAllCashFlowRecords(Expense, '-date'),
+                listAllCashFlowRecords(Payment, '-paid_at'),
                 User.me(),
-                Client.list()
+                listAllCashFlowRecords(Client, '-created_date'),
+                listAllCashFlowRecords(Payroll, '-pay_date'),
+                listAllPosSalesEvents(),
             ]);
+
+            const invoices = payrollResult[0].status === 'fulfilled' ? payrollResult[0].value || [] : [];
+            const expenses = payrollResult[1].status === 'fulfilled' ? payrollResult[1].value || [] : [];
+            const payments = payrollResult[2].status === 'fulfilled' ? payrollResult[2].value || [] : [];
+            const userData = payrollResult[3].status === 'fulfilled' ? payrollResult[3].value : null;
+            const clients = payrollResult[4].status === 'fulfilled' ? payrollResult[4].value || [] : [];
+            const payrolls = payrollResult[5].status === 'fulfilled' ? payrollResult[5].value || [] : [];
+            const posSales = payrollResult[6].status === 'fulfilled' ? payrollResult[6].value || [] : [];
+
+            if (payrollResult[0].status === 'rejected' || payrollResult[1].status === 'rejected') {
+                throw payrollResult[0].reason || payrollResult[1].reason;
+            }
 
             setUser(userData);
 
-            // Determine date range
-            let start, end;
-            const now = new Date();
+            const { start, end } = getReportPeriodBounds(range, new Date(), fromParam, toParam);
+            setDateRangeDisplay(`${format(start, 'MMM d, yyyy')} - ${format(end, 'MMM d, yyyy')}`);
 
-            if (range === 'custom' && fromParam && toParam) {
-                start = parseISO(fromParam);
-                end = parseISO(toParam);
-            } else {
-                switch (range) {
-                    case 'month':
-                        start = startOfMonth(now);
-                        end = endOfMonth(now);
-                        break;
-                    case 'quarter':
-                        start = subMonths(now, 3);
-                        end = now;
-                        break;
-                    case 'year':
-                        start = startOfYear(now);
-                        end = endOfYear(now);
-                        break;
-                    default: // all
-                        start = new Date(2000, 0, 1);
-                        end = now;
+            const clientNameById = new Map((clients || []).map((c) => [c.id, c.name]));
+            const invoiceById = new Map((invoices || []).map((inv) => [inv.id, inv]));
+
+            const allTxns = [];
+
+            const incomeEvents = collectIncomeEvents(payments, invoices, posSales);
+            for (const event of incomeEvents) {
+                const invoice = event.invoiceId ? invoiceById.get(event.invoiceId) : null;
+                if (clientId && invoice && invoice.client_id !== clientId) continue;
+                if (clientId && !invoice) continue;
+                if (statusParam && invoice && invoice.status !== statusParam) continue;
+                if (!inDayRange(event.date, start, end)) continue;
+                const date = eventDate(event.date);
+                if (!date) continue;
+                const amount = moneyAmount(event.amount);
+                const isPos = event.channel === 'pos';
+                const clientName = invoice
+                    ? (clientNameById.get(invoice.client_id) || invoice.client_name || 'Unknown Client')
+                    : event.name;
+                allTxns.push({
+                    date,
+                    type: isPos ? (amount < 0 ? 'POS REFUND' : 'POS') : (String(event.id).startsWith('pay-') ? 'PAYMENT' : 'INVOICE'),
+                    reference: invoice?.invoice_number || event.name || '-',
+                    description: isPos
+                      ? event.name
+                      : `Payment from ${clientName}`,
+                    credit: amount > 0 ? amount : 0,
+                    debit: amount < 0 ? -amount : 0,
+                    status: invoice?.status || 'paid',
+                });
+            }
+
+            const isPaidStatusFilter = !statusParam || statusParam === 'paid' || statusParam === 'partial_paid';
+            if (statusParam && !isPaidStatusFilter) {
+                for (const inv of invoices) {
+                    if (clientId && inv.client_id !== clientId) continue;
+                    if (inv.status !== statusParam) continue;
+                    const occurred = inv.created_date || inv.invoice_date || inv.created_at;
+                    if (!inDayRange(occurred, start, end)) continue;
+                    const date = eventDate(occurred);
+                    if (!date) continue;
+                    const clientName = clientNameById.get(inv.client_id) || inv.client_name || 'Unknown Client';
+                    allTxns.push({
+                        date,
+                        type: 'INVOICE',
+                        reference: inv.invoice_number,
+                        description: `Invoice to ${clientName} (${inv.status})`,
+                        credit: 0,
+                        debit: 0,
+                        status: inv.status,
+                        memo: `Amount: ${inv.total_amount}`,
+                    });
                 }
             }
 
-            setDateRangeDisplay(`${format(start, 'MMM d, yyyy')} - ${format(end, 'MMM d, yyyy')}`);
+            for (const exp of expenses) {
+                if (!isCashExpense(exp)) continue;
+                if (categoryParam && exp.category !== categoryParam) continue;
+                if (vendorParam && exp.vendor !== vendorParam) continue;
+                const occurred = expenseOccurredAt(exp);
+                if (!inDayRange(occurred, start, end)) continue;
+                const date = eventDate(occurred);
+                if (!date) continue;
+                allTxns.push({
+                    date,
+                    type: 'EXPENSE',
+                    reference: exp.expense_number || '-',
+                    description: `${exp.vendor ? exp.vendor + ' - ' : ''}${exp.category || exp.description || 'Expense'}`,
+                    credit: 0,
+                    debit: moneyAmount(exp.amount),
+                    status: 'paid',
+                });
+            }
 
-            // Process Transactions
-            let allTxns = [];
+            for (const pay of payrolls) {
+                if (!isCashPayroll(pay)) continue;
+                const occurred = pay.pay_date || pay.created_date || pay.created_at;
+                if (!inDayRange(occurred, start, end)) continue;
+                const date = eventDate(occurred);
+                if (!date) continue;
+                allTxns.push({
+                    date,
+                    type: 'PAYROLL',
+                    reference: pay.payslip_number || '-',
+                    description: `Salary - ${pay.employee_name || 'Employee'}`,
+                    credit: 0,
+                    debit: moneyAmount(pay.net_pay ?? pay.amount),
+                    status: pay.status,
+                });
+            }
 
-            // 1. Invoices (Income - Cash Basis via Payments)
-            // Note: If filtering by status (e.g. Draft, Sent), they won't appear here if we strictly show CASH basis (payments).
-            // However, the user asked to filter by invoice status. 
-            // If the user selects "Draft", they probably want to see Draft invoices even if not paid (Accrual view).
-            // The previous logic was hybrid. 
-            // Let's adapt: If status filter is applied, we list matching invoices regardless of payment status (Accrual style), 
-            // OR we strictly follow the "Cash Basis" request but filter the source invoices.
-            // Given "Accountant Report" usually implies a Statement of Transactions, showing unpaid invoices (Draft/Sent) 
-            // as "Income" is incorrect for Cash Basis but correct for Accrual.
-            // Let's assume Accrual if status is filtered to non-paid statuses, or just list them with 0 credit?
-            // Let's stick to the previous hybrid approach: 
-            // - If we have payments, list them (Cash). 
-            // - If fallback, list invoice if Paid/Partial.
-            // BUT now we must respect `statusParam`.
-            // If `statusParam` is present, we should filter the invoices by it.
-            
-            invoices.forEach(inv => {
-                if (clientId && inv.client_id !== clientId) return;
-                if (statusParam && inv.status !== statusParam) return;
-
-                const clientName = clients.find(c => c.id === inv.client_id)?.name || 'Unknown Client';
-
-                // If filtering by non-paid status (e.g. Draft, Sent, Overdue), we should list them to respect the filter
-                // even if they don't represent cash flow yet, so the accountant can see them.
-                // However, they shouldn't affect the "Balance" if they are not paid. 
-                // Let's list them with 0 Credit/Debit if unpaid, or just list the potential amount?
-                // Let's list the full amount but maybe mark status clearly. 
-                // Actually, for "Statement of Accounts", usually only effective transactions appear.
-                // But the user asked for granular filtering for the report.
-                
-                // Strategy:
-                // 1. If looking for Paid/Partial Paid (or no filter), show Payments (Cash flow).
-                // 2. If looking for specific status (e.g. Overdue), show the Invoice itself (Accrual view for that status).
-                
-                const isPaidStatus = inv.status === 'paid' || inv.status === 'partial_paid';
-
-                // If specific status filter is active and it's NOT a paid status, show the invoice entity
-                if (statusParam && !isPaidStatus) {
-                    const date = parseISO(inv.created_date);
-                    if (isWithinInterval(date, { start, end })) {
-                        allTxns.push({
-                            date: date,
-                            type: 'INVOICE',
-                            reference: inv.invoice_number,
-                            description: `Invoice to ${clientName} (${inv.status})`,
-                            credit: 0, // No cash received yet
-                            debit: 0,
-                            status: inv.status,
-                            memo: `Amount: ${inv.total_amount}` // Helper info
-                        });
-                    }
-                    return;
-                }
-
-                // Standard processing (Cash flow for paid/partial, or fallback)
-                if (inv.payments && Array.isArray(inv.payments) && inv.payments.length > 0) {
-                    inv.payments.forEach((payment, idx) => {
-                        const paymentDate = payment.date ? parseISO(payment.date) : parseISO(inv.created_date);
-                        
-                        if (isValid(paymentDate) && isWithinInterval(paymentDate, { start, end })) {
-                            allTxns.push({
-                                date: paymentDate,
-                                type: 'PAYMENT',
-                                reference: `${inv.invoice_number}-${idx + 1}`,
-                                description: `Payment from ${clientName} (${payment.method || 'Unknown'})`,
-                                credit: Number(payment.amount) || 0,
-                                debit: 0,
-                                status: 'paid'
-                            });
-                        }
-                    });
-                } 
-                else if (isPaidStatus) {
-                    const date = parseISO(inv.created_date);
-                    if (isWithinInterval(date, { start, end })) {
-                        allTxns.push({
-                            date: date,
-                            type: 'INVOICE',
-                            reference: inv.invoice_number,
-                            description: `Payment from ${clientName}`,
-                            credit: Number(inv.total_amount) || 0,
-                            debit: 0,
-                            status: inv.status
-                        });
-                    }
-                }
-            });
-
-            // 2. Expenses (Debit)
-            expenses.forEach(exp => {
-                const date = parseISO(exp.date);
-                if (isWithinInterval(date, { start, end })) {
-                    if (categoryParam && exp.category !== categoryParam) return;
-                    if (vendorParam && exp.vendor !== vendorParam) return;
-
-                    allTxns.push({
-                        date: date,
-                        type: 'EXPENSE',
-                        reference: exp.expense_number || '-',
-                        description: `${exp.vendor ? exp.vendor + ' - ' : ''}${exp.category}`,
-                        credit: 0,
-                        debit: exp.amount,
-                        status: 'paid'
-                    });
-                }
-            });
-
-            // 3. Payroll (Debit)
-            payrolls.forEach(pay => {
-                const date = parseISO(pay.pay_date || pay.created_date);
-                if (isWithinInterval(date, { start, end })) {
-                    allTxns.push({
-                        date: date,
-                        type: 'PAYROLL',
-                        reference: pay.payslip_number,
-                        description: `Salary - ${pay.employee_name}`,
-                        credit: 0,
-                        debit: pay.net_pay,
-                        status: pay.status
-                    });
-                }
-            });
-
-            // Sort by date
             allTxns.sort((a, b) => a.date - b.date);
 
-            // Calculate Running Balance
-            let runningBalance = 0;
-            const processedTxns = allTxns.map(txn => {
+            const openingTotals = range === 'all'
+                ? { profit: 0 }
+                : {
+                    profit: collectIncomeEvents(payments, invoices, posSales)
+                        .concat(collectExpenseEvents(expenses).map((row) => ({ ...row, amount: -moneyAmount(row.amount) })))
+                        .filter((row) => {
+                            const key = toDayKey(row.date);
+                            const startKey = toDayKey(start);
+                            return key && startKey && key < startKey;
+                        })
+                        .reduce((sum, row) => sum + moneyAmount(row.amount), 0),
+                };
+            // Payroll before the period also affects opening cash.
+            const openingPayroll = payrolls
+                .filter(isCashPayroll)
+                .filter((pay) => {
+                    const key = toDayKey(pay.pay_date || pay.created_date || pay.created_at);
+                    const startKey = toDayKey(start);
+                    return key && startKey && key < startKey;
+                })
+                .reduce((sum, pay) => sum + moneyAmount(pay.net_pay ?? pay.amount), 0);
+            const openingBalance = range === 'all' ? 0 : openingTotals.profit - openingPayroll;
+
+            let runningBalance = openingBalance;
+            const processedTxns = allTxns.map((txn) => {
                 runningBalance += (txn.credit - txn.debit);
                 return { ...txn, balance: runningBalance };
             });
 
             setTransactions(processedTxns);
-            
-            // Calculate Summary
+
             const totalIncome = processedTxns.reduce((sum, t) => sum + t.credit, 0);
             const totalExpenses = processedTxns.reduce((sum, t) => sum + t.debit, 0);
-            
+
             setSummary({
                 totalIncome,
                 totalExpenses,
                 netIncome: totalIncome - totalExpenses,
-                openingBalance: 0, // Simplified
+                openingBalance,
                 closingBalance: runningBalance
             });
 

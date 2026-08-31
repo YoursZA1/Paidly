@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useIsFetching, useMutation } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { affiliateApplicationsAdminQueryFn } from '@/api/fetchAdminAffiliateApplications';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import { adminUserNameEmailLines } from '@/utils/adminUserDisplay';
 import {
@@ -39,23 +38,10 @@ import { fetchAdminSubscriptionOverview } from '@/api/fetchAdminSubscriptionOver
 import { fetchAdminSubscriptionsList } from '@/api/fetchAdminSubscriptionsList';
 import { fetchAdminRevenueMetrics } from '@/api/fetchAdminRevenueMetrics';
 import { fetchAdminFailedPayments } from '@/api/fetchAdminFailedPayments';
-import AffiliateApprovalResultDialog from '@/components/affiliates/AffiliateApprovalResultDialog';
-import {
-  approveAffiliateApplication,
-  declineAffiliateApplication,
-  resendAffiliateReferralEmail,
-} from '@/api/affiliateAdminModerationApi';
-import { useAdminSettings } from '@/hooks/useAdminSettings';
-import { createAffiliateSignupShareUrl } from '@/utils';
 import { toast } from 'sonner';
-import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { getStableSession } from '@/core/auth/SessionCoordinator';
 import { countByUserId, mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
-import {
-  EMPTY_AFFILIATE_ADMIN_BUNDLE,
-  normalizeAffiliateAdminQueryResult,
-} from '@/utils/affiliateApplicationCounts';
 import { pickPreferredSubscriptionRow } from '@/lib/subscriptionPlan';
 import { stableDirectoryRowKey, stableEntityRowKey } from '@/utils/stableListKey';
 import { Button } from '@/components/ui/button';
@@ -76,7 +62,6 @@ const DASHBOARD_QUERY_KEYS = [
   'subscription-overview',
   'revenue-metrics',
   'failed-payments',
-  'affiliates',
   'waitlist',
   'invoices',
   'quotes',
@@ -134,8 +119,6 @@ export default function AdminV2Dashboard() {
   const queryClient = useQueryClient();
   const [tick, setTick] = useState(Date.now());
   const [showSecurityDetails, setShowSecurityDetails] = useState(false);
-  const [affiliateApprovalNotice, setAffiliateApprovalNotice] = useState(null);
-  const [busyAffiliateId, setBusyAffiliateId] = useState(null);
   const [behaviorSort, setBehaviorSort] = useState({ col: 'activity_score', dir: 'desc' });
   const [behaviorPage, setBehaviorPage] = useState(0);
   const [subsPage, setSubsPage] = useState(0);
@@ -231,136 +214,6 @@ export default function AdminV2Dashboard() {
   });
   const failedPayments = failedPaymentsPayload?.failedPayments || [];
 
-  const {
-    data: affiliateAdmin = EMPTY_AFFILIATE_ADMIN_BUNDLE,
-    dataUpdatedAt: affiliatesUpdatedAt,
-    isError: affiliatesQueryError,
-    error: affiliatesQueryErr,
-  } = useQuery({
-    queryKey: ['affiliates'],
-    select: normalizeAffiliateAdminQueryResult,
-    queryFn: () => affiliateApplicationsAdminQueryFn(),
-    refetchInterval: ADMIN_DASHBOARD_REFETCH_MS,
-    staleTime: ADMIN_DASHBOARD_STALE_MS,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
-  });
-  const affiliates = affiliateAdmin.applications;
-  const affiliateStatusCounts = affiliateAdmin.counts;
-
-  const { affiliateDefaultCommissionPercent: defaultAffiliateCommissionPct } = useAdminSettings();
-
-  const handleDashboardApproveAffiliate = async (aff) => {
-    setBusyAffiliateId(aff.id);
-    try {
-      const result = await approveAffiliateApplication({
-        applicationId: aff.id,
-        commissionRate: Number(aff.commission_rate ?? defaultAffiliateCommissionPct),
-      });
-      await queryClient.invalidateQueries({ queryKey: ['affiliates'] });
-
-      const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
-      const code = String(result?.referral_code || '').trim();
-      const link =
-        String(result?.referral_link || '').trim() ||
-        (code ? createAffiliateSignupShareUrl(code, origin) : '');
-
-      setAffiliateApprovalNotice({
-        applicantName: String(aff.applicant_name || '').trim() || 'Applicant',
-        applicantEmail: String(aff.applicant_email || '').trim(),
-        referralCode: code,
-        referralLink: link,
-        emailSent: result?.email_sent !== false,
-        emailError: result?.email_error != null ? String(result.email_error) : null,
-      });
-
-      toast.success('Affiliate approved', {
-        description:
-          result?.email_sent === false
-            ? 'Saved — email failed. Copy the link from the dialog.'
-            : `Confirmation email sent to ${String(aff.applicant_email || '').trim() || 'applicant'}.`,
-      });
-
-      logAction({
-        actor: currentUser,
-        action: AUDIT_ACTIONS.AFFILIATE_APPROVED,
-        category: 'affiliates',
-        entity: 'affiliate_application',
-        description: `Approved affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
-        targetId: aff.id,
-        targetLabel: aff.applicant_email,
-        before: { status: 'pending' },
-        after: {
-          status: 'approved',
-          referral_code: result?.referral_code,
-          referral_link: result?.referral_link,
-          email_sent: result?.email_sent,
-        },
-      });
-    } catch (e) {
-      toast.error(e?.message || 'Could not approve affiliate');
-    } finally {
-      setBusyAffiliateId(null);
-    }
-  };
-
-  const handleDashboardDeclineAffiliate = async (aff) => {
-    const name = String(aff.applicant_name || aff.applicant_email || 'this applicant');
-    if (!window.confirm(`Decline affiliate application for ${name}?`)) return;
-    setBusyAffiliateId(aff.id);
-    try {
-      await declineAffiliateApplication({ applicationId: aff.id });
-      await queryClient.invalidateQueries({ queryKey: ['affiliates'] });
-      toast.success('Application declined', {
-        description: `${String(aff.applicant_email || '').trim() || 'Applicant'} was not approved. Queue updated.`,
-      });
-      logAction({
-        actor: currentUser,
-        action: AUDIT_ACTIONS.AFFILIATE_DECLINED,
-        category: 'affiliates',
-        entity: 'affiliate_application',
-        description: `Declined affiliate application for ${aff.applicant_name} (${aff.applicant_email})`,
-        targetId: aff.id,
-        targetLabel: aff.applicant_email,
-        before: { status: 'pending' },
-        after: { status: 'declined' },
-      });
-    } catch (e) {
-      toast.error(e?.message || 'Could not decline application');
-    } finally {
-      setBusyAffiliateId(null);
-    }
-  };
-
-  const handleDashboardResendAffiliateLink = async (aff) => {
-    setBusyAffiliateId(aff.id);
-    try {
-      const result = await resendAffiliateReferralEmail({ applicationId: aff.id });
-      await queryClient.invalidateQueries({ queryKey: ['affiliates'] });
-      const origin = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
-      const code = String(result?.referral_code || '').trim();
-      const link =
-        String(result?.referral_link || '').trim() ||
-        (code ? createAffiliateSignupShareUrl(code, origin) : '');
-      setAffiliateApprovalNotice({
-        applicantName: String(aff.applicant_name || '').trim() || 'Applicant',
-        applicantEmail: String(aff.applicant_email || '').trim(),
-        referralCode: code,
-        referralLink: link,
-        emailSent: true,
-        emailError: null,
-        isResend: true,
-      });
-      toast.success('Referral link emailed again', {
-        description: `Sent to ${String(aff.applicant_email || '').trim() || 'applicant'}.`,
-      });
-    } catch (e) {
-      toast.error(e?.message || 'Could not resend link');
-    } finally {
-      setBusyAffiliateId(null);
-    }
-  };
-
   const { data: waitlist = [], dataUpdatedAt: waitlistUpdatedAt } = useQuery({
     queryKey: ['waitlist'],
     queryFn: () => paidly.entities.WaitlistEntry.list('-created_date', 150),
@@ -444,7 +297,6 @@ export default function AdminV2Dashboard() {
         subscriptionOverviewUpdatedAt || 0,
         revenueMetricsUpdatedAt || 0,
         failedPaymentsUpdatedAt || 0,
-        affiliatesUpdatedAt || 0,
         waitlistUpdatedAt || 0,
         invoicesUpdatedAt || 0,
         quotesUpdatedAt || 0,
@@ -456,7 +308,6 @@ export default function AdminV2Dashboard() {
       subscriptionOverviewUpdatedAt,
       revenueMetricsUpdatedAt,
       failedPaymentsUpdatedAt,
-      affiliatesUpdatedAt,
       waitlistUpdatedAt,
       invoicesUpdatedAt,
       quotesUpdatedAt,
@@ -486,7 +337,6 @@ export default function AdminV2Dashboard() {
     revenueMetrics?.monthlyRevenue != null
       ? revenueMetrics.monthlyRevenue
       : monthlyRevenueFallback;
-  const pendingAffiliateReviewCount = affiliateStatusCounts.pending;
   const totalInvoicesSent = invoices.length;
   const totalQuotes = quotes.length;
   const totalPayslips = payslips.length;
@@ -649,15 +499,6 @@ export default function AdminV2Dashboard() {
         </Alert>
       ) : null}
 
-      {affiliatesQueryError ? (
-        <Alert variant="destructive" className="mb-6">
-          <AlertDescription>
-            Could not load affiliate submissions from the backend (admin data is API-only):{' '}
-            {affiliatesQueryErr?.message || 'Unknown error'}.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
       {/* Primary stats */}
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
@@ -774,21 +615,9 @@ export default function AdminV2Dashboard() {
         <RecentActivity
           className="w-full min-w-0"
           users={users}
-          affiliates={affiliates}
           invoices={invoices}
           quotes={quotes}
           payslips={payslips}
-          pendingAffiliateCount={pendingAffiliateReviewCount}
-          busyAffiliateId={busyAffiliateId}
-          onApproveAffiliate={
-            affiliatesQueryError ? undefined : handleDashboardApproveAffiliate
-          }
-          onDeclineAffiliate={
-            affiliatesQueryError ? undefined : handleDashboardDeclineAffiliate
-          }
-          onResendAffiliateLink={
-            affiliatesQueryError ? undefined : handleDashboardResendAffiliateLink
-          }
         />
       </div>
 
@@ -900,13 +729,6 @@ export default function AdminV2Dashboard() {
           <div><span className="text-muted-foreground">5xx</span><p className="font-semibold">{securityEvents?.counts?.status5xx ?? '—'}</p></div>
         </div>
       </div>
-
-      <AffiliateApprovalResultDialog
-        notice={affiliateApprovalNotice}
-        onOpenChange={(open) => {
-          if (!open) setAffiliateApprovalNotice(null);
-        }}
-      />
 
       <Dialog open={showSecurityDetails} onOpenChange={setShowSecurityDetails}>
         <DialogContent className="sm:max-w-2xl">

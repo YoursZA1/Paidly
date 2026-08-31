@@ -41,33 +41,17 @@ const supabase = createClient(supabaseUrl, serviceRole, {
 
 const requiredMigrations = [
   "20260401150000_admin_query_indexes.sql",
-  "20260402143000_affiliate_internal_team_access.sql",
-  "20260406100000_affiliate_applications_select_rls_jwt_admin.sql",
-  "20260406120000_affiliate_applications_submit_rpc_and_insert_repair.sql",
   "20260407150000_organizations_bootstrap_rls.sql",
   "20260408120000_profiles_user_role_column.sql",
   "20260516120000_revoke_privileged_rpc_from_authenticated.sql",
   "20260516140000_invoices_client_operation_id.sql",
   "20260516160000_api_rate_limit_consume_rpc.sql",
+  "20260828120000_drop_affiliate_program.sql",
 ];
 
-const requiredIndexes = [
-  "affiliate_applications_status_created_at_idx",
-  "affiliate_applications_user_id_created_at_idx",
-];
+const requiredIndexes = [];
 
-const requiredPolicies = [
-  "affiliate_applications_anon_insert",
-  "affiliate_applications_auth_insert",
-  "affiliate_applications_team_select",
-  "affiliate_applications_jwt_admin_select",
-  "affiliate_applications_management_update",
-  "affiliate_applications_management_delete",
-  "affiliates_team_select",
-  "affiliates_management_insert",
-  "affiliates_management_update",
-  "affiliates_management_delete",
-];
+const requiredPolicies = [];
 
 async function verifyMigrations() {
   const { data, error } = await supabase
@@ -89,6 +73,10 @@ async function verifyMigrations() {
 }
 
 async function verifyIndexes() {
+  if (requiredIndexes.length === 0) {
+    console.log("SKIP: no required indexes configured");
+    return;
+  }
   const { data, error } = await supabase.rpc("exec_sql", {
     sql: `
       select indexname
@@ -109,12 +97,15 @@ async function verifyIndexes() {
 }
 
 async function verifyPolicies() {
+  if (requiredPolicies.length === 0) {
+    console.log("SKIP: no required policies configured");
+    return;
+  }
   const { data, error } = await supabase.rpc("exec_sql", {
     sql: `
       select policyname
       from pg_policies
       where schemaname = 'public'
-        and tablename in ('affiliate_applications','affiliates')
         and policyname in (${requiredPolicies.map((n) => `'${n}'`).join(",")});
     `,
   });

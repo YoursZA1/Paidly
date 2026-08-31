@@ -2,7 +2,7 @@
  * Built-in document template presets — seed content users can add to their org library
  * without saving from an existing document first.
  */
-import { categoryForType } from "./documentCatalog";
+import { categoryForType, isHubPersistedType } from "./documentCatalog";
 
 /** @typedef {{ key: string, type: string, name: string, description: string, content: Record<string, unknown> }} DocumentTemplatePreset */
 
@@ -113,6 +113,7 @@ export function getTemplatePreset(key) {
 export function presetsByCategory() {
   const groups = new Map();
   for (const preset of DOCUMENT_TEMPLATE_PRESETS) {
+    if (!isHubPersistedType(preset.type)) continue;
     const cat = categoryForType(preset.type) || "other";
     if (!groups.has(cat)) groups.set(cat, []);
     groups.get(cat).push(preset);

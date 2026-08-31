@@ -11,6 +11,7 @@ import { X, Save, Headset, DollarSign, Plus, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { ITEM_TYPES } from "@/components/invoice/itemTypeHelpers";
 import { renderIcon } from "@/utils/renderIcon";
+import { useOrgBrands } from "@/hooks/useOrgBrands";
 
 function normalizeTags(raw) {
     if (Array.isArray(raw)) return raw;
@@ -56,6 +57,7 @@ function buildFormStateFromService(service, defaultType) {
         tags: normalizeTags(service?.tags),
         estimated_duration: service?.estimated_duration || "",
         requirements: service?.requirements || "",
+        company_id: service?.company_id || "",
     };
 }
 
@@ -149,6 +151,7 @@ export default function ServiceForm({
     const isDialog = variant === "dialog";
     const isPageShell = Boolean(formId) && hideActions;
     const isEditorSurface = surface === "editor";
+    const { brands } = useOrgBrands();
     // BASE FIELDS (Shared by all catalog items - Mandatory)
     const [formData, setFormData] = useState(() => buildFormStateFromService(service, defaultType));
 
@@ -256,11 +259,13 @@ export default function ServiceForm({
             }),
             
             // Pricing controls
-            price_locked: formData.price_locked || false
+            price_locked: formData.price_locked || false,
+            company_id: formData.company_id || null,
         };
         
-        // Remove any undefined/null values
+        // Remove any undefined/null values except company_id (null = org-shared catalog).
         Object.keys(finalData).forEach(key => {
+            if (key === "company_id") return;
             if (finalData[key] === undefined || finalData[key] === null) {
                 delete finalData[key];
             }
@@ -502,6 +507,30 @@ export default function ServiceForm({
                                                 className="h-12 rounded-xl"
                                             />
                                         </div>
+                                        {brands.length > 0 ? (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="product-brand" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Brand</Label>
+                                            <Select
+                                                value={formData.company_id || "__shared__"}
+                                                onValueChange={(value) => handleInputChange("company_id", value === "__shared__" ? "" : value)}
+                                            >
+                                                <SelectTrigger id="product-brand" className="h-12 rounded-xl">
+                                                    <SelectValue placeholder="Shared across brands" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="__shared__">Shared across brands</SelectItem>
+                                                    {brands.map((brand) => (
+                                                        <SelectItem key={brand.id} value={brand.id}>
+                                                            {brand.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                Private to a brand so another brand’s POS cannot sell this product. Shared items appear on every till.
+                                            </p>
+                                        </div>
+                                        ) : null}
                                         <div className="grid md:grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label htmlFor="stock_quantity" className="text-sm font-semibold text-slate-700 dark:text-slate-300">

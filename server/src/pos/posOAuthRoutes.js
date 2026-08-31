@@ -16,6 +16,8 @@ import {
 } from "./squareOAuth.js";
 import { encryptPosSecret } from "./posSecretCrypto.js";
 import { completeYocoConnect } from "./yocoConnect.js";
+import { requirePosCapability } from "./posBusinessType.js";
+import { requirePosPlan } from "./posEntitlement.js";
 
 function jsonError(res, status, message) {
   return res.status(status).json({ error: message });
@@ -41,6 +43,12 @@ async function requireSettingsManager(req, res) {
   }
   if (!companyRoleHasPermission(membership.companyRole, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
     return { ok: false, response: jsonError(res, 403, "Forbidden — company settings permission required") };
+  }
+  if (!(await requirePosPlan(req, res))) {
+    return { ok: false, response: res };
+  }
+  if (!(await requirePosCapability(res, membership.orgId))) {
+    return { ok: false, response: res };
   }
 
   return { ok: true, user, membership };

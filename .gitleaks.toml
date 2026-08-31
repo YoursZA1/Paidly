@@ -13,7 +13,8 @@ useDefault = true
 [[rules]]
 id          = "paidly-resend-key"
 description = "Resend email API key"
-regex       = '''re_[A-Za-z0-9_\-]{20,}'''
+# Lookbehind avoids false positives like ensure_inventory_products_only
+regex       = '''(?<![A-Za-z0-9_])re_[A-Za-z0-9_\-]{20,}'''
 keywords    = ["resend", "re_"]
 
 [[rules]]
@@ -52,6 +53,9 @@ regexes = [
   '''your_.*_here''',
   '''<YOUR_.*?>''',
   '''example\.com''',
+  '''placeholder''',
+  # Function name contains re_… and trips the default Resend rule
+  '''ensure_inventory_products_only''',
   # Supabase anon key is intentionally public and appears in client env examples
   '''VITE_SUPABASE_ANON_KEY''',
 ]

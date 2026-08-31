@@ -4,25 +4,21 @@
  */
 
 import {
-  parseISO,
   startOfMonth,
   endOfMonth,
   startOfYear,
   endOfYear,
   format
 } from 'date-fns';
-
-/** Parse date from string or Date; never pass undefined to parseISO (throws .split). */
-function safeParseDate(value) {
-  if (value == null || value === '') return null;
-  const str = typeof value === 'string' ? value : (value instanceof Date ? value.toISOString() : String(value));
-  if (!str) return null;
-  try {
-    return parseISO(str);
-  } catch {
-    return null;
-  }
-}
+import {
+  collectExpenseEvents,
+  collectIncomeEvents,
+  expenseOccurredAt,
+  inDayRange,
+  isCashExpense,
+  moneyAmount,
+  paymentOccurredAt,
+} from '@/utils/cashFlowTruth';
 
 export const CashFlowService = {
   /**
@@ -31,56 +27,39 @@ export const CashFlowService = {
    * @param {Array} expenses - Expense objects with date
    * @param {Date} periodStart - Start date
    * @param {Date} periodEnd - End date
+   * @param {Array} [invoices] - Invoices used as income fallback when no payment rows exist
    * @returns {Object} Cash flow for period
+   * @param {Array} [posSales] - Native / adapter POS events (pos_sales_events)
    */
-  calculatePeriodCashFlow(payments = [], expenses = [], periodStart, periodEnd) {
+  calculatePeriodCashFlow(payments = [], expenses = [], periodStart, periodEnd, invoices = [], posSales = []) {
     if (!periodStart || !periodEnd) {
       return {
         income: 0,
         expenses: 0,
         net: 0,
-        transactionCount: 0
+        transactionCount: 0,
+        incomeTransactions: 0,
+        expenseTransactions: 0,
       };
     }
 
-    // Income from payments within period
-    const periodIncome = payments
-      .filter(payment => {
-        if (!payment.payment_date || !payment.amount || payment.amount <= 0) return false;
-        const paymentDate = safeParseDate(payment.payment_date);
-        return paymentDate && paymentDate >= periodStart && paymentDate <= periodEnd;
-      })
-      .reduce((sum, payment) => sum + payment.amount, 0);
+    const incomeInRange = collectIncomeEvents(payments, invoices, posSales).filter((row) =>
+      inDayRange(row.date, periodStart, periodEnd)
+    );
+    const expenseInRange = collectExpenseEvents(expenses).filter((row) =>
+      inDayRange(row.date, periodStart, periodEnd)
+    );
 
-    // Expenses within period
-    const periodExpenses = expenses
-      .filter(expense => {
-        if (!expense.date || !expense.amount || expense.amount <= 0) return false;
-        const expenseDate = safeParseDate(expense.date);
-        return expenseDate && expenseDate >= periodStart && expenseDate <= periodEnd;
-      })
-      .reduce((sum, expense) => sum + expense.amount, 0);
-
-    // Count transactions
-    const incomeTransactions = payments.filter(payment => {
-      if (!payment.payment_date || !payment.amount || payment.amount <= 0) return false;
-      const paymentDate = safeParseDate(payment.payment_date);
-      return paymentDate && paymentDate >= periodStart && paymentDate <= periodEnd;
-    }).length;
-
-    const expenseTransactions = expenses.filter(expense => {
-      if (!expense.date || !expense.amount || expense.amount <= 0) return false;
-      const expenseDate = safeParseDate(expense.date);
-      return expenseDate && expenseDate >= periodStart && expenseDate <= periodEnd;
-    }).length;
+    const periodIncome = incomeInRange.reduce((sum, row) => sum + moneyAmount(row.amount), 0);
+    const periodExpenses = expenseInRange.reduce((sum, row) => sum + moneyAmount(row.amount), 0);
 
     return {
       income: periodIncome,
       expenses: periodExpenses,
       net: periodIncome - periodExpenses,
-      incomeTransactions,
-      expenseTransactions,
-      transactionCount: incomeTransactions + expenseTransactions
+      incomeTransactions: incomeInRange.length,
+      expenseTransactions: expenseInRange.length,
+      transactionCount: incomeInRange.length + expenseInRange.length
     };
   },
 
@@ -89,9 +68,10 @@ export const CashFlowService = {
    * @param {Array} payments - Payment objects
    * @param {Array} expenses - Expense objects
    * @param {Number} monthsToShow - Number of months to include
+   * @param {Array} [invoices]
    * @returns {Array} Monthly cash flow data
    */
-  generateMonthlyCashFlow(payments = [], expenses = [], monthsToShow = 6) {
+  generateMonthlyCashFlow(payments = [], expenses = [], monthsToShow = 6, invoices = []) {
     const months = [];
     const now = new Date();
 
@@ -100,7 +80,7 @@ export const CashFlowService = {
       const monthStart = startOfMonth(date);
       const monthEnd = endOfMonth(date);
 
-      const cashFlow = this.calculatePeriodCashFlow(payments, expenses, monthStart, monthEnd);
+      const cashFlow = this.calculatePeriodCashFlow(payments, expenses, monthStart, monthEnd, invoices);
 
       months.push({
         month: format(date, 'MMM yyyy'),
@@ -120,24 +100,30 @@ export const CashFlowService = {
    * Generate yearly cash flow summary
    * @param {Array} payments - Payment objects
    * @param {Array} expenses - Expense objects
+   * @param {Array} [invoices]
    * @returns {Array} Yearly cash flow data
    */
-  generateYearlyCashFlow(payments = [], expenses = []) {
+  generateYearlyCashFlow(payments = [], expenses = [], invoices = []) {
     const years = {};
     const now = new Date();
     const currentYear = now.getFullYear();
 
-    // Get years from data
     const allDateStrings = [
-      ...payments.map(p => p.payment_date || p.paid_at),
-      ...expenses.map(e => e.date)
-    ].filter(d => d != null && typeof d === 'string');
+      ...payments.map((p) => paymentOccurredAt(p)),
+      ...expenses.map((e) => expenseOccurredAt(e)),
+    ].filter((d) => d != null && d !== '');
 
-    if (allDateStrings.length === 0) {
+    if (allDateStrings.length === 0 && (!invoices || invoices.length === 0)) {
       return [];
     }
 
-    const yearNumbers = allDateStrings.map(d => safeParseDate(d)?.getFullYear()).filter(Boolean);
+    const yearNumbers = allDateStrings
+      .map((d) => {
+        const key = String(d).slice(0, 4);
+        const year = Number(key);
+        return Number.isFinite(year) ? year : null;
+      })
+      .filter(Boolean);
     if (yearNumbers.length === 0) return [];
     const minYear = Math.min(...yearNumbers);
 
@@ -145,7 +131,7 @@ export const CashFlowService = {
       const yearStart = startOfYear(new Date(year, 0, 1));
       const yearEnd = endOfYear(new Date(year, 11, 31));
 
-      const cashFlow = this.calculatePeriodCashFlow(payments, expenses, yearStart, yearEnd);
+      const cashFlow = this.calculatePeriodCashFlow(payments, expenses, yearStart, yearEnd, invoices);
 
       years[year] = {
         year,
@@ -165,8 +151,8 @@ export const CashFlowService = {
     const categories = {};
 
     expenses
-      .filter(exp => exp.amount && exp.amount > 0)
-      .forEach(exp => {
+      .filter((exp) => isCashExpense(exp))
+      .forEach((exp) => {
         const category = exp.category || 'Other';
         if (!categories[category]) {
           categories[category] = {
@@ -176,13 +162,13 @@ export const CashFlowService = {
             percentage: 0
           };
         }
-        categories[category].amount += exp.amount;
+        categories[category].amount += moneyAmount(exp.amount);
         categories[category].count++;
       });
 
     const total = Object.values(categories).reduce((sum, cat) => sum + cat.amount, 0);
     return Object.values(categories)
-      .map(cat => ({
+      .map((cat) => ({
         ...cat,
         percentage: total > 0 ? (cat.amount / total) * 100 : 0
       }))
@@ -193,45 +179,46 @@ export const CashFlowService = {
    * Calculate cash flow metrics
    * @param {Array} payments - Payment objects
    * @param {Array} expenses - Expense objects
+   * @param {Array} [invoices]
    * @returns {Object} Cash flow metrics
    */
-  calculateMetrics(payments = [], expenses = []) {
+  calculateMetrics(payments = [], expenses = [], invoices = []) {
     const now = new Date();
     const currentMonthStart = startOfMonth(now);
     const currentMonthEnd = endOfMonth(now);
     const yearStart = startOfYear(now);
 
-    const currentMonth = this.calculatePeriodCashFlow(payments, expenses, currentMonthStart, currentMonthEnd);
-    const yearToDate = this.calculatePeriodCashFlow(payments, expenses, yearStart, now);
+    const currentMonth = this.calculatePeriodCashFlow(payments, expenses, currentMonthStart, currentMonthEnd, invoices);
+    const yearToDate = this.calculatePeriodCashFlow(payments, expenses, yearStart, now, invoices);
     const allTime = this.calculatePeriodCashFlow(
       payments,
       expenses,
       new Date(2000, 0, 1),
-      now
+      now,
+      invoices
     );
 
-    // Calculate averages
-    const monthlyData = this.generateMonthlyCashFlow(payments, expenses, 12);
-    const positiveMonths = monthlyData.filter(m => m.net > 0).length;
-    const negativeMonths = monthlyData.filter(m => m.net < 0).length;
+    const monthlyData = this.generateMonthlyCashFlow(payments, expenses, 12, invoices);
+    const positiveMonths = monthlyData.filter((m) => m.net > 0).length;
+    const negativeMonths = monthlyData.filter((m) => m.net < 0).length;
 
     return {
       currentMonth,
       yearToDate,
       allTime,
-      averageMonthlyIncome: monthlyData.length > 0 
-        ? monthlyData.reduce((sum, m) => sum + m.income, 0) / monthlyData.length 
+      averageMonthlyIncome: monthlyData.length > 0
+        ? monthlyData.reduce((sum, m) => sum + m.income, 0) / monthlyData.length
         : 0,
-      averageMonthlyExpenses: monthlyData.length > 0 
-        ? monthlyData.reduce((sum, m) => sum + m.expenses, 0) / monthlyData.length 
+      averageMonthlyExpenses: monthlyData.length > 0
+        ? monthlyData.reduce((sum, m) => sum + m.expenses, 0) / monthlyData.length
         : 0,
-      averageMonthlyNet: monthlyData.length > 0 
-        ? monthlyData.reduce((sum, m) => sum + m.net, 0) / monthlyData.length 
+      averageMonthlyNet: monthlyData.length > 0
+        ? monthlyData.reduce((sum, m) => sum + m.net, 0) / monthlyData.length
         : 0,
       positiveMonths,
       negativeMonths,
-      profitabilityRate: monthlyData.length > 0 
-        ? (positiveMonths / monthlyData.length) * 100 
+      profitabilityRate: monthlyData.length > 0
+        ? (positiveMonths / monthlyData.length) * 100
         : 0
     };
   },
@@ -241,10 +228,11 @@ export const CashFlowService = {
    * @param {Array} payments - Payment objects
    * @param {Array} expenses - Expense objects
    * @param {Number} months - Number of months to analyze
+   * @param {Array} [invoices]
    * @returns {Object} Trend analysis
    */
-  analyzeTrends(payments = [], expenses = [], months = 6) {
-    const monthlyData = this.generateMonthlyCashFlow(payments, expenses, months);
+  analyzeTrends(payments = [], expenses = [], months = 6, invoices = []) {
+    const monthlyData = this.generateMonthlyCashFlow(payments, expenses, months, invoices);
 
     if (monthlyData.length < 2) {
       return {
@@ -256,24 +244,24 @@ export const CashFlowService = {
 
     const getTrend = (values) => {
       if (values.length < 2) return 'flat';
-      
+
       const recent = values.slice(-3);
       const older = values.slice(0, -3);
-      
+
       const recentAvg = recent.reduce((a, b) => a + b) / recent.length;
       const olderAvg = older.length > 0 ? older.reduce((a, b) => a + b) / older.length : recentAvg;
-      
+
       const change = ((recentAvg - olderAvg) / (olderAvg || 1)) * 100;
-      
+
       if (change > 10) return 'increasing';
       if (change < -10) return 'decreasing';
       return 'stable';
     };
 
     return {
-      incomeTrend: getTrend(monthlyData.map(m => m.income)),
-      expenseTrend: getTrend(monthlyData.map(m => m.expenses)),
-      netTrend: getTrend(monthlyData.map(m => m.net)),
+      incomeTrend: getTrend(monthlyData.map((m) => m.income)),
+      expenseTrend: getTrend(monthlyData.map((m) => m.expenses)),
+      netTrend: getTrend(monthlyData.map((m) => m.net)),
       monthlyData
     };
   },
@@ -282,17 +270,19 @@ export const CashFlowService = {
    * Calculate operating margin
    * @param {Array} payments - Payment objects
    * @param {Array} expenses - Expense objects
+   * @param {Array} [invoices]
    * @returns {Object} Margin analysis
    */
-  calculateMargins(payments = [], expenses = []) {
+  calculateMargins(payments = [], expenses = [], invoices = []) {
     const now = new Date();
-    const monthlyData = this.generateMonthlyCashFlow(payments, expenses, 12);
+    const monthlyData = this.generateMonthlyCashFlow(payments, expenses, 12, invoices);
 
     const currentMonth = this.calculatePeriodCashFlow(
       payments,
       expenses,
       startOfMonth(now),
-      endOfMonth(now)
+      endOfMonth(now),
+      invoices
     );
 
     const avgMonthly = {
@@ -302,16 +292,16 @@ export const CashFlowService = {
 
     return {
       currentMonth: {
-        marginPercentage: currentMonth.income > 0 
-          ? ((currentMonth.net / currentMonth.income) * 100) 
+        marginPercentage: currentMonth.income > 0
+          ? ((currentMonth.net / currentMonth.income) * 100)
           : 0,
         margin: currentMonth.net,
         income: currentMonth.income,
         expenses: currentMonth.expenses
       },
       average: {
-        marginPercentage: avgMonthly.income > 0 
-          ? (((avgMonthly.income - avgMonthly.expenses) / avgMonthly.income) * 100) 
+        marginPercentage: avgMonthly.income > 0
+          ? (((avgMonthly.income - avgMonthly.expenses) / avgMonthly.income) * 100)
           : 0,
         margin: avgMonthly.income - avgMonthly.expenses,
         income: avgMonthly.income,
@@ -325,17 +315,17 @@ export const CashFlowService = {
    * @param {Array} payments - Payment objects
    * @param {Array} expenses - Expense objects
    * @param {Number} forecastMonths - Months to forecast
+   * @param {Array} [invoices]
    * @returns {Array} Forecasted cash flow
    */
-  generateForecast(payments = [], expenses = [], forecastMonths = 3) {
-    const monthlyData = this.generateMonthlyCashFlow(payments, expenses, 6);
+  generateForecast(payments = [], expenses = [], forecastMonths = 3, invoices = []) {
+    const monthlyData = this.generateMonthlyCashFlow(payments, expenses, 6, invoices);
     const forecast = [];
 
     if (monthlyData.length === 0) {
       return forecast;
     }
 
-    // Calculate average from last 3 months
     const recentMonths = monthlyData.slice(-3);
     const avgIncome = recentMonths.reduce((sum, m) => sum + m.income, 0) / recentMonths.length;
     const avgExpenses = recentMonths.reduce((sum, m) => sum + m.expenses, 0) / recentMonths.length;
@@ -365,10 +355,9 @@ export const CashFlowService = {
     const issues = [];
     const warnings = [];
 
-    // Check payments
     payments.forEach((payment, idx) => {
-      if (!payment.payment_date) {
-        issues.push(`Payment ${idx + 1}: Missing payment date`);
+      if (!paymentOccurredAt(payment)) {
+        warnings.push(`Payment ${idx + 1}: Missing payment date`);
       }
       if (!payment.amount || payment.amount <= 0) {
         issues.push(`Payment ${idx + 1}: Invalid amount`);
@@ -378,10 +367,9 @@ export const CashFlowService = {
       }
     });
 
-    // Check expenses
     expenses.forEach((expense, idx) => {
-      if (!expense.date) {
-        issues.push(`Expense ${idx + 1}: Missing date`);
+      if (!expenseOccurredAt(expense)) {
+        warnings.push(`Expense ${idx + 1}: Missing date`);
       }
       if (!expense.amount || expense.amount <= 0) {
         issues.push(`Expense ${idx + 1}: Invalid amount`);

@@ -25,39 +25,9 @@ const getPayfastApiBase = () => {
   return url;
 };
 
-const submitPayfastForm = (payfastUrl, fields, fieldOrder) => {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = payfastUrl;
-  form.style.display = "none";
-
-  const src = fields || {};
-  const orderedKeys = Array.isArray(fieldOrder) && fieldOrder.length
-    ? fieldOrder.filter((k) => k !== "signature")
-    : Object.keys(src).filter((k) => k !== "signature");
-
-  orderedKeys.forEach((key) => {
-    if (!Object.prototype.hasOwnProperty.call(src, key)) return;
-    const value = src[key];
-    if (value == null || String(value).trim() === "") return;
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = key;
-    input.value = String(value);
-    form.appendChild(input);
-  });
-
-  if (src.signature) {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = "signature";
-    input.value = String(src.signature);
-    form.appendChild(input);
-  }
-
-  document.body.appendChild(form);
-  form.submit();
-  document.body.removeChild(form);
+const submitPayfastForm = async (payfastUrl, fields, fieldOrder) => {
+  const { submitPayfastCheckoutForm } = await import("@/services/subscriptionCheckoutService");
+  submitPayfastCheckoutForm(payfastUrl, fields, fieldOrder);
 };
 
 const buildReturnUrl = (path) => {
@@ -135,7 +105,7 @@ const PayfastService = {
       throw new Error("Invalid Payfast response: missing signed fields");
     }
 
-    submitPayfastForm(data.payfastUrl, data.fields, data.fieldOrder);
+    await submitPayfastForm(data.payfastUrl, data.fields, data.fieldOrder);
   },
 
   async startSubscription({

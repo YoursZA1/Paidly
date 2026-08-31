@@ -36,7 +36,23 @@ export const PERMISSIONS = Object.freeze({
   VIEW_AUDIT_LOGS: "view_audit_logs",
   MANAGE_DEPARTMENTS: "manage_departments",
   APPROVE_LEAVE: "approve_leave",
+  /** Enter the native till. Not a second login — org membership + this grant. */
+  POS_ACCESS: "pos_access",
+  POS_SELL: "pos_sell",
+  POS_DISCOUNT: "pos_discount",
+  POS_REFUND: "pos_refund",
+  POS_CLOSE_REGISTER: "pos_close_register",
+  POS_VIEW_REPORTS: "pos_view_reports",
 });
+
+export const POS_PERMISSIONS = Object.freeze([
+  PERMISSIONS.POS_ACCESS,
+  PERMISSIONS.POS_SELL,
+  PERMISSIONS.POS_DISCOUNT,
+  PERMISSIONS.POS_REFUND,
+  PERMISSIONS.POS_CLOSE_REGISTER,
+  PERMISSIONS.POS_VIEW_REPORTS,
+]);
 
 /** @type {Record<CompanyRole, readonly string[]>} */
 const ROLE_PERMISSIONS = Object.freeze({
@@ -47,6 +63,8 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.VIEW_OWN_DOCUMENTS,
     PERMISSIONS.VIEW_NOTIFICATIONS,
     PERMISSIONS.VIEW_ANNOUNCEMENTS,
+    PERMISSIONS.POS_ACCESS,
+    PERMISSIONS.POS_SELL,
   ]),
   manager: Object.freeze([
     PERMISSIONS.VIEW_OWN_PROFILE,
@@ -60,6 +78,12 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.VIEW_TEAM_DOCUMENTS,
     PERMISSIONS.VIEW_TEAM_PAYROLL_SUMMARY,
     PERMISSIONS.APPROVE_LEAVE,
+    PERMISSIONS.POS_ACCESS,
+    PERMISSIONS.POS_SELL,
+    PERMISSIONS.POS_DISCOUNT,
+    PERMISSIONS.POS_REFUND,
+    PERMISSIONS.POS_CLOSE_REGISTER,
+    PERMISSIONS.POS_VIEW_REPORTS,
   ]),
   admin: Object.freeze([
     PERMISSIONS.VIEW_OWN_PROFILE,
@@ -81,6 +105,12 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.VIEW_AUDIT_LOGS,
     PERMISSIONS.MANAGE_DEPARTMENTS,
     PERMISSIONS.APPROVE_LEAVE,
+    PERMISSIONS.POS_ACCESS,
+    PERMISSIONS.POS_SELL,
+    PERMISSIONS.POS_DISCOUNT,
+    PERMISSIONS.POS_REFUND,
+    PERMISSIONS.POS_CLOSE_REGISTER,
+    PERMISSIONS.POS_VIEW_REPORTS,
   ]),
 });
 
@@ -123,6 +153,7 @@ export function companyRoleHasPermission(role, permission) {
  *   jobFunction: string,
  *   permissions: Set<string>,
  *   isOrgOwner: boolean,
+ *   businessType?: string | null,
  * }} CompanyAccessContext
  */
 
@@ -144,6 +175,7 @@ const KNOWN_JOB_FUNCTIONS = new Set([
   "support",
   "marketing",
   "it",
+  "pos",
 ]);
 
 /** @param {unknown} raw */
@@ -153,10 +185,11 @@ export function normalizeJobFunction(raw) {
     .toLowerCase()
     .replace(/\s+/g, "_");
   if (key === "human_resources") return "hr";
+  if (key === "cashier" || key === "till") return "pos";
   return KNOWN_JOB_FUNCTIONS.has(key) ? key : "general";
 }
 
-export function buildCompanyAccessContext({ userId, companyId, companyRole, membershipRole, jobFunction }) {
+export function buildCompanyAccessContext({ userId, companyId, companyRole, membershipRole, jobFunction, businessType }) {
   const rawMembership = String(membershipRole || "")
     .trim()
     .toLowerCase();
@@ -173,6 +206,7 @@ export function buildCompanyAccessContext({ userId, companyId, companyRole, memb
     jobFunction: normalizeJobFunction(jobFunction),
     permissions: permissionsForCompanyRole(role),
     isOrgOwner,
+    businessType: businessType ?? null,
   };
 }
 

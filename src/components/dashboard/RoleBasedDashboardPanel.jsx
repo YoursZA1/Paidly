@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { getCompanyWorkspaceSections } from "@/lib/companyDashboardNav";
+import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 
 function QuickLink({ to, title, description, icon: Icon }) {
   return (
@@ -43,10 +44,13 @@ function WorkspaceSkeleton() {
  */
 export default function RoleBasedDashboardPanel() {
   const { loading, hasPermission } = useCompanyContext();
+  const showPosNav = useCanShowPosNav();
 
   if (loading) return <WorkspaceSkeleton />;
 
-  const sections = getCompanyWorkspaceSections(hasPermission);
+  const sections = getCompanyWorkspaceSections(hasPermission, {
+    hasFeature: (feature) => (feature === "pos" ? showPosNav : true),
+  });
 
   if (!sections.length) {
     return (

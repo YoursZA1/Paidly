@@ -61,3 +61,16 @@ RLS: org members CRUD only their org’s `companies` rows; platform admins have 
 1. Settings → Brands, or insert rows into `companies` (per org): `id`, `org_id`, `name`, `logo_url`.
 2. When creating or updating an invoice, set `company_id` to the chosen company’s `id` (or leave null to keep using the owner snapshot / profile).
 3. EntityManager invoice insert/update whitelists include `company_id`.
+
+## POS (register + catalog)
+
+A POS register belongs to a brand (`pos_registers.company_id` → `companies.id`). Native checkout stamps `pos_sales_events.company_id` from **the register only**. The header brand switcher does not decide which products the till can sell.
+
+Catalog remains `public.services`. Optional `services.company_id`:
+
+- **Null** — org-shared. Visible on every till in the organization.
+- **Set** — private to that brand. Company A’s POS cannot sell Company B’s private products.
+
+Till catalog and checkout filter: `org_id` match, `item_type = product`, `is_active`, and `(company_id IS NULL OR company_id = register.company_id)`. A register with no brand sees shared products only. Inventory / catalog editors can assign a brand on a product; leave it shared unless the SKU must stay private.
+
+Migration: `supabase/migrations/20260828240000_pos_multibrand_catalog.sql`.

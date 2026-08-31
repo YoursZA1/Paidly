@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { User, BankingDetail } from "@/api/entities";
 import {
   uploadLogo,
@@ -50,7 +50,9 @@ import QuoteReminderSettings from "@/components/reminders/QuoteReminderSettings"
 import ReminderDashboard from "@/components/reminders/ReminderDashboard";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
 import PosIntegrationSettings from "@/components/settings/PosIntegrationSettings";
+import PosRegistersSettings from "@/components/settings/PosRegistersSettings";
 import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
+import InstallPaidlyCard from "@/components/pwa/InstallPaidlyCard";
 import CompanyOverviewPanel from "@/components/dashboard/CompanyOverviewPanel";
 import RoleBasedDashboardPanel from "@/components/dashboard/RoleBasedDashboardPanel";
 import CompanyTeamMembersPanel from "@/components/company/CompanyTeamMembersPanel";
@@ -58,6 +60,9 @@ import OrgBrandsSettings from "@/components/settings/OrgBrandsSettings";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import CurrencyConfiguration from "@/components/currency/CurrencyConfiguration";
+import BusinessTypePicker from "@/components/settings/BusinessTypePicker";
+import { fetchOrganizationProfile, updateOrganizationProfile } from "@/services/OrganizationProfileService";
+import { normalizeBusinessType } from "@shared/businessType.js";
 import { bankingDetailsToCsv, parseBankingCsv, csvRowToBankingDetailPayload } from "@/utils/bankingCsvMapping";
 import { createPageUrl } from "@/utils";
 import { writeInvoiceDraft } from "@/utils/invoiceDraftStorage";
@@ -129,23 +134,27 @@ function businessFieldsFromProfile(b) {
     };
 }
 
-function compactBusinessForProfile(fd) {
+function compactBusinessForProfile(fd, existing) {
+    const prev = existing && typeof existing === "object" ? { ...existing } : {};
     const o = {
         bank_name: (fd.business_bank_name || "").trim(),
         account_name: (fd.business_account_name || "").trim(),
         account_number: (fd.business_account_number || "").trim(),
         branch_code: (fd.business_branch_code || "").trim(),
     };
-    const out = {};
-    if (o.bank_name) out.bank_name = o.bank_name;
-    if (o.account_name) out.account_name = o.account_name;
-    if (o.account_number) out.account_number = o.account_number;
-    if (o.branch_code) out.branch_code = o.branch_code;
-    return Object.keys(out).length ? out : null;
+    for (const [key, val] of Object.entries(o)) {
+        if (val) prev[key] = val;
+        else delete prev[key];
+    }
+    const type = normalizeBusinessType(fd.business_type);
+    if (type) prev.business_type = type;
+    else delete prev.business_type;
+    return Object.keys(prev).length ? prev : null;
 }
 
 function CompanyProfileSettings() {
     const { user: authUser, refreshUser } = useAuth();
+    const { companyId, refresh: refreshCompanyContext } = useCompanyContext();
     const { toast } = useToast();
 
     // Use Auth session metadata as initial state so Name/Email aren't empty on load
@@ -168,6 +177,7 @@ function CompanyProfileSettings() {
         business_account_name: "",
         business_account_number: "",
         business_branch_code: "",
+        business_type: "",
     }));
     const [logoFile, setLogoFile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -258,6 +268,19 @@ function CompanyProfileSettings() {
                         business_branch_code: b.branch_code,
                     }));
                 }
+                if (companyId) {
+                    try {
+                        const org = await fetchOrganizationProfile(companyId);
+                        if (!cancelled && org) {
+                            setFormData((prev) => ({
+                                ...prev,
+                                business_type: normalizeBusinessType(org.business_type) || prev.business_type || "",
+                            }));
+                        }
+                    } catch {
+                        /* column missing until migration is applied */
+                    }
+                }
                 // Upsert if profile empty but we have auth data
                 const { data: { user: su } } = await supabase.auth.getUser();
                 const profileEmpty = !data || (!data.full_name && !data.email);
@@ -279,7 +302,7 @@ function CompanyProfileSettings() {
             }
         })();
         return () => { cancelled = true; };
-    }, [authUser?.id]);
+    }, [authUser?.id, companyId]);
 
     // Cleanup blob URLs on unmount to prevent memory leaks
     useEffect(() => {
@@ -392,9 +415,17 @@ function CompanyProfileSettings() {
                   updatedData.document_brand_secondary?.trim?.() === ""
                     ? null
                     : parseDocumentBrandHex(updatedData.document_brand_secondary) ?? null,
-                business: compactBusinessForProfile(updatedData),
+                business: compactBusinessForProfile(updatedData, authUser?.business),
             };
             await User.updateMyUserData(payload);
+            if (companyId) {
+                const type = normalizeBusinessType(updatedData.business_type);
+                await updateOrganizationProfile(companyId, {
+                    name: (updatedData.company_name || "").trim() || undefined,
+                    ...(type ? { business_type: type } : {}),
+                }).catch(() => {});
+                await refreshCompanyContext?.({ invalidateCache: true }).catch(() => {});
+            }
             // Defense in depth: always upsert current profile row so settings are replaced even when
             // local auth state/SDK write helpers are stale.
             if (authUser?.id) {
@@ -623,6 +654,18 @@ function CompanyProfileSettings() {
                         {!formData.company_name && (
                             <p className="text-xs text-amber-600 dark:text-amber-500">Required for professional invoices.</p>
                         )}
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                        <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                            Business type
+                            <HelpTooltip content="Service businesses use invoices only. Retail and mixed add an optional POS till. You can change this later." />
+                        </Label>
+                        <p className="text-xs text-muted-foreground">POS is optional — not every Paidly account needs a till.</p>
+                        <BusinessTypePicker
+                            value={formData.business_type || ""}
+                            onChange={(business_type) => handleInputChange("business_type", business_type)}
+                            disabled={isSaving}
+                        />
                     </div>
                     <div className="md:col-span-2 space-y-1.5">
                         <Label htmlFor="company_address" className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -1688,8 +1731,41 @@ function PersonalAccountSettings() {
             <SettingsCard title="Security" description="Protect your account with two-factor authentication.">
                 <TwoFactorSettings />
             </SettingsCard>
+            <InstallPaidlyCard />
             <ResetAppSection />
             <DeleteAccountSection />
+        </div>
+    );
+}
+
+function PosIntegrationsTab() {
+    const { posEnabled } = useCompanyContext();
+    if (!posEnabled) {
+        return (
+            <SettingsCard
+                title="POS"
+                description="The till is optional. Service businesses stay on invoices, quotes, and clients."
+            >
+                <p className="text-sm text-muted-foreground mb-4">
+                    Choose Retail or Mixed under Company Profile if you sell in person. You can turn POS off later by switching back to Service.
+                </p>
+                <Button asChild>
+                    <Link to={`${createPageUrl("Settings")}?tab=profile`}>Choose business type</Link>
+                </Button>
+            </SettingsCard>
+        );
+    }
+    return (
+        <div className="space-y-8">
+            <SettingsCard
+                title="POS registers"
+                description="Each register is a till on a brand. Opening balance is the cash float — not a sale and not an invoice."
+            >
+                <PosRegistersSettings />
+            </SettingsCard>
+            <SettingsCard title="POS integrations" description="Use Paidly POS in the app, or connect Yoco/Square so external tills write the same sales and inventory.">
+                <PosIntegrationSettings />
+            </SettingsCard>
         </div>
     );
 }
@@ -1748,11 +1824,7 @@ function SettingsTabPanels({ activeTab }) {
                 </SettingsCard>
             );
         case "integrations":
-            return (
-                <SettingsCard title="POS integrations" description="Connect your point of sale to sync sales and update inventory automatically.">
-                    <PosIntegrationSettings />
-                </SettingsCard>
-            );
+            return <PosIntegrationsTab />;
         case "reminders":
             return (
                 <SettingsCard title="Reminders" description="Set up payment reminders and follow-up notifications.">

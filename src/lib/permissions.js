@@ -8,11 +8,11 @@ export const ROLES = {
 
 const ROLE_PERMISSIONS = {
   admin: {
-    pages: ['/', '/users', '/messages', '/subscriptions', '/affiliates', '/waitlist', '/settings', '/audit-log'],
+    pages: ['/', '/users', '/messages', '/subscriptions', '/waitlist', '/settings', '/audit-log'],
     canManageTeam: true,
   },
   management: {
-    pages: ['/', '/users', '/messages', '/subscriptions', '/affiliates', '/waitlist', '/settings', '/audit-log'],
+    pages: ['/', '/users', '/messages', '/subscriptions', '/waitlist', '/settings', '/audit-log'],
     canManageTeam: true,
   },
   sales: {
@@ -20,7 +20,7 @@ const ROLE_PERMISSIONS = {
     canManageTeam: false,
   },
   support: {
-    pages: ['/', '/users', '/messages', '/affiliates', '/waitlist'],
+    pages: ['/', '/users', '/messages', '/waitlist'],
     canManageTeam: false,
   },
   user: {
@@ -49,7 +49,7 @@ export const ROLE_DESCRIPTIONS = {
   admin: 'Full access + team management',
   management: 'Full access + team management',
   sales: 'Users, subscriptions, waitlist',
-  support: 'Users, affiliates, waitlist',
+  support: 'Users, waitlist',
   user: 'No dashboard access',
 };
 

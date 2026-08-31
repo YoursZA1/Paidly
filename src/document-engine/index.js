@@ -27,6 +27,7 @@ export {
     DOCUMENT_CATEGORIES,
     DOCUMENT_TYPE_DEFS,
     DOCUMENT_TYPE_KEYS,
+    HUB_DOCUMENT_TYPE_DEFS,
     STATUS_FLOWS,
     isCatalogType,
     getTypeDef,
@@ -34,13 +35,31 @@ export {
     typeLabel,
     categoryForType,
     isFinancialType,
+    isHubPersistedType,
     typesByCategory,
+    hubTypesByCategory,
     defaultStatusForCatalogType,
     allowedStatusesForType,
 } from "./documentCatalog";
 export {
+    GENERIC_DOCUMENT_TABLE,
+    COMMERCIAL_DOCUMENT_TABLES,
+    COMMERCIAL_DOCUMENT_TYPES,
+    DOCUMENTS_HUB_EXCLUDED_TYPES,
+    isCommercialDocumentType,
+    isDocumentsHubExcludedType,
+    tableForDocumentType,
+    assertHubWritableType,
+    hubWriteForbiddenMessage,
+    leftoverHubCommercialMessage,
+    postgrestExcludeCommercialHubTypes,
+} from "./documentSystemOfRecord";
+export {
     DOCUMENT_CONVERSIONS,
     getConversionOptions,
+    isCommercialConversion,
+    specialisedComposeUrl,
+    hubDocumentToComposePrefill,
     usesLegacyQuoteToInvoice,
 } from "./documentConversions";
 export {
@@ -50,6 +69,7 @@ export {
     getDedicatedCreatePath,
     usesDedicatedCreatePage,
     dedicatedCreateTitle,
+    specialisedListPath,
 } from "./documentCreateFlow";
 export {
     documentsReturnPath,

@@ -1,6 +1,7 @@
 import { createPageUrl } from "@/utils";
 import { getTypeDef } from "./documentCatalog";
 import { DocumentService } from "@/services/DocumentService";
+import { assertHubWritableType } from "./documentSystemOfRecord";
 
 /** Resolve back link from router location state (set when opening create from Documents hub). */
 export function documentsReturnPath(location, fallback = createPageUrl("Documents")) {
@@ -19,6 +20,7 @@ export function isApprovalFlowType(typeKey) {
  * @param {{ submitForApproval?: boolean }} [options]
  */
 export async function persistNewHubDocument(payload, { submitForApproval = false } = {}) {
+  assertHubWritableType(payload?.type);
   const doc = await DocumentService.create(payload);
   if (!doc?.id || !submitForApproval) return doc;
   await DocumentService.update(doc.id, { status: "pending" });

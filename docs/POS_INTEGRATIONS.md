@@ -2,7 +2,15 @@
 
 Paidly ingests completed POS sales via **`/api/pos/*`** (Vercel serverless + optional Express). Sales land in `pos_sales_events`; inventory decrements when line items match catalog **SKU** or **barcode**.
 
-**Product surface:** Settings → **Integrations** · Dashboard **POS sales today** card.
+**Native till:** sidebar **POS** (`/POS`) is a Paidly checkout surface on the same catalog, customers, and sales table. It is not a separate database. Apply `supabase/migrations/20260828160000_native_pos_checkout.sql` so `provider = paidly` connections and receipt/return columns exist.
+
+**Native till tenders (not a fake card machine):** Pay is **Cash | Card | Digital Payment**. Cash is counted on the till (trusted cashier workflow). Card (`card_terminal`) never becomes `paid` from a cashier click — there is no physical Paidly terminal SDK and no click-to-paid permission. Digital Payment (`ozow`) completes only after Ozow confirms. Yoco/Square **webhook** sales are a different path: the external reader already confirmed the payment before Paidly records `pos_sales_events`. Do not POST `manual_complete`, `force_paid`, or `mark_paid` to `/api/pos/checkout`.
+
+**Native till inventory:** adding to cart, opening Pay, or creating a `payment_intents` row does **not** decrement `services.stock_quantity`. After verified cash/digital/card settlement, checkout writes `pos_sales_events` then calls `adjust_inventory_stock` (`source = pos`, `reference_id` = the sale event). Returns restock only when that original sale already applied inventory.
+
+**Native till receipts:** A completed sale opens a receipt (brand, sale number, time, staff, lines, discount, tax, total, tender, change). Print, download PDF, or email (`POST /api/pos/receipt/email`). This is not an invoice and does not use `/api/send-invoice`.
+
+**Product surface:** **POS** (till) · Settings → **Integrations** (Yoco/Square/generic) · Dashboard **POS sales today** card.
 
 ---
 
@@ -33,7 +41,9 @@ Apply in Supabase **SQL Editor** (paste and run **`scripts/apply-pos-integration
 
 1. `supabase/migrations/20260709180000_pos_integrations.sql` — `pos_connections`, `pos_sales_events` (members SELECT; company admins/owners write via `is_company_admin_for_org`)
 2. `supabase/migrations/20260709183000_pos_oauth_states.sql` — OAuth CSRF state (service_role only)
-3. `supabase/migrations/20260714150000_pos_connections_admin_write_rls.sql` — tighten write RLS on already-deployed DBs
+4. `supabase/migrations/20260828160000_native_pos_checkout.sql` — native till (`provider = paidly`), receipt numbers, returns
+5. `supabase/migrations/20260828180000_payment_intents.sql` — customer payment intents (cash / ozow)
+6. `supabase/migrations/20260828190000_payment_intents_card_terminal.sql` — allow `card_terminal` on POS intents (not click-to-paid)
 
 ---
 
@@ -46,7 +56,11 @@ Apply in Supabase **SQL Editor** (paste and run **`scripts/apply-pos-integration
 | `POST /api/pos/oauth/yoco/connect` | Bearer session | Validates API key, registers Yoco webhook |
 | `GET /api/pos/oauth/status` | Bearer session | Whether Square OAuth is configured |
 | `GET/POST/PATCH/DELETE /api/pos/connections` | Bearer + company admin (`MANAGE_COMPANY_SETTINGS`) | Manage connections; RLS matches admin write |
-| `GET /api/pos/sales` | Bearer session | Dashboard read model |
+| `GET /api/pos/sales` | Bearer session | Dashboard + till today read model |
+| `GET /api/pos/catalog` | Bearer session | Active physical products for the till |
+| `POST /api/pos/checkout` | Bearer + inventory plan | Native sale; stock out |
+| `POST /api/pos/return` | Bearer + inventory plan | Native return; stock in |
+| `POST /api/pos/receipt/email` | Bearer + inventory plan | Email till receipt (not an invoice) |
 | `POST /api/pos/webhook/:token` | Webhook secret / provider signature | Per-connection ingress (generic, Yoco) |
 | `POST /api/pos/webhook/provider/square` | Square HMAC | App-level Square events (routed by `merchant_id`) |
 

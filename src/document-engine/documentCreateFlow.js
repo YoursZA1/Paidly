@@ -2,17 +2,20 @@
  * Document creation routing — maps catalog types to the right compose experience.
  *
  * The Documents hub "New Document" menu is data-driven; each type resolves to either:
- * - invoice/quote compose (`CreateDocument/:type`)
- * - a bespoke page (payslip, leave request, expense claim)
- * - a typed form profile (`CreateTypedDocument/:type`) for all other catalog types
+ * - invoice/quote compose (`CreateDocument/:type`) — specialised `invoices` / `quotes` tables
+ * - a bespoke page (payslip → `payslips`; leave request / expense claim → hub `documents`)
+ * - a typed form profile (`CreateTypedDocument/:type`) for other hub catalog types
  * - an inline hub draft (fallback when no profile exists)
  *
- * To add a bespoke page: register in `DEDICATED_CREATE_PAGES` + build the page.
+ * Invoice, quote, and payslip never persist through DocumentService / `public.documents`.
+ *
+ * To add a bespoke hub page: register in `DEDICATED_CREATE_PAGES` + build the page.
  * To customize fields for a catalog type: extend `documentFormProfiles.js` (no menu changes).
  */
 import { createPageUrl } from "@/utils";
 import { getTypeDef } from "./documentCatalog";
 import { hasDocumentFormProfile } from "./documentFormProfiles";
+import { normalizeCommercialDocumentType } from "./documentSystemOfRecord";
 
 /** @typedef {"compose"|"dedicated"|"typed"|"hub"} DocumentCreateFlowMode */
 
@@ -81,4 +84,16 @@ export function dedicatedCreateTitle(typeKey) {
   if (def?.label) return `New ${def.label}`;
   if (resolveDocumentCreateFlow(key) === DOCUMENT_CREATE_FLOW.compose) return "New Document";
   return "New Document";
+}
+
+/**
+ * List page for a specialised commercial type (not the Documents Hub).
+ * @param {unknown} typeKey
+ */
+export function specialisedListPath(typeKey) {
+  const commercial = normalizeCommercialDocumentType(typeKey);
+  if (commercial === "invoice" || commercial === "recurring_invoice") return createPageUrl("Invoices");
+  if (commercial === "quote") return createPageUrl("Quotes");
+  if (commercial === "payslip") return createPageUrl("Payslips");
+  return createPageUrl("Documents");
 }

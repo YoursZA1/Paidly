@@ -16,8 +16,6 @@ export const AUDIT_ACTIONS = {
   SETTINGS_UPDATED: 'settings_updated',
   SUBSCRIPTION_STATUS_CHANGED: 'subscription_status_changed',
   USER_STATUS_CHANGED: 'user_status_changed',
-  AFFILIATE_APPROVED: 'affiliate_approved',
-  AFFILIATE_DECLINED: 'affiliate_declined',
 };
 
 /**

@@ -33,6 +33,7 @@ const FEATURE_ALIASES = {
   advancedSecurity: 'sso',
   prioritySupport: 'support_priority',
   inventory: 'inventory',
+  pos: 'pos',
   expenses: 'expenses',
   purchase_orders: 'purchase_orders',
   payslips: 'payslips',
@@ -40,7 +41,6 @@ const FEATURE_ALIASES = {
   email_templates: 'email_templates',
   recurring_invoices: 'recurring_invoices',
   multi_company: 'multi_company',
-  affiliate_program: 'affiliate_program',
   white_label: 'white_label',
   integrations: 'integrations',
   api_access: 'api_access',
@@ -51,6 +51,7 @@ export const FEATURE_TIERS = {
   quotes: ['Starter', 'Business', 'Growth'],
   clients: ['Starter', 'Business', 'Growth'],
   inventory: ['Business', 'Growth'],
+  pos: ['Business', 'Growth'],
   recurring: ['Business', 'Growth'],
   payroll: ['Business', 'Growth'],
   advancedReports: ['Growth'],
@@ -73,6 +74,7 @@ export const getRequiredPlan = (feature) => {
   if (
     [
       'inventory',
+      'pos',
       'expenses',
       'purchase_orders',
       'payslips',

@@ -14,15 +14,16 @@ import PropTypes from "prop-types";
 const PAYFAST_PROCESS_URL = "https://www.payfast.co.za/eng/process";
 const PAYFAST_SANDBOX_URL = "https://sandbox.payfast.co.za/eng/process";
 
-const PAYFAST_SUBSCRIBE_IMG =
-  "https://my.payfast.io/images/buttons/Subscribe/Light-Large-Subscribe.png";
-
 const PHASE = Object.freeze({
   idle: "idle",
   starting: "starting",
   redirecting: "redirecting",
   error: "error",
 });
+
+/** Last-resort UI recovery if PayFast never unloads this page. Do not use a short timeout:
+ *  the SPA stays mounted until PayFast answers the POST (often >8s on mobile). */
+const HANDOFF_STILL_HERE_MS = 60_000;
 
 /**
  * @deprecated Prefer `getSubscriptionCheckoutUrls` from subscriptionCheckoutService.
@@ -32,11 +33,18 @@ export function getPayfastSubscriptionCheckoutUrls() {
   return getSubscriptionCheckoutUrls();
 }
 
+function buttonLabel(phase, ctaLabel) {
+  if (phase === PHASE.starting) return "Starting checkout...";
+  if (phase === PHASE.redirecting) return "Redirecting to PayFast...";
+  if (phase === PHASE.error) return "Try again";
+  return ctaLabel;
+}
+
 /**
  * PayFast subscription UI (billing v2):
- * 1. Continue → POST /api/subscriptions/create (planSlug only — amount from DB).
- * 2. Receive PayFast URL + signed fields.
- * 3. Form POST to PayFast (does not wait for ITN).
+ * 1. Subscribe → POST /api/subscriptions/create (planSlug only — amount from DB).
+ * 2. Receive PayFast URL + signed fields (same payload on every device).
+ * 3. Same-window form POST to PayFast (no popup, no iframe).
  *
  * Never sets subscription.status = "active" on the client.
  */
@@ -45,8 +53,8 @@ export default function PayFastSubscriptionForm({
   planName = "Individual",
   displayPriceZar = null,
   itemDescription: _itemDescription = "",
-  ctaLabel = "Continue",
-  submitVariant = "button",
+  ctaLabel = "Subscribe",
+  submitVariant: _submitVariant = "button",
   processUrl: _processUrl,
   className = "",
   /** @deprecated Ignored — server loads amount from plans catalog. */
@@ -69,11 +77,12 @@ export default function PayFastSubscriptionForm({
     if (phase !== PHASE.redirecting) return undefined;
     const t = setTimeout(() => {
       if (!mountedRef.current) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       releaseSubscriptionCheckoutGuard();
       setPhase(PHASE.error);
-      setError("We couldn't open the payment page. Please try again.");
+      setError("We couldn't open the PayFast payment page. Please try again.");
       setErrorCode("PAYFAST_REDIRECT_FAILED");
-    }, 8000);
+    }, HANDOFF_STILL_HERE_MS);
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -84,9 +93,10 @@ export default function PayFastSubscriptionForm({
       : null;
 
   const busy = phase === PHASE.starting || phase === PHASE.redirecting;
+  const isHandoffError = errorCode === "PAYFAST_REDIRECT_FAILED";
+  const isAuthError = errorCode === "AUTH_REQUIRED";
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleStart = async () => {
     if (busy || isSubscriptionCheckoutInFlight()) return;
 
     setError(null);
@@ -94,7 +104,7 @@ export default function PayFastSubscriptionForm({
 
     if (!authUser?.email || !authUser?.id) {
       setPhase(PHASE.error);
-      setError("Please sign in to subscribe.");
+      setError("Your session has expired. Please sign in again.");
       setErrorCode("AUTH_REQUIRED");
       return;
     }
@@ -108,80 +118,64 @@ export default function PayFastSubscriptionForm({
     setPhase(PHASE.starting);
     try {
       await createSubscriptionAndRedirect({ planSlug: slug });
-      if (mountedRef.current) setPhase(PHASE.redirecting);
+      if (!mountedRef.current) return;
+      // Form POST does not unload this page until PayFast responds. Stay on redirecting.
+      setPhase(PHASE.redirecting);
     } catch (err) {
       if (!mountedRef.current) return;
       setPhase(PHASE.error);
-      setError(err?.message || "Unable to start subscription. Please try again.");
-      setErrorCode(err?.code || "CHECKOUT_FAILED");
+      const code = err?.code || "CHECKOUT_FAILED";
+      setErrorCode(code);
+      if (code === "PAYFAST_REDIRECT_FAILED") {
+        setError("We couldn't open the PayFast payment page. Please try again.");
+      } else if (code === "AUTH_REQUIRED") {
+        setError("Your session has expired. Please sign in again.");
+      } else {
+        setError(err?.message || "Unable to start subscription. Please try again.");
+      }
     }
   };
 
-  const handleRetry = () => {
-    setError(null);
-    setErrorCode(null);
-    setPhase(PHASE.idle);
-  };
-
   return (
-    <form action="#" method="post" onSubmit={handleSubmit} className={className}>
+    <div className={className}>
       {phase === PHASE.error && error ? (
-        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900/50 dark:bg-red-950/40" role="alert">
-          <p className="font-semibold text-red-800 dark:text-red-300">Unable to start subscription</p>
+        <div
+          className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900/50 dark:bg-red-950/40"
+          role="alert"
+        >
+          <p className="font-semibold text-red-800 dark:text-red-300">
+            {isHandoffError
+              ? "We couldn't open the PayFast payment page"
+              : isAuthError
+                ? "Your session has expired"
+                : "Unable to start subscription"}
+          </p>
           <p className="mt-1 text-red-700 dark:text-red-400">{error}</p>
           {import.meta.env.DEV && errorCode ? (
             <p className="mt-1 font-mono text-[11px] text-red-500/80">{errorCode}</p>
           ) : null}
-          <button
-            type="button"
-            onClick={handleRetry}
-            className="mt-2 text-sm font-semibold text-red-800 underline-offset-2 hover:underline dark:text-red-200"
-          >
-            Try again
-          </button>
         </div>
       ) : null}
 
-      {submitVariant === "image" ? (
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full flex justify-center disabled:opacity-70 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#f24e00] focus:ring-offset-2 rounded-2xl"
-        >
-          {busy ? (
-            <span className="inline-flex items-center gap-2 py-4 text-sm font-semibold text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" aria-hidden />
-              Starting subscription...
-            </span>
-          ) : (
-            <img
-              src={PAYFAST_SUBSCRIBE_IMG}
-              alt="Subscribe with Payfast"
-              title="Subscribe with Payfast"
-              className="h-auto max-w-full mx-auto"
-            />
-          )}
-        </button>
-      ) : (
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] text-white font-bold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#f24e00] focus:ring-offset-2"
-        >
-          {busy ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" aria-hidden />
-              Starting subscription...
-            </>
-          ) : (
-            <>
-              {ctaLabel}
-              {priceLabel ? ` (R${priceLabel}/mo)` : ""}
-            </>
-          )}
-        </button>
-      )}
-    </form>
+      <button
+        type="button"
+        onClick={handleStart}
+        disabled={busy}
+        className="w-full bg-gradient-to-r from-[#f24e00] to-[#ff7c00] hover:from-[#e04500] hover:to-[#e66d00] text-white font-bold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#f24e00] focus:ring-offset-2 min-h-[48px]"
+      >
+        {busy ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" aria-hidden />
+            {buttonLabel(phase, ctaLabel)}
+          </>
+        ) : (
+          <>
+            {buttonLabel(phase, ctaLabel)}
+            {phase === PHASE.idle && priceLabel ? ` (R${priceLabel}/mo)` : ""}
+          </>
+        )}
+      </button>
+    </div>
   );
 }
 

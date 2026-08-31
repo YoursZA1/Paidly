@@ -30,7 +30,22 @@ export const PERMISSIONS = Object.freeze({
   VIEW_AUDIT_LOGS: "view_audit_logs",
   MANAGE_DEPARTMENTS: "manage_departments",
   APPROVE_LEAVE: "approve_leave",
+  POS_ACCESS: "pos_access",
+  POS_SELL: "pos_sell",
+  POS_DISCOUNT: "pos_discount",
+  POS_REFUND: "pos_refund",
+  POS_CLOSE_REGISTER: "pos_close_register",
+  POS_VIEW_REPORTS: "pos_view_reports",
 });
+
+export const POS_PERMISSIONS = Object.freeze([
+  PERMISSIONS.POS_ACCESS,
+  PERMISSIONS.POS_SELL,
+  PERMISSIONS.POS_DISCOUNT,
+  PERMISSIONS.POS_REFUND,
+  PERMISSIONS.POS_CLOSE_REGISTER,
+  PERMISSIONS.POS_VIEW_REPORTS,
+]);
 
 /** @type {Record<string, readonly string[]>} */
 const ROLE_PERMISSIONS = Object.freeze({
@@ -41,6 +56,8 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.VIEW_OWN_DOCUMENTS,
     PERMISSIONS.VIEW_NOTIFICATIONS,
     PERMISSIONS.VIEW_ANNOUNCEMENTS,
+    PERMISSIONS.POS_ACCESS,
+    PERMISSIONS.POS_SELL,
   ]),
   manager: Object.freeze([
     PERMISSIONS.VIEW_OWN_PROFILE,
@@ -54,6 +71,12 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.VIEW_TEAM_DOCUMENTS,
     PERMISSIONS.VIEW_TEAM_PAYROLL_SUMMARY,
     PERMISSIONS.APPROVE_LEAVE,
+    PERMISSIONS.POS_ACCESS,
+    PERMISSIONS.POS_SELL,
+    PERMISSIONS.POS_DISCOUNT,
+    PERMISSIONS.POS_REFUND,
+    PERMISSIONS.POS_CLOSE_REGISTER,
+    PERMISSIONS.POS_VIEW_REPORTS,
   ]),
   admin: Object.freeze([
     PERMISSIONS.VIEW_OWN_PROFILE,
@@ -75,6 +98,12 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.VIEW_AUDIT_LOGS,
     PERMISSIONS.MANAGE_DEPARTMENTS,
     PERMISSIONS.APPROVE_LEAVE,
+    PERMISSIONS.POS_ACCESS,
+    PERMISSIONS.POS_SELL,
+    PERMISSIONS.POS_DISCOUNT,
+    PERMISSIONS.POS_REFUND,
+    PERMISSIONS.POS_CLOSE_REGISTER,
+    PERMISSIONS.POS_VIEW_REPORTS,
   ]),
 });
 
@@ -94,6 +123,7 @@ const KNOWN_JOB_FUNCTIONS = new Set([
   "support",
   "marketing",
   "it",
+  "pos",
 ]);
 
 export function normalizeJobFunction(raw) {
@@ -102,6 +132,7 @@ export function normalizeJobFunction(raw) {
     .toLowerCase()
     .replace(/\s+/g, "_");
   if (key === "human_resources") return "hr";
+  if (key === "cashier" || key === "till") return "pos";
   return KNOWN_JOB_FUNCTIONS.has(key) ? key : "general";
 }
 
@@ -109,6 +140,15 @@ export function companyRoleHasPermission(role, permission) {
   const normalized = normalizeCompanyRole(role);
   const set = new Set(ROLE_PERMISSIONS[normalized] || []);
   return set.has(permission);
+}
+
+/**
+ * @returns {boolean} true when the response was already sent (forbidden)
+ */
+export function forbidUnlessPermission(res, membership, permission, message = "Forbidden — POS permission required") {
+  if (companyRoleHasPermission(membership?.companyRole, permission)) return false;
+  res.status(403).json({ error: message, code: "POS_FORBIDDEN", permission });
+  return true;
 }
 
 /**

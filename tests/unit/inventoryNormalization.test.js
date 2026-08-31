@@ -24,5 +24,17 @@ describe("normalizeInventoryProductRow", () => {
       cost: 24,
       price: 35,
     });
+    expect(row.company_id).toBeNull();
+  });
+
+  it("keeps brand ownership for POS scoping", () => {
+    const row = normalizeInventoryProductRow({
+      id: "p2",
+      name: "Private tea",
+      company_id: "brand-a",
+      stock_quantity: 3,
+      price: 12,
+    });
+    expect(row.company_id).toBe("brand-a");
   });
 });

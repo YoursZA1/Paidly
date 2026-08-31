@@ -92,8 +92,7 @@ export default function UpgradeModal({ open, onOpenChange, featureKey, title, de
                     planSlug={slug}
                     planName={plan.name}
                     displayPriceZar={plan.price}
-                    ctaLabel="Continue"
-                    submitVariant="button"
+                    ctaLabel="Subscribe"
                     className="w-full"
                   />
                 </div>

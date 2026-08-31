@@ -27,7 +27,6 @@ const FALLBACK_FEATURES = {
     "Departments & approvals",
     "Advanced reports & API",
     "Integrations & multi-company",
-    "Affiliate system",
   ],
   enterprise: [
     "Everything in Growth",

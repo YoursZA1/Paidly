@@ -8,11 +8,14 @@ import {
 } from "../companyRouteAccess.js";
 import { postgrestErrorToApiBody } from "../postgrestErrorToApiBody.js";
 import { getWebhookPublicUrl } from "./posWebhookAuth.js";
+import { attachRefundStateToSales } from "./posReturnMath.js";
 import { decryptPosSecret } from "./posSecretCrypto.js";
+import { requirePosCapability, orgHasPosCapability } from "./posBusinessType.js";
+import { requirePosPlan } from "./posEntitlement.js";
 import { deleteYocoWebhook } from "./yocoConnect.js";
 
-function jsonError(res, status, message) {
-  return res.status(status).json({ error: message });
+function jsonError(res, status, message, extra = {}) {
+  return res.status(status).json({ error: message, ...extra });
 }
 
 function dbErrorResponse(res, status, err, fallback) {
@@ -65,7 +68,7 @@ function sanitizeConnection(row) {
   };
 }
 
-async function requireSettingsManager(req, res) {
+export async function requireSettingsManager(req, res) {
   const { user, error: authErr } = await getUserFromRequest(req);
   if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
 
@@ -76,6 +79,12 @@ async function requireSettingsManager(req, res) {
     }
     if (!companyRoleHasPermission(membership.companyRole, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
       return { ok: false, response: jsonError(res, 403, "Forbidden — company settings permission required") };
+    }
+    if (!(await requirePosPlan(req, res))) {
+      return { ok: false, response: res };
+    }
+    if (!(await requirePosCapability(res, membership.orgId))) {
+      return { ok: false, response: res };
     }
 
     return { ok: true, user, membership };
@@ -101,13 +110,14 @@ async function deletePosConnectionRows(orgId, connectionId) {
     return { ok: false, error: rpcError };
   }
 
-  const { error: salesDeleteError } = await supabaseAdmin
+  const { error: salesUnlinkError } = await supabaseAdmin
     .from("pos_sales_events")
-    .delete()
-    .eq("connection_id", connectionId);
+    .update({ connection_id: null })
+    .eq("connection_id", connectionId)
+    .eq("org_id", orgId);
 
-  if (salesDeleteError && !isMissingPosSchemaError(salesDeleteError.message)) {
-    return { ok: false, error: salesDeleteError };
+  if (salesUnlinkError && !isMissingPosSchemaError(salesUnlinkError.message)) {
+    return { ok: false, error: salesUnlinkError };
   }
 
   const { data: deletedRows, error: deleteError } = await supabaseAdmin
@@ -134,7 +144,9 @@ export async function handlePosConnectionsList(req, res) {
   if (error) return jsonError(res, 500, mapPosDbError(error.message) || "Could not load POS connections");
 
   return res.status(200).json({
-    connections: (data || []).map(sanitizeConnection),
+    connections: (data || [])
+      .filter((row) => row.provider !== "paidly")
+      .map(sanitizeConnection),
   });
 }
 
@@ -241,6 +253,9 @@ export async function handlePosConnectionDelete(req, res) {
       return jsonError(res, 500, mapPosDbError(loadError.message) || "Could not load connection");
     }
     if (!existing) return jsonError(res, 404, "Connection not found");
+    if (existing.provider === "paidly") {
+      return jsonError(res, 400, "The native Paidly POS connection cannot be removed");
+    }
 
     if (existing.provider === "yoco" && existing.config?.yoco_webhook_subscription_id) {
       const apiKey = decryptPosSecret(existing.config?.yoco_api_key_enc);
@@ -265,7 +280,7 @@ export async function handlePosConnectionDelete(req, res) {
   }
 }
 
-async function requireOrgMember(req, res) {
+export async function requireOrgMember(req, res) {
   const { user, error: authErr } = await getUserFromRequest(req);
   if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
 
@@ -277,33 +292,98 @@ async function requireOrgMember(req, res) {
   return { ok: true, user, membership };
 }
 
+/**
+ * Org membership plus a company-role POS grant. Same Auth session — not a second login.
+ */
+export async function requirePosPermission(req, res, permission) {
+  const gate = await requireOrgMember(req, res);
+  if (!gate.ok) return gate;
+  if (!companyRoleHasPermission(gate.membership.companyRole, permission)) {
+    return {
+      ok: false,
+      response: jsonError(res, 403, "Forbidden — POS permission required", {
+        code: "POS_FORBIDDEN",
+        permission,
+      }),
+    };
+  }
+  if (!(await requirePosPlan(req, res))) {
+    return { ok: false, response: res };
+  }
+  if (!(await requirePosCapability(res, gate.membership.orgId))) {
+    return { ok: false, response: res };
+  }
+  return gate;
+}
+
+const POS_SALES_SELECT_REFUND =
+  "id, external_id, receipt_number, provider, status, sale_kind, total_amount, currency, payment_method, occurred_at, inventory_applied, items, client_id, company_id, cashier_id, parent_event_id, amount_tendered, change_due, raw_payload, invoice_id, register_id, session_id, refund_status, refunded_amount, refund_rail, original_payment_intent_id, created_at";
+const POS_SALES_SELECT_RICH =
+  "id, external_id, receipt_number, provider, status, sale_kind, total_amount, currency, payment_method, occurred_at, inventory_applied, items, client_id, company_id, cashier_id, parent_event_id, amount_tendered, change_due, raw_payload, invoice_id, register_id, session_id, created_at";
+const POS_SALES_SELECT_WITH_REGISTER =
+  "id, external_id, receipt_number, provider, status, sale_kind, total_amount, currency, payment_method, occurred_at, inventory_applied, items, client_id, company_id, cashier_id, parent_event_id, amount_tendered, change_due, raw_payload, invoice_id, register_id, created_at";
+const POS_SALES_SELECT_LEAN =
+  "id, external_id, provider, total_amount, currency, payment_method, occurred_at, inventory_applied, items, created_at";
+
 export async function handlePosSalesList(req, res) {
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate.response;
 
-  const limit = Math.min(Math.max(Number(req.query?.limit) || 10, 1), 50);
-  const todayOnly = String(req.query?.today || "").trim() === "1";
-
-  let query = supabaseAdmin
-    .from("pos_sales_events")
-    .select("id, external_id, provider, total_amount, currency, payment_method, occurred_at, inventory_applied, items, created_at")
-    .eq("org_id", gate.membership.orgId)
-    .order("occurred_at", { ascending: false })
-    .limit(limit);
-
-  if (todayOnly) {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    query = query.gte("occurred_at", start.toISOString());
+  const posOn = await orgHasPosCapability(gate.membership.orgId);
+  if (!posOn) {
+    return res.status(200).json({ sales: [], total_today: 0 });
   }
 
-  const { data, error } = await query;
+  const todayOnly = String(req.query?.today || "").trim() === "1";
+  const canToday = companyRoleHasPermission(gate.membership.companyRole, PERMISSIONS.POS_ACCESS);
+  const canReports = companyRoleHasPermission(gate.membership.companyRole, PERMISSIONS.POS_VIEW_REPORTS);
+  if (todayOnly ? !canToday && !canReports : !canReports) {
+    return jsonError(res, 403, "Forbidden — POS permission required", {
+      code: "POS_FORBIDDEN",
+      permission: todayOnly ? PERMISSIONS.POS_ACCESS : PERMISSIONS.POS_VIEW_REPORTS,
+    });
+  }
+
+  const limit = Math.min(Math.max(Number(req.query?.limit) || 10, 1), 200);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const startIso = start.toISOString();
+
+  const run = (cols) => {
+    let query = supabaseAdmin
+      .from("pos_sales_events")
+      .select(cols)
+      .eq("org_id", gate.membership.orgId)
+      .order("occurred_at", { ascending: false })
+      .limit(limit);
+    if (todayOnly) query = query.gte("occurred_at", startIso);
+    return query;
+  };
+
+  let { data, error } = await run(POS_SALES_SELECT_REFUND);
+  if (error && /refund_status|refunded_amount|refund_rail|original_payment_intent_id/i.test(error.message || "")) {
+    ({ data, error } = await run(POS_SALES_SELECT_RICH));
+  }
+  if (error && /session_id/i.test(error.message || "")) {
+    ({ data, error } = await run(POS_SALES_SELECT_WITH_REGISTER));
+  }
+  if (error) {
+    ({ data, error } = await run(POS_SALES_SELECT_LEAN));
+  }
   if (error) return jsonError(res, 500, error.message || "Could not load POS sales");
 
-  const sales = data || [];
-  const totalToday = todayOnly
-    ? sales.reduce((sum, row) => sum + Number(row.total_amount || 0), 0)
-    : null;
+  const sales = attachRefundStateToSales(data || []);
+  let totalToday = null;
+  if (todayOnly) {
+    const { data: sumRows, error: sumError } = await supabaseAdmin
+      .from("pos_sales_events")
+      .select("total_amount")
+      .eq("org_id", gate.membership.orgId)
+      .gte("occurred_at", startIso);
+    totalToday = sumError
+      ? sales.reduce((sum, row) => sum + Number(row.total_amount || 0), 0)
+      : (sumRows || []).reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+  }
 
   return res.status(200).json({ sales, total_today: totalToday });
 }

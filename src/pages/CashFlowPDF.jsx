@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Expense, Invoice, User } from '@/api/entities';
+import { Expense, Invoice, Payment, User } from '@/api/entities';
 import { formatCurrency } from '@/components/CurrencySelector';
-import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import Logo from "@/components/shared/Logo";
+import {
+    buildCashFlowSnapshot,
+    expenseOccurredAt,
+    inDayRange,
+    isCashExpense,
+    listAllCashFlowRecords,
+    sumEventsInRange,
+} from '@/utils/cashFlowTruth';
+import { listAllPosSalesEvents } from '@/utils/cashFlowData';
 
 export default function CashFlowPDF() {
     const location = useLocation();
@@ -12,6 +21,8 @@ export default function CashFlowPDF() {
     
     const [expenses, setExpenses] = useState([]);
     const [invoices, setInvoices] = useState([]);
+    const [payments, setPayments] = useState([]);
+    const [posSales, setPosSales] = useState([]);
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -21,13 +32,17 @@ export default function CashFlowPDF() {
 
     const loadData = async () => {
         try {
-            const [expensesData, invoicesData, userData] = await Promise.all([
-                Expense.list("-date"),
-                Invoice.list("-created_date"),
+            const [expensesData, invoicesData, paymentsData, posSalesData, userData] = await Promise.all([
+                listAllCashFlowRecords(Expense, "-date"),
+                listAllCashFlowRecords(Invoice, "-created_date"),
+                listAllCashFlowRecords(Payment, "-paid_at"),
+                listAllPosSalesEvents().catch(() => []),
                 User.me()
             ]);
             setExpenses(expensesData);
             setInvoices(invoicesData);
+            setPayments(paymentsData);
+            setPosSales(posSalesData || []);
             setUser(userData);
         } catch (error) {
             console.error("Error loading cash flow data:", error);
@@ -36,93 +51,46 @@ export default function CashFlowPDF() {
         }
     };
 
-    const calculateMetrics = () => {
-        const now = new Date();
-        const currentMonthStart = startOfMonth(now);
-        const currentMonthEnd = endOfMonth(now);
+    const snap = buildCashFlowSnapshot({ payments, expenses, invoices, posSales, now: new Date() });
 
-        const currentMonthIncome = invoices
-            .filter(inv => {
-                if (!inv.created_date) return false;
-                const invDate = parseISO(inv.created_date);
-                return invDate >= currentMonthStart && invDate <= currentMonthEnd && 
-                       (inv.status === 'paid' || inv.status === 'partial_paid');
-            })
-            .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-
-        const currentMonthExpenses = expenses
-            .filter(exp => {
-                if (!exp.date) return false;
-                const expDate = parseISO(exp.date);
-                return expDate >= currentMonthStart && expDate <= currentMonthEnd;
-            })
-            .reduce((sum, exp) => sum + (exp.amount || 0), 0);
-
-        const netCashFlow = currentMonthIncome - currentMonthExpenses;
-
-        const totalIncome = invoices
-            .filter(inv => inv.status === 'paid' || inv.status === 'partial_paid')
-            .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-
-        const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-
-        return {
-            currentMonthIncome,
-            currentMonthExpenses,
-            netCashFlow,
-            totalIncome,
-            totalExpenses
-        };
-    };
+    const calculateMetrics = () => ({
+        currentMonthIncome: snap.monthlyIncome,
+        currentMonthExpenses: snap.monthlyExpenses,
+        netCashFlow: snap.netCashFlow,
+        totalIncome: snap.allTimeIncome,
+        totalExpenses: snap.allTimeExpenses,
+    });
 
     const getMonthlyData = () => {
-        const months = [];
-        for (let i = monthsToShow - 1; i >= 0; i--) {
-            const date = subMonths(new Date(), i);
-            const monthStart = startOfMonth(date);
-            const monthEnd = endOfMonth(date);
-
-            const income = invoices
-                .filter(inv => {
-                    if (!inv.created_date) return false;
-                    const invDate = parseISO(inv.created_date);
-                    return invDate >= monthStart && invDate <= monthEnd && 
-                           (inv.status === 'paid' || inv.status === 'partial_paid');
-                })
-                .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-
-            const expensesAmount = expenses
-                .filter(exp => {
-                    if (!exp.date) return false;
-                    const expDate = parseISO(exp.date);
-                    return expDate >= monthStart && expDate <= monthEnd;
-                })
-                .reduce((sum, exp) => sum + (exp.amount || 0), 0);
-
-            const monthExpenses = expenses.filter(exp => {
-                if (!exp.date) return false;
-                const expDate = parseISO(exp.date);
-                return expDate >= monthStart && expDate <= monthEnd;
-            });
-
-            months.push({
-                month: format(date, 'MMMM yyyy'),
-                income: income,
-                expenses: expensesAmount,
-                net: income - expensesAmount,
-                expenseList: monthExpenses
-            });
-        }
-        return months;
+        const now = new Date();
+        const points = monthsToShow >= 12 ? 12 : Math.max(monthsToShow, 6);
+        return Array.from({ length: points }, (_, idx) => {
+            const month = subMonths(now, points - 1 - idx);
+            const start = startOfMonth(month);
+            const end = endOfMonth(month);
+            const income = sumEventsInRange(snap.incomeEvents, start, end);
+            const expensesAmt = sumEventsInRange(snap.expenseEvents, start, end);
+            const expenseList = expenses.filter(
+                (exp) => isCashExpense(exp) && inDayRange(expenseOccurredAt(exp), start, end)
+            );
+            return {
+                month: format(month, "MMMM yyyy"),
+                income,
+                expenses: expensesAmt,
+                net: income - expensesAmt,
+                expenseList,
+            };
+        });
     };
 
     const getCategoryBreakdown = () => {
         const breakdown = {};
-        expenses.forEach(exp => {
-            const category = exp.category || 'other';
-            breakdown[category] = (breakdown[category] || 0) + exp.amount;
+        expenses.filter(isCashExpense).forEach((exp) => {
+            const category = exp.category || "other";
+            breakdown[category] = (breakdown[category] || 0) + (Number(exp.amount) || 0);
         });
-        return Object.entries(breakdown).map(([name, value]) => ({ name, value }))
+        return Object.entries(breakdown)
+            .map(([name, value]) => ({ name, value }))
             .sort((a, b) => b.value - a.value);
     };
 
@@ -286,7 +254,7 @@ export default function CashFlowPDF() {
                                 <tbody>
                                     {monthData.expenseList.map((expense, expIndex) => (
                                         <tr key={expIndex} className="hover:bg-gray-50">
-                                            <td className="border p-2">{format(parseISO(expense.date), 'MMM d, yyyy')}</td>
+                                            <td className="border p-2">{expense.date ? format(parseISO(String(expense.date).slice(0, 10)), 'MMM d, yyyy') : '—'}</td>
                                             <td className="border p-2 capitalize">{expense.category}</td>
                                             <td className="border p-2">{expense.description}</td>
                                             <td className="border p-2">{expense.vendor || '-'}</td>

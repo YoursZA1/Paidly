@@ -13,6 +13,7 @@ import {
   canCreateDocumentType,
   canApproveDocument,
 } from "@/lib/companyPermissions";
+import { businessTypeIncludesPos } from "@shared/businessType.js";
 import { formatCompanyMemberRoleLabel } from "@/lib/companyJobFunctions";
 import {
   loadCompanyAccessContext,
@@ -84,6 +85,8 @@ export function CompanyContextProvider({ children }) {
       canApproveLeave: () => canApproveLeave(ctx),
       canViewCompanyReports: () => canViewCompanyReports(ctx),
       isOrgOwner: Boolean(ctx?.isOrgOwner),
+      businessType: ctx?.businessType ?? null,
+      posEnabled: businessTypeIncludesPos(ctx?.businessType),
       showBusinessDashboard: showBusinessOwnerDashboard(ctx),
       canCreateDocumentType: (typeKey) => canCreateDocumentType(ctx, typeKey),
       canApproveDocument: (docType, docOwnerUserId) =>

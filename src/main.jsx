@@ -13,8 +13,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import {
     installGlobalAsyncErrorHandlers,
 } from '@/utils/globalAsyncErrorHandlers'
+import { initInstallPromptListeners } from '@/lib/pwa/installPrompt'
 
 installGlobalAsyncErrorHandlers()
+
+if (typeof window !== "undefined") {
+  initInstallPromptListeners()
+}
 
 /** Legacy `paidly_data` only. Supabase auth keys use `safeAuthStorage` (scrub on read) and are not nuked here. */
 function recoverFromCorruptedStorage() {

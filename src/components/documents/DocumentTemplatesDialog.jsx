@@ -17,8 +17,9 @@ import { DocumentService } from "@/services/DocumentService";
 import {
   DOCUMENT_CATEGORIES,
   DOCUMENT_TEMPLATE_PRESETS,
-  DOCUMENT_TYPE_DEFS,
+  HUB_DOCUMENT_TYPE_DEFS,
   typeLabel,
+  isHubPersistedType,
 } from "@/document-engine";
 import { DocumentTypeIcon } from "./documentIcon";
 import { useToast } from "@/components/ui/use-toast";
@@ -78,6 +79,7 @@ export default function DocumentTemplatesDialog({ open, onOpenChange, onCreated 
   const filteredPresets = useMemo(() => {
     const term = search.trim().toLowerCase();
     return DOCUMENT_TEMPLATE_PRESETS.filter((p) => {
+      if (!isHubPersistedType(p.type)) return false;
       if (filterType !== "all" && p.type !== filterType) return false;
       if (!term) return true;
       return (
@@ -123,8 +125,9 @@ export default function DocumentTemplatesDialog({ open, onOpenChange, onCreated 
             Templates
           </DialogTitle>
           <DialogDescription className="text-left leading-relaxed">
-            Reusable starting points for invoices, contracts, proposals, job cards, reports, and purchase orders.
-            Set a default per document type to speed up creation from the New Document menu.
+            Reusable starting points for contracts, proposals, job cards, reports, and purchase orders.
+            Invoices, quotes, and payslips use their own specialised pages. Set a default per hub
+            document type to speed up creation from the New Document menu.
           </DialogDescription>
         </DialogHeader>
 
@@ -156,7 +159,7 @@ export default function DocumentTemplatesDialog({ open, onOpenChange, onCreated 
             </SelectTrigger>
             <SelectContent className="max-h-[280px]">
               <SelectItem value="all">All types</SelectItem>
-              {DOCUMENT_TYPE_DEFS.map((t) => (
+              {HUB_DOCUMENT_TYPE_DEFS.map((t) => (
                 <SelectItem key={t.key} value={t.key}>
                   {t.label}
                 </SelectItem>
@@ -293,7 +296,7 @@ export default function DocumentTemplatesDialog({ open, onOpenChange, onCreated 
                 {filteredPresets.map((preset) => {
                   const categoryLabel =
                     DOCUMENT_CATEGORIES.find((c) =>
-                      DOCUMENT_TYPE_DEFS.some((t) => t.key === preset.type && t.category === c.key)
+                      HUB_DOCUMENT_TYPE_DEFS.some((t) => t.key === preset.type && t.category === c.key)
                     )?.label || "";
                   return (
                     <li

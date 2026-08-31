@@ -36,7 +36,7 @@ export function shouldLogEntityTimeoutWarning(entityName, maxWaitMs) {
 
 /** Explicit select columns per table for better query performance (avoid .select("*")). */
 export const SUPABASE_SELECT_COLUMNS = {
-  invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary",
+  invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary, pos_sale_event_id",
   companies: "id, org_id, name, logo_url, created_at, updated_at",
   quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, sent_date",
   invoice_items: "id, invoice_id, service_name, description, quantity, unit_price, total_price",
@@ -49,10 +49,10 @@ export const SUPABASE_SELECT_COLUMNS = {
   services:
     "id, org_id, name, description, item_type, default_unit, default_rate, tax_category, is_active, " +
     "rate, unit, unit_price, unit_of_measure, service_type, sku, price, billing_unit, " +
-    "stock_quantity, cost_price, low_stock_threshold, " +
+    "stock_quantity, cost_price, low_stock_threshold, barcode, image_url, stock_capacity, " +
     "role, hourly_rate, unit_type, cost_rate, cost_type, default_cost, " +
     "category, pricing_type, min_quantity, tags, estimated_duration, requirements, price_locked, " +
-    "created_at, updated_at",
+    "company_id, created_at, updated_at",
   payments: "id, org_id, invoice_id, document_id, client_id, amount, currency, exchange_rate, status, paid_at, method, reference, notes, created_at, updated_at",
   profiles:
     "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, reminder_settings, quote_reminder_settings, created_at, updated_at",

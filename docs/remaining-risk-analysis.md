@@ -26,7 +26,6 @@
 | File | Context | Risk |
 |------|---------|------|
 | `src/components/connection/connectionHealth.js` | Called inside `Promise.all()` | Concurrent with other requests |
-| `src/api/affiliateClient.js` (3 calls) | Per-API-call token grab | Parallel if multiple affiliate calls fire |
 | `src/services/ActivityNotificationService.js` (2 calls) | Notification polling | May fire concurrently with auth refresh |
 | `src/services/SupabaseAuthService.js` (3 calls) | Auth service operations | By design within auth layer |
 | `src/lib/supabaseAuthRefresh.js` (4 calls) | Refresh implementation | By design — these ARE the read-after-write verifications |
@@ -43,7 +42,7 @@
 - `SessionCoordinator` gates all SyncEngine and realtime-path reads
 - Most direct getSession() calls only need a valid token, not a fresh one — the Supabase client caches this in localStorage
 
-**Recommended follow-up:** Migrate `connectionHealth.js`, `affiliateClient.js`, and `ActivityNotificationService.js` to `getStableSession()` from SessionCoordinator — these are the only sites where concurrent reads under refresh pressure are plausible.
+**Recommended follow-up:** Migrate `connectionHealth.js` and `ActivityNotificationService.js` to `getStableSession()` from SessionCoordinator — these are the only sites where concurrent reads under refresh pressure are plausible.
 
 ---
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Users, Package, FileText, Loader2 } from "lucide-react";
+import { Search, Users, Package, FileText, Loader2, Store } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { useServicesCatalogQuery } from "@/hooks/useServicesCatalogQuery";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { matchesPosNavQuery } from "@/lib/posNavAccess";
 
 const MAX_PER_GROUP = 8;
 const OPEN_EVENT = "paidly:open-quick-search";
@@ -61,6 +62,7 @@ function QuickSearchResults({
   servicesLoading,
   onPick,
   compact,
+  includePos,
 }) {
   const term = q.trim();
   if (!term) {
@@ -80,8 +82,12 @@ function QuickSearchResults({
     );
   }
 
+  const showPosShortcut = Boolean(includePos) && matchesPosNavQuery(term);
   const empty =
-    grouped.clients.length === 0 && grouped.services.length === 0 && grouped.invoices.length === 0;
+    grouped.clients.length === 0 &&
+    grouped.services.length === 0 &&
+    grouped.invoices.length === 0 &&
+    !showPosShortcut;
 
   if (empty && servicesLoading) {
     return (
@@ -98,6 +104,19 @@ function QuickSearchResults({
 
   return (
     <div className="max-h-[min(60vh,22rem)] overflow-y-auto py-1">
+      {showPosShortcut && (
+        <div className="px-2 pb-2">
+          <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Pages
+          </p>
+          <ResultRow
+            icon={Store}
+            title="POS"
+            subtitle="Open till"
+            onSelect={() => onPick(createPageUrl("POS"))}
+          />
+        </div>
+      )}
       {grouped.clients.length > 0 && (
         <div className="px-2 pb-2">
           <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Clients</p>
@@ -171,7 +190,7 @@ function useQuickSearchData(open) {
 /**
  * Desktop header: anchored popover + optional global open via {@link OPEN_EVENT} (Ctrl/Cmd+K from Layout).
  */
-export function AppQuickSearchDesktop() {
+export function AppQuickSearchDesktop({ includePos = false }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -227,7 +246,13 @@ export function AppQuickSearchDesktop() {
         className="z-[200] w-[min(calc(100vw-2rem),28rem)] max-w-xl border-border bg-card p-0 shadow-lg"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <QuickSearchResults q={q} grouped={grouped} servicesLoading={servicesLoading} onPick={onPick} />
+        <QuickSearchResults
+          q={q}
+          grouped={grouped}
+          servicesLoading={servicesLoading}
+          onPick={onPick}
+          includePos={includePos}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -236,7 +261,7 @@ export function AppQuickSearchDesktop() {
 /**
  * Mobile header: opens full quick search dialog.
  */
-export function AppQuickSearchMobileDialog({ open, onOpenChange }) {
+export function AppQuickSearchMobileDialog({ open, onOpenChange, includePos = false }) {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const inputRef = useRef(null);
@@ -287,6 +312,7 @@ export function AppQuickSearchMobileDialog({ open, onOpenChange }) {
           grouped={grouped}
           servicesLoading={servicesLoading}
           onPick={onPick}
+          includePos={includePos}
           compact
         />
       </DialogContent>

@@ -16,6 +16,7 @@ export default defineConfig({
       "@shared": sharedDir,
       "@shared/plans.js": path.join(sharedDir, "plans.js"),
       resend: path.resolve(__dirname, "./tests/mocks/resend-test-double.js"),
+      "virtual:pwa-register/react": path.resolve(__dirname, "./tests/mocks/pwa-register-react.js"),
     },
   },
   test: {

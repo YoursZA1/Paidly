@@ -12,25 +12,36 @@ const EDIT_LOCKED_STATUSES = Object.freeze(['paid', 'partial_paid', 'cancelled']
 const RECORD_PAYMENT_LOCKED_STATUSES = Object.freeze(['paid', 'cancelled']);
 
 /**
+ * Whether this invoice is a tax copy of a settled POS sale (not a receivable).
+ * @param {{ pos_sale_event_id?: string }} invoice
+ * @returns {boolean}
+ */
+export function isPosOriginInvoice(invoice) {
+  return Boolean(invoice?.pos_sale_event_id);
+}
+
+/**
  * Whether the invoice can be edited (amounts, items, client, etc.).
- * Paid, partial_paid, and cancelled invoices are locked.
- * @param {{ status?: string }} invoice - Invoice object with at least status
+ * Paid, partial_paid, cancelled, and POS tax-invoice copies are locked.
+ * @param {{ status?: string, pos_sale_event_id?: string }} invoice
  * @returns {boolean}
  */
 export function canEditInvoice(invoice) {
   if (!invoice) return false;
+  if (isPosOriginInvoice(invoice)) return false;
   const status = (invoice.status || 'draft').toLowerCase();
   return !EDIT_LOCKED_STATUSES.includes(status);
 }
 
 /**
  * Whether the user can record a payment against this invoice.
- * Cannot record when status is paid or cancelled.
- * @param {{ status?: string }} invoice - Invoice object with at least status
+ * Cannot record when status is paid or cancelled, or when the invoice is a POS tax copy.
+ * @param {{ status?: string, pos_sale_event_id?: string }} invoice
  * @returns {boolean}
  */
 export function canRecordPayment(invoice) {
   if (!invoice) return false;
+  if (isPosOriginInvoice(invoice)) return false;
   const status = (invoice.status || 'draft').toLowerCase();
   return !RECORD_PAYMENT_LOCKED_STATUSES.includes(status);
 }

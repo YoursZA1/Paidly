@@ -252,6 +252,9 @@ export default function SyncEngine() {
           if (nextJob.type === "UPDATE_INVOICE" && nextJob.payload?.invoiceId) {
             useAppStore.getState().setInvoice(nextJob.payload.invoiceId, { sync_state: "synced" });
           }
+          if (nextJob.type === "SEND_INVOICE" && nextJob.payload?.invoiceId) {
+            useAppStore.getState().setInvoice(nextJob.payload.invoiceId, { sync_state: "synced" });
+          }
           if (hasActiveSession()) {
             const scopeKey = userIdRef.current ?? null;
             if (nextJob.type === "CREATE_INVOICE" || nextJob.type === "SEND_INVOICE" || nextJob.type === "UPDATE_INVOICE") {
@@ -262,6 +265,9 @@ export default function SyncEngine() {
           }
         } catch (error) {
           markFailed(nextJob.id, error?.message || "Sync job failed", { retryable: true });
+          if (nextJob.type === "SEND_INVOICE" && nextJob.payload?.invoiceId) {
+            useAppStore.getState().setInvoice(nextJob.payload.invoiceId, { sync_state: "failed" });
+          }
         }
 
         processed += 1;

@@ -65,18 +65,6 @@
       "destination": "/api/public-share?doc=og"
     },
     {
-      "source": "/affiliate/dashboard",
-      "destination": "/api/affiliates?__affiliateDashboard=1"
-    },
-    {
-      "source": "/api/affiliate/dashboard",
-      "destination": "/api/affiliates?__affiliateDashboard=1"
-    },
-    {
-      "source": "/api/referrals/create",
-      "destination": "/api/affiliates?__referralsCreate=1"
-    },
-    {
       "source": "/api/cron/payment-reminders",
       "destination": "/api/cron?job=payment-reminders"
     },
@@ -165,11 +153,46 @@
       "destination": "/api/cron?job=internal-expire"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|sw\\.js|workbox-|manifest\\.webmanifest).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
+    },
+    {
+      "source": "/workbox-(.*).js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/manifest+json; charset=utf-8"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [
@@ -195,7 +218,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com; font-src 'self' https://fonts.gstatic.com https://api.fontshare.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://api.paidly.co.za https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://sentry.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com; font-src 'self' https://fonts.gstatic.com https://api.fontshare.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://api.paidly.co.za https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://sentry.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         }
       ]
     }

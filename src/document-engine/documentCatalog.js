@@ -1,18 +1,23 @@
 /**
  * Paidly Document Engine — business document catalog (data-driven).
  *
- * The catalog is the single source of truth for every document KIND the hub supports. It is
- * intentionally data-driven so new document types plug in here (and in the `document_types` /
- * `document_categories` seed migration) without new code paths or new database tables — the
- * `public.documents` table is polymorphic (`type` + `category_key` + `metadata`/`body`).
+ * The catalog lists every document KIND the product knows about. Persistence follows
+ * `documentSystemOfRecord.js`:
+ *   - invoice / quote / payslip → specialised tables (create UX may still appear in the hub menu)
+ *   - all other types → `public.documents` (+ `document_items`, `document_events`)
+ *
+ * New generic types plug in here (and in the `document_types` / `document_categories` seed)
+ * without new tables. Do not add invoice/quote/payslip rows to `documents`.
  *
  * Status-flow groups map a type to its lifecycle vocabulary:
- *   - financial: line-item money documents (invoice, quote, PO, receipt, …)
+ *   - financial: line-item money documents (PO, receipt, expense claim, …)
  *   - signature: documents that get signed (contracts, NDAs, offer letters, …)
  *   - approval:  documents that route for approval (job cards, leave requests, …)
  *   - report:    generated/observed reports
  *   - simple:    lightweight prose/checklist documents
  */
+
+/** @typedef {"commercial"|"hub"} DocumentPersistence */
 
 /** @typedef {"financial"|"signature"|"approval"|"report"|"simple"} DocumentStatusFlow */
 
@@ -32,8 +37,9 @@ export const DOCUMENT_CATEGORIES = Object.freeze([
  */
 export const DOCUMENT_TYPE_DEFS = Object.freeze([
   // ── Financial ───────────────────────────────────────────────────────────
-  { key: "invoice", label: "Invoice", category: "financial", icon: "FileText", financial: true, flow: "financial" },
-  { key: "quote", label: "Quote", category: "financial", icon: "FileText", financial: true, flow: "financial" },
+  // invoice / quote: menu shortcuts to specialised compose; never persist in `documents`.
+  { key: "invoice", label: "Invoice", category: "financial", icon: "FileText", financial: true, flow: "financial", persistence: "commercial" },
+  { key: "quote", label: "Quote", category: "financial", icon: "FileText", financial: true, flow: "financial", persistence: "commercial" },
   { key: "proforma_invoice", label: "Proforma Invoice", category: "financial", icon: "FileText", financial: true, flow: "financial" },
   { key: "credit_note", label: "Credit Note", category: "financial", icon: "FileMinus", financial: true, flow: "financial" },
   { key: "debit_note", label: "Debit Note", category: "financial", icon: "FilePlus", financial: true, flow: "financial" },
@@ -59,7 +65,7 @@ export const DOCUMENT_TYPE_DEFS = Object.freeze([
   { key: "handover_document", label: "Handover Document", category: "projects", icon: "PackageCheck", financial: false, flow: "approval" },
 
   // ── HR ──────────────────────────────────────────────────────────────────
-  { key: "payslip", label: "Payslip", category: "hr", icon: "DollarSign", financial: true, flow: "financial" },
+  { key: "payslip", label: "Payslip", category: "hr", icon: "DollarSign", financial: true, flow: "financial", persistence: "commercial" },
   { key: "employment_contract", label: "Employment Contract", category: "hr", icon: "FileSignature", financial: false, flow: "signature" },
   { key: "offer_letter", label: "Offer Letter", category: "hr", icon: "Mail", financial: false, flow: "signature" },
   { key: "leave_request", label: "Leave Request", category: "hr", icon: "CalendarOff", financial: false, flow: "approval" },
@@ -167,4 +173,24 @@ export function allowedStatusesForType(key) {
   const base = STATUS_FLOWS[flow] || STATUS_FLOWS.financial;
   if (key === "quote") return Object.freeze([...base, ...QUOTE_EXTRA_STATUSES]);
   return base;
+}
+
+/** Whether this catalog type persists in the Documents Hub (`public.documents`). */
+export function isHubPersistedType(key) {
+  const def = getTypeDef(key);
+  if (def) return def.persistence !== "commercial";
+  return Boolean(key) && String(key).trim().length > 0;
+}
+
+/** Catalog types owned by the Documents Hub (excludes invoice, quote, payslip). */
+export const HUB_DOCUMENT_TYPE_DEFS = Object.freeze(
+  DOCUMENT_TYPE_DEFS.filter((t) => t.persistence !== "commercial")
+);
+
+/** Hub types grouped by category — for hub filters, not the New Document shortcuts. */
+export function hubTypesByCategory() {
+  return DOCUMENT_CATEGORIES.map((cat) => ({
+    ...cat,
+    types: HUB_DOCUMENT_TYPE_DEFS.filter((t) => t.category === cat.key),
+  })).filter((group) => group.types.length > 0);
 }

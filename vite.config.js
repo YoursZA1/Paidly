@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -34,6 +35,64 @@ export default defineConfig(async ({ mode }) => {
   return {
     plugins: await (async () => {
       const plugins = [react()];
+      // Application-shell PWA only. Never cache Supabase, /api, or authenticated business data.
+      plugins.push(
+        VitePWA({
+          strategies: 'generateSW',
+          registerType: 'prompt',
+          injectRegister: false,
+          filename: 'sw.js',
+          manifest: false,
+          workbox: {
+            globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2,webmanifest}'],
+            globIgnores: ['**/*.map', '**/paidly_data.xlsx'],
+            navigateFallback: '/index.html',
+            navigateFallbackDenylist: [/^\/api\//i],
+            cleanupOutdatedCaches: true,
+            skipWaiting: false,
+            clientsClaim: false,
+            navigationPreload: false,
+            maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+            runtimeCaching: [
+              {
+                urlPattern: ({ url }) =>
+                  url.hostname.endsWith('supabase.co') ||
+                  url.hostname.endsWith('supabase.com') ||
+                  url.pathname.startsWith('/rest/v1') ||
+                  url.pathname.startsWith('/auth/v1') ||
+                  url.pathname.startsWith('/storage/v1') ||
+                  url.pathname.startsWith('/realtime/v1'),
+                handler: 'NetworkOnly',
+              },
+              {
+                urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+                handler: 'NetworkOnly',
+              },
+              {
+                urlPattern: ({ url }) =>
+                  url.hostname === 'sentry.io' || url.hostname.endsWith('.sentry.io'),
+                handler: 'NetworkOnly',
+              },
+              {
+                urlPattern: ({ request }) => request.mode === 'navigate',
+                handler: 'NetworkFirst',
+                options: {
+                  cacheName: 'paidly-shell',
+                  networkTimeoutSeconds: 4,
+                  expiration: {
+                    maxEntries: 8,
+                    maxAgeSeconds: 60 * 60 * 24,
+                  },
+                  cacheableResponse: { statuses: [200] },
+                },
+              },
+            ],
+          },
+          devOptions: {
+            enabled: false,
+          },
+        })
+      );
       // Dynamically import the Sentry Vite plugin — only when SENTRY_AUTH_TOKEN is set.
       // Static import causes Rollup build-import-analysis failures for plain .js Sentry consumers.
       if (process.env.SENTRY_AUTH_TOKEN) {
@@ -58,11 +117,6 @@ export default defineConfig(async ({ mode }) => {
     server: {
       proxy: {
         '/api': {
-          target: backendTarget,
-          changeOrigin: true,
-        },
-        /** Same Node server as /api — affiliate dashboard: GET /api/affiliate/dashboard (see server/src/index.js) */
-        '/affiliate': {
           target: backendTarget,
           changeOrigin: true,
         },

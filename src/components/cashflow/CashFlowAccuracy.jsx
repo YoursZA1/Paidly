@@ -7,7 +7,7 @@ import { formatCurrency } from '@/utils/currencyCalculations';
 import { AlertCircle, TrendingUp, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react';
 import PropTypes from 'prop-types';
 
-const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) => {
+const CashFlowAccuracy = ({ payments = [], expenses = [], invoices = [], currency = 'USD' }) => {
   const analysis = useMemo(() => {
     if (!payments && !expenses) {
       return {
@@ -21,32 +21,32 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
 
     return {
       validation: CashFlowService.validateData(payments, expenses),
-      metrics: CashFlowService.calculateMetrics(payments, expenses),
-      trends: CashFlowService.analyzeTrends(payments, expenses, 6),
-      margins: CashFlowService.calculateMargins(payments, expenses),
-      forecast: CashFlowService.generateForecast(payments, expenses, 3),
-      monthlyData: CashFlowService.generateMonthlyCashFlow(payments, expenses, 6)
+      metrics: CashFlowService.calculateMetrics(payments, expenses, invoices),
+      trends: CashFlowService.analyzeTrends(payments, expenses, 6, invoices),
+      margins: CashFlowService.calculateMargins(payments, expenses, invoices),
+      forecast: CashFlowService.generateForecast(payments, expenses, 3, invoices),
+      monthlyData: CashFlowService.generateMonthlyCashFlow(payments, expenses, 6, invoices)
     };
-  }, [payments, expenses]);
+  }, [payments, expenses, invoices]);
 
-  if (!analysis.validation.isValid) {
-    return (
-      <Alert className="border-red-200 bg-red-50">
-        <AlertCircle className="h-4 w-4 text-red-600" />
-        <AlertDescription>
-          <p className="font-semibold text-red-900 mb-2">Data Validation Issues:</p>
-          <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
-            {analysis.validation.issues.map((issue, idx) => (
-              <li key={idx}>{issue}</li>
-            ))}
-          </ul>
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  const validationAlert = !analysis.validation.isValid ? (
+    <Alert className="border-red-200 bg-red-50">
+      <AlertCircle className="h-4 w-4 text-red-600" />
+      <AlertDescription>
+        <p className="font-semibold text-red-900 mb-2">Data Validation Issues:</p>
+        <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
+          {analysis.validation.issues.map((issue, idx) => (
+            <li key={idx}>{issue}</li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  ) : null;
 
   return (
     <div className="space-y-6">
+      {validationAlert}
+
       {/* Data Quality Summary */}
       <Card>
         <CardHeader>
@@ -333,8 +333,8 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
           <CardTitle className="text-sm text-foreground">Cash Flow Accuracy</CardTitle>
         </CardHeader>
         <CardContent className="text-xs text-primary space-y-2">
-          <p>✓ Income calculated from actual payment dates, not invoice creation dates</p>
-          <p>✓ Expenses matched to transaction dates for accurate period reporting</p>
+          <p>✓ Income calculated from settled payments (and paid invoices with no payment rows)</p>
+          <p>✓ Expenses matched to transaction dates; rejected claims are excluded</p>
           <p>✓ All calculations validated for data integrity and consistency</p>
           <p>✓ Forecasts based on 6-month historical averages</p>
           <p>✓ Margin analysis includes transaction fees and adjustments</p>
@@ -347,12 +347,14 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], currency = 'USD' }) =>
 CashFlowAccuracy.propTypes = {
   payments: PropTypes.arrayOf(PropTypes.object),
   expenses: PropTypes.arrayOf(PropTypes.object),
+  invoices: PropTypes.arrayOf(PropTypes.object),
   currency: PropTypes.string
 };
 
 CashFlowAccuracy.defaultProps = {
   payments: [],
   expenses: [],
+  invoices: [],
   currency: 'USD'
 };
 

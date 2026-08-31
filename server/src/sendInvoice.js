@@ -21,9 +21,17 @@ function getResend() {
  * @param {string} clientEmail
  * @param {string} invoiceNum
  * @param {string} [fromName="Paidly"]
- * @param {{ clientName?: string, amountDue?: string, dueDate?: string }} [template] - Optional. When provided, uses recommended subject/body template.
+ * @param {{ clientName?: string, amountDue?: string, dueDate?: string }} [template]
+ * @param {string} [idempotencyKey] - Forwarded to Resend so retries do not send a second email.
  */
-export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromName = "Paidly", template = null) {
+export async function sendInvoiceEmail(
+  base64PDF,
+  clientEmail,
+  invoiceNum,
+  fromName = "Paidly",
+  template = null,
+  idempotencyKey = ""
+) {
   if (!process.env.RESEND_API_KEY) {
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
@@ -78,7 +86,7 @@ export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromN
       };
 
   try {
-    const data = await resend.emails.send({
+    const payload = {
       from: fromAddress,
       to: [clientEmail],
       subject,
@@ -89,7 +97,11 @@ export async function sendInvoiceEmail(base64PDF, clientEmail, invoiceNum, fromN
           filename: `Invoice_${invoiceNum}.pdf`,
         },
       ],
-    });
+    };
+    const key = typeof idempotencyKey === "string" ? idempotencyKey.trim().slice(0, 256) : "";
+    const data = key
+      ? await resend.emails.send(payload, { idempotencyKey: key })
+      : await resend.emails.send(payload);
 
     return { success: true, data };
   } catch (error) {
@@ -104,7 +116,8 @@ function isSendHtmlMailOptsObject(value) {
     Object.prototype.hasOwnProperty.call(value, "text") ||
     Object.prototype.hasOwnProperty.call(value, "headers") ||
     Object.prototype.hasOwnProperty.call(value, "reply_to") ||
-    Object.prototype.hasOwnProperty.call(value, "tags")
+    Object.prototype.hasOwnProperty.call(value, "tags") ||
+    Object.prototype.hasOwnProperty.call(value, "attachments")
   );
 }
 
@@ -168,6 +181,9 @@ export async function sendHtmlEmail(to, subject, html, fromNameOrMailOpts = "Pai
   }
   if (Array.isArray(opts.tags) && opts.tags.length > 0) {
     payload.tags = opts.tags;
+  }
+  if (Array.isArray(opts.attachments) && opts.attachments.length > 0) {
+    payload.attachments = opts.attachments;
   }
 
   try {

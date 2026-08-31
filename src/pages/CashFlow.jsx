@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getFocusPolicy } from "@/core/query/queryFocusPolicy";
-import { Expense, Invoice, Payment } from "@/api/entities";
+import { Expense } from "@/api/entities";
 import { useAppStore } from "@/stores/useAppStore";
 import { expensesToCsv, parseExpenseCsv, csvRowToExpensePayload } from "@/utils/expenseCsvMapping";
 import { triggerDownload } from "@/utils/downloadFile";
@@ -24,14 +24,10 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/components/CurrencySelector";
 import {
-  addDays,
-  endOfMonth,
-  format,
-  isAfter,
-  isBefore,
-  parseISO,
-  startOfMonth,
   subMonths,
+  startOfMonth,
+  endOfMonth,
+  startOfDay,
 } from "date-fns";
 import ExpenseForm from "@/components/cashflow/ExpenseForm";
 import ExpenseList from "@/components/cashflow/ExpenseList";
@@ -42,6 +38,7 @@ import CashPositionCard from "@/components/cashflow/CashPositionCard";
 import CashFlowOverTimeChart from "@/components/cashflow/CashFlowOverTimeChart";
 import UpcomingCashEventsPanel from "@/components/cashflow/UpcomingCashEventsPanel";
 import InsightTiles from "@/components/cashflow/InsightTiles";
+import CashFlowLedger from "@/components/cashflow/CashFlowLedger";
 import ExpenseFilters, { applyExpenseFilters } from "@/components/filters/ExpenseFilters";
 import CashFlowAccuracy from "@/components/cashflow/CashFlowAccuracy";
 import PaymentTimingAnalysis from "@/components/payments/PaymentTimingAnalysis";
@@ -55,6 +52,15 @@ import {
   buildCashPositionModel,
   buildUpcomingCashEvents,
 } from "@/utils/cashFlowViewModels";
+import {
+  buildCashFlowChartRows,
+  buildCashFlowSnapshot,
+  buildCashLedger,
+} from "@/utils/cashFlowTruth";
+import { CASHFLOW_PAGE_QUERY_KEY, fetchCashFlowPageData } from "@/utils/cashFlowData";
+import { summarizePosSales } from "@/utils/posSalesTruth";
+import PosSalesReportCard from "@/components/reports/PosSalesReportCard";
+import { invalidateRevenueReadModels } from "@/lib/queryInvalidation";
 import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,24 +71,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
-
-const CASHFLOW_PAGE_QUERY_KEY = ['cashflow-page'];
-
-const CASHFLOW_LIST_OPTS = { limit: 100, maxWaitMs: 4000 };
-
-async function fetchCashFlowPageData(profile) {
-    const [expensesData, invoicesData, paymentsData] = await Promise.all([
-        Expense.list("-date", CASHFLOW_LIST_OPTS),
-        Invoice.list("-created_date", CASHFLOW_LIST_OPTS),
-        Payment.list("-payment_date", CASHFLOW_LIST_OPTS),
-    ]);
-    return {
-        expenses: expensesData || [],
-        invoices: invoicesData || [],
-        payments: paymentsData || [],
-        user: profile || null,
-    };
-}
 
 export default function CashFlowPage() {
     const { toast } = useToast();
@@ -97,20 +85,22 @@ export default function CashFlowPage() {
     const { data, isLoading, error } = useQuery({
         queryKey: [...CASHFLOW_PAGE_QUERY_KEY, authUserId ?? null],
         queryFn: () => fetchCashFlowPageData(profile),
-        staleTime: 5 * 60 * 1000,
-        refetchOnMount: false,
-        ...getFocusPolicy("cashflow-page"),
-        initialData: hasStoreData
+        staleTime: 60 * 1000,
+        refetchOnMount: true,
+        placeholderData: hasStoreData
             ? {
                 expenses: storeExpensesForInit ?? [],
                 invoices: storeInvoices ?? [],
                 payments: storePayments ?? [],
+                posSales: [],
                 user: storeUser ?? null,
             }
             : undefined,
+        ...getFocusPolicy("cashflow-page"),
     });
     const payments = data?.payments ?? storePayments ?? [];
     const invoices = data?.invoices ?? storeInvoices ?? [];
+    const posSales = data?.posSales ?? [];
     const user = data?.user ?? storeUser ?? null;
 
     useEffect(() => {
@@ -147,7 +137,20 @@ export default function CashFlowPage() {
     expenseFallbackUrlRef.current = expenseFallbackUrl;
     useEffect(() => () => { if (expenseFallbackUrlRef.current) URL.revokeObjectURL(expenseFallbackUrlRef.current); }, []);
 
-    const invalidateCashFlow = () => queryClient.invalidateQueries({ queryKey: CASHFLOW_PAGE_QUERY_KEY });
+    const invalidateCashFlow = () => invalidateRevenueReadModels(queryClient);
+
+    const patchCachedExpenses = (updater) => {
+        queryClient.setQueryData([...CASHFLOW_PAGE_QUERY_KEY, authUserId ?? null], (old) => {
+            const base = old || {
+                expenses: useAppStore.getState().expenses || [],
+                invoices: useAppStore.getState().invoices || [],
+                payments: useAppStore.getState().payments || [],
+                posSales: [],
+                user: useAppStore.getState().userProfile || profile || null,
+            };
+            return { ...base, expenses: updater(base.expenses || []) };
+        });
+    };
 
     useEffect(() => {
         if (error) {
@@ -215,122 +218,69 @@ export default function CashFlowPage() {
     };
 
     const userCurrency = user?.currency || 'ZAR';
-
     const now = new Date();
-    const monthRange = useMemo(() => {
-      if (quickFilter === "lastMonth") {
-        const start = startOfMonth(subMonths(now, 1));
-        const end = endOfMonth(subMonths(now, 1));
-        return { start, end };
-      }
-      return { start: startOfMonth(now), end: endOfMonth(now) };
-    }, [quickFilter, now]);
+    const snapshotNow = quickFilter === "lastMonth" ? subMonths(now, 1) : now;
 
-    const monthlyIncome = payments
-      .filter((p) => p.payment_date && isAfter(parseISO(p.payment_date), monthRange.start) && isBefore(parseISO(p.payment_date), addDays(monthRange.end, 1)))
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const cashSnap = useMemo(
+        () =>
+            buildCashFlowSnapshot({
+                payments,
+                expenses: storeExpenses || [],
+                invoices,
+                posSales,
+                now: snapshotNow,
+            }),
+        [payments, storeExpenses, invoices, posSales, snapshotNow]
+    );
 
-    const monthlyExpenses = (storeExpenses || [])
-      .filter((e) => e.date && isAfter(parseISO(e.date), monthRange.start) && isBefore(parseISO(e.date), addDays(monthRange.end, 1)))
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const {
+        monthlyIncome,
+        monthlyExpenses,
+        netCashFlow,
+        prevExpenses,
+        prevNet,
+        outstandingTotal: outstandingInvoices,
+        currentBalance,
+        incomingProjection,
+        outgoingProjection,
+        netProjection,
+        incomeEvents,
+        expenseEvents,
+        outstanding,
+    } = cashSnap;
 
-    const netCashFlow = monthlyIncome - monthlyExpenses;
+    const posSummary = useMemo(() => {
+      const start = startOfMonth(snapshotNow);
+      const end = endOfMonth(snapshotNow);
+      const month = summarizePosSales(posSales, { start, end });
+      const day = startOfDay(now);
+      const today = summarizePosSales(posSales, { start: day, end: day });
+      return { ...month, today_sales: today.net_sales };
+    }, [posSales, snapshotNow, now]);
 
-    const outstandingInvoices = invoices
-      .filter((inv) => String(inv.status || "").toLowerCase() !== "paid")
-      .reduce((sum, inv) => sum + (Number(inv.total_amount ?? inv.grand_total ?? 0) || 0), 0);
-
-    const previousMonthRange = {
-      start: startOfMonth(subMonths(monthRange.start, 1)),
-      end: endOfMonth(subMonths(monthRange.start, 1)),
-    };
-
-    const prevIncome = payments
-      .filter((p) => p.payment_date && isAfter(parseISO(p.payment_date), previousMonthRange.start) && isBefore(parseISO(p.payment_date), addDays(previousMonthRange.end, 1)))
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const prevExpenses = (storeExpenses || [])
-      .filter((e) => e.date && isAfter(parseISO(e.date), previousMonthRange.start) && isBefore(parseISO(e.date), addDays(previousMonthRange.end, 1)))
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const prevNet = prevIncome - prevExpenses;
     const netTrendPct = prevNet === 0 ? 0 : ((netCashFlow - prevNet) / Math.abs(prevNet)) * 100;
 
-    const projectionStart = now;
-    const projectionEnd = addDays(now, 30);
-    const incomingProjection = invoices
-      .filter((inv) => {
-        const raw = inv.due_date || inv.delivery_date;
-        if (!raw) return false;
-        const due = parseISO(raw);
-        return isAfter(due, projectionStart) && isBefore(due, addDays(projectionEnd, 1)) && String(inv.status || "").toLowerCase() !== "paid";
-      })
-      .reduce((sum, inv) => sum + (Number(inv.total_amount ?? inv.grand_total ?? 0) || 0), 0);
-    const outgoingProjection = (storeExpenses || [])
-      .filter((exp) => exp.date && isAfter(parseISO(exp.date), projectionStart) && isBefore(parseISO(exp.date), addDays(projectionEnd, 1)))
-      .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
-    const netProjection = incomingProjection - outgoingProjection;
-
-    const chartConfig = {
-      "7D": { points: 7, bucket: "day" },
-      "30D": { points: 30, bucket: "day" },
-      "6M": { points: 6, bucket: "month" },
-      "12M": { points: 12, bucket: "month" },
-    };
-
-    const chartData = useMemo(() => {
-      const conf = chartConfig[timeRange];
-      const rows = [];
-      if (conf.bucket === "day") {
-        for (let i = conf.points - 1; i >= 0; i -= 1) {
-          const date = subMonths(now, 0);
-          const day = addDays(startOfMonth(date), (new Date().getDate() - 1) - i);
-          const dayStart = new Date(day);
-          dayStart.setHours(0, 0, 0, 0);
-          const dayEnd = addDays(dayStart, 1);
-          const income = payments
-            .filter((p) => p.payment_date && isAfter(parseISO(p.payment_date), dayStart) && isBefore(parseISO(p.payment_date), dayEnd))
-            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-          const expenses = (storeExpenses || [])
-            .filter((e) => e.date && isAfter(parseISO(e.date), dayStart) && isBefore(parseISO(e.date), dayEnd))
-            .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-          rows.push({
-            label: format(dayStart, "MMM d"),
-            income,
-            expenses,
-            net: income - expenses,
-          });
-        }
-        return rows;
-      }
-
-      for (let i = conf.points - 1; i >= 0; i -= 1) {
-        const month = subMonths(now, i);
-        const monthStart = startOfMonth(month);
-        const monthEnd = endOfMonth(month);
-        const income = payments
-          .filter((p) => p.payment_date && isAfter(parseISO(p.payment_date), monthStart) && isBefore(parseISO(p.payment_date), addDays(monthEnd, 1)))
-          .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-        const expenses = (storeExpenses || [])
-          .filter((e) => e.date && isAfter(parseISO(e.date), monthStart) && isBefore(parseISO(e.date), addDays(monthEnd, 1)))
-          .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-        rows.push({
-          label: format(month, "MMM yyyy"),
-          income,
-          expenses,
-          net: income - expenses,
-        });
-      }
-      return rows;
-    }, [payments, storeExpenses, timeRange, now]);
+    const chartData = useMemo(
+        () =>
+            buildCashFlowChartRows({
+                incomeEvents,
+                expenseEvents,
+                timeRange,
+                now,
+            }),
+        [incomeEvents, expenseEvents, timeRange, now]
+    );
 
     const upcomingCashEvents = useMemo(
       () =>
         buildUpcomingCashEvents({
           invoices,
           expenses: storeExpenses || [],
+          payments,
           now,
           windowDays: 30,
         }).slice(0, 10),
-      [invoices, storeExpenses, now]
+      [invoices, storeExpenses, payments, now]
     );
 
     const insights = useMemo(
@@ -362,28 +312,52 @@ export default function CashFlowPage() {
     const cashPositionModel = useMemo(
       () =>
         buildCashPositionModel({
-          currentBalance: netCashFlow,
+          currentBalance,
           incomingProjection,
           outgoingProjection,
           netProjection,
         }),
-      [netCashFlow, incomingProjection, outgoingProjection, netProjection]
+      [currentBalance, incomingProjection, outgoingProjection, netProjection]
     );
 
-    const filteredTransactions = useMemo(() => {
-      if (kpiFilter === "all") return applyExpenseFilters(storeExpenses || [], expenseFilters);
-      if (kpiFilter === "moneyOut") return applyExpenseFilters(storeExpenses || [], expenseFilters);
-      if (kpiFilter === "outstanding") return [];
-      return applyExpenseFilters(storeExpenses || [], expenseFilters);
-    }, [storeExpenses, expenseFilters, kpiFilter]);
+    const ledgerRows = useMemo(() => {
+      const rows = buildCashLedger({
+        incomeEvents,
+        expenseEvents,
+        outstanding,
+        filter: kpiFilter === "net" ? "all" : kpiFilter,
+      });
+      const q = String(expenseFilters.search || "").trim().toLowerCase();
+      if (!q) return rows;
+      return rows.filter((row) =>
+        [row.name, row.category, row.vendor].some((part) => String(part || "").toLowerCase().includes(q))
+      );
+    }, [incomeEvents, expenseEvents, outstanding, kpiFilter, expenseFilters.search]);
+
+    const moneyOutExpenses = useMemo(
+      () => applyExpenseFilters(expenseEvents.map((row) => row.expense).filter(Boolean), expenseFilters),
+      [expenseEvents, expenseFilters]
+    );
 
     const handleSaveExpense = async (expenseData) => {
         try {
             if (editingExpense && editingExpense.id) {
                 await updateExpenseInStore(editingExpense.id, expenseData);
+                patchCachedExpenses((list) =>
+                    list.map((row) =>
+                        row.id === editingExpense.id ? { ...row, ...expenseData } : row
+                    )
+                );
             } else {
-                await addExpenseToStore(expenseData);
+                const created = await addExpenseToStore(expenseData);
+                if (created?.id) {
+                    patchCachedExpenses((list) => [
+                        created,
+                        ...list.filter((row) => row.id !== created.id),
+                    ]);
+                }
             }
+            invalidateCashFlow();
             setShowExpenseForm(false);
             setEditingExpense(null);
             setExpenseFormFromScan(false);
@@ -410,6 +384,8 @@ export default function CashFlowPage() {
     const handleDeleteExpense = async (expenseId) => {
         try {
             await deleteExpenseFromStore(expenseId);
+            patchCachedExpenses((list) => list.filter((row) => row.id !== expenseId));
+            invalidateCashFlow();
             toast({ title: "Expense deleted", variant: "default" });
         } catch (error) {
             console.error("Error deleting expense:", error);
@@ -443,7 +419,7 @@ export default function CashFlowPage() {
                 >
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Cash Flow</h1>
-                        <p className="text-muted-foreground mt-1">Understand your financial health in real time</p>
+                        <p className="text-muted-foreground mt-1">Understand your financial health in real time. Till sales are included in income.</p>
                     </div>
                     <div className="responsive-page-header-actions gap-2">
                         <Button variant="outline" className="gap-2" onClick={() => setShowImportModal(true)}>
@@ -551,6 +527,13 @@ export default function CashFlowPage() {
                   currency={userCurrency}
                 />
 
+                <PosSalesReportCard
+                  title={quickFilter === "lastMonth" ? "POS sales (last month)" : "POS sales (this month)"}
+                  subtitle="Till totals from pos_sales_events. Income above includes cash/card/digital sales minus till-cash refunds."
+                  summary={posSummary}
+                  currency={userCurrency}
+                />
+
                 <div className="flex gap-1 sm:gap-2 border-b border-border overflow-x-auto pb-px -mx-1 px-1 sm:mx-0 sm:px-0 touch-pan-x">
                     {['overview', 'transactions', 'insights'].map(tab => (
                         <button
@@ -600,7 +583,7 @@ export default function CashFlowPage() {
                           <Badge variant={kpiFilter === "outstanding" ? "default" : "outline"} onClick={() => setKpiFilter("outstanding")} className="cursor-pointer">Outstanding</Badge>
                         </div>
 
-                        {filteredTransactions.length === 0 && payments.length === 0 && invoices.length === 0 ? (
+                        {ledgerRows.length === 0 && payments.length === 0 && invoices.length === 0 && !(storeExpenses || []).length ? (
                           <Card>
                             <CardContent className="py-16 text-center">
                               <CalendarClock className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
@@ -625,14 +608,26 @@ export default function CashFlowPage() {
                               </div>
                             </CardContent>
                           </Card>
-                        ) : (
+                        ) : kpiFilter === "moneyOut" ? (
                           <ExpenseList
-                            expenses={filteredTransactions}
+                            expenses={moneyOutExpenses}
                             isLoading={isLoading}
                             onEdit={handleEditExpense}
                             onDelete={handleDeleteExpense}
                             currency={userCurrency}
                             onActionSuccess={invalidateCashFlow}
+                          />
+                        ) : (
+                          <CashFlowLedger
+                            rows={ledgerRows}
+                            currency={userCurrency}
+                            emptyLabel={
+                              kpiFilter === "moneyIn"
+                                ? "No income recorded in this view"
+                                : kpiFilter === "outstanding"
+                                  ? "No outstanding invoices"
+                                  : "No income or expenses in this view"
+                            }
                           />
                         )}
                     </motion.div>
@@ -648,6 +643,7 @@ export default function CashFlowPage() {
                         <CashFlowAccuracy 
                             payments={payments}
                             expenses={storeExpenses || []}
+                            invoices={invoices}
                             currency={userCurrency}
                         />
 
@@ -711,7 +707,7 @@ export default function CashFlowPage() {
                                     <p className="text-sm text-muted-foreground">Average Monthly Income</p>
                                     <p className="text-2xl font-bold text-primary break-words">
                                         {formatCurrency(
-                                          payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) / Math.max(chartData.length, 1),
+                                          cashSnap.allTimeIncome / Math.max(chartData.length, 1),
                                           userCurrency
                                         )}
                                     </p>
@@ -720,7 +716,7 @@ export default function CashFlowPage() {
                                     <p className="text-sm text-muted-foreground">Average Monthly Expenses</p>
                                     <p className="text-2xl font-bold text-red-600 break-words">
                                         {formatCurrency(
-                                          (storeExpenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) / Math.max(chartData.length, 1),
+                                          cashSnap.allTimeExpenses / Math.max(chartData.length, 1),
                                           userCurrency
                                         )}
                                     </p>

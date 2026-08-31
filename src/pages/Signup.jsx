@@ -1,11 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import {
-  parseSignupReferralRef,
-  processPendingAffiliateReferral,
-  recordAffiliateClick,
-  setPendingReferralCode,
-} from "@/api/affiliateClient";
 import Home from "./Home";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,6 +38,7 @@ import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboa
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { tryAcceptStoredInviteToken, peekPendingInviteToken } from "@/services/TenantRoleService";
+import { isPosInviteDest } from "@shared/posStaffInvite.js";
 
 const USERS_STORAGE_KEY = "breakapi_users";
 const SIGNUP_ONBOARDING_DRAFT_KEY = "paidly_signup_onboarding_draft";
@@ -160,15 +155,6 @@ export default function Signup() {
   const [resendStatus, setResendStatus] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  // Persist ?ref= for post-signup attribution (localStorage); also support legacy #sign-up?ref= URLs.
-  useEffect(() => {
-    const ref = parseSignupReferralRef(searchParams, location.hash);
-    if (ref) {
-      setPendingReferralCode(ref);
-      recordAffiliateClick(ref);
-    }
-  }, [searchParams, location.hash]);
 
   // Company invite link: pre-fill email from /invite → /Signup?invite=1&email=...
   useEffect(() => {
@@ -380,7 +366,6 @@ export default function Signup() {
         const sessionWrap = await SupabaseAuthService.getSession();
         if (sessionWrap?.session?.user?.id) {
           await tryAcceptStoredInviteToken();
-          await processPendingAffiliateReferral();
         }
       } catch {
         /* non-fatal — e.g. email confirmation required before session */
@@ -472,7 +457,6 @@ export default function Signup() {
 
       try {
         await tryAcceptStoredInviteToken();
-        await processPendingAffiliateReferral();
       } catch {
         /* non-fatal */
       }
@@ -515,11 +499,18 @@ export default function Signup() {
       
       setSuccess(true);
       clearSignupOnboardingDraft();
-      setWelcomeTourEligibleAfterSignup(createdUserId);
-      setQuickSetupEligibleAfterSignup(createdUserId);
+      const posInvite = isPosInviteDest(searchParams.get("next"));
+      if (!posInvite) {
+        setWelcomeTourEligibleAfterSignup(createdUserId);
+        setQuickSetupEligibleAfterSignup(createdUserId);
+      }
       setTimeout(async () => {
-        if (shouldRedirectToAppAfterAuth()) {
+        if (shouldRedirectToAppAfterAuth() && !posInvite) {
           window.location.replace(getAppDashboardUrl());
+          return;
+        }
+        if (posInvite) {
+          navigate(createPageUrl("POS"), { replace: true });
           return;
         }
         const { User } = await import("@/api/entities");

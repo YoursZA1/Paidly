@@ -31,9 +31,13 @@ const STARTER_FEATURES = Object.freeze([
   "support_basic",
 ]);
 
+/** Till / native POS — Business+; not a per-user or per-org allowlist. */
+export const POS_PLAN_FEATURE = "pos";
+
 const BUSINESS_FEATURES = Object.freeze([
   ...STARTER_FEATURES,
   "inventory",
+  POS_PLAN_FEATURE,
   "expenses",
   "purchase_orders",
   "payslips",
@@ -54,7 +58,6 @@ const GROWTH_FEATURES = Object.freeze([
   "api_access",
   "integrations",
   "multi_company",
-  "affiliate_program",
   "white_label",
 ]);
 

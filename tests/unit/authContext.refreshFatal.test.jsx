@@ -56,7 +56,6 @@ vi.mock("@/hooks/useSupabaseRealtime", () => ({ useSupabaseRealtime: () => {} })
 vi.mock("@/api/backendClient", () => ({ backendApi: {}, clearNodeAuthUnreachable: vi.fn() }));
 vi.mock("@/utils/sessionGuard", () => ({ redirectToLoginIfProtectedPath: vi.fn() }));
 vi.mock("@/lib/authProtectedSessionInvariant", () => ({ enforceProtectedRouteSessionInvariant: vi.fn(async () => {}) }));
-vi.mock("@/api/affiliateClient", () => ({ processPendingAffiliateReferral: vi.fn() }));
 vi.mock("@/lib/staffDashboard", () => ({ resolveUserRoleFromSessionAndProfile: vi.fn(() => "owner") }));
 vi.mock("@/utils/authStorage", () => ({ clearStoredAuthUser: vi.fn() }));
 vi.mock("@/lib/authSessionReconnectToast", () => ({

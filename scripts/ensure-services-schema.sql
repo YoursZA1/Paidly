@@ -45,3 +45,4 @@ ALTER TABLE public.services ADD COLUMN IF NOT EXISTS type_specific_data jsonb;
 ALTER TABLE public.services ADD COLUMN IF NOT EXISTS created_by_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
 ALTER TABLE public.services ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
 ALTER TABLE public.services ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+ALTER TABLE public.services ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id) ON DELETE SET NULL;

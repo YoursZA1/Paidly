@@ -310,33 +310,23 @@ export default function Inventory() {
   }, []);
 
   const loadProducts = useCallback(async () => {
-    const { data, error } = await supabase
+    const catalogSelect =
+      "id, org_id, name, description, sku, barcode, category, image_url, item_type, default_unit, min_quantity, stock_quantity, stock_capacity, low_stock_threshold, price, cost_price, is_active, company_id, created_at, updated_at";
+    const catalogSelectLegacy = catalogSelect.replace(", company_id", "");
+    let { data, error } = await supabase
       .from("services")
-      .select(
-        `
-          id,
-          org_id,
-          name,
-          description,
-          sku,
-          barcode,
-          category,
-          image_url,
-          item_type,
-          default_unit,
-          min_quantity,
-          stock_quantity,
-          stock_capacity,
-          low_stock_threshold,
-          price,
-          cost_price,
-          is_active,
-          created_at,
-          updated_at
-        `.replace(/\s+/g, " ")
-      )
+      .select(catalogSelect)
       .order("updated_at", { ascending: false })
       .limit(500);
+    if (error && /company_id/i.test(error.message || "")) {
+      const retry = await supabase
+        .from("services")
+        .select(catalogSelectLegacy)
+        .order("updated_at", { ascending: false })
+        .limit(500);
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) throw error;
     const rows = Array.isArray(data) ? data : [];
@@ -781,24 +771,49 @@ export default function Inventory() {
           cost_price: Number(productData?.cost ?? 0) || 0,
           price: Number(productData?.price ?? 0) || 0,
           default_rate: Number(productData?.price ?? 0) || 0,
+          company_id: productData?.company_id || null,
         };
+        const payloadWithoutBrand = { ...payload };
+        delete payloadWithoutBrand.company_id;
+        const missingBrandColumn = (err) => /company_id/i.test(err?.message || "");
 
         if (editingProduct) {
-          const { data: updatedRow, error } = await supabase
+          let { data: updatedRow, error } = await supabase
             .from("services")
             .update(payload)
             .eq("id", editingProduct.id)
             .eq("org_id", resolvedOrgId)
             .select("id")
             .maybeSingle();
+          if (error && missingBrandColumn(error)) {
+            const retry = await supabase
+              .from("services")
+              .update(payloadWithoutBrand)
+              .eq("id", editingProduct.id)
+              .eq("org_id", resolvedOrgId)
+              .select("id")
+              .maybeSingle();
+            updatedRow = retry.data;
+            error = retry.error;
+          }
           if (error) throw error;
           if (!updatedRow?.id) {
-            const { data: fallbackRow, error: fallbackError } = await supabase
+            let { data: fallbackRow, error: fallbackError } = await supabase
               .from("services")
               .update(payload)
               .eq("id", editingProduct.id)
               .select("id")
               .maybeSingle();
+            if (fallbackError && missingBrandColumn(fallbackError)) {
+              const retry = await supabase
+                .from("services")
+                .update(payloadWithoutBrand)
+                .eq("id", editingProduct.id)
+                .select("id")
+                .maybeSingle();
+              fallbackRow = retry.data;
+              fallbackError = retry.error;
+            }
             if (fallbackError) throw fallbackError;
             if (!fallbackRow?.id) {
               throw new Error("No matching product row was updated.");
@@ -825,11 +840,20 @@ export default function Inventory() {
             variant: "success",
           });
         } else {
-          const { data: insertedRow, error } = await supabase
+          let { data: insertedRow, error } = await supabase
             .from("services")
             .insert(payload)
             .select("id")
             .maybeSingle();
+          if (error && missingBrandColumn(error)) {
+            const retry = await supabase
+              .from("services")
+              .insert(payloadWithoutBrand)
+              .select("id")
+              .maybeSingle();
+            insertedRow = retry.data;
+            error = retry.error;
+          }
           if (!checkSupabaseWriteResult({ error }, "Add inventory product")) return;
 
           if (insertedRow?.id && requestedStockQuantity !== 0) {

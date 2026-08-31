@@ -13,9 +13,6 @@ export function dashboardRoleFromProfileRow(profile) {
 
 const INTERNAL_ADMIN_READ_ROLES = ["admin", "management", "support", "sales"];
 const TEAM_INVITE_PROFILE_ROLES = ["admin", "management"];
-const AFFILIATE_BUNDLE_READ_ROLES = ["admin", "management", "support"];
-/** Approve / decline / resend-link: same as `/admin-v2/affiliates` (excludes sales). */
-const AFFILIATE_MODERATION_ROLES = ["admin", "management", "support"];
 
 /**
  * First staff role token found on the JWT user (same sources the UI considers).
@@ -55,14 +52,12 @@ function adminBypassAllowed(email) {
  * @param {{
  *   allowInternalTeam?: boolean,
  *   allowTeamManagement?: boolean,
- *   allowAffiliateModeration?: boolean,
  * }} opts
  * @returns {Promise<null | { status: number, body: { error: string } }>}
  */
 export async function assertCallerForAdminRoute(supabaseAdmin, user, opts = {}) {
   const allowInternalTeam = opts.allowInternalTeam === true;
   const allowTeamManagement = opts.allowTeamManagement === true;
-  const allowAffiliateModeration = opts.allowAffiliateModeration === true;
 
   const jwtRole = jwtKnownStaffRole(user);
 
@@ -70,7 +65,7 @@ export async function assertCallerForAdminRoute(supabaseAdmin, user, opts = {}) 
   if (adminBypassAllowed(user?.email)) return null;
 
   // Strict admin-only routes (e.g. clean-orphaned-users): JWT or profile must be admin.
-  if (!allowInternalTeam && !allowTeamManagement && !allowAffiliateModeration) {
+  if (!allowInternalTeam && !allowTeamManagement) {
     if (!user?.id) {
       return { status: 403, body: { error: "Admin access required" } };
     }
@@ -88,7 +83,6 @@ export async function assertCallerForAdminRoute(supabaseAdmin, user, opts = {}) 
     return { status: 403, body: { error: "Admin access required" } };
   }
 
-  if (allowAffiliateModeration && jwtRole && AFFILIATE_MODERATION_ROLES.includes(jwtRole)) return null;
   if (allowInternalTeam && jwtRole && INTERNAL_ADMIN_READ_ROLES.includes(jwtRole)) return null;
   if (allowTeamManagement && jwtRole && TEAM_INVITE_PROFILE_ROLES.includes(jwtRole)) return null;
 
@@ -99,47 +93,8 @@ export async function assertCallerForAdminRoute(supabaseAdmin, user, opts = {}) 
     .maybeSingle();
 
   const pr = dashboardRoleFromProfileRow(profile);
-  if (allowAffiliateModeration && AFFILIATE_MODERATION_ROLES.includes(pr)) return null;
   if (allowInternalTeam && INTERNAL_ADMIN_READ_ROLES.includes(pr)) return null;
   if (allowTeamManagement && TEAM_INVITE_PROFILE_ROLES.includes(pr)) return null;
 
   return { status: 403, body: { error: "Admin access required" } };
-}
-
-/**
- * GET affiliate admin bundle (/api/affiliates, /api/admin/affiliates): admin | management | support.
- * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
- * @param {import("@supabase/auth-js").User} user
- */
-export async function canReadAffiliateAdminBundle(supabaseAdmin, user) {
-  const j = jwtKnownStaffRole(user);
-  if (AFFILIATE_BUNDLE_READ_ROLES.includes(j)) return true;
-  if (!user?.id) return false;
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("role, user_role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (error) return false;
-  const pr = dashboardRoleFromProfileRow(data);
-  return AFFILIATE_BUNDLE_READ_ROLES.includes(pr);
-}
-
-/**
- * Approve / decline affiliate application (admin, management, support — matches Affiliates admin UI).
- * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
- * @param {import("@supabase/auth-js").User} user
- */
-export async function canMutateAffiliateApplication(supabaseAdmin, user) {
-  const j = jwtKnownStaffRole(user);
-  if (AFFILIATE_MODERATION_ROLES.includes(j)) return true;
-  if (!user?.id) return false;
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("role, user_role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (error) return false;
-  const pr = dashboardRoleFromProfileRow(data);
-  return AFFILIATE_MODERATION_ROLES.includes(pr);
 }

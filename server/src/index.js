@@ -76,13 +76,11 @@ import {
 } from "./schemas/mutationSchemas.js";
 import { sendUnexpectedError } from "./apiResponse.js";
 import { assertCallerForAdminRoute } from "./adminRouteAccess.js";
-import { createReferralAttributionForUser } from "./affiliateReferralCreate.js";
-import { registerAffiliateUserRoutes } from "./affiliateUserRoutes.js";
 import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js";
-import { buildAffiliateDashboardPayload } from "./affiliateDashboardData.js";
 import dashboardBootstrapHandler from "./dashboardBootstrapHandler.js";
 import { registerCompanyTeamRoutes } from "./companyTeamRoutes.js";
 import { registerPosRoutes } from "./pos/posApiRoutes.js";
+import { registerPaymentIntentRoutes } from "./payments/registerPaymentIntentRoutes.js";
 import { registerAdminCompanyInviteRoutes } from "./adminCompanyInviteRoutes.js";
 import authSignInHandler from "./auth/authSignInApi.js";
 import authSignUpHandler from "./auth/authSignUpApi.js";
@@ -108,16 +106,6 @@ import {
   handleAdminSubscriptionUpdate,
 } from "./billing/adminBillingApi.js";
 import { envFlag, envNumber } from "./envFlags.js";
-import { countAffiliateApplicationsByStatus } from "./affiliateApplicationCounts.js";
-import { mergeAffiliateApplicationsWithPartnersAndStats } from "./affiliateAdminApplicationsEnrich.js";
-import {
-  isPaidSubscriptionPlan,
-  markReferralSubscribedForUser,
-} from "./affiliateReferralLifecycle.js";
-import {
-  handlePostAffiliateApplicationApprove,
-  handlePostAffiliateApplicationDecline,
-} from "./affiliateApplicationAdminActions.js";
 import { registerClientPortalRoutes } from "./clientPortalApi.js";
 import { registerPublicInvoiceRoutes } from "./publicInvoiceApi.js";
 import { registerPublicQuoteRoutes } from "./publicQuoteApi.js";
@@ -394,11 +382,9 @@ function isAdminBroadcastClientError(message) {
  * @param {{
  *   allowInternalTeam?: boolean,
  *   allowTeamManagement?: boolean,
- *   allowAffiliateModeration?: boolean,
  * }} [opts]
  *   allowInternalTeam — profiles with admin|management|support|sales may access read-style admin routes.
  *   allowTeamManagement — profiles with admin|management may POST team invites (same as JWT admin for this action).
- *   allowAffiliateModeration — admin|management|support may approve/decline affiliates (matches /admin-v2/affiliates).
  */
 const getAdminFromRequest = async (req, res, opts = {}) => {
   const { user, error } = await getUserFromRequest(req);
@@ -712,6 +698,7 @@ app.get("/api/exchange-rates", (req, res) => handleLatestExchangeRates(req, res)
 app.get("/api/dashboard/bootstrap", dashboardBootstrapHandler);
 registerCompanyTeamRoutes(app);
 registerPosRoutes(app);
+registerPaymentIntentRoutes(app);
 registerAdminCompanyInviteRoutes(app);
 
 app.get("/api/security/events", async (req, res) => {
@@ -796,9 +783,6 @@ app.post("/api/waitlist", async (req, res) => {
 });
 
 app.post("/api/auth/forgot-password", authForgotPasswordHandler);
-
-// Affiliate user routes: POST /api/referrals/create, GET /affiliate/dashboard, GET /api/affiliate/dashboard
-registerAffiliateUserRoutes(app);
 
 /** Shared handler: server/src/auth/authSignInApi.js (also Vercel api/auth/sign-in.js). */
 app.post("/api/auth/sign-in", authSignInHandler);
@@ -959,7 +943,8 @@ app.post("/api/send-invoice", requireAuthMiddleware, async (req, res) => {
       toEmail,
       invNum,
       senderName,
-      template
+      template,
+      parsed.idempotencyKey
     );
 
     if (!result.success) {
@@ -1260,14 +1245,6 @@ app.put("/api/admin/users/:userId", async (req, res) => {
       return res.status(500).json({ error: profileError.message });
     }
 
-    if (updates.subscription_plan && isPaidSubscriptionPlan(updates.subscription_plan)) {
-      try {
-        await markReferralSubscribedForUser(supabaseAdmin, userId);
-      } catch (e) {
-        console.error("[admin/users] mark referral subscribed:", e?.message || e);
-      }
-    }
-
     let userData = null;
     if (parsed.user_metadata && Object.keys(parsed.user_metadata).length > 0) {
       const authUpdatePayload = { user_metadata: { ...parsed.user_metadata } };
@@ -1398,7 +1375,7 @@ app.delete("/api/admin/users/:userId", async (req, res) => {
 
 /**
  * Authenticated user deletes their own account. Removes storage assets, then auth user row.
- * DB trigger purge_public_user_data_on_auth_delete clears subscriptions / affiliate applications / waitlist PII.
+ * DB trigger purge_public_user_data_on_auth_delete clears subscriptions / waitlist PII.
  * Owned organizations cascade-delete with all org-scoped business data (invoices, clients, etc.).
  */
 app.post("/api/account/delete", async (req, res) => {
@@ -1923,167 +1900,6 @@ app.post("/api/admin/broadcast-update", async (req, res) => {
   }
 });
 
-function parseAffiliateAdminListLimit(req) {
-  let limit = 150;
-  if (req.query.limit != null && String(req.query.limit).trim() !== "") {
-    const n = Number(String(req.query.limit).trim());
-    if (!Number.isInteger(n) || n < 1 || n > 500) {
-      return { error: "Invalid limit (use integer 1–500)" };
-    }
-    limit = n;
-  }
-  return { limit };
-}
-
-/**
- * GET /api/affiliates and GET /api/admin/affiliates — admin bundle: `affiliate_applications` + `affiliates` (partner rows). Service role; no user_id filter.
- */
-async function handleAdminAffiliateBundleGet(req, res) {
-  try {
-    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
-    if (!adminUser) {
-      return;
-    }
-
-    const parsed = parseAffiliateAdminListLimit(req);
-    if (parsed.error) {
-      return res.status(400).json({ error: parsed.error });
-    }
-    const { limit } = parsed;
-
-    const [appsRes, partnersRes] = await Promise.all([
-      supabaseAdmin
-        .from("affiliate_applications")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(limit),
-      supabaseAdmin.from("affiliates").select("*").order("created_at", { ascending: false }).limit(limit),
-    ]);
-
-    if (appsRes.error) {
-      console.error(
-        `[GET ${req.path}] affiliate_applications:`,
-        appsRes.error.code,
-        appsRes.error.message,
-        appsRes.error.details
-      );
-      logAdminApi(
-        req.method,
-        req.path,
-        500,
-        `affiliate_applications: ${appsRes.error.message || appsRes.error.code || "query failed"}`
-      );
-      const body = postgrestErrorToApiBody(appsRes.error);
-      return res.status(500).json(body || { error: "affiliate_applications query failed" });
-    }
-
-    const rawApplications = appsRes.data || [];
-    const partners = partnersRes.error ? [] : partnersRes.data || [];
-    const applications = await mergeAffiliateApplicationsWithPartnersAndStats(
-      supabaseAdmin,
-      rawApplications,
-      partners
-    );
-    const counts = countAffiliateApplicationsByStatus(applications);
-    const data = {
-      ok: true,
-      applications,
-      partners,
-      counts,
-      ...(partnersRes.error ? { partnerError: partnersRes.error.message } : {}),
-    };
-
-    console.log(
-      `[GET ${req.path}] applications=${applications.length} partners=${partners.length} pending=${counts.pending}` +
-        (partnersRes.error ? ` partner_fetch_error=${partnersRes.error.message}` : "")
-    );
-    logAdminApi(
-      req.method,
-      req.path,
-      200,
-      `bundle apps=${applications.length} partners=${partners.length} pending=${counts.pending}`
-    );
-    return res.json(data);
-  } catch (err) {
-    if (res.headersSent) {
-      return;
-    }
-    logAdminApi(req.method, req.path, 500, err?.message);
-    return res.status(500).json({
-      error: err?.message || "Failed to list affiliate data",
-    });
-  }
-}
-
-app.get("/api/affiliates", handleAdminAffiliateBundleGet);
-app.get("/api/admin/affiliates", handleAdminAffiliateBundleGet);
-
-const affiliateAdminMutationDeps = { supabaseAdmin, getAdminFromRequest, logAdminApi };
-app.post("/api/affiliates/approve", (req, res) =>
-  handlePostAffiliateApplicationApprove(req, res, affiliateAdminMutationDeps)
-);
-app.post("/api/admin/approve", (req, res) =>
-  handlePostAffiliateApplicationApprove(req, res, affiliateAdminMutationDeps)
-);
-app.post("/api/admin/decline", (req, res) =>
-  handlePostAffiliateApplicationDecline(req, res, affiliateAdminMutationDeps)
-);
-
-/**
- * Full affiliate application queue for admin UI: service role read — no `user_id = current user` filter.
- * (Pending rows often have user_id NULL; RLS on the browser client can hide them.)
- */
-app.get("/api/admin/affiliate-applications", async (req, res) => {
-  try {
-    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
-    if (!adminUser) {
-      return;
-    }
-
-    const parsed = parseAffiliateAdminListLimit(req);
-    if (parsed.error) {
-      return res.status(400).json({ error: parsed.error });
-    }
-    const { limit } = parsed;
-
-    const { data: applications, error } = await supabaseAdmin
-      .from("affiliate_applications")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      console.error(
-        `[GET ${req.path}] affiliate_applications:`,
-        error.code,
-        error.message,
-        error.details
-      );
-      logAdminApi(
-        req.method,
-        req.path,
-        500,
-        `affiliate_applications: ${error.message || error.code || "query failed"}`
-      );
-      const body = postgrestErrorToApiBody(error);
-      return res.status(500).json(body || { error: "affiliate_applications query failed" });
-    }
-
-    const list = applications || [];
-    const counts = countAffiliateApplicationsByStatus(list);
-    logAdminApi(req.method, req.path, 200, `${list.length} affiliate applications (pending=${counts.pending})`);
-    return res.json({ applications: list, counts });
-  } catch (err) {
-    if (res.headersSent) {
-      return;
-    }
-    logAdminApi(req.method, req.path, 500, err?.message);
-    return res.status(500).json({
-      error: err?.message || "Failed to list affiliate applications",
-    });
-  }
-});
-
 app.post("/api/admin/clean-orphaned-users", async (req, res) => {
   try {
     const adminUser = await getAdminFromRequest(req, res);
@@ -2245,56 +2061,6 @@ app.get("/api/admin/sync-data", async (req, res) => {
       return res.status(500).json({ error: quotesError.message });
     }
 
-    const { data: affiliates, error: affiliatesError } = await supabaseAdmin
-      .from("affiliates")
-      .select("*")
-      .limit(limit);
-
-    if (affiliatesError) {
-      logAdminApi(req.method, req.path, 500, `affiliates: ${affiliatesError.message}`);
-      return res.status(500).json({ error: affiliatesError.message });
-    }
-
-    const { data: affiliateApplications, error: affiliateApplicationsError } = await supabaseAdmin
-      .from("affiliate_applications")
-      .select("*")
-      .limit(limit);
-
-    if (affiliateApplicationsError) {
-      logAdminApi(req.method, req.path, 500, `affiliate_applications: ${affiliateApplicationsError.message}`);
-      return res.status(500).json({ error: affiliateApplicationsError.message });
-    }
-
-    const { data: referrals, error: referralsError } = await supabaseAdmin
-      .from("referrals")
-      .select("*")
-      .limit(limit);
-
-    if (referralsError) {
-      logAdminApi(req.method, req.path, 500, `referrals: ${referralsError.message}`);
-      return res.status(500).json({ error: referralsError.message });
-    }
-
-    const { data: commissions, error: commissionsError } = await supabaseAdmin
-      .from("commissions")
-      .select("*")
-      .limit(limit);
-
-    if (commissionsError) {
-      logAdminApi(req.method, req.path, 500, `commissions: ${commissionsError.message}`);
-      return res.status(500).json({ error: commissionsError.message });
-    }
-
-    const { data: affiliateClicks, error: affiliateClicksError } = await supabaseAdmin
-      .from("affiliate_clicks")
-      .select("*")
-      .limit(limit);
-
-    if (affiliateClicksError) {
-      logAdminApi(req.method, req.path, 500, `affiliate_clicks: ${affiliateClicksError.message}`);
-      return res.status(500).json({ error: affiliateClicksError.message });
-    }
-
     const { data: payments, error: paymentsError } = await supabaseAdmin
       .from("payments")
       .select("*")
@@ -2390,11 +2156,6 @@ app.get("/api/admin/sync-data", async (req, res) => {
       invoices: mappedInvoices.length,
       quotes: mappedQuotes.length,
       payments: mappedPayments.length,
-      affiliates: (affiliates || []).length,
-      affiliate_applications: (affiliateApplications || []).length,
-      referrals: (referrals || []).length,
-      commissions: (commissions || []).length,
-      affiliate_clicks: (affiliateClicks || []).length
     };
     logAdminApi(req.method, req.path, 200, `sync ok: ${counts.users} users, ${counts.invoices} invoices`);
     return res.json({
@@ -2406,11 +2167,6 @@ app.get("/api/admin/sync-data", async (req, res) => {
       invoices: mappedInvoices,
       quotes: mappedQuotes,
       payments: mappedPayments,
-      affiliates: affiliates || [],
-      affiliate_applications: affiliateApplications || [],
-      referrals: referrals || [],
-      commissions: commissions || [],
-      affiliate_clicks: affiliateClicks || [],
       assets,
       bucket: storageBucket
     });

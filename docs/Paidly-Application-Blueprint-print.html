@@ -32,7 +32,7 @@
   <p>Paidly is structured around <strong>four core engines</strong>:</p>
   <ol>
     <li><strong>Identity System</strong> — Auth, users, organizations, roles, RLS-backed tenancy.</li>
-    <li><strong>Document Engine</strong> — Invoices, quotes, payslips unified as <code>document(type=…)</code>; shared compose, send, and PDF paths.</li>
+    <li><strong>Document Engine</strong> — Shared compose, send, and PDF behaviour. Commercial documents persist on specialised tables (<code>invoices</code>, <code>quotes</code>, <code>payslips</code>); the Documents Hub owns other business documents in <code>documents</code>. Do not dual-write.</li>
     <li><strong>Financial Engine</strong> — Payments, cash flow, reports, subscriptions (reads and rails downstream of documents).</li>
     <li><strong>Growth Engine</strong> — Affiliates, email, notifications, CRM-style behaviour (how Paidly scales).</li>
   </ol>

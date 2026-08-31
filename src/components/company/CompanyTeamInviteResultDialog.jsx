@@ -24,6 +24,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
  */
 export default function CompanyTeamInviteResultDialog({ notice, onOpenChange }) {
   const open = notice != null;
+  const posOnly = /[?&]next=POS\b/i.test(String(notice?.inviteLink || ""));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -31,11 +32,12 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange }) 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-left">
             <CheckCircle className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
-            Invitation ready
+            {posOnly ? "POS invite link" : "Invitation ready"}
           </DialogTitle>
           <DialogDescription className="text-left">
-            Share the secure link below with {notice?.email || "your teammate"} so they can set a password and join
-            your company workspace.
+            {posOnly
+              ? `Copy this special link for ${notice?.email || "your cashier"}. After they join, they can use the till only.`
+              : `Share the secure link below with ${notice?.email || "your teammate"} so they can set a password and join your company workspace.`}
           </DialogDescription>
         </DialogHeader>
         {notice ? (

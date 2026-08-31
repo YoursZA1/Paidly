@@ -48,6 +48,7 @@ const TIERS = [
             "Everything in Starter",
             "Up to 5 users",
             "Inventory, expenses & purchase orders",
+            "Point of sale till",
             "Payslips & VAT reports",
             "Recurring invoices",
             "Priority support",
@@ -68,7 +69,6 @@ const TIERS = [
             "Departments & approval workflows",
             "Advanced reports & API access",
             "Integrations & multi-company",
-            "Affiliate system",
         ],
         buttonText: "Choose Plan",
         recommended: false,
@@ -154,7 +154,7 @@ export default function SubscriptionSettings() {
     }
 
     return (
-        <div className="space-y-10">
+        <div className="space-y-10 pb-[max(2.5rem,calc(1.5rem+env(safe-area-inset-bottom,0px)))] lg:pb-0">
             <DashboardSubscriptionBanner
                 serverStatus={billingStatus || null}
                 profileFallback={billingProfile}
@@ -270,8 +270,7 @@ export default function SubscriptionSettings() {
                                         planSlug={tier.id}
                                         planName={tier.name}
                                         itemDescription={tier.description}
-                                        ctaLabel={`Continue — ${tier.name}`}
-                                        submitVariant="image"
+                                        ctaLabel="Subscribe"
                                         className="mt-0"
                                     />
                                 ) : (

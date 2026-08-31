@@ -1,11 +1,8 @@
-import { postgrestErrorToApiBody } from "../../server/src/postgrestErrorToApiBody.js";
-import { mergeAffiliateApplicationsWithPartnersAndStats } from "../../server/src/affiliateAdminApplicationsEnrich.js";
-
 /**
  * Vercel serverless: /api/admin/:resource (Hobby plan: single function for many admin routes)
  *
- * GET: affiliates | platform-users | platform-user-messages | sync-users | security-events
- * POST: approve | decline | invite-user | clean-orphaned-users | send-platform-message
+ * GET: platform-users | platform-user-messages | sync-users | security-events
+ * POST: invite-user | clean-orphaned-users | send-platform-message
  *
  * /api/security/events → vercel.json rewrite → /api/admin/security-events
  */
@@ -16,7 +13,6 @@ let assertCallerForAdminRoute;
 let fetchMergedPlatformUsersForAdmin;
 let fetchSyncUsersForAdmin;
 let getSecurityEventsSnapshot;
-let handleVercelAffiliateDeclinePost;
 let handleVercelAdminInviteUserPost;
 let handleAdminCompanyInvitePost;
 let applyPaidlyServerlessCors;
@@ -26,16 +22,9 @@ let getAdminPlatformUserMessages;
 let isAdminPlatformMessageClientError;
 let broadcastAdminUpdateToAllUsers;
 let validateAdminBroadcastPayload;
-let assertVercelAffiliateModerationAuth;
-let createResendClient;
-let parseAffiliateApplicationId;
-let parseCommissionFractionFromBody;
-let runAffiliateApplicationApprove;
 
 let corsPromise = null;
 let getDepsPromise = null;
-let approveDeclineDepsPromise = null;
-let affiliateApproveDepsPromise = null;
 let inviteUserDepsPromise = null;
 let sendPlatformMessageDepsPromise = null;
 let sendMessageDepsPromise = null;
@@ -85,41 +74,6 @@ async function ensureGetDeps() {
     }
   );
   return getDepsPromise;
-}
-
-async function ensureApproveDeclineDeps() {
-  await ensureCorsDeps();
-  if (handleVercelAffiliateDeclinePost) return;
-  if (approveDeclineDepsPromise) return approveDeclineDepsPromise;
-  approveDeclineDepsPromise = import("../../server/src/vercelAffiliateDeclinePost.js").then((affiliateDeclineMod) => {
-    handleVercelAffiliateDeclinePost = affiliateDeclineMod.handleVercelAffiliateDeclinePost;
-  });
-  return approveDeclineDepsPromise;
-}
-
-async function ensureAffiliateApproveDeps() {
-  await ensureCorsDeps();
-  if (
-    assertVercelAffiliateModerationAuth &&
-    createResendClient &&
-    parseAffiliateApplicationId &&
-    parseCommissionFractionFromBody &&
-    runAffiliateApplicationApprove
-  ) {
-    return;
-  }
-  if (affiliateApproveDepsPromise) return affiliateApproveDepsPromise;
-  affiliateApproveDepsPromise = Promise.all([
-    import("../../server/src/vercelAffiliateModerationAuth.js"),
-    import("../../server/src/affiliateModerationCore.js"),
-  ]).then(([moderationAuthMod, moderationCoreMod]) => {
-    assertVercelAffiliateModerationAuth = moderationAuthMod.assertVercelAffiliateModerationAuth;
-    createResendClient = moderationCoreMod.createResendClient;
-    parseAffiliateApplicationId = moderationCoreMod.parseAffiliateApplicationId;
-    parseCommissionFractionFromBody = moderationCoreMod.parseCommissionFractionFromBody;
-    runAffiliateApplicationApprove = moderationCoreMod.runAffiliateApplicationApprove;
-  });
-  return affiliateApproveDepsPromise;
 }
 
 async function ensureInviteUserDeps() {
@@ -220,55 +174,6 @@ function getSupabaseAdmin() {
     client: createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } }),
     configError: null,
   };
-}
-
-function countAffiliateApplicationsByStatus(rows) {
-  let pending = 0;
-  let approved = 0;
-  let declined = 0;
-  for (const row of rows || []) {
-    const s = String(row?.status ?? "").toLowerCase();
-    if (s === "pending") pending += 1;
-    else if (s === "approved" || s === "accepted") approved += 1;
-    else if (s === "declined" || s === "rejected") declined += 1;
-  }
-  return { pending, approved, declined, total: (rows || []).length };
-}
-
-async function handleAffiliates(req, res, supabase, limit) {
-  const [appsRes, partnersRes] = await Promise.all([
-    supabase.from("affiliate_applications").select("*").order("created_at", { ascending: false }).limit(limit),
-    supabase.from("affiliates").select("*").order("created_at", { ascending: false }).limit(limit),
-  ]);
-
-  if (appsRes.error) {
-    console.error(
-      "[GET /api/admin/affiliates] affiliate_applications:",
-      appsRes.error.code,
-      appsRes.error.message,
-      appsRes.error.details
-    );
-    const body = postgrestErrorToApiBody(appsRes.error);
-    return res.status(500).json(body || { error: "affiliate_applications query failed" });
-  }
-
-  const rawApplications = appsRes.data || [];
-  const partners = partnersRes.error ? [] : partnersRes.data || [];
-  const applications = await mergeAffiliateApplicationsWithPartnersAndStats(supabase, rawApplications, partners);
-  const counts = countAffiliateApplicationsByStatus(applications);
-  const data = {
-    ok: true,
-    applications,
-    partners,
-    counts,
-    ...(partnersRes.error ? { partnerError: partnersRes.error.message } : {}),
-  };
-
-  console.log(
-    `[GET /api/admin/affiliates] applications=${applications.length} partners=${partners.length} pending=${counts.pending}` +
-      (partnersRes.error ? ` partner_fetch_error=${partnersRes.error.message}` : "")
-  );
-  return res.status(200).json(data);
 }
 
 async function handlePlatformUsers(req, res, supabase, limit) {
@@ -460,24 +365,18 @@ const DEFAULT_ADMIN_SETTINGS = {
     supportEmail: "support@paidly.co.za",
     maintenanceMode: false,
   },
-  affiliateProgram: {
-    defaultCommissionPercent: 15,
-    autoApproveApplications: false,
-  },
 };
 
 function mergeAdminSettingsRows(rows) {
   const out = {
     ...DEFAULT_ADMIN_SETTINGS,
     system: { ...DEFAULT_ADMIN_SETTINGS.system },
-    affiliateProgram: { ...DEFAULT_ADMIN_SETTINGS.affiliateProgram },
   };
   for (const row of rows || []) {
     const key = String(row?.key || "").trim();
     const value = row?.value && typeof row.value === "object" ? row.value : {};
     if (!key) continue;
     if (key === "system") out.system = { ...out.system, ...value };
-    else if (key === "affiliateProgram") out.affiliateProgram = { ...out.affiliateProgram, ...value };
     else out[key] = value;
   }
   return out;
@@ -487,7 +386,7 @@ async function handleGetSettings(res, supabase) {
   const { data, error } = await supabase
     .from("admin_settings")
     .select("key, value, updated_at, updated_by")
-    .in("key", ["system", "affiliateProgram"]);
+    .in("key", ["system"]);
   if (error) {
     return res.status(500).json({ error: error.message || "Failed to load admin settings" });
   }
@@ -532,93 +431,6 @@ async function rollbackAdminSettingsRows(supabase, previousRows) {
   if (error) {
     throw new Error(`Rollback failed: ${error.message}`);
   }
-}
-
-async function handleAffiliateApprovePost(req, res, supabase) {
-  await ensureAffiliateApproveDeps();
-
-  const moderator = await assertVercelAffiliateModerationAuth(supabase, req, res);
-  if (!moderator) return;
-
-  const resend = createResendClient();
-  if (!resend) {
-    return res.status(503).json({ error: "Email service not configured (RESEND_API_KEY)" });
-  }
-
-  const applicationId = parseAffiliateApplicationId(req.body || {});
-  if (!applicationId) {
-    return res.status(400).json({ error: "Missing applicationId" });
-  }
-
-  const commissionFraction = parseCommissionFractionFromBody(req.body || {});
-  const result = await runAffiliateApplicationApprove(supabase, resend, {
-    applicationId,
-    commissionFraction,
-    httpRequest: req,
-  });
-
-  if (!result.ok) {
-    return res.status(result.status).json(result.body);
-  }
-  return res.status(200).json(result.payload);
-}
-
-async function handleAffiliateCommissionPost(req, res, supabase) {
-  await ensureAffiliateApproveDeps();
-  const moderator = await assertVercelAffiliateModerationAuth(supabase, req, res);
-  if (!moderator) return;
-
-  const applicationId = parseAffiliateApplicationId(req.body || {});
-  if (!applicationId) {
-    return res.status(400).json({ error: "Missing applicationId" });
-  }
-
-  const commissionFraction = parseCommissionFractionFromBody(req.body || {});
-  if (commissionFraction == null) {
-    return res.status(400).json({ error: "Missing or invalid commissionRate" });
-  }
-
-  const nowIso = new Date().toISOString();
-  const { data: appRow, error: appErr } = await supabase
-    .from("affiliate_applications")
-    .update({
-      commission_rate: commissionFraction * 100,
-      updated_at: nowIso,
-    })
-    .eq("id", applicationId)
-    .select("id, user_id, commission_rate, status")
-    .single();
-
-  if (appErr) {
-    return res.status(500).json({ error: appErr.message || "Failed to update application commission" });
-  }
-  if (!appRow) {
-    return res.status(404).json({ error: "Affiliate application not found" });
-  }
-
-  const affiliatePatch = {
-    commission_rate: commissionFraction,
-    updated_at: nowIso,
-    application_id: appRow.id,
-  };
-  if (String(appRow.status || "").toLowerCase() === "approved") {
-    affiliatePatch.status = "approved";
-  }
-
-  if (appRow.user_id) {
-    const { error: affUpErr } = await supabase
-      .from("affiliates")
-      .upsert({ user_id: appRow.user_id, ...affiliatePatch }, { onConflict: "user_id" });
-    if (affUpErr) {
-      return res.status(500).json({ error: affUpErr.message || "Failed to update affiliate commission profile" });
-    }
-  }
-
-  return res.status(200).json({
-    ok: true,
-    applicationId: appRow.id,
-    commissionRate: Number(appRow.commission_rate ?? commissionFraction * 100),
-  });
 }
 
 function parseSystemWorkflowBody(req, res) {
@@ -827,9 +639,6 @@ async function handlePostSettings(req, res, supabase, user) {
     if (s.system && typeof s.system === "object") {
       updates.push({ key: "system", value: s.system, updated_by: user.id, updated_at: now });
     }
-    if (s.affiliateProgram && typeof s.affiliateProgram === "object") {
-      updates.push({ key: "affiliateProgram", value: s.affiliateProgram, updated_by: user.id, updated_at: now });
-    }
   } else if (body.key && body.value && typeof body.value === "object") {
     updates.push({
       key: String(body.key).trim(),
@@ -882,7 +691,6 @@ export default async function handler(req, res) {
     const adminSubpath = adminSubpathFromRequest(req);
     const systemAction = resource === "system" ? adminSubpath.split("/").slice(1).join("/") : "";
     const getResources = new Set([
-      "affiliates",
       "platform-users",
       "platform-user-messages",
       "broadcast-jobs",
@@ -896,9 +704,6 @@ export default async function handler(req, res) {
       "payments",
     ]);
     const postResources = new Set([
-      "approve",
-      "affiliate-commission",
-      "decline",
       "invite-user",
       "invite-company",
       "clean-orphaned-users",
@@ -952,24 +757,6 @@ export default async function handler(req, res) {
             console.error("[POST /api/admin/clean-orphaned-users]", e?.message || e);
             return res.status(500).json({ error: e?.message || "Failed to clean orphaned profiles" });
           }
-        }
-        if (resource === "approve") {
-          await ensureGetDeps();
-          cors(res, req);
-          const { client: supabase, configError } = getSupabaseAdmin();
-          if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
-          return handleAffiliateApprovePost(req, res, supabase);
-        }
-        if (resource === "affiliate-commission") {
-          await ensureGetDeps();
-          cors(res, req);
-          const { client: supabase, configError } = getSupabaseAdmin();
-          if (!supabase) return res.status(503).json({ error: configError || "Server misconfigured (Supabase)" });
-          return handleAffiliateCommissionPost(req, res, supabase);
-        }
-        if (resource === "decline") {
-          await ensureApproveDeclineDeps();
-          return handleVercelAffiliateDeclinePost(req, res);
         }
         if (resource === "invite-user") {
           await ensureInviteUserDeps();
@@ -1164,19 +951,6 @@ export default async function handler(req, res) {
         console.error("[GET /api/admin/platform-user-messages]", msg);
         return res.status(status).json({ error: msg });
       }
-    }
-
-    if (resource === "affiliates") {
-      let limit = 150;
-      const q = req.query?.limit;
-      if (q != null && String(q).trim() !== "") {
-        const n = Number(String(q).trim());
-        if (!Number.isInteger(n) || n < 1 || n > 500) {
-          return res.status(400).json({ error: "Invalid limit (use integer 1–500)" });
-        }
-        limit = n;
-      }
-      return handleAffiliates(req, res, supabase, limit);
     }
 
     // Billing v2 admin (also mirrored via admin-billing-handler + vercel rewrites)

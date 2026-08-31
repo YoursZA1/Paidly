@@ -67,14 +67,11 @@ Use this checklist before every production promotion:
      - `20260516140000_invoices_client_operation_id.sql` (sync idempotency)
      - `20260516160000_api_rate_limit_consume_rpc.sql` (shared auth rate limits on Vercel)
    - Run: `npm run verify:prod` (loads `server/.env` + `.env.production`; health checks need API running or `VITE_SERVER_URL` pointing at production API)
-   - Validate required affiliate/admin migrations are present.
-   - Ensure no missing critical RLS policies for `affiliate_applications` and `affiliates`.
 3. Critical smoke checks (manual + scripted)
    - Run: `npm run smoke:critical`
    - Manual browser checks on production:
      - Login/logout/session refresh
      - Create invoice, preview invoice, send invoice email
-     - Admin affiliates list, approve affiliate, resend referral link
 4. Health endpoint checks
    - `GET /api/health`
    - `GET /api/health/auth-security`
@@ -85,7 +82,6 @@ Use this checklist before every production promotion:
    - Trigger immediate rollback if any of these happen:
      - Login failures spike or sustained 5xx on `/api/auth/*`
      - Invoice send endpoint fails repeatedly
-     - Admin affiliate approval flow fails for valid requests
      - New crash-level frontend runtime exceptions in critical flows
 
 ### Incident Logging Standard
@@ -93,8 +89,6 @@ Use this checklist before every production promotion:
 - Always include `x-request-id` for API debugging and support handoff.
 - Log route-level failures with request id and endpoint label.
 - Return production-safe errors to clients, but keep detailed server logs with the same request id.
-
-**Affiliate dashboard API (Node):** `GET https://api.paidly.co.za/affiliate/dashboard` (alias: `GET /api/affiliate/dashboard`) requires `Authorization: Bearer <Supabase access token>`. Opening the URL in a browser without a token returns **`401`** JSON such as `{"error":"Missing bearer token"}` — that confirms the route is deployed. A successful **`200`** body includes `ok`, `affiliate`, `stats`, **`summary`** (`signups`, `paid_users`, `earnings`), and `recentCommissions`.
 
 ## Environment variables
 

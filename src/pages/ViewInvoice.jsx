@@ -466,6 +466,11 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                             </Button>
                         </div>
                     </div>
+                    {invoice.pos_sale_event_id ? (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                            Tax invoice for a settled till sale. Payment was collected at POS — this is not a new receivable.
+                        </p>
+                    ) : null}
                 </div>
             </div>
             

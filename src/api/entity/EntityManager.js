@@ -1080,12 +1080,15 @@ export class EntityManager {
         'sku', 'price', 'billing_unit', 'role', 'hourly_rate', 'unit_type', 'cost_rate', 'cost_type', 'default_cost',
         'category', 'pricing_type', 'min_quantity', 'tags', 'estimated_duration', 'requirements',
         'price_locked', 'price_locked_at', 'price_locked_reason', 'usage_count', 'last_used_date', 'type_specific_data',
-        'created_by_id', 'created_at', 'updated_at'
+        'company_id', 'created_by_id', 'created_at', 'updated_at'
       ];
       if (supabaseTable === 'services') {
         Object.keys(supabaseData).forEach(key => {
           if (!SERVICE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
         });
+        if (Object.prototype.hasOwnProperty.call(supabaseData, "company_id") && !supabaseData.company_id) {
+          supabaseData.company_id = null;
+        }
       }
 
       const SUPPLIER_INSERT_COLUMNS = [
@@ -1459,12 +1462,15 @@ export class EntityManager {
         'sku', 'price', 'billing_unit', 'role', 'hourly_rate', 'unit_type', 'cost_rate', 'cost_type', 'default_cost',
         'category', 'pricing_type', 'min_quantity', 'tags', 'estimated_duration', 'requirements',
         'price_locked', 'price_locked_at', 'price_locked_reason', 'usage_count', 'last_used_date', 'type_specific_data',
-        'created_by_id', 'updated_at'
+        'company_id', 'created_by_id', 'updated_at'
       ];
       if (supabaseTable === 'services') {
         Object.keys(updateData).forEach(key => {
           if (!SERVICE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
+        if (Object.prototype.hasOwnProperty.call(updateData, "company_id") && !updateData.company_id) {
+          updateData.company_id = null;
+        }
       }
 
       const SUPPLIER_UPDATE_COLUMNS = [

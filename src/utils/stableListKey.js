@@ -23,7 +23,7 @@ export function stableDirectoryRowKey(row, index = 0) {
 }
 
 /**
- * Stable key for subscriptions, affiliate applications, and similar entities.
+ * Stable key for subscriptions and similar entities.
  */
 export function stableEntityRowKey(row, index = 0) {
   const raw = row?.id;

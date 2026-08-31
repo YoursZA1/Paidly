@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
-import { Brain, ExternalLink, TrendingUp, Users, Wrench } from 'lucide-react';
+import { Brain, ExternalLink, Users, Wrench } from 'lucide-react';
 import TeamMembers from '@/components/settings/TeamMembers';
 import PlatformCompanyInvitePanel from '@/components/admin/PlatformCompanyInvitePanel';
 import { useCurrentUser } from '@/lib/useCurrentUser';
@@ -22,22 +22,12 @@ function readAdminSettingsForm() {
       supportEmail: 'support@paidly.co.za',
       maintenanceMode: false,
     },
-    affiliateProgram: {
-      defaultCommissionPercent: 15,
-      autoApproveApplications: false,
-    },
   };
-  const ap = s.affiliateProgram || {};
-  const rawCommission = Number(ap.defaultCommissionPercent);
-  const commission =
-    Number.isFinite(rawCommission) && rawCommission >= 0 ? Math.min(100, rawCommission) : 15;
   return {
     platformName: String(s.system?.siteName ?? 'Paidly'),
     supportEmail: String(
       s.system?.supportEmail ?? s.system?.adminEmail ?? 'support@paidly.co.za'
     ),
-    affiliateCommission: commission,
-    autoApproveAffiliates: Boolean(ap.autoApproveApplications),
     maintenanceMode: Boolean(s.system?.maintenanceMode),
   };
 }
@@ -59,7 +49,6 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [savingScope, setSavingScope] = useState('all');
   const [isReloading, setIsReloading] = useState(false);
-  const [isEditingAffiliateCommission, setIsEditingAffiliateCommission] = useState(false);
   const [systemHealth, setSystemHealth] = useState(null);
   const [systemHealthLoading, setSystemHealthLoading] = useState(false);
   const [systemHealthError, setSystemHealthError] = useState(null);
@@ -81,15 +70,9 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!adminSettingsFromServer || typeof adminSettingsFromServer !== 'object') return;
     const system = adminSettingsFromServer.system || {};
-    const ap = adminSettingsFromServer.affiliateProgram || {};
-    const rawCommission = Number(ap.defaultCommissionPercent);
-    const commission =
-      Number.isFinite(rawCommission) && rawCommission >= 0 ? Math.min(100, rawCommission) : 15;
     setSettings({
       platformName: String(system.siteName ?? 'Paidly'),
       supportEmail: String(system.supportEmail ?? system.adminEmail ?? 'support@paidly.co.za'),
-      affiliateCommission: commission,
-      autoApproveAffiliates: Boolean(ap.autoApproveApplications),
       maintenanceMode: Boolean(system.maintenanceMode),
     });
   }, [adminSettingsFromServer]);
@@ -195,9 +178,6 @@ export default function SettingsPage() {
     try {
       const name = settings.platformName.trim() || 'Paidly';
       const email = settings.supportEmail.trim() || 'support@paidly.co.za';
-      let commission = Number(settings.affiliateCommission);
-      if (!Number.isFinite(commission) || commission < 0) commission = 0;
-      if (commission > 100) commission = 100;
 
       const payload = { settings: {} };
       if (scope === 'all' || scope === 'platform') {
@@ -205,12 +185,6 @@ export default function SettingsPage() {
           siteName: name,
           supportEmail: email,
           maintenanceMode: settings.maintenanceMode,
-        };
-      }
-      if (scope === 'all' || scope === 'growth') {
-        payload.settings.affiliateProgram = {
-          defaultCommissionPercent: commission,
-          autoApproveApplications: settings.autoApproveAffiliates,
         };
       }
 
@@ -228,7 +202,6 @@ export default function SettingsPage() {
         ...prev,
         platformName: name,
         supportEmail: email,
-        affiliateCommission: commission,
       }));
 
       toast.success('Saved successfully');
@@ -255,35 +228,6 @@ export default function SettingsPage() {
     void runDangerWorkflow('reset', { reason: parsedReason }, 'reset-settings');
   };
 
-  const handleRemoveAffiliates = () => {
-    if (!window.confirm('Remove affiliates configuration? This resets affiliate defaults.')) return;
-    void (async () => {
-      setDangerAction('remove-affiliates');
-      try {
-        await authedJson('/api/admin/settings', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            settings: {
-              affiliateProgram: {
-                defaultCommissionPercent: 0,
-                autoApproveApplications: false,
-              },
-            },
-          }),
-        }, 'admin-settings-remove-affiliates-missing-token');
-        await queryClient.invalidateQueries({ queryKey: ['admin-settings'] });
-        toast.success('Saved successfully');
-      } catch (e) {
-        toast.error(e?.message || 'Could not remove affiliates');
-      } finally {
-        setDangerAction('');
-      }
-    })();
-  };
-
   const runDangerWorkflow = async (action, payload, actionKey) => {
     setDangerAction(actionKey);
     try {
@@ -305,8 +249,6 @@ export default function SettingsPage() {
         const defaults = {
           platformName: 'Paidly',
           supportEmail: 'support@paidly.co.za',
-          affiliateCommission: 15,
-          autoApproveAffiliates: false,
           maintenanceMode: false,
         };
         setSettings(defaults);
@@ -388,96 +330,6 @@ export default function SettingsPage() {
                   checked={settings.maintenanceMode}
                   onCheckedChange={(v) => setSettings({ ...settings, maintenanceMode: v })}
                 />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <TrendingUp className="h-5 w-5 text-violet-600" />
-                <span>Growth &amp; Monetization</span>
-              </CardTitle>
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSave('growth')}
-                  disabled={isSaving}
-                >
-                  {isSaving && savingScope === 'growth' ? 'Saving…' : 'Save Section'}
-                </Button>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Levers that influence partner activation and recurring acquisition.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg border bg-muted/20 p-4">
-                <p className="text-sm font-semibold">Affiliate Program</p>
-
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Commission</p>
-                    <p className="text-base font-semibold">{settings.affiliateCommission}%</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEditingAffiliateCommission((prev) => !prev)}
-                  >
-                    {isEditingAffiliateCommission ? 'Done' : 'Edit'}
-                  </Button>
-                </div>
-                {isEditingAffiliateCommission ? (
-                  <div className="mt-3 space-y-2">
-                    <Label htmlFor="settings-affiliate-commission">Default Commission %</Label>
-                    <Input
-                      id="settings-affiliate-commission"
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.5}
-                      value={settings.affiliateCommission}
-                      onChange={(e) =>
-                        setSettings({ ...settings, affiliateCommission: Number(e.target.value) })
-                      }
-                    />
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="rounded-lg border bg-muted/20 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Auto-Approve</p>
-                    <p className="text-base font-semibold">
-                      {settings.autoApproveAffiliates ? 'ON' : 'OFF'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setSettings((prev) => ({
-                          ...prev,
-                          autoApproveAffiliates: !prev.autoApproveAffiliates,
-                        }))
-                      }
-                    >
-                      Toggle
-                    </Button>
-                    <Switch
-                      checked={settings.autoApproveAffiliates}
-                      onCheckedChange={(v) => setSettings({ ...settings, autoApproveAffiliates: v })}
-                    />
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground">Affects all new affiliates.</p>
               </div>
             </CardContent>
           </Card>
@@ -657,7 +509,7 @@ export default function SettingsPage() {
               High-impact operations. Use only when operationally necessary.
             </p>
           </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-3">
+          <CardContent className="grid gap-2 sm:grid-cols-2">
             <Button
               type="button"
               variant="destructive"
@@ -673,14 +525,6 @@ export default function SettingsPage() {
               disabled={dangerAction !== ''}
             >
               {dangerAction === 'reset-settings' ? 'Processing…' : 'Reset settings'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleRemoveAffiliates}
-              disabled={dangerAction !== ''}
-            >
-              {dangerAction === 'remove-affiliates' ? 'Processing…' : 'Remove affiliates'}
             </Button>
           </CardContent>
         </Card>

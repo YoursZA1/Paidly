@@ -8,7 +8,6 @@ import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
 import { clearSessionOrgIdCache } from "@/api/auth/orgCache.js";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { enforceProtectedRouteSessionInvariant } from "@/lib/authProtectedSessionInvariant";
-import { processPendingAffiliateReferral } from "@/api/affiliateClient";
 import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import Button from "@/components/ui/button";
 import { isAbortError } from "@/utils/retryOnAbort";
@@ -1113,9 +1112,7 @@ export function AuthProvider({ children }) {
         connectionLifecycle.markConnected("signed_in");
         patchAuthSession({ session: norm });
         void bootstrapOrganizationAfterLogin(norm);
-        void tryAcceptStoredInviteToken().then(() => {
-          void processPendingAffiliateReferral();
-        });
+        void tryAcceptStoredInviteToken();
         // Do not await — refreshUser calls getSession and can deadlock with setSession.
         void refreshUserRef.current();
         touchAuthHeartbeatIfValid(norm);
@@ -1149,12 +1146,6 @@ export function AuthProvider({ children }) {
     });
     return () => subscription.unsubscribe();
   }, [bootstrapOrganizationAfterLogin, connectionLifecycle]);
-
-  // Attach pending ?ref= from localStorage once a session exists (OAuth, email link, or after refresh).
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    processPendingAffiliateReferral();
-  }, [session?.user?.id]);
 
   const login = useCallback(async ({ email, password, role }) => {
     setError("");

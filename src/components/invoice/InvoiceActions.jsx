@@ -16,7 +16,7 @@ import { MoreHorizontal, Eye, Mail, Download, CheckCircle, Clock, AlertTriangle,
 import { PaperAirplaneIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Invoice, User, BankingDetail } from '@/api/entities';
+import { Invoice } from '@/api/entities';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import RecordPaymentModal from './RecordPaymentModal';
 import { RecordPaymentForm } from './RecordPaymentForm';
@@ -24,7 +24,7 @@ import ManualShareModal from '../shared/ManualShareModal';
 import EmailPreviewModal from './EmailPreviewModal';
 import InvoiceService from '@/api/InvoiceService';
 import { useToast } from '@/components/ui/use-toast';
-import { sendDraftInvoice, recordDocumentSend, createTrackableInvoiceLink } from '@/services/InvoiceSendService';
+import { sendDraftInvoice, sendInvoicePdfEmailToClient, recordDocumentSend, prepareInvoiceTrackingLink } from '@/services/InvoiceSendService';
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
 import { isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
@@ -32,10 +32,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
-import { getStableSessionResult } from '@/core/auth/SessionCoordinator';
-import { generateInvoicePDF } from '@/components/pdf/generateInvoicePDF';
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
-import { getPublicApiBase } from '@/api/backendClient';
 
 const statusOptions = [
     { value: 'sent', label: 'Mark as Sent', icon: Mail },
@@ -249,117 +246,13 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
         }
     };
 
-    const handleSendEmail = async (htmlContent) => {
+    const handleSendEmail = async (htmlContent, trackingToken) => {
         setIsProcessing(true);
         try {
-            const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
-            if (!supabaseUrl) throw new Error('Supabase URL is not configured.');
-
-            const { data: sessionData, error: sessionError } = await getStableSessionResult();
-            if (sessionError) throw sessionError;
-            const accessToken = sessionData?.session?.access_token;
-            if (!accessToken) throw new Error('You must be logged in to send emails.');
-
-            // Generate the invoice PDF in the browser (same HTML templates as preview) and attach via Edge Function.
-            const userData = await User.me();
-            let bankingForPdf = null;
-            if (invoice?.banking_detail_id) {
-                try {
-                    bankingForPdf = await BankingDetail.get(invoice.banking_detail_id);
-                } catch {
-                    bankingForPdf = null;
-                }
-            }
-            const pdfBlob = await generateInvoicePDF({
-                invoice,
-                client,
-                user: userData,
-                bankingDetail: bankingForPdf,
+            await sendInvoicePdfEmailToClient(invoice, client, {
+                html: htmlContent,
+                trackingToken,
             });
-
-            const blobToBase64 = async (blob) =>
-                new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        const result = String(reader.result || '');
-                        const base64 = result.includes(',') ? result.split(',')[1] : result;
-                        resolve(base64);
-                    };
-                    reader.onerror = () => reject(new Error('Failed to read PDF blob.'));
-                    reader.readAsDataURL(blob);
-                });
-
-            const pdfBase64 = await blobToBase64(pdfBlob);
-            const subject = `Invoice #${invoice.invoice_number} from ${invoice.owner_company_name || 'Us'}`;
-            const filename = `invoice-${invoice.invoice_number || invoice.reference_number || 'invoice'}.pdf`;
-
-            let sent = false;
-            let primaryError = null;
-            try {
-                const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`,
-                    },
-                    body: JSON.stringify({
-                        pdfBase64,
-                        email: client.email,
-                        subject,
-                        html: htmlContent,
-                        filename,
-                    }),
-                });
-
-                if (!sendRes.ok) {
-                    let details = '';
-                    try {
-                        details = await sendRes.text();
-                    } catch {
-                        details = '';
-                    }
-                    throw new Error(details || 'Failed to send email via edge function.');
-                }
-                sent = true;
-            } catch (edgeErr) {
-                primaryError = edgeErr;
-                // Fallback to Node API route for production resiliency.
-                const apiBase = getPublicApiBase() || '';
-                const fallbackRes = await fetch(`${apiBase}/api/send-invoice`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`,
-                    },
-                    body: JSON.stringify({
-                        base64PDF: pdfBase64,
-                        clientEmail: client.email,
-                        invoiceNum: String(invoice.invoice_number || invoice.reference_number || ''),
-                        fromName: String(userData?.company_name || userData?.full_name || 'Paidly'),
-                        clientName: String(client?.name || 'there'),
-                        amountDue: String(invoice?.total_amount ?? ''),
-                        dueDate: String(invoice?.delivery_date || ''),
-                    }),
-                });
-                if (!fallbackRes.ok) {
-                    let details = '';
-                    try {
-                        details = await fallbackRes.text();
-                    } catch {
-                        details = '';
-                    }
-                    const fallbackMsg = details || `Fallback send failed (${fallbackRes.status})`;
-                    const primaryMsg = primaryError?.message || 'Edge send failed';
-                    throw new Error(`${primaryMsg} | ${fallbackMsg}`);
-                }
-                sent = true;
-            }
-
-            if (!sent) {
-                throw new Error('Failed to send email.');
-            }
-            
-            // Mark as sent (with retry on spurious AbortError)
             if (invoice.status === 'draft') {
                 const historyEntry = createHistoryEntry({
                     action: 'send',
@@ -371,14 +264,11 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                 });
                 await retryOnAbort(() =>
                     Invoice.update(invoice.id, {
-                        status: 'sent',
-                        sent_to_email: client.email,
                         version_history: appendHistory(invoice.version_history, historyEntry),
                     })
                 );
-                onActionSuccess();
             }
-            recordDocumentSend('invoice', invoice.id, client?.id, 'email');
+            onActionSuccess?.();
 
             setShowEmailPreview(false);
             toast({
@@ -396,7 +286,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                 ? "Request was interrupted. Please try again."
                 : isLikelyNetworkFetchError(error)
                     ? "Could not reach email service. Please verify network/API settings and try again."
-                    : (error.message || "Please try again.");
+                    : (error.message || "Invoice could not be sent. Please try again.");
             toast({
                 title: "Failed to send email",
                 description: message,
@@ -937,7 +827,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                     onClose={() => setShowEmailPreview(false)}
                     onSend={handleSendEmail}
                     isSending={isProcessing}
-                    getTrackableLink={() => createTrackableInvoiceLink(invoice, 'email', client?.email)}
+                    getTrackableLink={() => prepareInvoiceTrackingLink(invoice)}
                 />
             )}
         </>

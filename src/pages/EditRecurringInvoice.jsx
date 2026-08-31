@@ -57,7 +57,7 @@ export default function EditRecurringInvoice() {
                     description: "No template ID provided",
                     variant: "destructive",
                 });
-                navigate(createPageUrl("recurring-invoices"));
+                navigate(createPageUrl("RecurringInvoices"));
                 return;
             }
 
@@ -73,7 +73,7 @@ export default function EditRecurringInvoice() {
                     description: "Template not found",
                     variant: "destructive",
                 });
-                navigate(createPageUrl("recurring-invoices"));
+                navigate(createPageUrl("RecurringInvoices"));
                 return;
             }
 
@@ -132,7 +132,7 @@ export default function EditRecurringInvoice() {
 
             // Refresh and navigate back
             setTimeout(() => {
-                navigate(createPageUrl("recurring-invoices"));
+                navigate(createPageUrl("RecurringInvoices"));
             }, 1500);
         } catch (error) {
             console.error("Error updating template:", error);
@@ -179,7 +179,7 @@ export default function EditRecurringInvoice() {
                     </div>
                     <Button
                         variant="outline"
-                        onClick={() => navigate(createPageUrl("recurring-invoices"))}
+                        onClick={() => navigate(createPageUrl("RecurringInvoices"))}
                         className="gap-2"
                     >
                         <ArrowLeft className="w-4 h-4" />

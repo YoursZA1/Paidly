@@ -16,7 +16,7 @@ pdf_options:
 
 ## 1. What Paidly is
 
-Paidly is **not** a narrow invoicing app. It is a **financial workflow platform** for small and medium businesses: one place to issue commercial documents, manage clients and catalog, collect payment, see cash performance, and grow through channels such as affiliates.
+Paidly is **not** a narrow invoicing app. It is a **financial workflow platform** for small and medium businesses: one place to issue commercial documents, manage clients and catalog, collect payment, and see cash performance.
 
 **Mission:** Help businesses get paid faster by reducing friction between sending a document and receiving money.
 
@@ -65,7 +65,7 @@ Intelligence (smart reminders, at-risk follow-ups)
 3. Send via email or shareable link; track views.
 4. Collect payment (PayFast) and record partial payments where needed.
 5. Use dashboard, cash flow, and reports for visibility.
-6. Grow via affiliates and team/company workspaces.
+6. Operate team and company workspaces.
 
 ---
 
@@ -82,7 +82,7 @@ Paidly is built as **named systems** (not a random page list):
 | **Revenue & Ops** | Payments, cash flow, reports, SaaS subscriptions, POS | Cash visibility + how Paidly bills its own tenants |
 | **Payment Intelligence** | Reminders, nudges, “viewed but unpaid” triggers | Collection velocity — the Get Paid differentiator |
 | **Experience** | Consistent UI shell, money CTAs, layout system | Feels like one premium product, not 20 features |
-| **Growth** | Affiliates, email, notifications, CRM behaviour | Acquisition and retention loops beside day-to-day issuing |
+| **Growth** | Email, notifications, CRM behaviour | Acquisition and retention loops beside day-to-day issuing |
 
 ---
 
@@ -129,7 +129,6 @@ Paidly is built as **named systems** (not a random page list):
 
 | Capability | Status |
 |------------|--------|
-| Affiliate program (apply, landing, dashboard, admin moderation) | **Shipped** |
 | Platform admin (users, oversight, messaging, subscriptions) | **Shipped** (Admin v2 surface) |
 | Waitlist / marketing site surfaces | **Shipped** |
 | SEO / structured data on marketing homepage | **Shipped** |
@@ -175,7 +174,6 @@ Competitors typically win one vertical. Paidly’s thesis is **workflow ownershi
 - Know who bought what (clients + catalog)  
 - Collect and reconcile payment safely  
 - Remind and prioritize unpaid work intelligently  
-- Grow distribution via affiliates  
 - Operate the company with admin, roles, and subscriptions  
 
 That stack is the **defensible story** for shareholders: not feature count, but **system coherence**.
@@ -202,7 +200,6 @@ Paidly is a **SaaS subscription** product:
 - Plans and features are catalog-driven (not hardcoded in the UI).
 - Tenant subscriptions activate only after **verified** PayFast Instant Transaction Notifications (ITN) — frontend cannot fake “paid.”
 - Append-only payment history and subscription event timeline support auditability and admin oversight.
-- Affiliate channel supports acquisition without building a separate growth product.
 
 ---
 
@@ -213,7 +210,7 @@ Paidly is a **SaaS subscription** product:
 | **What is it?** | SMB business operating system for documents, relationships, payments, and growth |
 | **Where?** | South Africa–first; live product at paidly.co.za |
 | **Who uses it?** | Small businesses, freelancers, teams with company workspaces |
-| **What’s shipped?** | Invoices, quotes, payslips, clients, catalog, PayFast, cash/reports, affiliates, admin, portal, recurring billing plumbing |
+| **What’s shipped?** | Invoices, quotes, payslips, clients, catalog, PayFast, cash/reports, admin, portal, recurring billing plumbing |
 | **What’s left for moat?** | Payment abstraction, document event intelligence, quote→invoice conversion, experience consistency |
 | **Tech posture?** | Modern cloud stack (Vercel + Supabase + PayFast); security-first billing; multi-tenant RLS |
 | **Ask of shareholders?** | Align on **workflow platform** narrative; fund completion of the Get Paid / Payment Intent layer that turns invoicing into collection velocity |
@@ -230,7 +227,6 @@ Paidly is a **SaaS subscription** product:
 - **Services / inventory** — catalog  
 - **Cash flow & reports** — money visibility  
 - **Settings / company / billing** — branding, bank details, plan  
-- **Affiliates** — apply, track, admin  
 - **Admin platform** — users, revenue, messaging, oversight  
 - **Integrations** — POS (Yoco, Square)
 

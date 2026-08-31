@@ -42,6 +42,7 @@ const PublicQuote = lazy(() => import("./PublicQuote"));
 const ClientPortal = lazy(() => import("./ClientPortal"));
 const RecurringInvoices = lazy(() => import("./RecurringInvoices"));
 const CreateRecurringInvoice = lazy(() => import("./CreateRecurringInvoice"));
+const EditRecurringInvoice = lazy(() => import("./EditRecurringInvoice"));
 const CompanyWorkspace = lazy(() => import("./CompanyWorkspace"));
 const Reports = lazy(() => import("./Reports"));
 const Payslips = lazy(() => import("./Payslips"));
@@ -64,13 +65,13 @@ const EditCatalogItem = lazy(() => import("./EditCatalogItem"));
 const QuoteTemplates = lazy(() => import("./QuoteTemplates"));
 const Vendors = lazy(() => import("./Vendors"));
 const PurchaseOrders = lazy(() => import("./PurchaseOrders"));
+const POS = lazy(() => import("./POS"));
 const Budgets = lazy(() => import("./Budgets"));
 const Accounting = lazy(() => import("./Accounting"));
 const AdminV2Dashboard = lazy(() => import("./AdminV2Dashboard"));
 const UsersPage = lazy(() => import("./UsersPage"));
 const AdminPlatformMessages = lazy(() => import("./AdminPlatformMessages"));
 const SubscriptionsPage = lazy(() => import("./SubscriptionsPage"));
-const AffiliatesPage = lazy(() => import("./AffiliatesPage"));
 const WaitlistPage = lazy(() => import("./WaitlistPage"));
 const SettingsPage = lazy(() => import("./SettingsPage"));
 const AuditLogPage = lazy(() => import("./AuditLogPage"));
@@ -84,9 +85,6 @@ const TermsAndConditions = lazy(() => import("./TermsAndConditions"));
 const BentoDemoPage = lazy(() => import("./BentoDemo"));
 const AnimatedIconsDemoPage = lazy(() => import("./AnimatedIconsDemo"));
 const HowTo = lazy(() => import("./HowTo"));
-const AffiliateLanding = lazy(() => import("./AffiliateLanding"));
-const AffiliateApply = lazy(() => import("./AffiliateApply"));
-const AffiliateDashboard = lazy(() => import("./AffiliateDashboard"));
 const PayfastReturn = lazy(() => import("./PayfastReturn"));
 const PayfastCancel = lazy(() => import("./PayfastCancel"));
 const AdminLayout = lazy(() => import("@/components/layout/AdminLayout"));
@@ -94,7 +92,7 @@ const NotFoundPage = lazy(() =>
   import("./ApplicationErrorPage").then((m) => ({ default: m.NotFoundPage }))
 );
 
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { RequireCompanyPermissionRedirect } from "@/components/auth/RequireCompanyPermission";
 import RequireBusinessOwner from "@/components/auth/RequireBusinessOwner";
@@ -137,10 +135,6 @@ const AUTH_ROUTES = [
     { path: "/HowTo", element: <HowTo /> },
     { path: "/how-to", element: <HowTo /> },
     { path: "/How-to", element: <HowTo /> },
-    { path: "/affiliate", element: <AffiliateLanding /> },
-    { path: "/Affiliate", element: <AffiliateLanding /> },
-    { path: "/affiliate/apply", element: <AffiliateApply /> },
-    { path: "/Affiliate/apply", element: <AffiliateApply /> },
     { path: "/return", element: <PayfastReturn /> },
     { path: "/success", element: <PayfastReturn /> },
     { path: "/cancel", element: <PayfastCancel /> },
@@ -152,6 +146,12 @@ function ownerRoute(element) {
             <RequireBusinessOwner>{element}</RequireBusinessOwner>
         </RequireAuth>
     );
+}
+
+/** Canonicalize a legacy path while keeping query/hash (e.g. ?id=). */
+function RedirectPreserveSearch({ to }) {
+    const { search, hash } = useLocation();
+    return <Navigate to={`${to}${search}${hash}`} replace />;
 }
 
 // --- Main App Pages ---
@@ -187,6 +187,8 @@ const MAIN_ROUTES = [
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
     { path: "/PurchaseOrders", element: ownerRoute(<PurchaseOrders />) },
     { path: "/purchaseorders", element: ownerRoute(<PurchaseOrders />) },
+    { path: "/POS", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.POS_ACCESS}><POS /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/pos", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.POS_ACCESS}><POS /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
     { path: "/PrivacyPolicy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },
@@ -197,7 +199,6 @@ const MAIN_ROUTES = [
     { path: "/bento-demo", element: <RequireAuth><BentoDemoPage /></RequireAuth> },
     { path: "/AnimatedIconsDemo", element: <RequireAuth><AnimatedIconsDemoPage /></RequireAuth> },
     { path: "/animated-icons-demo", element: <RequireAuth><AnimatedIconsDemoPage /></RequireAuth> },
-    { path: "/dashboard/affiliate", element: <RequireAuth><AffiliateDashboard /></RequireAuth> },
 ];
 
 // --- Invoice Pages ---
@@ -226,6 +227,9 @@ const INVOICE_ROUTES = [
     { path: "/EditInvoice", element: ownerRoute(<EditInvoice />) },
     { path: "/RecurringInvoices", element: ownerRoute(<RecurringInvoices />) },
     { path: "/CreateRecurringInvoice", element: ownerRoute(<CreateRecurringInvoice />) },
+    { path: "/EditRecurringInvoice", element: ownerRoute(<EditRecurringInvoice />) },
+    { path: "/editrecurringinvoice", element: ownerRoute(<EditRecurringInvoice />) },
+    { path: "/Edit-recurring-invoice", element: ownerRoute(<RedirectPreserveSearch to="/EditRecurringInvoice" />) },
 ];
 
 // --- Quote Pages ---
@@ -277,7 +281,6 @@ const ADMIN_ROUTES = [
     { path: "/SubscriptionsManagement", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
     { path: "/DocumentActivity", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
     { path: "/AdminUsers", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
-    { path: "/AdminAffiliates", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/affiliates" replace /></RequireAuth> },
     { path: "/AdminAccounts", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
     { path: "/AdminDocumentOversight", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
     { path: "/AdminSubscriptions", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
@@ -298,7 +301,6 @@ const ADMIN_ROUTES = [
     { path: "/admin/subscriptions-management", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
     { path: "/admin/document-activity", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
     { path: "/admin/user-management", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
-    { path: "/admin/affiliates", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/affiliates" replace /></RequireAuth> },
     { path: "/admin/accounts-management", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/users" replace /></RequireAuth> },
     { path: "/admin/document-oversight", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
     { path: "/admin/platform-settings", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/settings" replace /></RequireAuth> },
@@ -311,7 +313,7 @@ const ADMIN_ROUTES = [
     { path: "/BuildLogs", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
     { path: "/admin/build-logs", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
     { path: "/admin/transactions",    element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
-    { path: "/admin/payouts",          element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/affiliates" replace /></RequireAuth> },
+    { path: "/admin/payouts",          element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
     { path: "/admin/fees",             element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
     { path: "/admin/billing",          element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/subscriptions" replace /></RequireAuth> },
     { path: "/admin/invoices-quotes",  element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2" replace /></RequireAuth> },
@@ -332,10 +334,6 @@ const ADMIN_ROUTES = [
         element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><SubscriptionsPage /></AdminLayout></RequireAuth>,
     },
     {
-        path: "/admin-v2/affiliates",
-        element: <RequireAuth roles={["admin", "management", "support"]}><AdminLayout><AffiliatesPage /></AdminLayout></RequireAuth>,
-    },
-    {
         path: "/admin-v2/waitlist",
         element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><WaitlistPage /></AdminLayout></RequireAuth>,
     },
@@ -351,8 +349,6 @@ const ADMIN_ROUTES = [
 
 
 
-
-import { useLocation, Navigate } from "react-router-dom";
 
 function getPageName(pathname) {
   // Remove leading slash and query params
@@ -380,10 +376,11 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/privacy-policy$/i,
     /^\/privacypolicy$/i,
     /^\/terms/i,
-    /^\/affiliate(\/|$)/i,
     /^\/return$/i,
     /^\/success$/i,
     /^\/cancel$/i,
+    // Retired public affiliate URLs — 404 without the authenticated shell.
+    /^\/affiliate(\/|$)/i,
 ];
 
 function shouldBypassAppLayout(pathname) {

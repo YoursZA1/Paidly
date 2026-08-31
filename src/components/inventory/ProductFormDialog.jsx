@@ -8,6 +8,7 @@ import { Loader2, Upload } from "lucide-react";
 import ProductThumbnail from "@/components/inventory/ProductThumbnail";
 import { uploadProductImage } from "@/lib/productImageUpload";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrgBrands } from "@/hooks/useOrgBrands";
 
 const COUNT_STYLES = ["units", "cases", "packs", "boxes", "pallets", "bottles", "bags", "rolls"];
 
@@ -24,10 +25,12 @@ const defaultProduct = {
   cost: 0,
   price: 0,
   image_url: null,
+  company_id: "",
 };
 
 export default function ProductFormDialog({ open, onOpenChange, product, onSave }) {
   const { user } = useAuth();
+  const { brands } = useOrgBrands();
   const [form, setForm] = useState(defaultProduct);
   const [uploading, setUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
@@ -41,6 +44,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
         ...product,
         cost: product.cost ?? product._raw?.cost_price ?? 0,
         stock_capacity: product.stock_capacity ?? 100,
+        company_id: product.company_id || product._raw?.company_id || "",
       });
       setImagePreview(product.image_url || null);
     } else {
@@ -77,6 +81,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
       price: Number(form.price) || 0,
       barcode: String(form.barcode || "").trim(),
       sku: String(form.sku || "").trim(),
+      company_id: form.company_id || null,
     });
   };
 
@@ -155,6 +160,30 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave 
                 placeholder="e.g. Skin care"
               />
             </div>
+            {brands.length > 0 ? (
+            <div className="col-span-2 space-y-1.5">
+              <Label htmlFor="product-brand">Brand</Label>
+              <Select
+                value={form.company_id || "__shared__"}
+                onValueChange={(value) => setForm({ ...form, company_id: value === "__shared__" ? "" : value })}
+              >
+                <SelectTrigger id="product-brand">
+                  <SelectValue placeholder="Shared across brands" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__shared__">Shared across brands</SelectItem>
+                  {brands.map((brand) => (
+                    <SelectItem key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Private products only appear on that brand’s POS till. Shared items appear on every till.
+              </p>
+            </div>
+            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="product-count-style">Count Style</Label>
               <Select value={form.count_style} onValueChange={(v) => setForm({ ...form, count_style: v })}>

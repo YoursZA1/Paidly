@@ -60,7 +60,6 @@ src/lib/adminNavConfig.js
 | Users | `/admin-v2/users` | ✅ | ✅ | ✅ | ✅ |
 | Messages | `/admin-v2/messages` | ✅ | ✅ | ✅ | ✅ |
 | Subscriptions | `/admin-v2/subscriptions` | ✅ | ✅ | ✅ | ❌ |
-| Affiliates | `/admin-v2/affiliates` | ✅ | ✅ | ❌ | ✅ |
 | Waitlist | `/admin-v2/waitlist` | ✅ | ✅ | ✅ | ✅ |
 | Audit Log | `/admin-v2/audit-log` | ✅ | ✅ | ❌ | ❌ |
 | Settings | `/admin-v2/settings` | ✅ | ✅ | ❌ | ❌ |
@@ -106,7 +105,7 @@ These routes existed with `showInNav: true` but rendered only a `<Navigate>` red
 | Old path | Was labeled | Redirects to |
 |----------|-------------|--------------|
 | `/admin/transactions` | "Transactions" | `/admin-v2` |
-| `/admin/payouts` | "Payouts" | `/admin-v2/affiliates` |
+| `/admin/payouts` | "Payouts" | `/admin-v2` |
 | `/admin/fees` | "Fees" | `/admin-v2/subscriptions` |
 | `/admin/billing` | "Billing" | `/admin-v2/subscriptions` |
 | `/admin/invoices-quotes` | "Invoices & Quotes" | `/admin-v2` |

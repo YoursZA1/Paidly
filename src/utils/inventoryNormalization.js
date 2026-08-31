@@ -44,6 +44,7 @@ export function normalizeInventoryProductRow(row) {
     cost: toNumber(row?.cost_price ?? row?.cost_rate, 0),
     price: toNumber(row?.price ?? row?.default_rate, 0),
     is_active: row?.is_active !== false,
+    company_id: toTrimmedString(row?.company_id) || null,
     _raw: row,
   };
 }

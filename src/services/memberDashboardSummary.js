@@ -7,7 +7,7 @@
 
 export const RECENT_LIMIT = 5;
 
-/** Document types that are finance/business documents, not personal/HR member documents. */
+/** Commercial types stored on specialised tables — never counted in hub `documents` queries. */
 export const BUSINESS_DOCUMENT_TYPES = Object.freeze(["invoice", "quote", "payslip"]);
 export const LEAVE_DOCUMENT_TYPE = "leave_request";
 /** Leave statuses that count as awaiting approval. */

@@ -41,6 +41,7 @@ import {
   PackageSearch,
   Warehouse,
   ClipboardList,
+  Store,
 } from "lucide-react";
 import { TaxService } from "@/services/TaxService";
 import { motion } from "framer-motion";
@@ -57,9 +58,9 @@ import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
 import { getBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals';
 import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
-import AffiliateProgramBanner from '@/components/dashboard/AffiliateProgramBanner';
 import PosSalesCard from '@/components/dashboard/PosSalesCard';
 import useCompanyContext from "@/hooks/useCompanyContext";
+import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
 import CompanyMemberDashboard from "@/components/dashboard/CompanyMemberDashboard";
@@ -267,6 +268,7 @@ export default function Dashboard() {
 
 function DashboardMain() {
   const { user: authUser, session } = useAuth();
+  const canShowPosEntry = useCanShowPosNav();
   const { loading: appLoading, setLoading: setAppLoading } = useAppContext();
   const {
     profile: profileFromQuery,
@@ -1730,8 +1732,6 @@ function DashboardMain() {
           />
         </motion.div>
 
-        <AffiliateProgramBanner />
-
         {/* KPI Carousel — Framer Motion swipe on mobile, grid on desktop */}
         <div className="mb-4 sm:mb-6">
           <div className="glass-card rounded-2xl sm:rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
@@ -1802,6 +1802,17 @@ function DashboardMain() {
                 <Receipt className="w-5 h-5 shrink-0" />
                 Add Expense
               </Button>
+              {canShowPosEntry ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="col-span-2 rounded-2xl min-h-[48px] h-12 px-4 gap-2 border-border text-foreground font-semibold hover:bg-muted text-base transition-all active:scale-[0.98] touch-manipulation"
+                  onClick={() => navigate(createPageUrl("POS"))}
+                >
+                  <Store className="w-5 h-5 shrink-0" />
+                  POS
+                </Button>
+              ) : null}
             </div>
           </div>
           {/* Recent Transactions — compact mobile list */}
@@ -2203,7 +2214,7 @@ function DashboardMain() {
               <SetupProgressStepper checklist={onboardingChecklist} />
             )}
 
-            {user && !isAdmin && (
+            {user && !isAdmin && canShowPosEntry && (
               <PosSalesCard currency={userCurrency} />
             )}
 
@@ -2219,6 +2230,17 @@ function DashboardMain() {
                   <FileText className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
                   New Invoice
                 </Button>
+                {canShowPosEntry ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="group rounded-2xl min-h-[48px] sm:min-h-[36px] h-12 sm:h-9 px-4 gap-2 border-border text-foreground font-semibold hover:bg-muted text-base sm:text-sm transition-all duration-200 ease-out active:scale-[0.98] touch-manipulation"
+                    onClick={() => navigate(createPageUrl("POS"))}
+                  >
+                    <Store className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
+                    POS
+                  </Button>
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"
