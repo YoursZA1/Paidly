@@ -12,6 +12,8 @@ import {
 import { membershipHasPermission, normalizeJobFunction, PERMISSIONS } from "@/lib/companyPermissions";
 import { formatCompanyMemberRoleLabel } from "@/lib/companyJobFunctions";
 import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
+import { resolveCompanyHomePath } from "@/lib/postAuthNavigation.js";
+import { createPageUrl } from "@/utils";
 import { normalizeJobFunction as serverNormalizeJobFunction } from "../../server/src/companyRouteAccess.js";
 
 const NAV = [
@@ -74,12 +76,16 @@ describe("POS-only staff invite", () => {
   it("builds a dedicated /pos/invite/:token link", () => {
     expect(isPosInviteDest("POS")).toBe(true);
     expect(isPosInviteUrl("/pos/invite/abc")).toBe(true);
+    expect(isPosInviteUrl("/pos/invite/7K4M-X92Q")).toBe(true);
     expect(appendPosInviteNext("https://www.paidly.co.za/invite?token=abc")).toBe(
       "https://www.paidly.co.za/pos/invite/abc"
     );
     expect(appendPosInviteNext("/invite?token=abc")).toBe("/pos/invite/abc");
     expect(posInvitePath("tok", "https://www.paidly.co.za")).toBe(
       "https://www.paidly.co.za/pos/invite/tok"
+    );
+    expect(posInvitePath("7K4M-X92Q", "https://www.paidly.co.za")).toBe(
+      "https://www.paidly.co.za/pos/invite/7K4M-X92Q"
     );
   });
 
@@ -98,5 +104,24 @@ describe("POS-only staff invite", () => {
     expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_COMPANY_REPORTS)).toBe(false);
     expect(POS_ONLY_PERMISSIONS).toContain("pos_close_register");
     expect(POS_INVITE_NEXT).toBe("POS");
+  });
+
+  it("sends POS-only staff to the till, not the dashboard", () => {
+    expect(
+      resolveCompanyHomePath({
+        companyId: "o1",
+        companyRole: "employee",
+        jobFunction: "pos",
+        isOrgOwner: false,
+      })
+    ).toBe(createPageUrl("POS"));
+    expect(
+      resolveCompanyHomePath({
+        companyId: "o1",
+        companyRole: "admin",
+        jobFunction: "pos",
+        isOrgOwner: false,
+      })
+    ).toBe(createPageUrl("Dashboard"));
   });
 });

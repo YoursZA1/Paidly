@@ -292,7 +292,7 @@ export default function SubscriptionSettings() {
                 </div>
             </div>
 
-            {/* 3. Corporate / Contact Card */}
+            {/* 3. Enterprise / Contact Card */}
             <div className="bg-slate-900 dark:bg-slate-950 rounded-[32px] p-8 md:p-10 text-center relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-10 opacity-10">
                     <Globe className="w-40 h-40 text-white" />

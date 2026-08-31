@@ -60,7 +60,7 @@ create table plans (
 );
 ```
 
-Seeded public catalog (after catalog-flip): `starter_monthly` (50), `starter_annual` (500), `business_monthly` (150), `business_annual` (1500), `growth_monthly` (350), `growth_annual` (3500), `enterprise_custom` (contact sales). Legacy `individual` / `sme` / `corporate` kept as `is_legacy` for grandfathered renewals. Entitlements key off `plan_family`. RLS: `anon`/`authenticated` select where `active`; writes admin/service_role only.
+Seeded public catalog (after catalog-flip): `starter_monthly` (50), `starter_annual` (500), `business_monthly` (150), `business_annual` (1500), `growth_monthly` (350), `growth_annual` (3500), `enterprise_custom` (contact sales). Legacy `individual` / `sme` / `corporate` kept as `is_legacy` / inactive for ITN and audit only — they are not assignable on admin write, signup, or PayFast create. Entitlements key off `plan_family`. RLS: `anon`/`authenticated` select where `active`; writes admin/service_role only.
 
 ### `subscriptions` (Phase 1.2 core)
 

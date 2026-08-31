@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { platformUsersQueryFn } from '@/api/platformUsersQueryFn';
 import { createAdminSubscription, updateAdminSubscription } from '@/api/mutateAdminSubscription';
@@ -15,13 +15,13 @@ import PlatformUsersLoadErrorHint from '@/components/PlatformUsersLoadErrorHint'
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
+import {
+  buildPublicCatalogFamilies,
+  isLegacyPlanSlug,
+  mapLegacySlugToCurrentFamily,
+  resolveCurrentCatalogAssignment,
+} from '@/lib/plans.js';
 import { normalizePaidPackageKey } from '@/lib/subscriptionPlan';
-
-/** Map profile / app plan names to subscription plan keys (aligns with `profiles` + PayFast). */
-export function mapProfilePlanToSubPlan(plan) {
-  return normalizePaidPackageKey(plan);
-}
 
 function toLocalDateInput(date) {
   const y = date.getFullYear();
@@ -39,18 +39,44 @@ function endOfMonthDate() {
   return toLocalDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 }
 
+function assignmentForForm(plan, billingCycle) {
+  return resolveCurrentCatalogAssignment({
+    plan,
+    billing_cycle: billingCycle === 'yearly' ? 'annual' : billingCycle,
+  });
+}
+
 function emptyForm() {
+  const assigned = assignmentForForm('starter', 'monthly');
   return {
     user_id: '',
     user_name: '',
     user_email: '',
     plan: 'starter',
     status: 'active',
-    amount: PLAN_DEFAULT_AMOUNT.starter,
+    amount: assigned?.amount ?? 50,
     billing_cycle: 'monthly',
     start_date: todayDate(),
     next_billing_date: endOfMonthDate(),
   };
+}
+
+function formatPlanOption(family) {
+  if (!family) return '';
+  if (family.contact_sales || family.family === 'enterprise') {
+    return `${family.name} — Custom`;
+  }
+  const monthly = Number(family.monthly?.amount);
+  const price = Number.isFinite(monthly) ? `R${monthly}/mo` : '';
+  return price ? `${family.name} — ${price}` : family.name;
+}
+
+/**
+ * Map profile / app plan names to current catalog families (legacy slugs migrate).
+ */
+export function mapProfilePlanToSubPlan(plan) {
+  if (isLegacyPlanSlug(plan)) return mapLegacySlugToCurrentFamily(plan) || 'starter';
+  return normalizePaidPackageKey(plan) === 'none' ? 'starter' : normalizePaidPackageKey(plan);
 }
 
 /**
@@ -60,27 +86,43 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
   const queryClient = useQueryClient();
   const [form, setForm] = useState(emptyForm);
   const isEdit = Boolean(subscription?.id);
+  const storedPlan = subscription?.plan || subscription?.plan_slug || subscription?.current_plan || '';
+  const legacyStored = isLegacyPlanSlug(storedPlan);
   const { data: users = [], isError: platformUsersError, error: platformUsersErr } = useQuery({
     queryKey: ['platform-users'],
     queryFn: () => platformUsersQueryFn(500),
     enabled: open,
   });
+  const { data: catalogFamilies = [] } = useQuery({
+    queryKey: ['subscription-plans-catalog'],
+    enabled: open,
+    queryFn: async () => {
+      const res = await fetch('/api/subscriptions/plans');
+      const data = await res.json().catch(() => ({}));
+      const rows = res.ok && Array.isArray(data.plans) ? data.plans : [];
+      return buildPublicCatalogFamilies(rows);
+    },
+    placeholderData: () => buildPublicCatalogFamilies([]),
+  });
 
   useEffect(() => {
     if (!open) return;
     if (subscription?.id) {
+      const family = mapProfilePlanToSubPlan(storedPlan);
+      const cycleRaw = subscription.billing_cycle === 'annual' || subscription.billing_cycle === 'annually'
+        ? 'yearly'
+        : subscription.billing_cycle || 'monthly';
+      const cycle = family === 'enterprise' ? 'monthly' : cycleRaw;
+      const assigned = assignmentForForm(family, cycle);
       setForm({
         user_id: subscription.user_id || '',
         user_name: subscription.user_name || '',
         user_email: subscription.user_email || '',
-        plan: subscription.plan || 'individual',
+        plan: family,
         status:
           subscription.status === 'suspended' ? 'paused' : subscription.status || 'active',
-        amount: subscription.amount ?? PLAN_DEFAULT_AMOUNT[subscription.plan] ?? PLAN_DEFAULT_AMOUNT.starter,
-        billing_cycle:
-          subscription.billing_cycle === 'annual' || subscription.billing_cycle === 'annually'
-            ? 'yearly'
-            : subscription.billing_cycle || 'monthly',
+        amount: assigned?.amount ?? 0,
+        billing_cycle: cycle === 'annual' ? 'yearly' : cycle,
         start_date: subscription.start_date
           ? String(subscription.start_date).slice(0, 10)
           : todayDate(),
@@ -88,42 +130,50 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
           ? String(subscription.next_billing_date).slice(0, 10)
           : endOfMonthDate(),
       });
+    } else if (subscription?.user_id && !subscription?.id) {
+      const p = mapProfilePlanToSubPlan(subscription.plan);
+      const assigned = assignmentForForm(p, 'monthly');
+      setForm({
+        ...emptyForm(),
+        user_id: String(subscription.user_id),
+        user_name: subscription.user_name || '',
+        user_email: subscription.user_email || '',
+        plan: p,
+        amount: assigned?.amount ?? 0,
+        status: 'active',
+        billing_cycle: 'monthly',
+      });
     } else {
-      // Create flow: optional row prefill (user without subscription row yet)
-      if (subscription?.user_id && !subscription?.id) {
-        const p = mapProfilePlanToSubPlan(subscription.plan);
-        setForm({
-          ...emptyForm(),
-          user_id: String(subscription.user_id),
-          user_name: subscription.user_name || '',
-          user_email: subscription.user_email || '',
-          plan: p,
-          amount: PLAN_DEFAULT_AMOUNT[p] ?? PLAN_DEFAULT_AMOUNT.starter,
-          status: 'active',
-          billing_cycle: subscription.billing_cycle || 'monthly',
-          start_date: todayDate(),
-          next_billing_date: endOfMonthDate(),
-        });
-      } else {
-        setForm(emptyForm());
-      }
+      setForm(emptyForm());
     }
-  }, [open, subscription]);
+  }, [open, subscription, storedPlan]);
+
+  const applyPlanAndCycle = (plan, billingCycle) => {
+    const cycle = plan === 'enterprise' ? 'monthly' : billingCycle;
+    const assigned = assignmentForForm(plan, cycle);
+    setForm((f) => ({
+      ...f,
+      plan,
+      billing_cycle: cycle,
+      amount: assigned?.amount ?? 0,
+    }));
+  };
 
   const buildPayload = () => {
-    const amount = Number(form.amount);
-    const payload = {
+    const assigned = assignmentForForm(form.plan, form.billing_cycle);
+    const amount = assigned?.amount ?? 0;
+    return {
       user_id: form.user_id || null,
       user_name: form.user_name.trim(),
       user_email: form.user_email.trim().toLowerCase(),
       email: form.user_email.trim().toLowerCase(),
       full_name: form.user_name.trim(),
-      plan: form.plan,
-      current_plan: form.plan,
+      plan: assigned?.family || form.plan,
+      current_plan: assigned?.family || form.plan,
+      plan_slug: assigned?.slug,
       status: form.status,
       amount,
-      custom_price: amount,
-      billing_cycle: form.billing_cycle,
+      billing_cycle: assigned?.billing_cycle || 'monthly',
       start_date: form.start_date
         ? new Date(`${form.start_date}T12:00:00`).toISOString()
         : null,
@@ -131,7 +181,6 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
         ? new Date(`${form.next_billing_date}T12:00:00`).toISOString()
         : null,
     };
-    return payload;
   };
 
   const createMutation = useMutation({
@@ -175,6 +224,13 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
   };
 
   const pending = createMutation.isPending || updateMutation.isPending;
+  const families = catalogFamilies.length ? catalogFamilies : buildPublicCatalogFamilies([]);
+  const enterpriseSelected = form.plan === 'enterprise';
+  const amountLabel = useMemo(() => {
+    if (enterpriseSelected) return 'Custom';
+    const n = Number(form.amount);
+    return Number.isFinite(n) ? String(n) : '';
+  }, [enterpriseSelected, form.amount]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -187,6 +243,14 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
             <AlertDescription>
               Could not load users from the backend: {platformUsersErr?.message || 'Unknown error'}.
               <PlatformUsersLoadErrorHint message={platformUsersErr?.message} />
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {legacyStored ? (
+          <Alert>
+            <AlertDescription>
+              This account is on a previous catalog plan ({String(storedPlan)}). Saving moves them onto
+              Starter, Business, Growth, or Enterprise. Payment history is kept.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -243,36 +307,22 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
                 id="sub-plan"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                 value={form.plan}
-                onChange={(e) => {
-                  const plan = e.target.value;
-                  setForm((f) => ({
-                    ...f,
-                    plan,
-                    amount: PLAN_DEFAULT_AMOUNT[plan] ?? f.amount,
-                  }));
-                }}
+                onChange={(e) => applyPlanAndCycle(e.target.value, form.billing_cycle)}
               >
-                <optgroup label="Current catalog">
-                  <option value="starter">Starter — R50/mo</option>
-                  <option value="business">Business — R150/mo</option>
-                  <option value="growth">Growth — R350/mo</option>
-                  <option value="enterprise">Enterprise — Custom</option>
-                </optgroup>
-                <optgroup label="Grandfathered">
-                  <option value="individual">Individual — R25/mo</option>
-                  <option value="sme">SME — R50/mo</option>
-                  <option value="corporate">Corporate — R110/mo</option>
-                </optgroup>
+                {families.map((family) => (
+                  <option key={family.family} value={family.family}>
+                    {formatPlanOption(family)}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="sub-amount">Amount (ZAR)</Label>
               <Input
                 id="sub-amount"
-                type="number"
-                min={0}
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+                readOnly
+                value={amountLabel}
+                aria-readonly="true"
               />
             </div>
           </div>
@@ -297,10 +347,11 @@ export default function SubscriptionFormDialog({ open, onClose, subscription }) 
                 id="sub-billing"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                 value={form.billing_cycle}
-                onChange={(e) => setForm({ ...form, billing_cycle: e.target.value })}
+                disabled={enterpriseSelected}
+                onChange={(e) => applyPlanAndCycle(form.plan, e.target.value)}
               >
                 <option value="monthly">monthly</option>
-                <option value="yearly">yearly</option>
+                {enterpriseSelected ? null : <option value="yearly">yearly</option>}
               </select>
             </div>
           </div>

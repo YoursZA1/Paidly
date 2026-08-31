@@ -90,9 +90,14 @@ export default function CompanyInvitesPanel() {
       const result = await resendCompanyInvite(row.id);
       setResendNotice({
         email: row.email,
+        invitedName: row.invited_name || null,
         inviteLink: result.invite_link || "",
+        inviteCode: result.invite_code || null,
+        registerName: result.register_name || row.register_name || null,
+        expiresAt: result.expires_at || null,
         emailSent: result.email_sent === true,
         emailError: result.email_error || null,
+        posOnly: row.source === "pos",
       });
       await reload();
     } catch (e) {

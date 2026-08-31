@@ -49,17 +49,23 @@ const ENABLE_LOCAL_SIGNUP_MIRROR =
     .trim()
     .toLowerCase() === "true";
 const PLAN_OPTIONS = [
-  { value: "individual", label: "Individual" },
-  { value: "sme", label: "SME" },
-  { value: "corporate", label: "Corporate" }
+  { value: "starter", label: "Starter — R50/mo" },
+  { value: "business", label: "Business — R150/mo" },
+  { value: "growth", label: "Growth — R350/mo" },
+  { value: "enterprise", label: "Enterprise — Custom" },
 ];
 
 function normalizeSignupPlan(raw) {
   const v = String(raw || "").trim().toLowerCase();
-  if (["individual", "starter", "free", "basic", "trial", "none"].includes(v)) return "individual";
-  if (["sme", "professional", "business"].includes(v)) return "sme";
-  if (["corporate", "enterprise", "pro"].includes(v)) return "corporate";
-  return "individual";
+  if (["individual", "starter", "free", "basic", "trial", "none"].includes(v) || v.startsWith("starter_")) {
+    return "starter";
+  }
+  if (["sme", "professional", "business", "pro"].includes(v) || v.startsWith("business_")) {
+    return "business";
+  }
+  if (["corporate", "growth"].includes(v) || v.startsWith("growth_")) return "growth";
+  if (v === "enterprise" || v === "enterprise_custom") return "enterprise";
+  return "starter";
 }
 
 async function persistSignupProfilePlan({
@@ -144,7 +150,7 @@ export default function Signup() {
   const [companyName, setCompanyName] = useState("");
   const [companyAddress, setCompanyAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [plan, setPlan] = useState("individual");
+  const [plan, setPlan] = useState("starter");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [createdUserId, setCreatedUserId] = useState("");

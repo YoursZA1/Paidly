@@ -30,7 +30,7 @@ describe("structuredData (Google SD policies)", () => {
   it("offers match shared plan prices in ZAR", () => {
     const app = buildHomeStructuredDataGraph()["@graph"].find((n) => n["@id"] === APP_ID);
     const prices = app.offers.map((o) => o.price).sort();
-    expect(prices).toEqual(["110", "25", "50"]);
+    expect(prices).toEqual(["150", "350", "50"]);
     expect(app.offers.every((o) => o.priceCurrency === "ZAR")).toBe(true);
   });
 

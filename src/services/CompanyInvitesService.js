@@ -76,6 +76,46 @@ export async function resendCompanyInvite(inviteId) {
  *   role?: string,
  * }} payload
  */
+export async function validatePublicInviteToken(token) {
+  const code = String(token || "").trim();
+  if (!code) throw new Error("Enter your till invite code");
+  const res = await fetch(
+    `${apiBase()}/api/company/invite/validate?token=${encodeURIComponent(code)}`
+  );
+  const raw = await res.text().catch(() => "");
+  let json = {};
+  try {
+    json = raw ? JSON.parse(raw) : {};
+  } catch {
+    json = {};
+  }
+  if (res.status === 429) {
+    throw new Error(json.error || "Too many attempts. Try again later.");
+  }
+  if (!res.ok || json.ok === false) {
+    const reason = json.error || "invalid";
+    const messages = {
+      not_found: "This invitation code is invalid or has already been used.",
+      expired: "This invitation has expired. Ask your administrator to send a new invite.",
+      not_pending: "This invitation is no longer active.",
+      revoked: "This invitation was revoked.",
+      missing_token: "Enter your till invite code.",
+    };
+    throw new Error(messages[reason] || json.error || "This invitation is not valid.");
+  }
+  return json;
+}
+
+/**
+ * Platform admin: invite a company admin or employee to a new or existing company.
+ * @param {{
+ *   email: string,
+ *   fullName?: string,
+ *   companyId?: string,
+ *   companyName?: string,
+ *   role?: string,
+ * }} payload
+ */
 export async function platformInviteCompanyAdmin(payload) {
   const headers = await authHeaders();
   const res = await apiRequest(`${apiBase()}/api/admin/invite-company`, {

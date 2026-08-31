@@ -24,46 +24,50 @@ export class SubscriptionService {
   }
 
   /**
-   * Get users grouped by plan type
-   * Maps plans to categories: Individual, SME, Corporate
+   * Get users grouped by plan type (current catalog families).
    */
   static getUsersByPlanCategory() {
     const users = this.getAllUsersWithSubscriptions();
-    
+
     const categories = {
-      'Individual': {
-        plans: ['free', 'starter', 'basic'],
+      Starter: {
+        plans: ["free", "starter", "basic", "individual"],
         users: [],
         count: 0,
-        percentage: 0
+        percentage: 0,
       },
-      'SME': {
-        plans: ['professional', 'business', 'sme'],
+      Business: {
+        plans: ["professional", "business", "sme"],
         users: [],
         count: 0,
-        percentage: 0
+        percentage: 0,
       },
-      'Corporate': {
-        plans: ['enterprise', 'corporate'],
+      Growth: {
+        plans: ["growth", "corporate"],
         users: [],
         count: 0,
-        percentage: 0
-      }
+        percentage: 0,
+      },
+      Enterprise: {
+        plans: ["enterprise", "enterprise_custom"],
+        users: [],
+        count: 0,
+        percentage: 0,
+      },
     };
 
-    // Categorize users
-    users.forEach(user => {
-      const userPlan = user.plan || 'free';
-      
-      if (categories.Individual.plans.includes(userPlan)) {
-        categories.Individual.users.push(user);
-      } else if (categories.SME.plans.includes(userPlan)) {
-        categories.SME.users.push(user);
-      } else if (categories.Corporate.plans.includes(userPlan)) {
-        categories.Corporate.users.push(user);
+    users.forEach((user) => {
+      const userPlan = user.plan || "free";
+      if (categories.Starter.plans.includes(userPlan)) {
+        categories.Starter.users.push(user);
+      } else if (categories.Business.plans.includes(userPlan)) {
+        categories.Business.users.push(user);
+      } else if (categories.Growth.plans.includes(userPlan)) {
+        categories.Growth.users.push(user);
+      } else if (categories.Enterprise.plans.includes(userPlan)) {
+        categories.Enterprise.users.push(user);
       } else {
-        // Default to Individual for unknown plans
-        categories.Individual.users.push(user);
+        categories.Starter.users.push(user);
       }
     });
 

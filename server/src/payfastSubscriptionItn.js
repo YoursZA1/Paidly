@@ -68,16 +68,23 @@ function parsePayfastYyyyMmDdToIso(raw) {
 }
 
 /**
- * Map PayFast item_name (e.g. Individual, SME) → profiles.subscription_plan slug.
+ * Map PayFast item_name → profiles.subscription_plan slug.
+ * Current catalog names win. Historical Individual/SME/Corporate item names stay
+ * mapped to those slugs so grandfathered ITN renewals do not rewrite audit history.
  */
 export function mapPayfastPlanToProfilePlan(itemName) {
   const t = String(itemName || "")
     .toLowerCase()
     .replace(/\s+plan$/i, "");
-  if (t.includes("corporate") || t.includes("enterprise")) return "corporate";
-  if (t.includes("sme") || t.includes("professional") || t.includes("business")) return "sme";
-  if (t.includes("individual") || t.includes("starter") || t.includes("solo")) return "individual";
-  return "individual";
+  if (!t) return "";
+  if (t.includes("enterprise")) return "enterprise";
+  if (t.includes("growth")) return "growth";
+  if (t.includes("business")) return "business";
+  if (t.includes("starter")) return "starter";
+  if (t.includes("corporate")) return "corporate";
+  if (t.includes("sme") || t.includes("professional")) return "sme";
+  if (t.includes("individual") || t.includes("solo")) return "individual";
+  return "";
 }
 
 function resolvePayfastSubscriptionUserId(payload) {

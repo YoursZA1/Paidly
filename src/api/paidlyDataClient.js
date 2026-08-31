@@ -8,6 +8,7 @@ import {
   resetAuditLogsSupabaseTableFlag,
 } from '@/lib/auditLogsSupabaseStatus';
 import { isSupabaseMissingRelationError } from '@/utils/supabaseErrorUtils';
+import { coerceAssignableProfilePlan, familyForSlug, isLegacyPlanSlug } from '@/lib/plans.js';
 
 const PAIDLY_AUDIT_STORAGE_KEY = 'paidly_audit_log';
 
@@ -235,7 +236,7 @@ function normalizeEntity(entityName, row) {
       ...row,
       user_email: row.user_email || row.email || '',
       user_name: row.user_name || row.full_name || '',
-      plan: row.plan || row.current_plan || 'individual',
+      plan: row.plan || row.current_plan || 'starter',
       amount: Number(row.amount ?? row.custom_price ?? 0),
       status: row.status || 'active',
       billing_cycle: row.billing_cycle || 'monthly',
@@ -277,11 +278,21 @@ function denormalizeEntity(entityName, payload) {
   if (!payload) return payload;
 
   if (entityName === 'PlatformUser') {
+    const rawPlan = String(payload.plan || payload.subscription_plan || '').trim().toLowerCase();
+    let billingPlan = rawPlan;
+    if (rawPlan && rawPlan !== 'none') {
+      if (isLegacyPlanSlug(rawPlan)) {
+        billingPlan = familyForSlug(rawPlan) || 'starter';
+      } else {
+        const coerced = coerceAssignableProfilePlan(rawPlan);
+        if (coerced) billingPlan = coerced;
+      }
+    }
     return {
       ...payload,
       company_name: payload.company_name || payload.company,
-      subscription_plan: payload.subscription_plan || payload.plan,
-      plan: payload.plan || payload.subscription_plan,
+      subscription_plan: billingPlan || payload.subscription_plan || payload.plan,
+      plan: billingPlan || payload.plan || payload.subscription_plan,
     };
   }
 

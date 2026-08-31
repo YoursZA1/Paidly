@@ -85,10 +85,15 @@ serve(async (req) => {
       const t = String(itemName || "")
         .toLowerCase()
         .replace(/\s+plan$/i, "");
-      if (t.includes("corporate") || t.includes("enterprise")) return "corporate";
-      if (t.includes("sme") || t.includes("professional") || t.includes("business")) return "sme";
-      if (t.includes("individual") || t.includes("starter") || t.includes("solo")) return "individual";
-      return "individual";
+      if (!t) return "";
+      if (t.includes("enterprise")) return "enterprise";
+      if (t.includes("growth")) return "growth";
+      if (t.includes("business")) return "business";
+      if (t.includes("starter")) return "starter";
+      if (t.includes("corporate")) return "corporate";
+      if (t.includes("sme") || t.includes("professional")) return "sme";
+      if (t.includes("individual") || t.includes("solo")) return "individual";
+      return "";
     };
     const planLabel = String(data.item_name ?? data.custom_str2 ?? "")
       .replace(/\s+plan$/i, "")

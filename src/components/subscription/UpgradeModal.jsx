@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PLANS, PLAN_SLUGS } from "@/lib/plans.js";
+import { PLANS, PUBLIC_SELF_SERVE_MONTHLY_SLUGS } from "@/lib/plans.js";
 import PayFastSubscriptionForm from "./PayFastSubscriptionForm";
 
 const FEATURE_LABELS = {
@@ -20,14 +20,15 @@ const FEATURE_LABELS = {
 };
 
 function tierHint(slug) {
-  if (slug === "individual") return "Entry — get started";
-  if (slug === "sme") return "Best for growing teams";
-  if (slug === "corporate") return "Full capability";
+  if (slug === "starter_monthly") return "Entry — get started";
+  if (slug === "business_monthly") return "Best for growing teams";
+  if (slug === "growth_monthly") return "Full capability";
   return "";
 }
 
 /**
  * Plan picker + PayFast subscribe per tier. Controlled by `useUpgradeModalStore` via `UpgradeModalHost`.
+ * Uses the current self-serve monthly catalog only (no grandfathered plans, no Enterprise checkout).
  */
 export default function UpgradeModal({ open, onOpenChange, featureKey, title, description }) {
   const featureLabel =
@@ -53,24 +54,24 @@ export default function UpgradeModal({ open, onOpenChange, featureKey, title, de
         </DialogHeader>
 
         <div className="mt-2 grid gap-4 sm:grid-cols-3">
-          {PLAN_SLUGS.map((slug) => {
+          {PUBLIC_SELF_SERVE_MONTHLY_SLUGS.map((slug) => {
             const plan = PLANS[slug];
-            const isSme = slug === "sme";
+            const isRecommended = slug === "business_monthly";
             return (
               <div
                 key={slug}
                 className={`flex flex-col rounded-2xl border bg-card p-4 shadow-sm ${
-                  isSme ? "border-orange-500/60 ring-2 ring-orange-500/25" : "border-border"
+                  isRecommended ? "border-orange-500/60 ring-2 ring-orange-500/25" : "border-border"
                 }`}
               >
-                {isSme ? (
+                {isRecommended ? (
                   <p className="mb-2 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-orange-600 dark:text-orange-400">
                     <Star className="h-3.5 w-3.5 fill-current" aria-hidden />
                     Recommended
                   </p>
                 ) : (
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {slug === "individual" ? "Entry" : "Top tier"}
+                    {slug === "starter_monthly" ? "Entry" : "Top tier"}
                   </p>
                 )}
                 <h3 className="text-lg font-bold text-foreground">{plan.name}</h3>

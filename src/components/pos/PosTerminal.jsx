@@ -25,6 +25,8 @@ import {
   FileText,
   Store,
   UserPlus,
+  HelpCircle,
+  Receipt,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,6 +51,7 @@ import { useCompanyContext } from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 import PosStaffInviteSheet from "@/components/pos/PosStaffInviteSheet";
+import PosTillStaffSheet from "@/components/pos/PosTillStaffSheet";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { createPageUrl, triggerHaptic } from "@/utils";
 import {
@@ -84,6 +87,9 @@ import { WALK_IN_CUSTOMER_LABEL } from "@/lib/pos/posCustomerSearch";
 import { invalidateClientDomain, invalidateRevenueReadModels } from "@/lib/queryInvalidation";
 import PosCustomerDialog from "@/components/pos/PosCustomerDialog";
 import PosReceiptSheet from "@/components/pos/PosReceiptSheet";
+import PosCashKeypad from "@/components/pos/PosCashKeypad";
+import PosConnectivityBar from "@/components/pos/PosConnectivityBar";
+import { popularProductIdsFromSales, scopePosCatalog } from "@/lib/pos/posPopularProducts.js";
 import {
   buildPosReceiptView,
   openPosReceiptPrint,
@@ -145,7 +151,10 @@ function CartLineList({ cart, currency, onQty }) {
         <li key={line.product_id} className="flex items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium leading-tight">{line.name}</p>
-            <p className="mt-0.5 text-sm tabular-nums text-muted-foreground">
+            <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+              {formatCurrency(line.unit_price, currency)} × {line.quantity}
+            </p>
+            <p className="text-sm font-semibold tabular-nums">
               {formatCurrency(line.unit_price * line.quantity, currency)}
             </p>
           </div>
@@ -154,7 +163,7 @@ function CartLineList({ cart, currency, onQty }) {
               type="button"
               size="icon"
               variant="outline"
-              className="size-10 min-h-10 min-w-10 touch-manipulation"
+              className="size-11 min-h-11 min-w-11 touch-manipulation"
               onClick={() => onQty(line.product_id, line.quantity - 1)}
               aria-label={`Decrease ${line.name}`}
             >
@@ -164,7 +173,7 @@ function CartLineList({ cart, currency, onQty }) {
               <Input
                 autoFocus
                 inputMode="numeric"
-                className="h-10 w-12 px-1 text-center text-sm font-semibold tabular-nums"
+                className="h-11 w-12 px-1 text-center text-sm font-semibold tabular-nums"
                 value={draft}
                 aria-label={`Quantity for ${line.name}`}
                 onChange={(e) => setDraft(e.target.value)}
@@ -180,7 +189,7 @@ function CartLineList({ cart, currency, onQty }) {
             ) : (
               <button
                 type="button"
-                className="h-10 w-10 rounded-input text-sm font-semibold tabular-nums hover:bg-muted"
+                className="h-11 w-11 rounded-input text-sm font-semibold tabular-nums hover:bg-muted"
                 onClick={() => {
                   setEditingId(line.product_id);
                   setDraft(String(line.quantity));
@@ -194,7 +203,7 @@ function CartLineList({ cart, currency, onQty }) {
               type="button"
               size="icon"
               variant="outline"
-              className="size-10 min-h-10 min-w-10 touch-manipulation"
+              className="size-11 min-h-11 min-w-11 touch-manipulation"
               onClick={() => onQty(line.product_id, line.quantity + 1)}
               aria-label={`Increase ${line.name}`}
             >
@@ -205,7 +214,7 @@ function CartLineList({ cart, currency, onQty }) {
             type="button"
             size="icon"
             variant="ghost"
-            className="size-10 min-h-10 min-w-10 touch-manipulation text-muted-foreground"
+            className="size-11 min-h-11 min-w-11 touch-manipulation text-muted-foreground"
             onClick={() => onQty(line.product_id, 0)}
             aria-label={`Remove ${line.name}`}
           >
@@ -222,7 +231,7 @@ export default function PosTerminal() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, profile, logout } = useAuth();
-  const { hasPermission, jobFunction, companyRole, isOrgOwner } = useCompanyContext();
+  const { hasPermission, jobFunction, companyRole, isOrgOwner, ctx: companyCtx } = useCompanyContext();
   const canSell = hasPermission(PERMISSIONS.POS_SELL);
   const canDiscount = hasPermission(PERMISSIONS.POS_DISCOUNT);
   const canRefund = hasPermission(PERMISSIONS.POS_REFUND);
@@ -250,6 +259,7 @@ export default function PosTerminal() {
   const [cardOpen, setCardOpen] = useState(false);
   const [digitalOpen, setDigitalOpen] = useState(false);
   const [payMethodOpen, setPayMethodOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [tendered, setTendered] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [completedSale, setCompletedSale] = useState(null);
@@ -280,6 +290,7 @@ export default function PosTerminal() {
   const [startShiftOpen, setStartShiftOpen] = useState(false);
   const [closeShiftOpen, setCloseShiftOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [staffManageOpen, setStaffManageOpen] = useState(false);
   const [openingDraft, setOpeningDraft] = useState("0");
   const [closingDraft, setClosingDraft] = useState("");
   const [shiftBusy, setShiftBusy] = useState(false);
@@ -406,15 +417,24 @@ export default function PosTerminal() {
   const categories = useMemo(() => listPosCatalogCategories(products), [products]);
 
   useEffect(() => {
-    if (category === "all") return;
+    if (category === "all" || category === "popular") return;
     if (!categories.some((row) => row.name === category)) setCategory("all");
   }, [categories, category]);
 
   const codeIndex = useMemo(() => buildPosCodeIndex(products), [products]);
 
+  const popularIds = useMemo(() => popularProductIdsFromSales(todaySales), [todaySales]);
+  const categoryScoped = useMemo(
+    () => scopePosCatalog(products, category, popularIds),
+    [products, category, popularIds]
+  );
   const filteredProducts = useMemo(
-    () => filterPosProducts(products, { query, category, codeIndex }),
-    [products, query, category, codeIndex]
+    () => filterPosProducts(category === "popular" ? categoryScoped : products, {
+      query,
+      category: category === "popular" ? "all" : category,
+      codeIndex,
+    }),
+    [products, categoryScoped, query, category, codeIndex]
   );
 
   const subtotal = useMemo(() => posCartSubtotal(cart), [cart]);
@@ -689,6 +709,7 @@ export default function PosTerminal() {
       setAttachedCustomer(null);
       setCustomerOpen(false);
       setCashOpen(false);
+      setCardOpen(false);
       setDigitalOpen(false);
       setPayMethodOpen(false);
       setCartSheetOpen(false);
@@ -1036,12 +1057,32 @@ export default function PosTerminal() {
   const customerLabel = attachedCustomer?.name || WALK_IN_CUSTOMER_LABEL;
   const staffFirstName = (activeRegister?.assigned_staff_name || cashierName || "Staff")
     .split(/\s+/)[0];
-  const presenceLabel =
-    connectivityState === "online"
-      ? "Online"
-      : connectivityState === "reconnecting"
-        ? "Reconnecting"
-        : "Offline";
+  const shiftStatusLabel = sessionLoading
+    ? "Shift…"
+    : openSession
+      ? "Shift open"
+      : needsShift
+        ? "Shift closed"
+        : "Shift";
+  const tillChoiceLocked =
+    posOnlyStaff && registers.filter((row) => (row.status || "active") === "active").length <= 1;
+
+  const startNewSale = () => {
+    setCompletedSale(null);
+    setSaleAudit([]);
+    setPayMethodOpen(false);
+    setCashOpen(false);
+    setCardOpen(false);
+    setDigitalOpen(false);
+    searchRef.current?.focus();
+  };
+
+  const closePayStage = () => {
+    setPayMethodOpen(false);
+    setCashOpen(false);
+    setCardOpen(false);
+    setDigitalOpen(false);
+  };
 
   const handlePosLogout = async () => {
     try {
@@ -1059,79 +1100,100 @@ export default function PosTerminal() {
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:gap-4 sm:px-5">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:h-16 sm:gap-3 sm:px-5">
         {posOnlyStaff ? (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="size-9 shrink-0 touch-manipulation text-muted-foreground"
+            className="size-11 shrink-0 touch-manipulation text-muted-foreground"
             aria-label="Sign out"
             onClick={() => void handlePosLogout()}
           >
             <LogOut className="size-4" />
           </Button>
         ) : (
-          <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-muted-foreground" asChild>
+          <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 text-muted-foreground" asChild>
             <Link to={createPageUrl("Dashboard")} aria-label="Back to dashboard">
               <ArrowLeft className="size-4" />
             </Link>
           </Button>
         )}
-        <h1 className="shrink-0 font-display text-base font-semibold tracking-tight">Paidly POS</h1>
+        <div className="min-w-0 shrink-0">
+          <h1 className="font-display text-base font-semibold leading-none tracking-tight">Paidly POS</h1>
+          <p className="mt-0.5 hidden truncate text-[11px] text-muted-foreground sm:block">
+            {staffFirstName}
+          </p>
+        </div>
         <button
           type="button"
-          className="hidden min-w-0 max-w-[14rem] truncate rounded-input px-1.5 py-1 text-sm font-medium hover:bg-muted sm:block"
-          onClick={() => setRegisterOpen(true)}
+          className="hidden min-h-11 min-w-0 max-w-[12rem] truncate rounded-input px-2 py-1 text-left text-sm font-medium hover:bg-muted sm:block"
+          onClick={() => {
+            if (!tillChoiceLocked) setRegisterOpen(true);
+          }}
         >
-          {activeRegister?.name || "Main Till"}
+          <span className="block truncate">{activeRegister?.name || "Main Till"}</span>
+          <span className="block text-[11px] font-normal text-muted-foreground">{tillBrandName}</span>
         </button>
-        <p className="hidden min-w-0 truncate text-sm text-muted-foreground md:block">
-          {staffFirstName}
+        <div className="hidden items-center gap-2 md:flex">
+          <PosConnectivityBar state={connectivityState} />
           <span
             className={cn(
-              "ml-1.5",
-              connectivityState === "online" ? "text-emerald-600" : "text-amber-600"
+              "rounded-full border px-2.5 py-1 text-[11px] font-medium",
+              openSession
+                ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                : "border-border bg-muted text-muted-foreground"
             )}
           >
-            · {presenceLabel}
+            {shiftStatusLabel}
           </span>
-        </p>
-        <div className="ml-auto flex items-center gap-1.5">
+        </div>
+        <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
+          <button
+            type="button"
+            className="hidden min-h-11 rounded-input px-2 text-right sm:block"
+            onClick={() => {
+              setTodayOpen(true);
+              void loadToday();
+            }}
+          >
+            <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">Today</span>
+            <span className="block text-sm font-semibold tabular-nums">{formatCurrency(todayTotal, currency)}</span>
+          </button>
           {openSession && canCloseRegister ? (
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-8 touch-manipulation"
+              className="h-11 min-h-11 touch-manipulation px-3"
               onClick={() => void openCloseShift()}
             >
-              Shift
+              Close shift
             </Button>
           ) : needsShift ? (
             <Button
               type="button"
-              size="sm"
-              className="h-8 touch-manipulation"
+              className="h-11 min-h-11 touch-manipulation px-3"
               onClick={() => {
                 setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
                 setStartShiftOpen(true);
               }}
             >
-              Shift
+              Open shift
             </Button>
           ) : (
-            <Button type="button" variant="outline" size="sm" className="h-8" disabled>
-              Shift
+            <Button type="button" variant="outline" className="h-11 min-h-11 px-3" disabled>
+              {shiftStatusLabel}
             </Button>
           )}
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 sm:hidden"
-            onClick={() => setRegisterOpen(true)}
-            aria-label={`Register ${activeRegister?.name || "Main Till"}`}
+            className="size-11 sm:hidden"
+            onClick={() => {
+              if (!tillChoiceLocked) setRegisterOpen(true);
+            }}
+            aria-label={`Till ${activeRegister?.name || "Main Till"}`}
           >
             <Store className="size-4" />
           </Button>
@@ -1139,29 +1201,72 @@ export default function PosTerminal() {
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-muted-foreground sm:px-3"
-              onClick={() => setInviteOpen(true)}
-              aria-label="Invite staff"
+              className="h-11 min-h-11 px-2 text-muted-foreground sm:px-3"
+              onClick={() => setStaffManageOpen(true)}
+              aria-label="Staff"
             >
-              <UserPlus className="size-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">Invite</span>
+              <UserPlus className="size-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Staff</span>
             </Button>
           ) : null}
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-8 text-muted-foreground"
+            className="h-11 min-h-11 px-2 text-muted-foreground sm:px-3"
             onClick={() => {
               setTodayOpen(true);
               void loadToday();
             }}
+            aria-label="Orders"
           >
-            Today
+            <Receipt className="size-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Orders</span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-11 text-muted-foreground"
+            aria-label="Help"
+            onClick={() => setHelpOpen(true)}
+          >
+            <HelpCircle className="size-4" />
           </Button>
         </div>
       </header>
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-1.5 md:hidden">
+        <button
+          type="button"
+          className="min-h-11 min-w-0 truncate text-left text-xs font-medium"
+          onClick={() => {
+            if (!tillChoiceLocked) setRegisterOpen(true);
+          }}
+        >
+          {activeRegister?.name || "Main Till"}
+          <span className="text-muted-foreground"> · {staffFirstName}</span>
+        </button>
+        <PosConnectivityBar state={connectivityState} className="ml-auto shrink-0" />
+        <span
+          className={cn(
+            "shrink-0 rounded-full border px-2 py-1 text-[11px] font-medium",
+            openSession
+              ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+              : "border-border bg-muted text-muted-foreground"
+          )}
+        >
+          {shiftStatusLabel}
+        </span>
+        <button
+          type="button"
+          className="min-h-11 shrink-0 text-xs font-semibold tabular-nums"
+          onClick={() => {
+            setTodayOpen(true);
+            void loadToday();
+          }}
+        >
+          {formatCurrency(todayTotal, currency)}
+        </button>
+      </div>
       {blockedReason ? (
         <div
           className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-950 dark:text-amber-100 sm:text-sm"
@@ -1171,7 +1276,7 @@ export default function PosTerminal() {
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="shrink-0 space-y-3 p-3 sm:p-4">
             <div className="flex gap-2">
@@ -1233,11 +1338,26 @@ export default function PosTerminal() {
                     setCategory("all");
                   }}
                   className={cn(
-                    "h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
+                    "h-11 min-h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
                     category === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
                   )}
                 >
                   All
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={category === "popular"}
+                  onClick={() => {
+                    triggerHaptic(8);
+                    setCategory("popular");
+                  }}
+                  className={cn(
+                    "h-11 min-h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
+                    category === "popular" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                  )}
+                >
+                  Popular
                 </button>
                 {categories.map((row) => {
                   const selected = category === row.name;
@@ -1252,7 +1372,7 @@ export default function PosTerminal() {
                         setCategory(row.name);
                       }}
                       className={cn(
-                        "h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
+                        "h-11 min-h-11 shrink-0 rounded-input px-4 text-sm font-medium touch-manipulation",
                         selected ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
                       )}
                     >
@@ -1275,9 +1395,11 @@ export default function PosTerminal() {
                 {category !== "all" || query.trim() ? "No products in this view" : "No products to sell"}
               </p>
               <p className="text-sm text-muted-foreground">
-                {category !== "all"
+                {category !== "all" && category !== "popular"
                   ? `Nothing in ${category}${query.trim() ? " matches this search" : ""}.`
-                  : query.trim()
+                  : category === "popular"
+                    ? "No popular items yet. Complete a few sales today and they will show here."
+                    : query.trim()
                     ? "Try a different name, SKU, or barcode."
                     : "Add physical products with stock in the catalog. Private brand products only appear on that brand’s till."}
               </p>
@@ -1301,7 +1423,7 @@ export default function PosTerminal() {
               )}
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-4">
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-24 sm:px-4 lg:pb-3">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {filteredProducts.map((product) => {
                   const stock = posProductStock(product);
@@ -1309,49 +1431,78 @@ export default function PosTerminal() {
                   const out = stockUi.tone === "out";
                   const inCart = cart.find((line) => line.product_id === product.id);
                   return (
-                    <button
+                    <div
                       key={product.id}
-                      type="button"
-                      disabled={out}
-                      aria-label={`Add ${product.name} to cart`}
-                      onClick={() => addProduct(product)}
                       className={cn(
-                        "flex min-h-[11rem] flex-col items-stretch overflow-hidden rounded-2xl border border-border bg-card text-left touch-manipulation select-none active:scale-[0.98]",
+                        "flex min-h-[11rem] flex-col items-stretch overflow-hidden rounded-2xl border border-border bg-card text-left",
                         out ? "opacity-45" : "hover:border-primary",
                         inCart ? "border-primary ring-1 ring-primary/40" : ""
                       )}
                     >
-                      <div className="relative aspect-[4/3] w-full bg-muted/40">
-                        <ProductThumbnail
-                          imageUrl={product.image_url}
-                          name={product.name}
-                          className="h-full w-full rounded-none border-0"
-                        />
-                        {inCart ? (
-                          <span className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                            {inCart.quantity}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-1 flex-col gap-1 p-3">
-                        <p className="line-clamp-2 text-sm font-semibold leading-tight">{product.name}</p>
-                        <p className="text-base font-semibold tabular-nums">
-                          {formatCurrency(catalogUnitPrice(product), currency)}
-                        </p>
-                        <p
-                          className={cn(
-                            "mt-auto text-xs font-medium",
-                            stockUi.tone === "out"
-                              ? "text-destructive"
-                              : stockUi.tone === "low"
-                                ? "font-semibold uppercase tracking-wide text-amber-600"
-                                : "text-muted-foreground"
-                          )}
-                        >
-                          {stockUi.text}
-                        </p>
-                      </div>
-                    </button>
+                      <button
+                        type="button"
+                        disabled={out}
+                        aria-label={`Add ${product.name} to cart`}
+                        onClick={() => addProduct(product)}
+                        className="flex min-w-0 flex-1 flex-col touch-manipulation select-none active:scale-[0.99]"
+                      >
+                        <div className="relative aspect-[4/3] w-full bg-muted/40">
+                          <ProductThumbnail
+                            imageUrl={product.image_url}
+                            name={product.name}
+                            className="h-full w-full rounded-none border-0"
+                          />
+                          {inCart ? (
+                            <span className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                              {inCart.quantity}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-1 flex-col gap-1 p-3 pb-2">
+                          <p className="line-clamp-2 text-sm font-semibold leading-tight">{product.name}</p>
+                          <p className="text-base font-semibold tabular-nums">
+                            {formatCurrency(catalogUnitPrice(product), currency)}
+                          </p>
+                          <p
+                            className={cn(
+                              "mt-auto text-xs font-medium",
+                              stockUi.tone === "out"
+                                ? "text-destructive"
+                                : stockUi.tone === "low"
+                                  ? "font-semibold uppercase tracking-wide text-amber-600"
+                                  : "text-muted-foreground"
+                            )}
+                          >
+                            {stockUi.text}
+                          </p>
+                        </div>
+                      </button>
+                      {inCart && !out ? (
+                        <div className="flex items-center justify-between gap-1 border-t border-border px-2 py-1.5">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="size-11 min-h-11 min-w-11"
+                            onClick={() => setQty(product.id, inCart.quantity - 1)}
+                            aria-label={`Decrease ${product.name}`}
+                          >
+                            <Minus className="size-3.5" />
+                          </Button>
+                          <span className="min-w-6 text-center text-sm font-semibold tabular-nums">{inCart.quantity}</span>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="size-11 min-h-11 min-w-11"
+                            onClick={() => addProduct(product)}
+                            aria-label={`Increase ${product.name}`}
+                          >
+                            <Plus className="size-3.5" />
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
@@ -1359,9 +1510,9 @@ export default function PosTerminal() {
           )}
         </section>
 
-        <div className="grid shrink-0 grid-cols-1 border-t border-border bg-card md:grid-cols-2 md:h-[min(46vh,28rem)]">
-          <section className="flex min-h-0 flex-col border-border md:border-r">
-            <div className="hidden items-center justify-between gap-2 px-4 py-3 md:flex">
+        <aside className="hidden min-h-0 w-[22rem] shrink-0 flex-col border-l border-border bg-card xl:w-[26rem] lg:flex">
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex items-center justify-between gap-2 px-4 py-3">
               <h2 className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wider">
                 Cart
                 {cartCount > 0 ? (
@@ -1372,94 +1523,70 @@ export default function PosTerminal() {
               </h2>
               <div className="flex shrink-0 items-center gap-1">
                 {orgId && heldCart && cart.length === 0 ? (
-                  <Button type="button" variant="ghost" className="h-10 px-2 text-xs" onClick={resumeHeldCart}>
+                  <Button type="button" variant="ghost" className="h-11 px-2 text-xs" onClick={resumeHeldCart}>
                     <Play className="size-3.5" />
                     Resume
                   </Button>
                 ) : null}
                 {orgId && cart.length > 0 ? (
-                  <Button type="button" variant="ghost" className="h-10 px-2 text-xs" onClick={holdCart}>
+                  <Button type="button" variant="ghost" className="h-11 px-2 text-xs" onClick={holdCart}>
                     <Pause className="size-3.5" />
                     Hold
                   </Button>
                 ) : null}
                 {cart.length > 0 ? (
-                  <Button type="button" variant="ghost" className="h-10 px-2 text-xs" onClick={clearCart}>
+                  <Button type="button" variant="ghost" className="h-11 px-2 text-xs" onClick={clearCart}>
                     Clear
                   </Button>
                 ) : null}
               </div>
             </div>
-            <div className="hidden min-h-0 flex-1 overflow-y-auto md:block">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               <CartLineList cart={cart} currency={currency} onQty={setQty} />
             </div>
-            {orgId && heldCart && cart.length === 0 ? (
-              <button
-                type="button"
-                className="flex h-12 items-center justify-between px-4 text-sm md:hidden"
-                onClick={resumeHeldCart}
-              >
-                <span className="text-muted-foreground">Held sale on this device</span>
-                <span className="font-semibold">Resume</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="flex h-12 items-center justify-between px-4 text-sm md:hidden"
-                onClick={() => setCartSheetOpen(true)}
-              >
-                <span className="text-muted-foreground">
-                  {cartCount === 0 ? "Cart is empty" : `${cartCount} items · Checkout`}
-                </span>
-                <span className="font-semibold tabular-nums">{formatCurrency(cartTotal, currency)}</span>
-              </button>
-            )}
           </section>
 
-          <section className="hidden flex-col justify-between p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:flex">
-            <div>
-              <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider">Checkout</h2>
-              <button
-                type="button"
-                className="mb-4 flex w-full flex-col items-start gap-0.5 text-left"
-                onClick={() => setCustomerOpen(true)}
-              >
-                <span className="text-sm text-muted-foreground">POS Customer</span>
-                <span className="truncate font-medium">{customerLabel}</span>
-              </button>
-              <dl className="space-y-2 text-sm">
-                {moneyRows.map((row) => (
-                  <div key={row.label} className="flex items-center justify-between gap-4">
-                    <dt className="text-muted-foreground">{row.label}</dt>
-                    <dd className="tabular-nums">
-                      {row.action === "discount" ? (
-                        <button
-                          type="button"
-                          className="rounded-input px-1 font-medium underline-offset-2 hover:underline"
-                          onClick={() => {
-                            setDiscountDraft(String(totals.discount_amount || 0));
-                            setDiscountOpen(true);
-                          }}
-                        >
-                          {formatCurrency(row.amount, currency)}
-                        </button>
-                      ) : (
-                        formatCurrency(row.amount, currency)
-                      )}
-                    </dd>
-                  </div>
-                ))}
-                <div className="mt-2 flex items-baseline justify-between gap-4 border-t border-border pt-3">
-                  <dt className="text-xs font-semibold uppercase tracking-wider">Total</dt>
-                  <dd className="font-display text-2xl font-bold tabular-nums tracking-tight">
-                    {formatCurrency(cartTotal, currency)}
+          <section className="shrink-0 border-t border-border p-4">
+            <button
+              type="button"
+              className="mb-4 flex min-h-11 w-full flex-col items-start gap-0.5 text-left"
+              onClick={() => setCustomerOpen(true)}
+            >
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">Customer</span>
+              <span className="truncate font-medium">{customerLabel}</span>
+            </button>
+            <dl className="space-y-2 text-sm">
+              {moneyRows.map((row) => (
+                <div key={row.label} className="flex items-center justify-between gap-4">
+                  <dt className="text-muted-foreground">{row.label}</dt>
+                  <dd className="tabular-nums">
+                    {row.action === "discount" ? (
+                      <button
+                        type="button"
+                        className="min-h-11 rounded-input px-1 font-medium underline-offset-2 hover:underline"
+                        onClick={() => {
+                          setDiscountDraft(String(totals.discount_amount || 0));
+                          setDiscountOpen(true);
+                        }}
+                      >
+                        {formatCurrency(row.amount, currency)}
+                      </button>
+                    ) : (
+                      formatCurrency(row.amount, currency)
+                    )}
                   </dd>
                 </div>
-              </dl>
-            </div>
+              ))}
+              <div className="mt-2 flex items-baseline justify-between gap-4 border-t border-border pt-3">
+                <dt className="text-xs font-semibold uppercase tracking-wider">Total</dt>
+                <dd className="font-display text-3xl font-bold tabular-nums tracking-tight">
+                  {formatCurrency(cartTotal, currency)}
+                </dd>
+              </div>
+            </dl>
             <Button
               type="button"
-              className="mt-4 h-14 w-full text-base font-semibold touch-manipulation"
+              className="mt-4 h-14 min-h-11 w-full text-base font-semibold uppercase tracking-wide touch-manipulation"
               disabled={
                 submitting ||
                 sessionLoading ||
@@ -1474,14 +1601,37 @@ export default function PosTerminal() {
                   ? "Reconnecting…"
                   : "Offline"
                 : needsShift
-                  ? "Start shift"
+                  ? "Open shift"
                   : canSell
                     ? `Pay ${formatCurrency(cartTotal, currency)}`
                     : "No sell access"}
             </Button>
           </section>
-        </div>
+        </aside>
       </div>
+
+      {cartCount > 0 || (orgId && heldCart) ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+          <button
+            type="button"
+            className="pointer-events-auto flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl bg-primary px-5 py-3 text-left text-primary-foreground shadow-lg touch-manipulation"
+            onClick={() => {
+              if (orgId && heldCart && cart.length === 0) {
+                resumeHeldCart();
+                return;
+              }
+              setCartSheetOpen(true);
+            }}
+          >
+            <span className="text-sm font-semibold uppercase tracking-wide">
+              {cart.length === 0 && heldCart ? "Resume held sale" : `${cartCount} items · ${formatCurrency(cartTotal, currency)}`}
+            </span>
+            <span className="text-sm font-bold uppercase tracking-wide">
+              {cart.length === 0 ? "View" : "View cart"}
+            </span>
+          </button>
+        </div>
+      ) : null}
 
       <BarcodeScannerDialog
         open={scannerOpen}
@@ -1489,6 +1639,29 @@ export default function PosTerminal() {
         title="Scan barcode"
         onDetected={(code) => applyScannedCode(code)}
       />
+
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Till help</DialogTitle>
+            <DialogDescription>Sell, take payment, receipt, next sale.</DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            <li>Search or scan to add products. Out of stock items cannot be sold.</li>
+            <li>Walk-in Customer is the default. Attach a POS customer only when you need a name.</li>
+            <li>Cash is counted on this till. Card and EFT wait for the real payment rail.</li>
+            <li>Stock decreases only after a sale is paid — not when you add to the cart.</li>
+          </ul>
+          {posOnlyStaff ? null : (
+            <Button type="button" variant="outline" className="h-11 min-h-11 w-full" asChild>
+              <Link to={`${createPageUrl("Settings")}?tab=integrations`}>POS settings</Link>
+            </Button>
+          )}
+          <Button type="button" className="h-11 min-h-11 w-full" asChild>
+            <a href={`mailto:${import.meta.env.VITE_SUPPORT_EMAIL || "support@paidly.co.za"}`}>Contact support</a>
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={cartSheetOpen} onOpenChange={setCartSheetOpen}>
         <SheetContent side="bottom" className="flex max-h-[85dvh] flex-col rounded-t-2xl p-0">
@@ -1595,25 +1768,29 @@ export default function PosTerminal() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={payMethodOpen} onOpenChange={setPayMethodOpen}>
-        <DialogContent className="max-w-md sm:rounded-2xl">
+      <Dialog
+        open={payMethodOpen}
+        onOpenChange={setPayMethodOpen}
+      >
+        <DialogContent className="max-w-md gap-5 sm:rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="font-display text-2xl">Pay</DialogTitle>
+            <DialogTitle className="font-display text-2xl">Payment</DialogTitle>
             <DialogDescription>
-              {formatCurrency(cartTotal, currency)} · {customerLabel}. Cash is counted on the till. Card and Digital
-              Payment complete only when the real rail confirms — not from this tap. Checkout needs an online
-              connection; cash is not queued on this device.
+              {customerLabel} · {cartCount} items
             </DialogDescription>
           </DialogHeader>
+          <p className="font-display text-4xl font-bold tabular-nums tracking-tight">
+            {formatCurrency(cartTotal, currency)}
+          </p>
           <div className="grid grid-cols-1 gap-2">
-            <Button type="button" className="h-14 text-base touch-manipulation" disabled={!checkoutAllowed} onClick={openCash}>
+            <Button type="button" className="h-14 min-h-11 text-base font-semibold uppercase tracking-wide touch-manipulation" disabled={!checkoutAllowed} onClick={openCash}>
               <Banknote className="size-5" />
               Cash
             </Button>
             <Button
               type="button"
               variant="secondary"
-              className="h-14 text-base touch-manipulation"
+              className="h-14 min-h-11 text-base font-semibold uppercase tracking-wide touch-manipulation"
               disabled={!checkoutAllowed}
               onClick={openCard}
             >
@@ -1623,42 +1800,52 @@ export default function PosTerminal() {
             <Button
               type="button"
               variant="secondary"
-              className="h-14 text-base touch-manipulation"
+              className="h-14 min-h-11 text-base font-semibold uppercase tracking-wide touch-manipulation"
               disabled={submitting || !checkoutAllowed}
               onClick={openDigital}
             >
               {submitting ? <Loader2 className="size-5 animate-spin" /> : <Smartphone className="size-5" />}
-              Digital Payment
+              EFT / Digital
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Cash is counted on this till. Card and EFT complete only after the real payment rail confirms — this
+            screen never marks a sale paid on tap.
+          </p>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={cardOpen} onOpenChange={setCardOpen}>
+      <Dialog
+        open={cardOpen}
+        onOpenChange={setCardOpen}
+      >
         <DialogContent className="max-w-md sm:rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Card terminal</DialogTitle>
-            <DialogDescription>
-              This till has no physical card machine. Tapping Card does not mark the sale paid.
-            </DialogDescription>
+            <DialogTitle>Card</DialogTitle>
+            <DialogDescription>Waiting for card payment confirmation.</DialogDescription>
           </DialogHeader>
+          <p className="font-display text-4xl font-bold tabular-nums">{formatCurrency(cartTotal, currency)}</p>
           <p className="text-sm text-muted-foreground">
-            Card-present readers (Yoco / Square) confirm through their webhook when those integrations are
-            connected in Settings. Digital Payment uses Ozow and also waits for a real confirmation.
-            There is no trusted click-to-paid card workflow on this till.
+            This till does not mark a card sale paid on tap. Connect a reader (Yoco / Square) in back-office
+            Integrations. The order stays unpaid until that rail confirms.
           </p>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
-            <Button type="button" className="h-12 w-full" asChild>
-              <Link to={`${createPageUrl("Settings")}?tab=integrations`}>Open Integrations</Link>
-            </Button>
-            <Button type="button" variant="ghost" className="h-12 w-full" onClick={() => setCardOpen(false)}>
+            {posOnlyStaff ? null : (
+              <Button type="button" className="h-12 min-h-11 w-full" asChild>
+                <Link to={`${createPageUrl("Settings")}?tab=integrations`}>POS settings</Link>
+              </Button>
+            )}
+            <Button type="button" variant="ghost" className="h-12 min-h-11 w-full" onClick={closePayStage}>
               Back
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={digitalOpen} onOpenChange={setDigitalOpen}>
+      <Dialog
+        open={digitalOpen}
+        onOpenChange={setDigitalOpen}
+      >
         <DialogContent className="max-w-md sm:rounded-2xl">
           <DialogHeader>
             <DialogTitle>Digital Payment</DialogTitle>
@@ -1679,51 +1866,44 @@ export default function PosTerminal() {
               {submitting ? <Loader2 className="size-5 animate-spin" /> : <Smartphone className="size-5" />}
               Request Ozow payment
             </Button>
-            <Button type="button" variant="ghost" className="h-12 w-full" onClick={() => setDigitalOpen(false)}>
+            <Button type="button" variant="ghost" className="h-12 min-h-11 w-full" onClick={closePayStage}>
               Back
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={cashOpen} onOpenChange={setCashOpen}>
+      <Dialog
+        open={cashOpen}
+        onOpenChange={setCashOpen}
+      >
         <DialogContent className="max-w-md gap-4 sm:rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl">Cash</DialogTitle>
-            <DialogDescription>
-              Counted on the till. Not sent to Ozow or PayFast.
-            </DialogDescription>
+            <DialogDescription>Counted on the till. Not sent to Ozow or PayFast.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="text-muted-foreground">Total</span>
+              <span className="text-muted-foreground">Amount due</span>
               <span className="font-semibold tabular-nums">{formatCurrency(cartTotal, currency)}</span>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Customer pays</p>
-              <Input
-                type="number"
-                min={cartTotal}
-                step="0.01"
-                value={tendered}
-                onChange={(e) => setTendered(e.target.value)}
-                className="h-16 text-center text-3xl font-bold tabular-nums"
-                aria-label="Customer pays"
-                inputMode="decimal"
-              />
-              <div className="grid grid-cols-3 gap-2">
-                {tenderChips.map((amount) => (
-                  <Button
-                    key={amount}
-                    type="button"
-                    variant={roundMoney(Number(tendered)) === amount ? "default" : "outline"}
-                    className="h-12 touch-manipulation tabular-nums"
-                    onClick={() => setTendered(String(amount))}
-                  >
-                    {amount === cartTotal ? "Exact" : formatCurrency(amount, currency)}
-                  </Button>
-                ))}
-              </div>
+            <div className="rounded-2xl border border-border bg-muted/30 px-4 py-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Cash received</p>
+              <p className="font-display text-3xl font-bold tabular-nums">{formatCurrency(Number(tendered) || 0, currency)}</p>
+            </div>
+            <PosCashKeypad value={tendered} onChange={setTendered} />
+            <div className="grid grid-cols-3 gap-2">
+              {tenderChips.slice(0, 3).map((amount) => (
+                <Button
+                  key={amount}
+                  type="button"
+                  variant={roundMoney(Number(tendered)) === amount ? "default" : "outline"}
+                  className="h-11 min-h-11 touch-manipulation tabular-nums"
+                  onClick={() => setTendered(String(amount.toFixed(2)))}
+                >
+                  {amount === cartTotal ? "Exact" : formatCurrency(amount, currency)}
+                </Button>
+              ))}
             </div>
             <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3">
               <span className="text-sm text-muted-foreground">Change</span>
@@ -1735,12 +1915,12 @@ export default function PosTerminal() {
           <DialogFooter className="sm:justify-stretch">
             <Button
               type="button"
-              className="h-14 w-full text-base touch-manipulation"
+              className="h-14 min-h-11 w-full text-base font-semibold uppercase tracking-wide touch-manipulation"
               disabled={submitting || !cashTender.ok || !checkoutAllowed}
               onClick={() => void completeCheckout({ paymentMethod: "cash", amountTendered: tendered })}
             >
               {submitting ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
-              Take cash
+              Complete payment
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1749,29 +1929,29 @@ export default function PosTerminal() {
       <Dialog
         open={Boolean(completedSale)}
         onOpenChange={(open) => {
-          if (!open) {
-            setCompletedSale(null);
-            setSaleAudit([]);
-            searchRef.current?.focus();
-          }
+          if (!open) startNewSale();
         }}
       >
         <DialogContent className="max-w-md sm:rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl">
-              {completedSale?.sale_kind === "return" ? "Returned" : "Receipt"}
+              {completedSale?.sale_kind === "return" ? "Return complete" : "Payment successful"}
             </DialogTitle>
             <DialogDescription>
-              {completedSale?.receipt_number} · retail receipt, not an invoice
+              {completedSale?.receipt_number || "Order"} · {customerLabel}
             </DialogDescription>
           </DialogHeader>
           <p className="font-display text-4xl font-bold tabular-nums">
             {formatCurrency(Math.abs(Number(completedSale?.total_amount) || 0), completedSale?.currency || currency)}
           </p>
+          <p className="text-sm text-muted-foreground">
+            {completedSale?.receipt_number ? `Order ${completedSale.receipt_number}` : null}
+            {completedSale?.cashier_name ? ` · ${completedSale.cashier_name}` : null}
+          </p>
           {completedSale?.payment_method === "cash" && completedSale?.amount_tendered != null ? (
             <dl className="space-y-1 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Customer paid</dt>
+                <dt className="text-muted-foreground">Cash received</dt>
                 <dd className="tabular-nums">{formatCurrency(completedSale.amount_tendered, currency)}</dd>
               </div>
               <div className="flex justify-between gap-4">
@@ -1801,55 +1981,59 @@ export default function PosTerminal() {
             </ol>
           ) : null}
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Email receipt</p>
+            <p className="text-sm text-muted-foreground">Send receipt</p>
             <Input
               type="email"
               value={receiptEmailTo}
               onChange={(e) => setReceiptEmailTo(e.target.value)}
               placeholder="customer@email"
-              className="h-12"
+              className="h-12 min-h-11"
               autoComplete="email"
             />
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
-            <Button
-              type="button"
-              className="h-14 w-full text-base"
-              onClick={() => {
-                setCompletedSale(null);
-                searchRef.current?.focus();
-              }}
-            >
-              Next sale
+            <Button type="button" className="h-14 min-h-11 w-full text-base font-semibold" onClick={startNewSale}>
+              New sale
             </Button>
-            <Button type="button" variant="outline" className="h-12 w-full" onClick={printCurrentReceipt}>
-              <Printer className="size-4" /> Print
+            <Button type="button" variant="outline" className="h-12 min-h-11 w-full" onClick={printCurrentReceipt}>
+              <Printer className="size-4" /> Print receipt
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="h-12 w-full"
+              className="h-12 min-h-11 w-full"
               disabled={receiptBusy === "download"}
               onClick={() => void downloadCurrentReceipt()}
             >
               {receiptBusy === "download" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-              Download
+              Download receipt
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="h-12 w-full"
+              className="h-12 min-h-11 w-full"
               disabled={receiptBusy === "email"}
               onClick={() => void emailCurrentReceipt()}
             >
               {receiptBusy === "email" ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-              Email
+              Send receipt
             </Button>
-            {(completedSale?.sale_kind || "sale") === "sale" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-12 min-h-11 w-full"
+              onClick={() => {
+                setTodayOpen(true);
+                void loadToday();
+              }}
+            >
+              <Receipt className="size-4" /> View order
+            </Button>
+            {(completedSale?.sale_kind || "sale") === "sale" && !posOnlyStaff ? (
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 w-full"
+                className="h-12 min-h-11 w-full"
                 disabled={convertBusy}
                 onClick={() => void convertSaleToInvoice(completedSale)}
               >
@@ -1900,8 +2084,9 @@ export default function PosTerminal() {
           <ul className="max-h-72 space-y-2 overflow-auto">
             {registers.filter((row) => (row.status || "active") === "active").length === 0 ? (
               <li className="rounded-xl border border-border px-3 py-4 text-sm text-muted-foreground">
-                No active register yet. Add one in Settings → Integrations after running the POS registers
-                migration.
+                {posOnlyStaff
+                  ? "No active till is assigned yet. Ask a manager to add a register."
+                  : "No active register yet. Add one in Settings → Integrations after running the POS registers migration."}
               </li>
             ) : null}
             {registers.filter((row) => (row.status || "active") === "active").map((row) => (
@@ -1998,6 +2183,23 @@ export default function PosTerminal() {
               <dt className="text-muted-foreground">Cash refunds</dt>
               <dd className="tabular-nums">{formatCurrency(Number(openSession?.cash_refunds) || 0, currency)}</dd>
             </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Card / EFT (not drawer)</dt>
+              <dd className="tabular-nums">
+                {formatCurrency(
+                  todaySales
+                    .filter(
+                      (row) =>
+                        (row.sale_kind || "sale") !== "return" &&
+                        row.payment_method &&
+                        row.payment_method !== "cash" &&
+                        (!openSession?.id || row.session_id === openSession.id)
+                    )
+                    .reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0),
+                  currency
+                )}
+              </dd>
+            </div>
             <div className="flex justify-between gap-4 border-t border-border pt-2 font-medium">
               <dt>Expected cash</dt>
               <dd className="tabular-nums">{formatCurrency(Number(openSession?.expected_cash) || 0, currency)}</dd>
@@ -2052,8 +2254,10 @@ export default function PosTerminal() {
       <Sheet open={todayOpen} onOpenChange={setTodayOpen}>
         <SheetContent className="w-full sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>Today</SheetTitle>
-            <SheetDescription>{formatCurrency(todayTotal, currency)} including returns</SheetDescription>
+            <SheetTitle>Orders</SheetTitle>
+            <SheetDescription>
+              {formatCurrency(todayTotal, currency)} today · this till’s authorised sales
+            </SheetDescription>
           </SheetHeader>
           <div className="mt-4 space-y-2 overflow-y-auto pb-8">
             {todayLoading ? (
@@ -2063,7 +2267,15 @@ export default function PosTerminal() {
             ) : (
               todaySales.map((sale) => (
                 <div key={sale.id} className="rounded-xl border border-border p-3">
-                  <div className="flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    className="flex w-full items-start justify-between gap-2 text-left touch-manipulation"
+                    onClick={() => {
+                      setCompletedSale(sale);
+                      setReceiptEmailTo(sale.customer_email || sale.raw_payload?.customer_email || "");
+                      setTodayOpen(false);
+                    }}
+                  >
                     <div>
                       <p className="text-sm font-medium">
                         {sale.receipt_number || sale.external_id}
@@ -2072,14 +2284,21 @@ export default function PosTerminal() {
                         {sale.refund_status === "full" ? " · Returned" : ""}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {sale.occurred_at ? format(new Date(sale.occurred_at), "HH:mm") : ""} ·{" "}
-                        {sale.payment_method || "POS"}
+                        {sale.occurred_at ? format(new Date(sale.occurred_at), "HH:mm") : ""}
+                        {" · "}
+                        {sale.cashier_name || staffFirstName}
+                        {" · "}
+                        {sale.customer_name || WALK_IN_CUSTOMER_LABEL}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {(Array.isArray(sale.items) ? sale.items.reduce((n, line) => n + (Number(line.quantity) || 0), 0) : 0)}{" "}
+                        items · {sale.payment_method || "POS"}
                       </p>
                     </div>
                     <span className="text-base font-semibold tabular-nums">
                       {formatCurrency(Number(sale.total_amount) || 0, sale.currency || currency)}
                     </span>
-                  </div>
+                  </button>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <Button
                       type="button"
@@ -2148,7 +2367,7 @@ export default function PosTerminal() {
                       type="button"
                       size="icon"
                       variant="outline"
-                      className="size-10 min-h-10 min-w-10 touch-manipulation"
+                      className="size-11 min-h-11 min-w-11 touch-manipulation"
                       onClick={() =>
                         setReturnQtys((prev) => ({
                           ...prev,
@@ -2164,7 +2383,7 @@ export default function PosTerminal() {
                       type="button"
                       size="icon"
                       variant="outline"
-                      className="size-10 min-h-10 min-w-10 touch-manipulation"
+                      className="size-11 min-h-11 min-w-11 touch-manipulation"
                       onClick={() =>
                         setReturnQtys((prev) => ({
                           ...prev,
@@ -2227,6 +2446,15 @@ export default function PosTerminal() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PosTillStaffSheet
+        open={staffManageOpen}
+        onOpenChange={setStaffManageOpen}
+        companyCtx={companyCtx}
+        onInvite={() => {
+          setStaffManageOpen(false);
+          setInviteOpen(true);
+        }}
+      />
       <PosStaffInviteSheet
         open={inviteOpen}
         onOpenChange={setInviteOpen}

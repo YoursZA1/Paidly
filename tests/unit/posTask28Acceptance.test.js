@@ -72,9 +72,9 @@ describe("Task 28 POS acceptance", () => {
     expect(added.cart[0]).toMatchObject({ product_id: "p1", quantity: 1, unit_price: 25 });
     expect(row.stock_quantity).toBe(4);
     expect(posProductStock(row)).toBe(4);
-    expect(posStockLabel(4).text).toBe("LOW STOCK");
+    expect(posStockLabel(4).text).toBe("LOW STOCK · 4 in stock");
     expect(posStockLabel(0).text).toBe("Out of stock");
-    expect(posStockLabel(24).text).toBe("24 available");
+    expect(posStockLabel(24).text).toBe("24 in stock");
   });
 
   it("TEST 4 Increase quantity — cart and total update", () => {

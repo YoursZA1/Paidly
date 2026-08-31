@@ -124,7 +124,7 @@ export async function fetchUserProfile(supabase, userId) {
 
 /**
  * Canonical Paidly product package for admin subscriptions UI, PayFast tiers, and pricing cards.
- * Maps profile slugs (and legacy names) to `individual` | `sme` | `corporate`.
+ * Maps profile slugs (and previous catalog names) to starter | business | growth | enterprise.
  */
 export function normalizePaidPackageKey(planOrProfile) {
   const raw =

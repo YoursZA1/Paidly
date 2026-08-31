@@ -2,7 +2,7 @@ import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
 import { requireBearerUser } from "./httpAuth.js";
 import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
 import { isValidEmail, isValidUuid } from "../inputValidation.js";
-import { familyForSlug, LEGACY_PLAN_SLUGS } from "../subscriptionPlans.js";
+import { resolveCurrentCatalogAssignment, isLegacyPlanSlug } from "../subscriptionPlans.js";
 import { PAYMENT_HISTORY_STATUS } from "../../../shared/paymentHistoryStatuses.js";
 import {
   SUBSCRIPTION_STATUS,
@@ -208,12 +208,13 @@ export function normalizeAdminSubscriptionListRow(row) {
     ...row,
     user_email: row.user_email || row.email || "",
     user_name: row.user_name || row.full_name || "",
-    plan: row.plan || row.current_plan || row.plan_slug || "individual",
+    plan: row.plan || row.current_plan || row.plan_slug || "starter",
     amount: Number(row.amount ?? row.custom_price ?? 0),
     status: row.status || "active",
     billing_cycle: row.billing_cycle || "monthly",
     next_billing_date: row.next_billing_date || null,
     created_date: row.created_date || row.created_at || null,
+    needs_plan_migration: isLegacyPlanSlug(row.plan || row.current_plan || row.plan_slug),
   };
 }
 
@@ -278,34 +279,52 @@ export function buildAdminSubscriptionWriteRow(body, opts = {}) {
   if (src.billing_cycle != null && String(src.billing_cycle).trim() && !cycleFromBody) {
     throw httpError(400, "invalid billing_cycle");
   }
+  if (cycleFromBody && cycleFromBody !== "monthly" && cycleFromBody !== "annual") {
+    throw httpError(400, "billing_cycle must be monthly or annual");
+  }
   if (cycleFromBody) out.billing_cycle = cycleFromBody;
 
-  if (planRaw) {
-    const isLegacy = LEGACY_PLAN_SLUGS.includes(planRaw);
-    const family = familyForSlug(planRaw);
-    const cycle = cycleFromBody || "monthly";
-    if (isLegacy) {
-      out.plan = planRaw;
-      out.current_plan = planRaw;
-      out.plan_slug = planRaw;
-    } else {
-      const fam = family || planRaw.replace(/_monthly$|_annual$/, "");
-      out.plan = fam;
-      out.current_plan = fam;
-      if (fam === "enterprise") out.plan_slug = "enterprise_custom";
-      else if (["starter", "business", "growth"].includes(fam)) {
-        out.plan_slug = `${fam}_${cycle === "annual" ? "annual" : "monthly"}`;
-      } else {
-        out.plan_slug = planRaw;
-      }
-    }
-    if (family) out.plan_family = family;
+  if (isCreate && !planRaw) {
+    throw httpError(400, "plan is required");
   }
 
-  if (src.amount != null && src.amount !== "") {
-    const n = Number(src.amount);
-    if (!Number.isFinite(n) || n < 0) throw httpError(400, "invalid amount");
-    out.amount = Math.round(n * 100) / 100;
+  if (planRaw) {
+    const assignment = resolveCurrentCatalogAssignment({
+      plan: planRaw,
+      billing_cycle: cycleFromBody || src.billing_cycle,
+    });
+    if (!assignment) {
+      throw httpError(400, "plan must be a current Paidly catalog plan (Starter, Business, Growth, or Enterprise)");
+    }
+    if (assignment.family === "enterprise" && cycleFromBody === "annual") {
+      throw httpError(400, "Enterprise is custom billing and cannot use annual list prices");
+    }
+    out.plan = assignment.family;
+    out.current_plan = assignment.family;
+    out.plan_slug = assignment.slug;
+    out.plan_family = assignment.family;
+    out.billing_cycle = assignment.billing_cycle;
+
+    const catalogAmount = assignment.amount;
+    if (src.amount != null && src.amount !== "") {
+      const n = Number(src.amount);
+      if (!Number.isFinite(n) || n < 0) throw httpError(400, "invalid amount");
+      const submitted = Math.round(n * 100) / 100;
+      if (assignment.contact_sales) {
+        if (submitted !== 0) {
+          throw httpError(400, "Enterprise is custom — do not submit a list price");
+        }
+        out.amount = 0;
+      } else if (submitted !== catalogAmount) {
+        throw httpError(400, "amount must match the canonical catalog price for this plan");
+      } else {
+        out.amount = catalogAmount;
+      }
+    } else {
+      out.amount = catalogAmount;
+    }
+  } else if (src.amount != null && src.amount !== "") {
+    throw httpError(400, "amount cannot be set without a current catalog plan");
   }
 
   if (src.status != null && String(src.status).trim()) {
@@ -352,10 +371,11 @@ async function attachPlanId(supabase, row) {
   if (!slug) return row;
   const { data: plan } = await supabase
     .from("plans")
-    .select("id, slug, plan_family")
+    .select("id, slug, plan_family, is_legacy, active")
     .eq("slug", slug)
+    .eq("active", true)
     .maybeSingle();
-  if (plan?.id) {
+  if (plan?.id && !plan.is_legacy) {
     row.plan_id = plan.id;
     if (!row.plan_family && plan.plan_family) row.plan_family = plan.plan_family;
   }

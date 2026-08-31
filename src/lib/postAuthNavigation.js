@@ -6,6 +6,7 @@ import {
   shouldRedirectToAppAfterAuth,
 } from "@/lib/appOrigin";
 import { normalizeCompanyRole, COMPANY_ROLES } from "@/lib/companyPermissions";
+import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 
 /**
  * Resolve home route from company membership (post-auth, does not touch login/signup).
@@ -13,6 +14,7 @@ import { normalizeCompanyRole, COMPANY_ROLES } from "@/lib/companyPermissions";
  */
 export function resolveCompanyHomePath(companyCtx) {
   if (!companyCtx?.companyId) return createPageUrl("Dashboard");
+  if (isPosOnlyStaff(companyCtx)) return createPageUrl("POS");
   if (companyCtx.isOrgOwner || companyCtx.companyRole === COMPANY_ROLES.ADMIN) {
     return createPageUrl("Dashboard");
   }

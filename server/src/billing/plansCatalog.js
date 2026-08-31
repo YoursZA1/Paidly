@@ -1,4 +1,10 @@
-import { getPlanBySlug, normalizePlanSlug, familyForSlug } from "../subscriptionPlans.js";
+import {
+  getPlanBySlug,
+  normalizePlanSlug,
+  familyForSlug,
+  isLegacyPlanSlug,
+  PUBLIC_PLAN_SLUGS,
+} from "../subscriptionPlans.js";
 
 const PLAN_SELECT =
   "id, slug, name, description, billing_cycle, amount, currency, payfast_item_name, features, active, plan_family, tier_rank, interval_months, limits, is_legacy, is_public, contact_sales, sort_order";
@@ -36,6 +42,8 @@ function mapPlanRow(data, source = "db") {
 export async function loadActivePlan(supabaseAdmin, slug) {
   const key = normalizePlanSlug(slug);
   if (!key) return null;
+  if (isLegacyPlanSlug(key)) return null;
+  if (!PUBLIC_PLAN_SLUGS.includes(/** @type {any} */ (key))) return null;
 
   const { data, error } = await supabaseAdmin
     .from("plans")
@@ -128,5 +136,7 @@ export async function listPublicPlans(supabaseAdmin, opts = {}) {
     console.warn("[plansCatalog] listPublicPlans failed", error.message);
     return [];
   }
-  return (data || []).map((row) => mapPlanRow(row, "db")).filter(Boolean);
+  return (data || [])
+    .map((row) => mapPlanRow(row, "db"))
+    .filter((p) => p && !p.is_legacy);
 }

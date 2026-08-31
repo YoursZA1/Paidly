@@ -2,11 +2,14 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 import { isValidUuid } from "../inputValidation.js";
 import { requireSettingsManager, requirePosPermission } from "./posConnectionsRoutes.js";
 import { PERMISSIONS } from "../companyRouteAccess.js";
+import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
 import { registerHasOpenSession } from "./posRegisterSessions.js";
 import {
   normalizeRegisterWrite,
   publicRegisterView,
   findConflictingRegister,
+  resolveAssignedTill,
+  filterRegistersForMembership,
 } from "./posRegisterMath.js";
 
 function jsonError(res, status, message, extra = {}) {
@@ -187,7 +190,10 @@ export async function ensureDefaultPosRegister(orgId, userId) {
   return inserted;
 }
 
-export async function resolveCheckoutRegister(orgId, userId, registerId) {
+export async function resolveCheckoutRegister(orgId, userId, registerId, membership = null) {
+  const till = resolveAssignedTill(membership, registerId);
+  if (!till.ok) return till;
+  registerId = till.registerId;
   if (registerId) {
     if (!isValidUuid(registerId)) {
       return { ok: false, error: "register_id is invalid", code: "REGISTER_INVALID" };
@@ -240,8 +246,9 @@ export async function handlePosRegistersList(req, res) {
       .order("created_at", { ascending: true });
     if (error) return jsonError(res, 500, mapRegisterSchemaError(error.message));
 
-    const registers = await decorateRegisters(orgId, data || []);
-    const members = await listOrgMembers(orgId);
+    const scoped = filterRegistersForMembership(gate.membership, data || []);
+    const registers = await decorateRegisters(orgId, scoped);
+    const members = isPosOnlyStaff(gate.membership) ? [] : await listOrgMembers(orgId);
     return res.status(200).json({ registers, members });
   } catch (err) {
     return jsonError(res, 500, mapRegisterSchemaError(err?.message));

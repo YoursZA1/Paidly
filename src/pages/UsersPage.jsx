@@ -36,7 +36,7 @@ import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import { mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
 import { adminRowPrimaryId, stableDirectoryRowKey } from '@/utils/stableListKey';
-import { normalizePlanSlug, PLANS } from '@/lib/plans.js';
+import { normalizePlanSlug, PLANS, isLegacyPlanSlug, familyForSlug } from '@/lib/plans.js';
 import { bulkUpdateUsers } from '@/api/userManagement';
 import TablePagination from '@/components/ui/TablePagination';
 
@@ -55,22 +55,16 @@ function rawPlanSlug(u) {
   return raw || EMPTY_PLAN;
 }
 
-/** Paidly tier bucket: individual | sme | corporate | other | none */
+/** Paidly tier bucket: current catalog family, needs_migration, other, or none */
 function packageTierKey(u) {
   const raw = rawPlanSlug(u);
   if (raw === EMPTY_PLAN) return 'none';
+  if (isLegacyPlanSlug(raw)) return 'needs_migration';
+  const fam = familyForSlug(raw);
+  if (fam && ['starter', 'business', 'growth', 'enterprise'].includes(fam)) return fam;
   const n = normalizePlanSlug(raw);
-  if (n && PLANS[n]) return n;
+  if (n && PLANS[n] && !isLegacyPlanSlug(n)) return familyForSlug(n) || n;
   return 'other';
-}
-
-/** For profile filter dropdown + row display. */
-function profileBillingKey(u) {
-  if (!u.profile) return 'missing';
-  const st = String(u.profile.subscription_status || '').trim().toLowerCase();
-  if (!st) return 'unset';
-  if (st === 'canceled') return 'cancelled';
-  return st;
 }
 
 /** Matches UserFormDialog plan → profile payload for bulk updates. */
@@ -81,7 +75,7 @@ function planFieldsForBulk(planSelectValue) {
     plan: billingPlan,
     subscription_plan: billingPlan,
   };
-  if (['individual', 'sme', 'corporate'].includes(slug)) {
+  if (['starter', 'business', 'growth', 'enterprise'].includes(slug)) {
     payload.subscription_status = 'active';
     payload.trial_ends_at = null;
     payload.is_pro = true;
@@ -90,6 +84,15 @@ function planFieldsForBulk(planSelectValue) {
     payload.is_pro = false;
   }
   return payload;
+}
+
+/** For profile filter dropdown + row display. */
+function profileBillingKey(u) {
+  if (!u.profile) return 'missing';
+  const st = String(u.profile.subscription_status || '').trim().toLowerCase();
+  if (!st) return 'unset';
+  if (st === 'canceled') return 'cancelled';
+  return st;
 }
 
 function isExcludedFromBulk(userId, adminSelfId) {
@@ -517,10 +520,12 @@ export default function UsersPage() {
             <SelectContent>
               <SelectItem value="all">Any package</SelectItem>
               <SelectItem value="none">No plan set</SelectItem>
-              <SelectItem value="individual">Individual tier</SelectItem>
-              <SelectItem value="sme">SME tier</SelectItem>
-              <SelectItem value="corporate">Corporate tier</SelectItem>
-              <SelectItem value="other">Other / legacy</SelectItem>
+              <SelectItem value="starter">Starter</SelectItem>
+              <SelectItem value="business">Business</SelectItem>
+              <SelectItem value="growth">Growth</SelectItem>
+              <SelectItem value="enterprise">Enterprise</SelectItem>
+              <SelectItem value="needs_migration">Needs catalog migration</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
 
@@ -602,9 +607,10 @@ export default function UsersPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">→ none / free</SelectItem>
-                <SelectItem value="individual">→ individual</SelectItem>
-                <SelectItem value="sme">→ sme</SelectItem>
-                <SelectItem value="corporate">→ corporate</SelectItem>
+                <SelectItem value="starter">→ Starter</SelectItem>
+                <SelectItem value="business">→ Business</SelectItem>
+                <SelectItem value="growth">→ Growth</SelectItem>
+                <SelectItem value="enterprise">→ Enterprise</SelectItem>
               </SelectContent>
             </Select>
 

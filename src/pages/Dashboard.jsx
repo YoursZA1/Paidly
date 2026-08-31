@@ -26,6 +26,7 @@ import { formatCurrency } from "@/utils/currencyCalculations";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { userService } from "@/services/ExcelUserService";
+import { normalizePaidPackageKey } from "@/lib/subscriptionPlan";
 import CreateAccountDialog from "@/components/CreateAccountDialog";
 import {
   FileText,
@@ -345,6 +346,7 @@ function DashboardMain() {
     individualUsers: 0,
     smeUsers: 0,
     corporateUsers: 0,
+    enterpriseUsers: 0,
     activePlans: 0,
     cancelledPlans: 0
   });
@@ -796,10 +798,11 @@ function DashboardMain() {
       const cancellations = allUsers.filter(u => u.status === 'cancelled' || u.status === 'suspended').length;
       const trialsConverted = allUsers.filter(u => u.plan === 'paid' && u.previously_trial === true).length;
 
-      // Plan breakdown (Individual / SME / Corporate)
-      const individualUsers = allUsers.filter(u => u.plan === 'individual' || u.plan === 'basic' || u.plan === 'free').length;
-      const smeUsers = allUsers.filter(u => u.plan === 'sme' || u.plan === 'professional' || u.plan === 'business').length;
-      const corporateUsers = allUsers.filter(u => u.plan === 'corporate' || u.plan === 'enterprise').length;
+      // Plan breakdown (current catalog families; previous Individual/SME/Corporate map in)
+      const individualUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "starter").length;
+      const smeUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "business").length;
+      const corporateUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "growth").length;
+      const enterpriseUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "enterprise").length;
       
       // Active vs cancelled subscriptions
       const activePlans = allUsers.filter(u => u.status === 'active' && u.plan && u.plan !== 'free').length;
@@ -820,6 +823,7 @@ function DashboardMain() {
         individualUsers,
         smeUsers,
         corporateUsers,
+        enterpriseUsers,
         activePlans,
         cancelledPlans
       });
@@ -834,7 +838,7 @@ function DashboardMain() {
         trialsConverted
       });
 
-      const lowPlans = ['free', 'trial', 'individual', 'basic', 'starter'];
+      const lowPlans = ["free", "trial", "starter", "basic"];
       const highVolumeThresholds = {
         free: 10,
         trial: 10,
@@ -1294,12 +1298,16 @@ function DashboardMain() {
                       <span className="text-sm font-semibold text-foreground">{adminStats.individualUsers}</span>
                     </div>
                     <div className="flex items-center justify-between bg-primary/10 border border-primary/30 rounded-md px-3 py-2">
-                      <span className="text-sm font-semibold text-primary">Entrepreneur</span>
+                      <span className="text-sm font-semibold text-primary">Business</span>
                       <span className="text-sm font-semibold text-foreground">{adminStats.smeUsers}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Corporate</span>
+                      <span className="text-sm text-muted-foreground">Growth</span>
                       <span className="text-sm font-semibold text-foreground">{adminStats.corporateUsers}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Enterprise</span>
+                      <span className="text-sm font-semibold text-foreground">{adminStats.enterpriseUsers}</span>
                     </div>
                   </>
                 )}

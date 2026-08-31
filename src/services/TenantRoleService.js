@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { validatePublicInviteToken } from "@/services/CompanyInvitesService";
 
 export const INVITE_TOKEN_KEY = "paidly_company_invite_token";
 
@@ -106,9 +107,7 @@ export function clearPendingInviteToken() {
 }
 
 export async function validateInviteToken(token) {
-  const { data, error } = await supabase.rpc("validate_company_invite_token", { p_token: token });
-  if (error) throw new Error(getSupabaseErrorMessage(error, "Could not validate invite"));
-  return data;
+  return validatePublicInviteToken(token);
 }
 
 /** After signup/sign-in: bind pending company_invites token to the authenticated user. */

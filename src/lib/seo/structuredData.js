@@ -9,7 +9,7 @@
  * - Most specific applicable types; nested @graph with stable @id links
  * - Offers match the visible Pricing section (ZAR amounts from shared plans)
  */
-import { PLANS, PLAN_SLUGS } from "@shared/plans.js";
+import { PLANS, PUBLIC_SELF_SERVE_MONTHLY_SLUGS } from "@shared/plans.js";
 import { PAIDLY_SITE_ORIGIN, absoluteUrl } from "@/lib/seo/siteOrigin.js";
 
 export const ORG_ID = `${PAIDLY_SITE_ORIGIN}/#organization`;
@@ -51,7 +51,7 @@ export function buildHomeStructuredDataGraph() {
 
   // WebApplication + offers that mirror the Pricing section. No AggregateRating —
   // fabricating reviews violates Google's quality guidelines / spam policies.
-  const offers = PLAN_SLUGS.map((slug) => {
+  const offers = PUBLIC_SELF_SERVE_MONTHLY_SLUGS.map((slug) => {
     const plan = PLANS[slug];
     return {
       "@type": "Offer",

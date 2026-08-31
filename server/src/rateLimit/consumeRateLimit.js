@@ -97,6 +97,20 @@ export async function consumePersistedRateLimit(bucketKey, maxHits, windowMs) {
  * @param {'login'|'signup'|'forgot-password'} kind
  * @param {string} ip
  */
+/**
+ * Unauthenticated till-code guesses. Always on — this is not a login page.
+ * 8 attempts / 15 minutes / IP (memory or Postgres bucket).
+ */
+export async function consumeTillInviteSlot(ip) {
+  const max = num("TILL_INVITE_RATE_PER_IP_MAX", 8);
+  const windowMs = num("TILL_INVITE_RATE_PER_IP_WINDOW_MS", 15 * 60 * 1000);
+  const bucket = `pos:till-invite:${ip || "unknown"}`;
+  if (isRateLimitPersistEnabled()) {
+    return consumePersistedRateLimit(bucket, max, windowMs);
+  }
+  return consumeMemoryRateLimit("till-invite", bucket, max, windowMs);
+}
+
 export async function consumeAuthIpSlot(kind, ip) {
   const key = ip || "unknown";
   if (kind === "login") {

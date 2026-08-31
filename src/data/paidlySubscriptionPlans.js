@@ -23,7 +23,7 @@ export const plans = Object.fromEntries(
     .filter(Boolean)
 );
 
-/** Admin + DB slug → ZAR (fallback only). New catalog monthly list prices; legacy slugs stay grandfathered. */
+/** Admin + DB slug → ZAR (fallback only). Historical Individual/SME/Corporate amounts remain for display of old rows. */
 export const PLAN_DEFAULT_AMOUNT = {
   starter: PLANS.starter_monthly.price,
   business: PLANS.business_monthly.price,

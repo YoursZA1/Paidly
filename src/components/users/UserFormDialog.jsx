@@ -13,6 +13,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { adminRowPrimaryId } from '@/utils/stableListKey';
+import {
+  ASSIGNABLE_PROFILE_PLAN_SLUGS,
+  coerceAssignableProfilePlan,
+  isLegacyPlanSlug,
+  mapLegacySlugToCurrentFamily,
+} from '@/lib/plans.js';
 
 function emptyForm() {
   return {
@@ -33,12 +39,18 @@ function emptyForm() {
 export default function UserFormDialog({ open, onClose, user }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(emptyForm);
+  const [legacyStoredPlan, setLegacyStoredPlan] = useState('');
   const editId = adminRowPrimaryId(user);
   const isEdit = Boolean(editId);
 
   useEffect(() => {
     if (!open) return;
     if (adminRowPrimaryId(user)) {
+      const stored = String(user.plan || user.subscription_plan || 'none').trim().toLowerCase();
+      const mapped = isLegacyPlanSlug(stored)
+        ? mapLegacySlugToCurrentFamily(stored) || 'starter'
+        : coerceAssignableProfilePlan(stored) || stored || 'none';
+      setLegacyStoredPlan(isLegacyPlanSlug(stored) ? stored : '');
       setForm({
         full_name: user.full_name || '',
         email: user.email || '',
@@ -47,16 +59,20 @@ export default function UserFormDialog({ open, onClose, user }) {
         company_address: user.company_address || '',
         company_website: user.company_website || '',
         status: user.status || 'active',
-        plan: user.plan || 'none',
+        plan: mapped === 'free' ? 'none' : mapped,
       });
     } else {
+      setLegacyStoredPlan('');
       setForm(emptyForm());
     }
   }, [open, user]);
 
   const buildPayload = () => {
     const planSlug = String(form.plan || "none").trim().toLowerCase();
-    const billingPlan = planSlug === "none" ? "free" : planSlug;
+    const billingPlan =
+      planSlug === "none" || planSlug === "free"
+        ? "free"
+        : coerceAssignableProfilePlan(planSlug);
     const payload = {
       full_name: form.full_name.trim(),
       email: form.email.trim().toLowerCase(),
@@ -65,10 +81,10 @@ export default function UserFormDialog({ open, onClose, user }) {
       company_address: form.company_address.trim(),
       company_website: form.company_website.trim(),
       status: form.status,
-      plan: billingPlan,
-      subscription_plan: billingPlan,
+      plan: billingPlan || "free",
+      subscription_plan: billingPlan || "free",
     };
-    if (["individual", "sme", "corporate"].includes(planSlug)) {
+    if (billingPlan && billingPlan !== "free") {
       payload.subscription_status = "active";
       payload.trial_ends_at = null;
       payload.is_pro = true;
@@ -206,10 +222,17 @@ export default function UserFormDialog({ open, onClose, user }) {
                 onChange={(e) => setForm({ ...form, plan: e.target.value })}
               >
                 <option value="none">none</option>
-                <option value="individual">individual</option>
-                <option value="sme">sme</option>
-                <option value="corporate">corporate</option>
+                {ASSIGNABLE_PROFILE_PLAN_SLUGS.map((slug) => (
+                  <option key={slug} value={slug}>
+                    {slug === "enterprise" ? "enterprise — custom" : slug}
+                  </option>
+                ))}
               </select>
+              {legacyStoredPlan ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Stored previous-catalog plan ({legacyStoredPlan}). Saving moves this profile onto the current catalog.
+                </p>
+              ) : null}
             </div>
           </div>
         </form>

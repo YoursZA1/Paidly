@@ -3,7 +3,7 @@
  * Status vocabulary stays on the existing CHECK allow-list (grant → active, suspend → suspended).
  */
 
-import { familyForSlug, LEGACY_PLAN_SLUGS } from "../subscriptionPlans.js";
+import { resolveCurrentCatalogAssignment } from "../subscriptionPlans.js";
 import { SUBSCRIPTION_STATUS, coerceSubscriptionStatus } from "../../../shared/subscriptionStatuses.js";
 import { addCalendarDaysIso, SUBSCRIPTION_SOURCE, TRIAL_DURATION_DAYS } from "../../../shared/subscriptionAccess.js";
 
@@ -146,29 +146,20 @@ export function buildAdminOverridePatch(existing, body, opts = {}) {
     if (!planRaw) throw httpError(400, "plan is required");
     extra.from = existing?.plan || existing?.plan_slug || existing?.plan_family || "";
     extra.to = planRaw;
-    const isLegacy = LEGACY_PLAN_SLUGS.includes(planRaw);
-    const family = familyForSlug(planRaw);
-    const cycle = String(src.billing_cycle || existing?.billing_cycle || "monthly")
-      .trim()
-      .toLowerCase();
-    const annual = cycle === "annual" || cycle === "yearly" || cycle === "annually";
-    if (isLegacy) {
-      patch.plan = planRaw;
-      patch.current_plan = planRaw;
-      patch.plan_slug = planRaw;
-    } else {
-      const fam = family || planRaw.replace(/_monthly$|_annual$/, "");
-      patch.plan = fam;
-      patch.current_plan = fam;
-      if (fam === "enterprise") patch.plan_slug = "enterprise_custom";
-      else if (["starter", "business", "growth"].includes(fam)) {
-        patch.plan_slug = `${fam}_${annual ? "annual" : "monthly"}`;
-      } else {
-        patch.plan_slug = planRaw;
-      }
+    const assignment = resolveCurrentCatalogAssignment({
+      plan: planRaw,
+      billing_cycle: src.billing_cycle || existing?.billing_cycle,
+    });
+    if (!assignment) {
+      throw httpError(400, "plan must be a current Paidly catalog plan (Starter, Business, Growth, or Enterprise)");
     }
-    if (family) patch.plan_family = family;
-    extra.to = patch.plan || planRaw;
+    patch.plan = assignment.family;
+    patch.current_plan = assignment.family;
+    patch.plan_slug = assignment.slug;
+    patch.plan_family = assignment.family;
+    patch.billing_cycle = assignment.billing_cycle;
+    patch.amount = assignment.amount;
+    extra.to = assignment.family;
   }
 
   markAdmin(patch, actorId, reason, nowIso);

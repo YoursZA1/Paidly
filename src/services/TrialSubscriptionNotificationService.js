@@ -10,10 +10,13 @@ import { User } from '@/api/entities';
 import { createActivityNotification } from '@/services/ActivityNotificationService';
 
 function tierLabel(plan) {
-  const x = String(plan || 'individual').toLowerCase();
-  if (['sme', 'professional', 'business'].includes(x)) return 'SME';
-  if (['corporate', 'enterprise'].includes(x)) return 'Corporate';
-  return 'Individual';
+  const x = String(plan || "starter").toLowerCase();
+  if (["sme", "professional", "business", "pro"].includes(x) || x.startsWith("business_")) {
+    return "Business";
+  }
+  if (["corporate", "growth"].includes(x) || x.startsWith("growth_")) return "Growth";
+  if (x === "enterprise" || x === "enterprise_custom") return "Enterprise";
+  return "Starter";
 }
 
 function dedupePrefix(phase, userId, trialEndDay) {

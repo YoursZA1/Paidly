@@ -94,11 +94,19 @@ export function clearCompanyAccessContextCache() {
 export async function listCompanyMembers(ctx) {
   if (!ctx?.companyId) return [];
 
-  const { data: memberships, error } = await supabase
+  let { data: memberships, error } = await supabase
     .from("memberships")
-    .select("user_id, role, job_function, created_at")
+    .select("user_id, role, job_function, pos_register_id, created_at")
     .eq("org_id", ctx.companyId)
     .order("created_at", { ascending: true });
+
+  if (error && /pos_register_id/i.test(String(error.message || ""))) {
+    ({ data: memberships, error } = await supabase
+      .from("memberships")
+      .select("user_id, role, job_function, created_at")
+      .eq("org_id", ctx.companyId)
+      .order("created_at", { ascending: true }));
+  }
 
   if (error) {
     throw new Error(getSupabaseErrorMessage(error, "Failed to load team members"));
@@ -131,6 +139,7 @@ export async function listCompanyMembers(ctx) {
       user_id: m.user_id,
       role: m.role,
       job_function: memberCtx.jobFunction,
+      pos_register_id: m.pos_register_id || null,
       company_role: memberCtx.companyRole,
       role_label: formatCompanyMemberRoleLabel(memberCtx.companyRole, memberCtx.jobFunction),
       full_name: p?.full_name || null,

@@ -191,7 +191,7 @@ export default function QuotesPage() {
                 <UpgradePrompt
                     featureKey="quotes"
                     title="Quotes aren’t on your current plan"
-                    description="Quotes are included on SME (R50/mo) and Corporate. Pick a tier and pay with PayFast to unlock."
+                    description="Quotes are included on Starter, Business, and Growth. Pick a tier and pay with PayFast to unlock."
                 />
             </div>
         );

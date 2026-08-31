@@ -28,7 +28,7 @@ export default function CurrencyConfiguration() {
   const [loading, setLoading] = useState(true);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [viewMode, setViewMode] = useState('common'); // 'common' or 'all'
-  const userPlan = profile?.subscription_plan || profile?.plan || 'Individual';
+  const userPlan = profile?.subscription_plan || profile?.plan || "starter";
   const canUseMultiCurrency = hasFeatureAccess(userPlan, 'multicurrency');
 
   const loadCurrencyData = async () => {

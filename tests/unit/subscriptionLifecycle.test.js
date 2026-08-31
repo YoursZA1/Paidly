@@ -208,6 +208,23 @@ describe("admin override patch", () => {
     expect(patch.status).toBe("suspended");
     expect(hasSubscriptionAccess({ ...existing, ...patch }, now)).toBe(false);
   });
+
+  it("rejects change_plan to a previous-catalog slug", () => {
+    expect(() =>
+      buildAdminOverridePatch(existing, { action: "change_plan", plan: "individual" }, { now })
+    ).toThrow(/current Paidly catalog plan/);
+  });
+
+  it("change_plan Growth uses catalog amount 350", () => {
+    const { patch } = buildAdminOverridePatch(
+      existing,
+      { action: "change_plan", plan: "growth", billing_cycle: "monthly" },
+      { now }
+    );
+    expect(patch.plan).toBe("growth");
+    expect(patch.plan_slug).toBe("growth_monthly");
+    expect(patch.amount).toBe(350);
+  });
 });
 
 describe("user-facing copy", () => {

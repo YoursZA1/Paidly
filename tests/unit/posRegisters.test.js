@@ -4,6 +4,8 @@ import {
   publicRegisterView,
   POS_REGISTER_STATUSES,
   findConflictingRegister,
+  resolveAssignedTill,
+  filterRegistersForMembership,
 } from "../../server/src/pos/posRegisterMath.js";
 import { pickActiveRegister } from "@/lib/pos/posRegisterStorage";
 
@@ -73,5 +75,19 @@ describe("POS registers", () => {
     expect(view.opening_balance).toBe(100);
     expect(view.company_name).toBe("Harbour");
     expect(view.assigned_staff_name).toBe("Ada");
+  });
+
+  it("locks POS-only staff to their assigned till", () => {
+    const cashier = { companyRole: "employee", jobFunction: "pos", posRegisterId: "till-1" };
+    expect(resolveAssignedTill(cashier, "till-2").ok).toBe(false);
+    expect(resolveAssignedTill(cashier, "till-1").registerId).toBe("till-1");
+    expect(resolveAssignedTill(cashier, null).registerId).toBe("till-1");
+    expect(resolveAssignedTill({ companyRole: "admin", jobFunction: "pos" }, "till-2").ok).toBe(true);
+    expect(
+      filterRegistersForMembership(cashier, [
+        { id: "till-1", name: "Main" },
+        { id: "till-2", name: "Back" },
+      ]).map((row) => row.id)
+    ).toEqual(["till-1"]);
   });
 });

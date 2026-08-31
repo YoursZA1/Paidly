@@ -27,7 +27,7 @@ export default function Accounting() {
   return (
     <FeatureGate 
       feature="accounting" 
-      userPlan={user?.subscription_plan || 'Individual'}
+      userPlan={user?.subscription_plan || user?.plan || "starter"}
     >
       <AccountingDashboard user={user} />
     </FeatureGate>

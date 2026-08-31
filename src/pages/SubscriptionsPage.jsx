@@ -26,6 +26,7 @@ import SubscriptionFormDialog, {
   mapProfilePlanToSubPlan,
 } from '@/components/subscriptions/SubscriptionFormDialog';
 import { pickPreferredSubscriptionRow, normalizePaidPackageKey } from '@/lib/subscriptionPlan';
+import { isLegacyPlanSlug } from '@/lib/plans.js';
 import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
 import TablePagination from '@/components/ui/TablePagination';
 
@@ -164,7 +165,10 @@ export default function SubscriptionsPage() {
       (s.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
       (s.company_address || '').toLowerCase().includes(search.toLowerCase());
     const matchPlan =
-      planFilter === 'all' || normalizePaidPackageKey(s.plan) === planFilter;
+      planFilter === 'all' ||
+      (planFilter === 'needs_migration'
+        ? Boolean(s.needs_plan_migration || isLegacyPlanSlug(s.plan || s.plan_slug))
+        : normalizePaidPackageKey(s.plan) === planFilter);
     const matchStatus =
       statusFilter === 'all' ||
       (statusFilter === 'admin_granted'
@@ -180,7 +184,7 @@ export default function SubscriptionsPage() {
     <div>
       <PageHeader
         title="Subscriptions"
-        description="Platform users and billed plans. Grandfathered Individual / SME / Corporate rows keep their original amount."
+        description="Platform users and billed plans. Previous-catalog rows are flagged for migration and cannot be selected as new plans."
         onRefresh={() => {
           void refetch();
           void refetchOverview();
@@ -258,6 +262,7 @@ export default function SubscriptionsPage() {
             <SelectItem value="business">Business</SelectItem>
             <SelectItem value="growth">Growth</SelectItem>
             <SelectItem value="enterprise">Enterprise</SelectItem>
+            <SelectItem value="needs_migration">Needs migration</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -312,6 +317,9 @@ export default function SubscriptionsPage() {
                   </td>
                   <td className="px-4 py-2.5">
                     <PlanBadge plan={sub.plan} />
+                    {sub.needs_plan_migration || isLegacyPlanSlug(sub.plan || sub.plan_slug) ? (
+                      <p className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-400">Needs catalog migration</p>
+                    ) : null}
                   </td>
                   <td className="px-4 py-2.5 text-sm font-medium tabular-nums">
                     {sub._isSynthetic ? (

@@ -34,24 +34,28 @@ function PosPlanLock() {
   );
 }
 
-function PosBusinessTypeLock() {
+function PosBusinessTypeLock({ posOnlyStaff = false }) {
   return (
     <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-6 text-center">
       <Store className="size-10 text-muted-foreground" aria-hidden />
       <div>
         <p className="font-display text-xl font-semibold">POS is optional</p>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          Service businesses use invoices, quotes, and clients. Switch to Retail or Mixed to open a till.
+          {posOnlyStaff
+            ? "This company is not set up for a till. Ask a manager to switch the business type to Retail or Mixed."
+            : "Service businesses use invoices, quotes, and clients. Switch to Retail or Mixed to open a till."}
         </p>
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button asChild className="h-12 min-w-[10rem]">
-          <Link to={`${createPageUrl("Settings")}?tab=profile`}>Choose business type</Link>
-        </Button>
-        <Button asChild variant="outline" className="h-12">
-          <Link to={createPageUrl("Dashboard")}>Back to dashboard</Link>
-        </Button>
-      </div>
+      {posOnlyStaff ? null : (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button asChild className="h-12 min-w-[10rem]">
+            <Link to={`${createPageUrl("Settings")}?tab=profile`}>Choose business type</Link>
+          </Button>
+          <Button asChild variant="outline" className="h-12">
+            <Link to={createPageUrl("Dashboard")}>Back to dashboard</Link>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -61,7 +65,7 @@ export default function POS() {
   const { loading, posEnabled, isOrgOwner, companyRole, jobFunction } = useCompanyContext();
   const posOnlyStaff = isPosOnlyStaff({ isOrgOwner, companyRole, jobFunction });
   const userPlan = useMemo(
-    () => profile?.subscription_plan || profile?.plan || "Individual",
+    () => profile?.subscription_plan || profile?.plan || "starter",
     [profile]
   );
 
@@ -73,7 +77,7 @@ export default function POS() {
     );
   }
 
-  const till = posEnabled ? <PosTerminal /> : <PosBusinessTypeLock />;
+  const till = posEnabled ? <PosTerminal /> : <PosBusinessTypeLock posOnlyStaff={posOnlyStaff} />;
   if (posOnlyStaff) return till;
 
   return (

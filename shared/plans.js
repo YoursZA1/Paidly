@@ -52,11 +52,169 @@ export const PUBLIC_PLAN_SLUGS = /** @type {const} */ ([
   "enterprise_custom",
 ]);
 
-/** Legacy catalog slugs (kept for ITN / grandfathered rows). */
+/** Self-serve PayFast checkout (no Enterprise / no annual cards in the upgrade grid). */
+export const PUBLIC_SELF_SERVE_MONTHLY_SLUGS = /** @type {const} */ ([
+  "starter_monthly",
+  "business_monthly",
+  "growth_monthly",
+]);
+
+/** Legacy catalog slugs — ITN / historical rows only. Never assignable for new admin writes or checkout. */
 export const LEGACY_PLAN_SLUGS = /** @type {const} */ (["individual", "sme", "corporate"]);
 
-/** @deprecated Use PUBLIC_PLAN_SLUGS + LEGACY_PLAN_SLUGS — still exported for old imports */
-export const PLAN_SLUGS = LEGACY_PLAN_SLUGS;
+/** Current catalog is the only selectable list. */
+export const PLAN_SLUGS = PUBLIC_PLAN_SLUGS;
+
+export function isLegacyPlanSlug(slug) {
+  const key = String(slug || "")
+    .trim()
+    .toLowerCase();
+  if (!key) return false;
+  if (LEGACY_PLAN_SLUGS.includes(/** @type {any} */ (key))) return true;
+  return key === "grandfathered" || key === "legacy_plan" || key === "old_plan";
+}
+
+/**
+ * True when a slug/family may be assigned on create/update/checkout.
+ * Legacy Individual / SME / Corporate are never assignable.
+ */
+export function isAssignableCurrentPlan(slug) {
+  if (isLegacyPlanSlug(slug)) return false;
+  const assignment = resolveCurrentCatalogAssignment({ plan: slug });
+  return Boolean(assignment?.slug);
+}
+
+/** Profile `plan` / `subscription_plan` values that may be assigned by admin/signup. */
+export const ASSIGNABLE_PROFILE_PLAN_SLUGS = Object.freeze([
+  "starter",
+  "business",
+  "growth",
+  "enterprise",
+]);
+
+/**
+ * Coerce a profile plan write to the current catalog. Returns null when the value must be rejected.
+ * `free` / `none` remain valid (no paid package). Legacy Individual/SME/Corporate are rejected.
+ */
+export function coerceAssignableProfilePlan(raw) {
+  const key = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (!key || key === "none" || key === "free") return "free";
+  if (isLegacyPlanSlug(key)) return null;
+  const fam = familyForSlug(key);
+  if (fam && ASSIGNABLE_PROFILE_PLAN_SLUGS.includes(fam)) return fam;
+  if (ASSIGNABLE_PROFILE_PLAN_SLUGS.includes(/** @type {any} */ (key))) return key;
+  return null;
+}
+
+/**
+ * Map a stored slug to the current family for migration UI (does not assign).
+ * @param {string} slug
+ * @returns {import('./planFeatures.js').PlanFamily | null}
+ */
+export function mapLegacySlugToCurrentFamily(slug) {
+  const key = String(slug || "")
+    .trim()
+    .toLowerCase();
+  if (LEGACY_SLUG_ALIASES[key] && isLegacyPlanSlug(key)) return LEGACY_SLUG_ALIASES[key];
+  return familyForSlug(key);
+}
+
+/**
+ * Resolve family + billing cycle to a current catalog row. Never returns a legacy slug.
+ * @param {{ plan?: string, billing_cycle?: string }} [input]
+ */
+export function resolveCurrentCatalogAssignment(input = {}) {
+  const raw = String(input.plan || "")
+    .trim()
+    .toLowerCase();
+  if (!raw || isLegacyPlanSlug(raw)) return null;
+
+  const family = familyForSlug(raw);
+  if (!family) return null;
+
+  let cycle = String(input.billing_cycle || "")
+    .trim()
+    .toLowerCase();
+  if (cycle === "yearly" || cycle === "annually") cycle = "annual";
+  if (!cycle) {
+    cycle = raw.endsWith("_annual") ? "annual" : "monthly";
+  }
+
+  if (family === "enterprise") {
+    const p = PLANS.enterprise_custom;
+    return {
+      family: "enterprise",
+      slug: "enterprise_custom",
+      billing_cycle: "monthly",
+      amount: 0,
+      contact_sales: true,
+      name: p.name,
+    };
+  }
+
+  if (!["starter", "business", "growth"].includes(family)) return null;
+  if (cycle !== "annual") cycle = "monthly";
+  const slug = `${family}_${cycle}`;
+  const p = PLANS[slug];
+  if (!p) return null;
+  return {
+    family,
+    slug,
+    billing_cycle: cycle,
+    amount: Number(p.price),
+    contact_sales: false,
+    name: p.name,
+  };
+}
+
+/**
+ * Group GET /api/subscriptions/plans rows (or shared fallback) by family for admin / pricing UIs.
+ * @param {object[]} [planRows]
+ */
+export function buildPublicCatalogFamilies(planRows) {
+  const rows =
+    Array.isArray(planRows) && planRows.length
+      ? planRows.filter((p) => p && !p.is_legacy)
+      : PUBLIC_PLAN_SLUGS.map((slug) => {
+          const p = getPlanBySlug(slug);
+          if (!p) return null;
+          return {
+            slug,
+            name: p.name,
+            billing_cycle: p.billing_cycle || "monthly",
+            amount: p.price,
+            plan_family: p.family,
+            contact_sales: Boolean(p.contact_sales),
+          };
+        }).filter(Boolean);
+
+  const byFamily = new Map();
+  for (const p of rows) {
+    const fam = String(p.plan_family || familyForSlug(p.slug) || "").toLowerCase();
+    if (!["starter", "business", "growth", "enterprise"].includes(fam)) continue;
+    if (!byFamily.has(fam)) {
+      byFamily.set(fam, {
+        family: fam,
+        name: p.name,
+        contact_sales: Boolean(p.contact_sales),
+        monthly: null,
+        annual: null,
+      });
+    }
+    const entry = byFamily.get(fam);
+    const cyc = String(p.billing_cycle || "monthly").toLowerCase();
+    if (cyc === "annual" || cyc === "yearly") entry.annual = p;
+    else entry.monthly = p;
+    entry.name = p.name || entry.name;
+    entry.contact_sales = Boolean(entry.contact_sales || p.contact_sales);
+  }
+
+  return ["starter", "business", "growth", "enterprise"]
+    .filter((f) => byFamily.has(f))
+    .map((f) => byFamily.get(f));
+}
 
 /** Fallback display/price when DB unavailable (dev only). */
 export const PLANS = {

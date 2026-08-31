@@ -9,6 +9,7 @@ import {
   publicSessionView,
   summarizeSessionCash,
 } from "./posRegisterSessionMath.js";
+import { resolveAssignedTill } from "./posRegisterMath.js";
 
 const SESSION_SELECT =
   "id, org_id, register_id, status, opening_balance, cash_sales, cash_refunds, expected_cash, closing_cash, variance, opened_by, closed_by, opened_at, closed_at, notes, created_at, updated_at";
@@ -160,6 +161,9 @@ export async function handlePosSessionsList(req, res) {
 
   const orgId = gate.membership.orgId;
   const registerId = String(req.query?.register_id || "").trim();
+  const till = resolveAssignedTill(gate.membership, registerId || null);
+  if (!till.ok) return jsonError(res, 403, till.error, { code: till.code });
+  const scopedRegisterId = till.locked ? till.registerId : registerId;
   const status = String(req.query?.status || "").trim().toLowerCase();
   const limit = Math.min(Math.max(Number(req.query?.limit) || 50, 1), 100);
   const canReports = companyRoleHasPermission(gate.membership.companyRole, PERMISSIONS.POS_VIEW_REPORTS);
@@ -171,9 +175,9 @@ export async function handlePosSessionsList(req, res) {
       .eq("org_id", orgId)
       .order("opened_at", { ascending: false })
       .limit(limit);
-    if (registerId) {
-      if (!isValidUuid(registerId)) return jsonError(res, 422, "register_id is invalid");
-      query = query.eq("register_id", registerId);
+    if (scopedRegisterId) {
+      if (!isValidUuid(scopedRegisterId)) return jsonError(res, 422, "register_id is invalid");
+      query = query.eq("register_id", scopedRegisterId);
     }
     if (status === "open" || status === "closed") {
       if (status === "closed" && !canReports) {
@@ -244,16 +248,19 @@ export async function handlePosSessionOpen(req, res) {
 
   try {
     const registerId = body.register_id ? String(body.register_id).trim() : "";
-    if (!isValidUuid(registerId)) {
+    const till = resolveAssignedTill(gate.membership, registerId || null);
+    if (!till.ok) return jsonError(res, 403, till.error, { code: till.code });
+    const lockedId = till.locked ? till.registerId : registerId;
+    if (!isValidUuid(lockedId)) {
       return jsonError(res, 422, "register_id is required", { code: "REGISTER_REQUIRED" });
     }
-    const register = await loadRegister(orgId, registerId);
+    const register = await loadRegister(orgId, lockedId);
     if (!register) return jsonError(res, 404, "Register not found", { code: "REGISTER_NOT_FOUND" });
     if (register.status !== "active") {
       return jsonError(res, 422, "This register is disabled", { code: "REGISTER_DISABLED" });
     }
 
-    const parsed = parseOpenSessionBody(body, register.opening_balance);
+    const parsed = parseOpenSessionBody({ ...body, register_id: lockedId }, register.opening_balance);
     if (!parsed.ok) return jsonError(res, 422, parsed.error, { code: parsed.code });
 
     const { data, error } = await supabaseAdmin

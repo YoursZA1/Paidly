@@ -50,7 +50,7 @@ function buttonLabel(phase, ctaLabel) {
  */
 export default function PayFastSubscriptionForm({
   planSlug,
-  planName = "Individual",
+  planName = "Starter",
   displayPriceZar = null,
   itemDescription: _itemDescription = "",
   ctaLabel = "Subscribe",

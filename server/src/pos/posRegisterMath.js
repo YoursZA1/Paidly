@@ -112,3 +112,36 @@ export function publicRegisterView(row, extras = {}) {
     updated_at: row.updated_at,
   };
 }
+
+/**
+ * POS-only staff may only use the till stored on memberships.pos_register_id.
+ * Owners/managers keep full till choice. Client-submitted till ids are ignored when locked.
+ */
+export function resolveAssignedTill(membership, requestedRegisterId) {
+  const requested = requestedRegisterId || null;
+  const posOnly =
+    membership &&
+    membership.isOrgOwner !== true &&
+    String(membership.companyRole || membership.membershipRole || "").toLowerCase() === "employee" &&
+    ["pos", "cashier", "till"].includes(
+      String(membership.jobFunction || membership.job_function || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+    );
+  if (!posOnly) return { ok: true, registerId: requested, locked: false };
+
+  const assigned = membership.posRegisterId || membership.pos_register_id || null;
+  if (!assigned) return { ok: true, registerId: requested, locked: false };
+  if (requested && requested !== assigned) {
+    return { ok: false, error: "This till is not assigned to you", code: "TILL_FORBIDDEN" };
+  }
+  return { ok: true, registerId: assigned, locked: true };
+}
+
+export function filterRegistersForMembership(membership, registers) {
+  const list = Array.isArray(registers) ? registers : [];
+  const resolved = resolveAssignedTill(membership, null);
+  if (!resolved.locked || !resolved.registerId) return list;
+  return list.filter((row) => row?.id === resolved.registerId);
+}

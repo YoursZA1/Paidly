@@ -74,6 +74,7 @@ import {
   generatePdfHtmlBodySchema,
   trackOpenBodySchema,
 } from "./schemas/mutationSchemas.js";
+import { coerceAssignableProfilePlan } from "./subscriptionPlans.js";
 import { sendUnexpectedError } from "./apiResponse.js";
 import { assertCallerForAdminRoute } from "./adminRouteAccess.js";
 import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js";
@@ -1219,12 +1220,12 @@ app.put("/api/admin/users/:userId", async (req, res) => {
 
     const updates = {};
     if (parsed.plan) {
-      const plan = String(parsed.plan).trim().toLowerCase();
-      const allowedPlans = ["free", "starter", "professional", "enterprise"];
-      if (!allowedPlans.includes(plan)) {
+      const plan = coerceAssignableProfilePlan(parsed.plan);
+      if (!plan) {
         return res.status(400).json({ error: "Invalid plan value" });
       }
       updates.subscription_plan = plan;
+      updates.plan = plan;
     }
 
     if (parsed.full_name) {
@@ -1295,6 +1296,17 @@ app.post("/api/admin/users/bulk-update", async (req, res) => {
     );
     if (Object.keys(data).length === 0) {
       return res.status(400).json({ error: "No permitted fields provided (allowed: subscription_plan, full_name)" });
+    }
+
+    if (data.subscription_plan != null) {
+      const plan = coerceAssignableProfilePlan(data.subscription_plan);
+      if (!plan) {
+        return res.status(400).json({
+          error: "subscription_plan must be a current catalog plan (starter, business, growth, enterprise) or free",
+        });
+      }
+      data.subscription_plan = plan;
+      data.plan = plan;
     }
 
     const uniqueIds = [...new Set(ids.map((v) => String(v || "").trim()).filter(Boolean))];

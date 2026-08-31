@@ -5,6 +5,10 @@ import {
   normalizePlanSlug,
   priceForSlug,
   PLANS,
+  isAssignableCurrentPlan,
+  resolveCurrentCatalogAssignment,
+  coerceAssignableProfilePlan,
+  mapLegacySlugToCurrentFamily,
 } from "../../shared/plans.js";
 import { familyHasFeature, normalizePlanFamily } from "../../shared/planFeatures.js";
 
@@ -52,5 +56,31 @@ describe("plan slug / family aliases", () => {
   it("enterprise is contact-sales in fallback", () => {
     expect(PLANS.enterprise_custom.contact_sales).toBe(true);
     expect(PLANS.enterprise_custom.price).toBe(0);
+  });
+
+  it("does not assign legacy slugs to the current catalog", () => {
+    expect(isAssignableCurrentPlan("individual")).toBe(false);
+    expect(isAssignableCurrentPlan("sme")).toBe(false);
+    expect(isAssignableCurrentPlan("corporate")).toBe(false);
+    expect(isAssignableCurrentPlan("starter")).toBe(true);
+    expect(isAssignableCurrentPlan("growth_monthly")).toBe(true);
+    expect(resolveCurrentCatalogAssignment({ plan: "individual" })).toBeNull();
+    expect(resolveCurrentCatalogAssignment({ plan: "starter", billing_cycle: "monthly" })).toMatchObject({
+      slug: "starter_monthly",
+      amount: 50,
+    });
+    expect(resolveCurrentCatalogAssignment({ plan: "growth", billing_cycle: "monthly" })).toMatchObject({
+      slug: "growth_monthly",
+      amount: 350,
+    });
+    expect(resolveCurrentCatalogAssignment({ plan: "enterprise", billing_cycle: "annual" })).toMatchObject({
+      slug: "enterprise_custom",
+      amount: 0,
+      billing_cycle: "monthly",
+      contact_sales: true,
+    });
+    expect(coerceAssignableProfilePlan("sme")).toBeNull();
+    expect(coerceAssignableProfilePlan("starter_monthly")).toBe("starter");
+    expect(mapLegacySlugToCurrentFamily("corporate")).toBe("growth");
   });
 });

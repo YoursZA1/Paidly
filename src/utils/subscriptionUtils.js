@@ -8,9 +8,10 @@ import { getPlan, getPlanOrder } from '@/data/planLimits';
 
 // Plan tier mappings
 export const PLAN_CATEGORIES = {
-  'Individual': ['free', 'starter', 'basic'],
-  'SME': ['professional', 'business', 'sme'],
-  'Corporate': ['enterprise', 'corporate']
+  Starter: ["free", "starter", "basic", "individual"],
+  Business: ["professional", "business", "sme"],
+  Growth: ["growth", "corporate"],
+  Enterprise: ["enterprise", "enterprise_custom"],
 };
 
 const getMonthlyPrice = (planKey) => {
@@ -31,7 +32,7 @@ export function getPlanCategory(planName) {
       return category;
     }
   }
-  return 'Individual'; // Default
+  return "Starter";
 }
 
 /**

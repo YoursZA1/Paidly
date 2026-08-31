@@ -13,8 +13,8 @@ export function posProductStock(product) {
 export function posStockLabel(stock, { low = 5 } = {}) {
   const n = Number(stock);
   if (!Number.isFinite(n) || n <= 0) return { text: "Out of stock", tone: "out" };
-  if (n <= low) return { text: "LOW STOCK", tone: "low" };
-  return { text: `${n} available`, tone: "ok" };
+  if (n <= low) return { text: `LOW STOCK · ${n} in stock`, tone: "low" };
+  return { text: `${n} in stock`, tone: "ok" };
 }
 
 /**

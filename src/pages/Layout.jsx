@@ -686,7 +686,7 @@ export default function Layout({ children, currentPageName }) {
   const posOnlyBlockedPath = (() => {
     if (companyContextLoading || !posOnlyStaff || isPosTerminal || isAdminV2Route) return false;
     const path = String(location.pathname || "").toLowerCase();
-    if (/\/(login|signup|forgotpassword|resetpassword|home|invite)(\/|$)/i.test(path)) return false;
+    if (/\/(login|signup|forgotpassword|resetpassword|home|invite|pos\/join)(\/|$)/i.test(path)) return false;
     return true;
   })();
 
@@ -700,7 +700,7 @@ export default function Layout({ children, currentPageName }) {
     if (companyContextLoading || !posOnlyStaff) return;
     if (isPosTerminal || isAdminV2Route) return;
     const path = String(location.pathname || "").toLowerCase();
-    if (/\/(login|signup|forgotpassword|resetpassword|home|invite)(\/|$)/i.test(path)) return;
+    if (/\/(login|signup|forgotpassword|resetpassword|home|invite|pos\/join)(\/|$)/i.test(path)) return;
     navigate(createPageUrl("POS"), { replace: true });
   }, [
     companyContextLoading,

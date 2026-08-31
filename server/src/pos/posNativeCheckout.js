@@ -339,7 +339,8 @@ export async function handleNativePosCatalog(req, res, gate) {
     const resolved = await resolveCheckoutRegister(
       gate.membership.orgId,
       gate.user.id,
-      registerId || null
+      registerId || null,
+      gate.membership
     );
     if (registerId && !resolved.ok) {
       return jsonError(res, 422, resolved.error, { code: resolved.code });
@@ -400,7 +401,7 @@ export async function handleNativePosCheckout(req, res, gate) {
 
   let register = null;
   try {
-    const resolved = await resolveCheckoutRegister(gate.membership.orgId, gate.user.id, registerIdFromBody);
+    const resolved = await resolveCheckoutRegister(gate.membership.orgId, gate.user.id, registerIdFromBody, gate.membership);
     if (!resolved.ok) {
       return jsonError(res, 422, resolved.error, { code: resolved.code });
     }

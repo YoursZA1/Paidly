@@ -122,6 +122,8 @@ const AUTH_ROUTES = [
     { path: "/Invite", element: <InvitePage /> },
     { path: "/pos/invite/:token", element: <InvitePage /> },
     { path: "/POS/invite/:token", element: <InvitePage /> },
+    { path: "/pos/join", element: <InvitePage /> },
+    { path: "/POS/join", element: <InvitePage /> },
     { path: "/PublicInvoice", element: <PublicInvoice /> },
     { path: "/view/:token", element: <InvoiceView /> },
     /** Guest-safe PDF + download; uses ?token= (public API) or ?id= when logged in */
@@ -370,6 +372,7 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/acceptinvite$/i,
     /^\/invite$/i,
     /^\/pos\/invite\//i,
+    /^\/pos\/join$/i,
     /^\/publicinvoice$/i,
     /^\/publicquote$/i,
     /^\/publicpayslip$/i,

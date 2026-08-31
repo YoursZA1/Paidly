@@ -1,30 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, Loader2, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Store, Loader2, AlertCircle } from "lucide-react";
 import { createPageUrl } from "@/utils";
-import { supabase } from "@/lib/supabaseClient";
-import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { storePendingInviteToken } from "@/services/TenantRoleService";
+import { validatePublicInviteToken } from "@/services/CompanyInvitesService";
+import { formatPosTillInviteCode, normalizePosTillInviteCode } from "@shared/posTillInviteCode.js";
 import { isPosInviteDest, POS_JOB_FUNCTION } from "@shared/posStaffInvite.js";
 
 /**
- * Entry point for company invitation links: /invite?token=… or /pos/invite/:token
+ * Company invitation links: /invite?token=…
+ * POS till invites: /pos/invite/:code or /pos/join (manual code).
  */
 export default function InvitePage() {
   const [searchParams] = useSearchParams();
   const { token: tokenParam } = useParams();
   const navigate = useNavigate();
-  const token = String(tokenParam || searchParams.get("token") || "").trim();
+  const tokenFromUrl = String(tokenParam || searchParams.get("token") || "").trim();
 
-  const [loading, setLoading] = useState(Boolean(token));
+  const [codeDraft, setCodeDraft] = useState(tokenFromUrl ? formatPosTillInviteCode(tokenFromUrl) : "");
+  const [token, setToken] = useState(tokenFromUrl);
+  const [loading, setLoading] = useState(Boolean(tokenFromUrl));
   const [invite, setInvite] = useState(null);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(tokenFromUrl ? null : null);
 
   useEffect(() => {
     if (!token) {
-      setError("No invitation token was provided.");
       setLoading(false);
       return;
     }
@@ -35,20 +39,7 @@ export default function InvitePage() {
       setLoading(true);
       setError(null);
       try {
-        const { data, error: rpcErr } = await supabase.rpc("validate_company_invite_token", {
-          p_token: token,
-        });
-        if (rpcErr) throw new Error(getSupabaseErrorMessage(rpcErr, "Could not validate invitation"));
-        if (!data?.ok) {
-          const reason = data?.error || "invalid";
-          const messages = {
-            not_found: "This invitation link is invalid or has already been used.",
-            expired: "This invitation has expired. Ask your administrator to send a new invite.",
-            not_pending: "This invitation is no longer active.",
-            missing_token: "No invitation token was provided.",
-          };
-          throw new Error(messages[reason] || "This invitation is not valid.");
-        }
+        const data = await validatePublicInviteToken(token);
         if (!cancelled) {
           storePendingInviteToken(token);
           setInvite(data);
@@ -65,99 +56,167 @@ export default function InvitePage() {
     };
   }, [token]);
 
+  const posInviteCopy = useMemo(() => {
+    if (tokenParam || isPosInviteDest(searchParams.get("next"))) return true;
+    if (String(invite?.job_function || "").toLowerCase() === POS_JOB_FUNCTION) return true;
+    if (String(invite?.source || "").toLowerCase() === "pos") return true;
+    return invite?.pos_only === true;
+  }, [tokenParam, searchParams, invite]);
+
   const continueToSignup = () => {
     const email = invite?.email ? `&email=${encodeURIComponent(invite.email)}` : "";
-    const posInvite =
-      Boolean(tokenParam) ||
-      isPosInviteDest(searchParams.get("next")) ||
-      String(invite?.job_function || "").toLowerCase() === POS_JOB_FUNCTION ||
-      String(invite?.source || "").toLowerCase() === "pos";
-    const next = posInvite ? "&next=POS" : "";
+    const next = posInviteCopy ? "&next=POS" : "";
     navigate(`${createPageUrl("Signup")}?invite=1${email}${next}`);
   };
 
-  const posInviteCopy =
-    Boolean(tokenParam) ||
-    isPosInviteDest(searchParams.get("next")) ||
-    String(invite?.job_function || "").toLowerCase() === POS_JOB_FUNCTION ||
-    String(invite?.source || "").toLowerCase() === "pos";
+  const submitCode = (event) => {
+    event.preventDefault();
+    const normalized = normalizePosTillInviteCode(codeDraft);
+    if (!normalized) {
+      setError("Enter your till invite code.");
+      return;
+    }
+    setInvite(null);
+    setToken(formatPosTillInviteCode(normalized) || normalized);
+  };
+
+  const showJoinForm = !tokenFromUrl && !invite && !loading;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-primary/5 to-primary/5 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-2xl border-0">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md border-border shadow-none">
         <CardHeader className="space-y-1 pb-6 text-center">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Building2 className="w-8 h-8 text-white" />
+          <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary">
+            <Store className="size-8 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl font-bold">
-            {posInviteCopy ? "POS staff invitation" : "Company invitation"}
+          <CardTitle className="font-display text-2xl font-bold">
+            {posInviteCopy || showJoinForm ? "Paidly POS" : "Company invitation"}
           </CardTitle>
-          <p className="text-sm text-slate-500">
-            {posInviteCopy
-              ? "This link gives POS-only access. You can use the till, take sales, and manage your shift — not invoices, clients, reports, or settings."
-              : "Join your team on Paidly with the role and company assigned by your administrator."}
+          <p className="text-sm text-muted-foreground">
+            {showJoinForm
+              ? "Enter your till invite code."
+              : posInviteCopy
+                ? "POS-only access to the assigned till. Not the dashboard, invoices, clients, reports, or settings."
+                : "Join your team on Paidly with the role assigned by your administrator."}
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {showJoinForm ? (
+            <form className="space-y-3" onSubmit={submitCode}>
+              <div className="space-y-2">
+                <Label htmlFor="till-invite-code">Till invite code</Label>
+                <Input
+                  id="till-invite-code"
+                  value={codeDraft}
+                  onChange={(e) => setCodeDraft(e.target.value.toUpperCase())}
+                  placeholder="7K4M-X92Q"
+                  className="h-14 text-center font-mono text-xl tracking-[0.2em]"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                />
+              </div>
+              {error ? (
+                <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+                  <AlertCircle className="size-5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : null}
+              <Button type="submit" className="h-12 w-full">
+                Join till
+              </Button>
+            </form>
+          ) : null}
+
           {loading && (
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-6">
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               Validating invitation…
             </div>
           )}
 
-          {!loading && error && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 flex gap-2">
-              <AlertCircle className="w-5 h-5 shrink-0 text-amber-700" />
+          {!loading && error && !showJoinForm && (
+            <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+              <AlertCircle className="size-5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {!loading && invite && (
-            <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-2">
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
               <p>
-                You&apos;ve been invited to join{" "}
-                <strong>{invite.company_name || "your company"}</strong>
-                {invite.email ? (
-                  <>
-                    {" "}
-                    as <strong>{invite.email}</strong>
-                  </>
-                ) : null}
-                .
+                You&apos;re invited to join <strong>{invite.company_name || "your company"}</strong>
               </p>
-              <p className="text-muted-foreground capitalize">
-                {posInviteCopy
-                  ? "Access: POS till only"
-                  : `Role: ${String(invite.role || "employee").replace(/_/g, " ")}`}
-              </p>
+              {posInviteCopy ? (
+                <>
+                  <p>
+                    Till: <strong>{invite.register_name || "Assigned till"}</strong>
+                  </p>
+                  <p>
+                    Role: <strong>POS Staff</strong>
+                  </p>
+                  <p>
+                    Access: <strong>POS only</strong>
+                  </p>
+                  <p className="font-mono tracking-widest">
+                    Invite code: {formatPosTillInviteCode(token) || token}
+                  </p>
+                </>
+              ) : (
+                <p className="capitalize text-muted-foreground">
+                  Role: {String(invite.role || "employee").replace(/_/g, " ")}
+                </p>
+              )}
             </div>
           )}
 
           {!loading && invite && (
-            <Button type="button" onClick={continueToSignup} className="w-full">
-              Create account
-            </Button>
+            <>
+              <Button type="button" onClick={continueToSignup} className="h-12 w-full">
+                {posInviteCopy ? "Create POS account" : "Create account"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 w-full"
+                onClick={() => navigate(`${createPageUrl("Login")}#sign-in`)}
+              >
+                Sign in
+              </Button>
+            </>
           )}
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate(`${createPageUrl("Login")}#sign-in`)}
-            className="w-full"
-          >
-            Already have an account? Sign in
-          </Button>
+          {!invite && !showJoinForm ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(`${createPageUrl("Login")}#sign-in`)}
+              className="h-12 w-full"
+            >
+              Already have an account? Sign in
+            </Button>
+          ) : null}
 
-          <p className="text-xs text-center text-muted-foreground">
-            Received an email invite instead?{" "}
-            <Link to={createPageUrl("AcceptInvite")} className="text-primary underline">
-              Use your email link
-            </Link>
-          </p>
+          {posInviteCopy || showJoinForm ? (
+            <p className="text-center text-xs text-muted-foreground">
+              {tokenFromUrl ? (
+                <Link to="/pos/join" className="text-primary underline">
+                  Enter a code instead
+                </Link>
+              ) : (
+                "Ask your manager for the till invite code if you do not have a link."
+              )}
+            </p>
+          ) : (
+            <p className="text-center text-xs text-muted-foreground">
+              Received an email invite instead?{" "}
+              <Link to={createPageUrl("AcceptInvite")} className="text-primary underline">
+                Use your email link
+              </Link>
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
-

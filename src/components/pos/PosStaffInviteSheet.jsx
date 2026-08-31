@@ -12,10 +12,9 @@ import { POS_INVITE_SOURCE, POS_JOB_FUNCTION } from "@shared/posStaffInvite.js";
 import { COMPANY_ROLES } from "@/lib/companyPermissions";
 
 /**
- * Till-facing invite: employee + job_function pos, shareable /pos/invite/:token link.
- * Callers must already have MANAGE_EMPLOYEES (cashiers cannot invite).
+ * Till-facing invite: employee + job_function pos, unique hashed till code, /pos/invite/:code.
  */
-export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegisterId }) {
+export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegisterId, onCreated }) {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -31,7 +30,9 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
       .then((data) => {
         if (cancelled) return;
         const rows = Array.isArray(data?.registers) ? data.registers : [];
-        setRegisters(rows.filter((row) => row.status !== "disabled"));
+        const active = rows.filter((row) => row.status !== "disabled");
+        setRegisters(active);
+        setRegisterId((prev) => prev || defaultRegisterId || active[0]?.id || "");
       })
       .catch(() => {
         if (!cancelled) setRegisters([]);
@@ -39,7 +40,7 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, defaultRegisterId]);
 
   useEffect(() => {
     if (defaultRegisterId) setRegisterId(defaultRegisterId);
@@ -50,8 +51,18 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
     setFullName("");
   };
 
+  const selectedTill = registers.find((row) => row.id === registerId);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!registerId) {
+      toast({
+        variant: "destructive",
+        title: "Till is required",
+        description: "Assign this cashier to a till before creating the invite.",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await inviteCompanyMember({
@@ -60,12 +71,16 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
         role: COMPANY_ROLES.EMPLOYEE,
         jobFunction: POS_JOB_FUNCTION,
         source: POS_INVITE_SOURCE,
-        registerId: registerId || null,
+        registerId,
       });
       if (result.mode === "email_invite") {
         setInviteNotice({
           email: String(result.email || email).trim(),
+          invitedName: fullName.trim() || null,
           inviteLink: result.invite_link || "",
+          inviteCode: result.invite_code || null,
+          registerName: result.register_name || selectedTill?.name || null,
+          expiresAt: result.expires_at || null,
           emailSent: result.email_sent === true,
           emailError: result.email_error || null,
           posOnly: true,
@@ -73,11 +88,12 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
       } else {
         toast({
           title: "POS staff added",
-          description: `${email} can sign in and use the till only.`,
+          description: `${email} can sign in and use ${selectedTill?.name || "the assigned till"} only.`,
         });
       }
       resetForm();
       onOpenChange(false);
+      onCreated?.();
     } catch (err) {
       toast({
         variant: "destructive",
@@ -97,10 +113,10 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
             <SheetTitle className="font-display text-xl">Invite POS staff</SheetTitle>
             <SheetDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <p className="font-semibold text-foreground">POS-only access</p>
+                <p className="font-semibold text-foreground">POS only</p>
                 <p>
-                  This staff member can use the till, process sales and manage their shift. They{" "}
-                  <span className="font-medium text-foreground">cannot access invoices, clients, reports, settings or the rest of Paidly.</span>
+                  This person can use the assigned till only. They cannot access invoices, clients, reports, settings,
+                  or the rest of Paidly.
                 </p>
               </div>
             </SheetDescription>
@@ -125,19 +141,22 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
                 id="pos-staff-name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="Till name"
+                placeholder="John"
                 className="h-12"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pos-staff-register">POS location</Label>
+              <Label htmlFor="pos-staff-register">Till</Label>
               <select
                 id="pos-staff-register"
+                required
                 value={registerId}
                 onChange={(e) => setRegisterId(e.target.value)}
                 className="h-12 w-full rounded-input border border-input bg-background px-3 text-sm"
               >
-                <option value="">Any till</option>
+                <option value="" disabled>
+                  Select a till
+                </option>
                 {registers.map((row) => (
                   <option key={row.id} value={row.id}>
                     {row.name}
@@ -146,9 +165,14 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
                 ))}
               </select>
             </div>
-            <Button type="submit" className="mt-auto h-12 touch-manipulation" disabled={submitting}>
+            <p className="text-xs text-muted-foreground">Access: POS only</p>
+            <Button
+              type="submit"
+              className="mt-auto h-12 touch-manipulation"
+              disabled={submitting || !registerId}
+            >
               {submitting ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
-              Create POS invite
+              Create till invite
             </Button>
           </form>
         </SheetContent>
