@@ -102,6 +102,7 @@ import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthUserId } from "@/lib/authUserId";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 
 // --- Auth & Public Pages ---
@@ -120,6 +121,8 @@ const AUTH_ROUTES = [
     { path: "/AcceptInvite", element: <AcceptInvite /> },
     { path: "/invite", element: <InvitePage /> },
     { path: "/Invite", element: <InvitePage /> },
+    { path: "/invite/:token", element: <InvitePage /> },
+    { path: "/Invite/:token", element: <InvitePage /> },
     { path: "/pos/invite/:token", element: <InvitePage /> },
     { path: "/POS/invite/:token", element: <InvitePage /> },
     { path: "/pos/join", element: <InvitePage /> },
@@ -370,7 +373,7 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/forgotpassword$/i,
     /^\/resetpassword$/i,
     /^\/acceptinvite$/i,
-    /^\/invite$/i,
+    /^\/invite(\/|$)/i,
     /^\/pos\/invite\//i,
     /^\/pos\/join$/i,
     /^\/publicinvoice$/i,
@@ -434,7 +437,12 @@ function PagesContent() {
     );
 
     if (shouldBypassAppLayout(location.pathname)) {
-        return content;
+        return (
+            <>
+                {content}
+                <PWAInstallPrompt />
+            </>
+        );
     }
 
     return (
@@ -442,6 +450,7 @@ function PagesContent() {
             <Layout currentPageName={currentPageName}>
                 {content}
             </Layout>
+            <PWAInstallPrompt />
         </AuthenticatedShell>
     );
 }

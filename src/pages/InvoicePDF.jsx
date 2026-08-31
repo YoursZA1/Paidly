@@ -15,7 +15,7 @@ import { mapInvoiceDataForTemplate, DOCUMENT_TEMPLATE_KEY } from '@/utils/invoic
 import DocumentPreview from '@/components/DocumentPreview';
 import { recordToStyledPreviewDoc } from '@/utils/documentPreviewData';
 import { readInvoiceDraftRaw } from '@/utils/invoiceDraftStorage';
-import { isAbortError } from '@/utils/retryOnAbort';
+import { waitUntilElementReady } from "@/lib/documentPdf/waitForPdfDocumentReady";
 const OPTIONAL_FETCH_TIMEOUT_MS = 30000;
 const OPTIONAL_FETCH_RETRIES = 2;
 
@@ -87,7 +87,9 @@ export default function InvoicePDF() {
             try {
                 setIsGeneratingPdf(true);
                 const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
-                await generatePdfFromElement(printRef.current, filename);
+                const el = await waitUntilElementReady(printRef.current);
+                if (cancelled || !el) return;
+                await generatePdfFromElement(el, filename);
             } catch (e) {
                 if (isAbortError(e) || cancelled) return;
                 console.error('Auto-download PDF failed, falling back to print:', e);
@@ -255,7 +257,9 @@ export default function InvoicePDF() {
         setIsGeneratingPdf(true);
         try {
             const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
-            await generatePdfFromElement(printRef.current, filename);
+            const el = await waitUntilElementReady(printRef.current);
+            if (!el) return;
+            await generatePdfFromElement(el, filename);
         } catch (e) {
             if (isAbortError(e)) return;
             console.error('PDF generation failed, falling back to print:', e);
@@ -275,8 +279,8 @@ export default function InvoicePDF() {
                     .pdf-page { padding: 0 !important; }
                 }
                 @page {
-                    margin: 0.5in;
-                    size: A4;
+                    margin: 15mm 18mm;
+                    size: A4 portrait;
                 }
                 @media screen {
                     .pdf-page { max-width: 8.27in; margin: 0 auto; }

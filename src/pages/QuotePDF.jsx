@@ -4,6 +4,7 @@ import { Quote, Client, User, BankingDetail } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { DocumentPageSkeleton } from '@/components/shared/PageSkeleton';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
+import { waitUntilElementReady } from '@/lib/documentPdf/waitForPdfDocumentReady';
 import DocumentPreview from '@/components/DocumentPreview';
 import { recordToStyledPreviewDoc, profileForQuotePreview } from '@/utils/documentPreviewData';
 import { readQuoteDraftRaw } from '@/utils/invoiceDraftStorage';
@@ -86,7 +87,9 @@ export default function QuotePDF() {
             try {
                 setIsGeneratingPdf(true);
                 const filename = `${quote.quote_number || 'quote'}.pdf`;
-                await generatePdfFromElement(printRef.current, filename);
+                const el = await waitUntilElementReady(printRef.current);
+                if (cancelled || !el) return;
+                await generatePdfFromElement(el, filename);
             } catch (e) {
                 console.error('Auto-download quote PDF failed, falling back to print:', e);
                 window.print();
@@ -162,7 +165,9 @@ export default function QuotePDF() {
         try {
             setIsGeneratingPdf(true);
             const filename = `${quote.quote_number || 'quote'}.pdf`;
-            await generatePdfFromElement(printRef.current, filename);
+            const el = await waitUntilElementReady(printRef.current);
+            if (!el) return;
+            await generatePdfFromElement(el, filename);
         } catch (e) {
             console.error('Quote PDF generation failed, falling back to print:', e);
             window.print();
@@ -181,8 +186,8 @@ export default function QuotePDF() {
                     .pdf-page { padding: 0 !important; }
                 }
                 @page {
-                    margin: 0.5in;
-                    size: A4;
+                    margin: 15mm 18mm;
+                    size: A4 portrait;
                 }
                 @media screen {
                     .pdf-page { max-width: 8.27in; margin: 0 auto; }

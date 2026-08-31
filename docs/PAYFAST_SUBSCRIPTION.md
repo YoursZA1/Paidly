@@ -97,6 +97,16 @@ PayFast: **Generated signature does not match submitted signature.**
 
 Admin sandbox diagnostic (disabled in production): `POST /api/subscriptions/payfast-diagnose` with Bearer admin JWT and `{ "planSlug": "starter_monthly" }`. Returns included fields, redacted param string, and signature — never the passphrase.
 
+## Browser CSP
+
+Checkout is a **top-level HTML form POST** to PayFast (`/eng/process`). The browser enforces `form-action`, not `connect-src`.
+
+Production (`vercel.json`) and Express (`server/src/securityMiddleware.js`) must include:
+
+`form-action 'self' https://www.payfast.co.za https://sandbox.payfast.co.za`
+
+Sandbox is listed because `PAYFAST_MODE=sandbox` posts to `https://sandbox.payfast.co.za/eng/process` (preview / local). Do not use `form-action *`. Do not add PayFast only to `connect-src`. Merchant key, passphrase, and service-role keys never ship in the SPA.
+
 ## Database
 
 SoR: `plans`, `subscriptions`, `payment_history`, `subscription_events`, `payfast_itn_logs`. Profiles are a cache (`plan_family`). Service role only for ITN writes. See `docs/SUBSCRIPTION_BILLING_SCHEMA.md`.

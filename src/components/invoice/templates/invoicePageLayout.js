@@ -6,6 +6,10 @@
  * inherited by any future template.
  *
  * WHY THIS MODULE EXISTS
+ * Alternate invoice skins (Classic, Modern, Minimal, Bold) still paginate from
+ * estimated row heights. The production default (DocumentPreview — invoices and
+ * quotes) uses Document → Page → Blocks with live measured heights in
+ * `src/lib/documentPdf/`. Do not add a "N items per page" rule here or there.
  * The templates render as HTML and export through html2pdf (html → canvas →
  * PDF). html2pdf slices the rendered DOM into A4 pages; if a single `.page`
  * block is taller than one printable page it gets re-sliced mid-element —
@@ -23,31 +27,23 @@
  *   before html2pdf scales px → mm. Both are derived from the same constants.
  */
 
-// ── A4 sheet ───────────────────────────────────────────────────────────────
-export const PAGE_WIDTH = 210; // mm
-export const PAGE_HEIGHT = 297; // mm
+import {
+  CONTENT_HEIGHT_MM,
+  CONTENT_HEIGHT_PX,
+  CONTENT_WIDTH_MM,
+  PAGE_HEIGHT_MM,
+  PAGE_WIDTH_MM,
+  SAFE_MARGIN,
+} from "@/lib/documentPdf/pageGeometry";
 
-/**
- * Printable margin applied to every side of every page (mm).
- * MUST stay in sync with PDF_PAGE_MARGIN_MM in utils/generatePdfFromElement.js,
- * which feeds these to html2pdf as a per-page margin — guaranteeing page 1 and
- * all continuation pages share identical top/bottom/left/right margins.
- */
-export const SAFE_MARGIN = { top: 15, right: 18, bottom: 15, left: 18 };
+export const PAGE_WIDTH = PAGE_WIDTH_MM;
+export const PAGE_HEIGHT = PAGE_HEIGHT_MM;
+export { SAFE_MARGIN, CONTENT_HEIGHT_PX };
 
-/** Content band edges (mm) — where drawable content starts / ends on a page. */
-export const CONTENT_TOP = SAFE_MARGIN.top; // 15
-export const CONTENT_BOTTOM = PAGE_HEIGHT - SAFE_MARGIN.bottom; // 282
-
-/** Printable content area (mm). */
-export const CONTENT_WIDTH = PAGE_WIDTH - SAFE_MARGIN.left - SAFE_MARGIN.right; // 174
-export const CONTENT_HEIGHT = CONTENT_BOTTOM - CONTENT_TOP; // 267
-
-/** 1mm expressed in CSS px @96dpi. */
-const PX_PER_MM = 96 / 25.4;
-
-/** Usable vertical space per page, in px — the budget every page is packed against. */
-export const CONTENT_HEIGHT_PX = Math.floor(CONTENT_HEIGHT * PX_PER_MM); // ≈ 1009
+export const CONTENT_TOP = SAFE_MARGIN.top;
+export const CONTENT_BOTTOM = PAGE_HEIGHT_MM - SAFE_MARGIN.bottom;
+export const CONTENT_WIDTH = CONTENT_WIDTH_MM;
+export const CONTENT_HEIGHT = CONTENT_HEIGHT_MM;
 
 /**
  * Safety buffer (px) subtracted from every page budget. The region heights

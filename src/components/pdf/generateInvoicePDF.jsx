@@ -8,45 +8,13 @@ import {
 } from "@/components/pdf/InvoiceTemplatePdfCapture";
 import InvoiceTemplateDocument from "@/components/pdf/InvoiceTemplateDocument";
 import { DOCUMENT_TEMPLATE_KEY } from "@/utils/invoiceTemplateData";
-
-async function waitForImages(container) {
-  const imgs = [...container.querySelectorAll("img")];
-  await Promise.all(
-    imgs.map(
-      (img) =>
-        new Promise((resolve) => {
-          if (img.complete && img.naturalHeight > 0) {
-            resolve();
-            return;
-          }
-          const done = () => resolve();
-          img.addEventListener("load", done, { once: true });
-          img.addEventListener("error", done, { once: true });
-          setTimeout(done, 4000);
-        })
-    )
-  );
-}
-
-function flushLayout() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
-  });
-}
-
-async function waitForCaptureNode(host, timeoutMs = 3000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const el = host.firstElementChild;
-    if (el) return el;
-    await new Promise((resolve) => setTimeout(resolve, 32));
-  }
-  return host.firstElementChild;
-}
+import {
+  waitForPdfAssets,
+  waitForPdfDocumentReady,
+} from "@/lib/documentPdf/waitForPdfDocumentReady";
 
 /**
  * Invoice PDF blob using the same DocumentPreview + html2pdf path as {@link generateQuotePDF}.
- * Avoids multi-page template shells that cause extra/blank pages in html2pdf v0.10.
  *
  * @param {{ invoice: object, client: object, user: object, bankingDetail?: object|null }} params
  * @returns {Promise<Blob>}
@@ -59,7 +27,7 @@ export async function generateInvoicePDF({ invoice, client, user, bankingDetail 
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
   host.style.cssText =
-    "position:fixed;left:-12000px;top:0;width:210mm;max-width:210mm;z-index:-1;pointer-events:none;";
+    "position:fixed;left:0;top:0;width:210mm;max-width:210mm;z-index:-1;opacity:0;pointer-events:none;";
   document.body.appendChild(host);
 
   const root = createRoot(host);
@@ -73,7 +41,6 @@ export async function generateInvoicePDF({ invoice, client, user, bankingDetail 
     const pack = buildInvoiceTemplatePdfCaptureProps(invoice, resolvedClient, user, bankingDetail);
 
     if (pack.templateKey === DOCUMENT_TEMPLATE_KEY) {
-      // Paidly Document — DocumentPreview engine (single-flow, html2pdf-safe).
       const profile = profileForQuotePreview(invoice, user);
       const previewDoc = recordToStyledPreviewDoc(invoice, resolvedClient, "invoice", profile);
       root.render(
@@ -86,25 +53,27 @@ export async function generateInvoicePDF({ invoice, client, user, bankingDetail 
           hideStatus
         />
       );
-    } else {
-      // Classic / Modern / Minimal / Bold / Paidly Pro — variant template.
-      root.render(
-        <InvoiceTemplateDocument
-          TemplateComponent={pack.TemplateComponent}
-          invoice={pack.templateInvoice}
-          client={pack.clientForTemplate}
-          user={pack.resolvedUser}
-          bankingDetail={pack.bankingForTemplate}
-          userCurrency={pack.userCurrency}
-          safeFormatDate={safeFormatDate}
-        />
-      );
+      const el = await waitForPdfDocumentReady(host);
+      if (!el) throw new Error("Invoice PDF capture node missing");
+      return await generatePdfBlobFromElement(el, filename);
     }
 
-    await flushLayout();
-    const el = await waitForCaptureNode(host);
+    root.render(
+      <InvoiceTemplateDocument
+        TemplateComponent={pack.TemplateComponent}
+        invoice={pack.templateInvoice}
+        client={pack.clientForTemplate}
+        user={pack.resolvedUser}
+        bankingDetail={pack.bankingForTemplate}
+        userCurrency={pack.userCurrency}
+        safeFormatDate={safeFormatDate}
+      />
+    );
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const el =
+      host.querySelector("[data-invoice-pdf-capture='true']") || host.firstElementChild;
     if (!el) throw new Error("Invoice PDF capture node missing");
-    await waitForImages(el);
+    await waitForPdfAssets(el);
     return await generatePdfBlobFromElement(el, filename);
   } finally {
     root.unmount();

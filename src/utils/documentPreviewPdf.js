@@ -1,4 +1,5 @@
 import generatePdfFromElement from "./generatePdfFromElement";
+import { waitUntilElementReady } from "@/lib/documentPdf/waitForPdfDocumentReady";
 
 /** Wait until after the next paint so refs (e.g. DocumentPreview) are attached. */
 export function waitForPreviewPaint() {
@@ -36,5 +37,6 @@ export async function downloadDocumentPreviewFromElement(element, docType, numbe
     );
     return;
   }
-  await generatePdfFromElement(element, filename);
+  const ready = await waitUntilElementReady(element);
+  await generatePdfFromElement(ready || element, filename);
 }

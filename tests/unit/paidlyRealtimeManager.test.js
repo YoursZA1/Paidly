@@ -90,6 +90,23 @@ describe("paidlyRealtimeManager", () => {
     unsub();
   });
 
+  it("does not rebuild the channel when the sync callback is replaced for the same user", async () => {
+    const { supabase } = await import("@/lib/supabaseClient");
+    setPaidlySyncRealtimeBridge({
+      userId: "11111111-1111-4111-8111-111111111111",
+      onEntityEvent: () => {},
+    });
+    await flushAndCompleteSubscribe();
+    const channelCalls = vi.mocked(supabase.channel).mock.calls.length;
+    const removeCalls = vi.mocked(removeChannelMock).mock.calls.length;
+    setPaidlySyncRealtimeBridge({
+      userId: "11111111-1111-4111-8111-111111111111",
+      onEntityEvent: () => {},
+    });
+    await flushRealtimeRebuild();
+    expect(vi.mocked(supabase.channel).mock.calls.length).toBe(channelCalls);
+    expect(vi.mocked(removeChannelMock).mock.calls.length).toBe(removeCalls);
+  });
   it("rebuilds when sync bridge and profiles are both active", async () => {
     const { supabase } = await import("@/lib/supabaseClient");
     subscribePaidlyProfilesRealtime(() => {});
@@ -102,6 +119,20 @@ describe("paidlyRealtimeManager", () => {
     await flushAndCompleteSubscribe();
     expect(removeChannelMock).toHaveBeenCalled();
     expect(supabase.channel).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not rebuild when a second profile listener is added", async () => {
+    const { supabase } = await import("@/lib/supabaseClient");
+    const u1 = subscribePaidlyProfilesRealtime(() => {});
+    await flushAndCompleteSubscribe();
+    const channelCalls = vi.mocked(supabase.channel).mock.calls.length;
+    const removeCalls = vi.mocked(removeChannelMock).mock.calls.length;
+    const u2 = subscribePaidlyProfilesRealtime(() => {});
+    await flushRealtimeRebuild();
+    expect(vi.mocked(supabase.channel).mock.calls.length).toBe(channelCalls);
+    expect(vi.mocked(removeChannelMock).mock.calls.length).toBe(removeCalls);
+    u2();
+    u1();
   });
 
   it("warns and no-ops aux subscribe for SyncEngine-reserved tables in dev", () => {

@@ -1,8 +1,7 @@
-/** A4 page size in mm (ISO 216). */
-const A4_WIDTH_MM = 210;
-
-/** Document margins for PDF: [top, left, bottom, right] in mm. */
-const PDF_PAGE_MARGIN_MM = [15, 18, 15, 18];
+import {
+  CONTENT_WIDTH_MM,
+  PDF_PAGE_MARGIN_MM,
+} from "@/lib/documentPdf/pageGeometry";
 
 function html2CanvasOnClone(clonedDoc) {
   try {
@@ -18,7 +17,9 @@ function html2CanvasOnClone(clonedDoc) {
         /* ignore per-node */
       }
     });
-    /* html2canvas mis-renders -webkit-line-clamp (second line sliced). Strip inside captured invoice/preview roots only. */
+    clonedDoc.querySelectorAll(".paidly-doc-measure").forEach((el) => {
+      el.remove();
+    });
     const roots = clonedDoc.querySelectorAll(
       '[data-invoice-pdf-capture="true"], .document-preview-styled'
     );
@@ -71,7 +72,7 @@ async function withInvoicePdfElementStyles(element, filename, run) {
     // Margins are now applied by html2pdf on every page, so the element itself
     // carries no padding — this keeps margins consistent across all pages and
     // stops fixed-width children (210mm) from overflowing the printable area.
-    const contentWidthMm = A4_WIDTH_MM - PDF_PAGE_MARGIN_MM[1] - PDF_PAGE_MARGIN_MM[3];
+    const contentWidthMm = CONTENT_WIDTH_MM;
     element.style.width = `${contentWidthMm}mm`;
     element.style.maxWidth = `${contentWidthMm}mm`;
     element.style.boxSizing = "border-box";

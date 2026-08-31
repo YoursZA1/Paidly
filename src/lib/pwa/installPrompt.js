@@ -7,8 +7,48 @@
 
 /** @typedef {'accepted' | 'dismissed' | 'unavailable' | 'failed'} InstallOutcome */
 
+export const PWA_INSTALL_DISMISSED_KEY = "pwa-prompt-dismissed";
+
 function hasWindow() {
   return typeof window !== "undefined";
+}
+
+/** Till shell and POS invite/join — do not intercept the native install banner. */
+export function isPosRelatedPath(pathname) {
+  try {
+    const p = pathname ?? (hasWindow() ? window.location?.pathname : "");
+    return /^\/pos(\/|$)/i.test(String(p || ""));
+  } catch {
+    return false;
+  }
+}
+
+export function isCustomInstallUiDismissed() {
+  if (!hasWindow()) return false;
+  try {
+    return window.localStorage.getItem(PWA_INSTALL_DISMISSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setCustomInstallUiDismissed(dismissed) {
+  if (!hasWindow()) return;
+  try {
+    if (dismissed) window.localStorage.setItem(PWA_INSTALL_DISMISSED_KEY, "true");
+    else window.localStorage.removeItem(PWA_INSTALL_DISMISSED_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Chromium logs a console error if we call preventDefault() on beforeinstallprompt
+ * without an immediate user-triggered prompt(). Paidly does not intercept: the native
+ * install banner / address-bar install icon remains the Chromium path.
+ */
+export function shouldInterceptBeforeInstallPrompt() {
+  return false;
 }
 
 function matchDisplayMode(query) {
@@ -69,21 +109,10 @@ function emit() {
   }
 }
 
-function onBeforeInstallPrompt(event) {
-  // Till shell has no Install control. Leave the native banner available.
-  try {
-    if (/^\/pos\/?$/i.test(window.location?.pathname || "")) {
-      return;
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    event.preventDefault();
-  } catch {
-    /* older engines */
-  }
-  deferredPrompt = event;
+function onBeforeInstallPrompt(_event) {
+  // Do not call preventDefault() — that suppresses the native banner and Chrome reports:
+  // "Banner not shown: beforeinstallpromptevent.preventDefault() called."
+  deferredPrompt = null;
   emit();
 }
 
@@ -147,9 +176,10 @@ export async function promptPaidlyInstall() {
   try {
     deferredPrompt = null;
     emit();
-    event.prompt();
+    await event.prompt();
     const choice = await event.userChoice;
     const outcome = choice?.outcome === "accepted" ? "accepted" : "dismissed";
+    if (outcome === "dismissed") setCustomInstallUiDismissed(true);
     return { outcome };
   } catch {
     return { outcome: "failed" };

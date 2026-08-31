@@ -2,31 +2,7 @@ import { createRoot } from "react-dom/client";
 import DocumentPreview from "@/components/DocumentPreview";
 import { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
 import { profileForQuotePreview, recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
-
-async function waitForImages(container) {
-  const imgs = [...container.querySelectorAll("img")];
-  await Promise.all(
-    imgs.map(
-      (img) =>
-        new Promise((resolve) => {
-          if (img.complete && img.naturalHeight > 0) {
-            resolve();
-            return;
-          }
-          const done = () => resolve();
-          img.addEventListener("load", done, { once: true });
-          img.addEventListener("error", done, { once: true });
-          setTimeout(done, 4000);
-        })
-    )
-  );
-}
-
-function flushLayout() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
-  });
-}
+import { waitForPdfDocumentReady } from "@/lib/documentPdf/waitForPdfDocumentReady";
 
 /**
  * Generate a quote PDF blob using the same DocumentPreview used by QuotePDF page.
@@ -41,7 +17,7 @@ export async function generateQuotePDF({ quote, client, user, bankingDetail = nu
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
   host.style.cssText =
-    "position:fixed;left:-12000px;top:0;width:210mm;max-width:210mm;z-index:-1;pointer-events:none;";
+    "position:fixed;left:0;top:0;width:210mm;max-width:210mm;z-index:-1;opacity:0;pointer-events:none;";
   document.body.appendChild(host);
 
   const root = createRoot(host);
@@ -63,14 +39,11 @@ export async function generateQuotePDF({ quote, client, user, bankingDetail = nu
       />
     );
 
-    await flushLayout();
-    const el = host.firstElementChild;
+    const el = await waitForPdfDocumentReady(host);
     if (!el) throw new Error("Quote PDF capture node missing");
-    await waitForImages(el);
     return await generatePdfBlobFromElement(el, filename);
   } finally {
     root.unmount();
     host.remove();
   }
 }
-

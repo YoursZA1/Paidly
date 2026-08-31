@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User } from '@/api/entities';
 
 const currencyData = {
     // South African Rand (Default)
@@ -102,54 +100,6 @@ export const parseCurrencyAmount = (amountString, _currencyCode = 'ZAR') => {
 };
 
 export default function CurrencySelector({ value, onChange, className = "" }) {
-    const [, setDetectedCountry] = useState(null);
-    const [suggestedCurrency, setSuggestedCurrency] = useState('ZAR'); // Default to ZAR
-
-    useEffect(() => {
-        let cancelled = false;
-        const detectLocation = async () => {
-            try {
-                const response = await fetch('https://ipapi.co/json/');
-                if (cancelled) return;
-                const data = await response.json();
-                if (cancelled) return;
-                if (data.country_code) {
-                    setDetectedCountry(data.country_code);
-                    const suggested = Object.entries(currencyData).find(([, info]) =>
-                        info.countries.includes(data.country_code)
-                    );
-                    if (suggested) {
-                        setSuggestedCurrency(suggested[0]);
-                        if (!value && onChange) {
-                            onChange(suggested[0]);
-                            User.updateMyUserData({
-                                country: data.country_code,
-                                currency: suggested[0]
-                            }).catch(() => {});
-                        }
-                    }
-                } else {
-                    setSuggestedCurrency('ZAR');
-                    if (!value && onChange) {
-                        onChange('ZAR');
-                        User.updateMyUserData({ currency: 'ZAR' }).catch(() => {});
-                    }
-                }
-            } catch {
-                // Network/CORS or ipapi down: fail silently, use ZAR
-                if (cancelled) return;
-                setSuggestedCurrency('ZAR');
-                if (!value && onChange) {
-                    onChange('ZAR');
-                }
-            }
-        };
-        detectLocation();
-        return () => { cancelled = true; };
-    // Run once on mount; value/onChange changes don't need to re-detect location
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     const formatCurrencyOption = (code) => {
         const currency = currencyData[code];
         return (
@@ -163,11 +113,6 @@ export default function CurrencySelector({ value, onChange, className = "" }) {
                     </div>
                     <div className="text-xs text-gray-500">{currency.name}</div>
                 </div>
-                {code === suggestedCurrency && code !== 'ZAR' && (
-                    <span className="text-xs bg-primary/15 text-primary px-2 py-1 rounded">
-                        Suggested
-                    </span>
-                )}
             </div>
         );
     };
@@ -197,22 +142,13 @@ export default function CurrencySelector({ value, onChange, className = "" }) {
                     {formatCurrencyOption('ZAR')}
                 </SelectItem>
                 
-                {/* Suggested currency if not ZAR */}
-                {suggestedCurrency && suggestedCurrency !== 'ZAR' && value !== suggestedCurrency && (
-                    <>
-                        <SelectItem value={suggestedCurrency} className="border-b">
-                            {formatCurrencyOption(suggestedCurrency)}
-                        </SelectItem>
-                    </>
-                )}
-                
                 <div className="px-2 py-1 text-xs font-medium text-gray-500 bg-gray-50">
                     Other Currencies
                 </div>
                 
                 {/* All other currencies */}
                 {Object.entries(currencyData)
-                    .filter(([code]) => code !== 'ZAR' && code !== suggestedCurrency)
+                    .filter(([code]) => code !== 'ZAR')
                     .sort(([a], [b]) => a.localeCompare(b))
                     .map(([code]) => (
                         <SelectItem key={code} value={code}>

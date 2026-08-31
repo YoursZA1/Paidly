@@ -6,6 +6,8 @@ import {
   getInstallPromptSnapshot,
   promptPaidlyInstall,
   initInstallPromptListeners,
+  isPosRelatedPath,
+  shouldInterceptBeforeInstallPrompt,
   __resetInstallPromptForTests,
   __setDeferredPromptForTests,
 } from "@/lib/pwa/installPrompt";
@@ -93,7 +95,7 @@ describe("install prompt", () => {
   });
 
   it("calls native prompt() and returns accepted", async () => {
-    const prompt = vi.fn();
+    const prompt = vi.fn().mockResolvedValue(undefined);
     __setDeferredPromptForTests({
       prompt,
       userChoice: Promise.resolve({ outcome: "accepted" }),
@@ -102,5 +104,43 @@ describe("install prompt", () => {
     expect(prompt).toHaveBeenCalledTimes(1);
     expect(result.outcome).toBe("accepted");
     expect(getInstallPromptSnapshot().canInstall).toBe(false);
+  });
+
+  it("never calls preventDefault on beforeinstallprompt (native Chromium banner)", () => {
+    window.localStorage.removeItem("pwa-prompt-dismissed");
+    window.history.replaceState({}, "", "/Dashboard");
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => {} }));
+    const preventDefault = vi.fn();
+    initInstallPromptListeners();
+    window.dispatchEvent(
+      Object.assign(new Event("beforeinstallprompt"), { preventDefault, prompt: vi.fn() })
+    );
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(getInstallPromptSnapshot().canInstall).toBe(false);
+    expect(shouldInterceptBeforeInstallPrompt()).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
+  it("does not intercept when the custom install UI was dismissed", () => {
+    window.localStorage.setItem("pwa-prompt-dismissed", "true");
+    const preventDefault = vi.fn();
+    initInstallPromptListeners();
+    window.dispatchEvent(
+      Object.assign(new Event("beforeinstallprompt"), { preventDefault, prompt: vi.fn() })
+    );
+    expect(preventDefault).not.toHaveBeenCalled();
+    window.localStorage.removeItem("pwa-prompt-dismissed");
+  });
+
+  it("treats /POS and till invite paths as POS-related", () => {
+    expect(isPosRelatedPath("/POS")).toBe(true);
+    expect(isPosRelatedPath("/pos/invite/abc")).toBe(true);
+    expect(isPosRelatedPath("/Dashboard")).toBe(false);
+  });
+
+  it("does not intercept on POS paths", () => {
+    window.history.replaceState({}, "", "/POS");
+    expect(shouldInterceptBeforeInstallPrompt()).toBe(false);
+    window.history.replaceState({}, "", "/");
   });
 });

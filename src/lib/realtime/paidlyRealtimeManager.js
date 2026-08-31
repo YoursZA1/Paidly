@@ -354,6 +354,23 @@ const mainChannelStatusListeners = new Set();
 /** Last status from {@link PAIDLY_REALTIME_CHANNEL} subscribe callback (for late listeners). */
 let lastMainChannelSubscribeStatus = null;
 
+let lastBoundWorkKey = "";
+
+function computeRealtimeWorkKey() {
+  const auxKeys = [...auxTableListeners.keys()].sort().join(",");
+  return [
+    syncBridge.userId && syncBridge.onEntityEvent ? `sync:${syncBridge.userId}` : "",
+    profileListeners.size > 0 ? "profiles" : "",
+    notificationUserId && notificationListeners.size > 0 ? `n:${notificationUserId}` : "",
+    auxKeys ? `aux:${auxKeys}` : "",
+  ].join("|");
+}
+
+function realtimeWorkKeyUnchanged() {
+  const next = computeRealtimeWorkKey();
+  return Boolean(lastBoundWorkKey) && next === lastBoundWorkKey;
+}
+
 function computePaidlyRealtimeWork() {
   return Boolean(
     (syncBridge.userId && syncBridge.onEntityEvent) ||
@@ -399,6 +416,7 @@ function startHeartbeatIfNeeded() {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     if (isRecoveryCircuitOpen()) return;
     if (getPaidlyRealtimeConnectionPhase() === RealtimeConnectionPhase.RECONNECTING) return;
+    if (getPaidlyRealtimeConnectionPhase() === RealtimeConnectionPhase.CONNECTING) return;
 
     const ch = channelInstance;
     if (!ch) {
@@ -564,6 +582,7 @@ function createAndSubscribeMainChannel(origin, subscribeGen) {
   const hasAux = auxTableListeners.size > 0;
 
   if (!hasSync && !hasProfiles && !hasNotifications && !hasAux) {
+    lastBoundWorkKey = "";
     lastMainChannelSubscribeStatus = null;
     setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.IDLE, "no_listeners");
     stopHeartbeatIfIdle();
@@ -574,6 +593,7 @@ function createAndSubscribeMainChannel(origin, subscribeGen) {
 
   startHeartbeatIfNeeded();
   setPaidlyRealtimeConnectionPhase(RealtimeConnectionPhase.CONNECTING, origin);
+  lastBoundWorkKey = computeRealtimeWorkKey();
 
   const ch = supabase.channel(PAIDLY_REALTIME_CHANNEL);
   paidlyRealtimeLog("channel_created", { origin, channel: PAIDLY_REALTIME_CHANNEL });
@@ -733,10 +753,10 @@ function createAndSubscribeMainChannel(origin, subscribeGen) {
 
     if (rebuildQueued) {
       rebuildQueued = false;
-      if (typeof window !== "undefined") {
-        window.setTimeout(() => runChannelRebuild("queued_after_subscribe", { force: true }), 0);
+      if (realtimeWorkKeyUnchanged()) {
+        paidlyRealtimeLog("reconnect_suppressed", { kind: "queued_after_subscribe_work_unchanged", origin });
       } else {
-        queueMicrotask(() => runChannelRebuild("queued_after_subscribe", { force: true }));
+        schedulePaidlyRealtimeRebuild("queued_after_subscribe_settled");
       }
     }
   });
@@ -838,6 +858,11 @@ function runChannelRebuild(origin, opts = {}) {
   }
 
   flushRebuildDelayTimer("entering_rebuild");
+  if (realtimeWorkKeyUnchanged() && isPaidlyRealtimeMainChannelJoined()) {
+    rebuildInFlight = false;
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "work_key_unchanged_joined", origin });
+    return;
+  }
   clearPendingReconnectTimers("reconnect_started");
   rebuildInFlight = true;
   rebuildQueued = false;
@@ -1182,13 +1207,22 @@ export function isPaidlyRealtimeMainChannelJoined() {
  * @param {{ userId: string | null, onEntityEvent: ((table: string, payload: object) => void) | null }} next
  */
 export function setPaidlySyncRealtimeBridge(next) {
-  syncBridge.userId = next?.userId ?? null;
-  syncBridge.onEntityEvent = next?.onEntityEvent ?? null;
+  const nextUserId = next?.userId ?? null;
+  const nextFn = next?.onEntityEvent ?? null;
+  const hadWork = Boolean(syncBridge.userId && syncBridge.onEntityEvent);
+  const willHaveWork = Boolean(nextUserId && nextFn);
+  const userChanged = syncBridge.userId !== nextUserId;
+  syncBridge.userId = nextUserId;
+  syncBridge.onEntityEvent = nextFn;
   const rm = getSharedRealtimeManager();
-  if (syncBridge.userId && syncBridge.onEntityEvent) {
+  if (willHaveWork) {
     rm.trackLogical("sync");
   } else {
     rm.untrackLogical("sync");
+  }
+  if (hadWork === willHaveWork && !userChanged) {
+    paidlyRealtimeLog("reconnect_suppressed", { kind: "sync_bridge_callback_only" });
+    return;
   }
   schedulePaidlyRealtimeRebuild("sync_bridge");
 }
@@ -1198,11 +1232,13 @@ export function subscribePaidlyProfilesRealtime(listener) {
   const wasEmpty = profileListeners.size === 0;
   profileListeners.add(listener);
   if (wasEmpty) getSharedRealtimeManager().trackLogical("profiles");
-  schedulePaidlyRealtimeRebuild("profiles_subscribe");
+  if (wasEmpty) schedulePaidlyRealtimeRebuild("profiles_subscribe");
   return () => {
     profileListeners.delete(listener);
-    if (profileListeners.size === 0) getSharedRealtimeManager().untrackLogical("profiles");
-    schedulePaidlyRealtimeRebuild("profiles_unsubscribe");
+    if (profileListeners.size === 0) {
+      getSharedRealtimeManager().untrackLogical("profiles");
+      schedulePaidlyRealtimeRebuild("profiles_unsubscribe");
+    }
   };
 }
 
@@ -1212,17 +1248,18 @@ export function subscribePaidlyProfilesRealtime(listener) {
  */
 export function subscribePaidlyNotificationsRealtime(userId, listener) {
   const wasEmpty = notificationListeners.size === 0;
+  const userChanged = notificationUserId !== userId;
   notificationListeners.add(listener);
   notificationUserId = userId;
   if (wasEmpty) getSharedRealtimeManager().trackLogical("notifications");
-  schedulePaidlyRealtimeRebuild("notifications_subscribe");
+  if (wasEmpty || userChanged) schedulePaidlyRealtimeRebuild("notifications_subscribe");
   return () => {
     notificationListeners.delete(listener);
     if (notificationListeners.size === 0) {
       notificationUserId = null;
       getSharedRealtimeManager().untrackLogical("notifications");
+      schedulePaidlyRealtimeRebuild("notifications_unsubscribe");
     }
-    schedulePaidlyRealtimeRebuild("notifications_unsubscribe");
   };
 }
 
@@ -1254,7 +1291,7 @@ export function subscribePaidlyAuxPostgres(config, listener) {
   const wasEmpty = bucket.size === 0;
   bucket.add(listener);
   if (wasEmpty) getSharedRealtimeManager().trackLogical(family);
-  schedulePaidlyRealtimeRebuild("aux_subscribe");
+  if (wasEmpty) schedulePaidlyRealtimeRebuild("aux_subscribe");
   return () => {
     const set = auxTableListeners.get(k);
     if (set) {
@@ -1262,9 +1299,9 @@ export function subscribePaidlyAuxPostgres(config, listener) {
       if (set.size === 0) {
         auxTableListeners.delete(k);
         getSharedRealtimeManager().untrackLogical(family);
+        schedulePaidlyRealtimeRebuild("aux_unsubscribe");
       }
     }
-    schedulePaidlyRealtimeRebuild("aux_unsubscribe");
   };
 }
 
@@ -1320,6 +1357,7 @@ export function __resetPaidlyRealtimeManagerForTests() {
   lastVisibilityReconnectScheduleAt = 0;
   lastHeartbeatReconnectScheduleAt = 0;
   lastSuccessfulSubscribeAtMs = 0;
+  lastBoundWorkKey = "";
   clearSubscribeWatchdog();
   if (heartbeatTimerId && typeof window !== "undefined") {
     window.clearInterval(heartbeatTimerId);

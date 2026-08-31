@@ -7,6 +7,7 @@
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { buildBrandedEmailDocumentHtml } from "@/utils/brandedEmailTemplates";
 import { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
+import { waitUntilElementReady } from "@/lib/documentPdf/waitForPdfDocumentReady";
 import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
 import { typeLabel } from "@/document-engine";
 import { escapeHtml } from "@/utils/htmlSecurity";
@@ -151,7 +152,8 @@ export async function sendDocumentEmail({
     filename = [documentNumber || docTypeLabel, ".pdf"]
       .join("")
       .replace(/\s+/g, "-");
-    const blob = await generatePdfBlobFromElement(pdfElement, filename);
+    const ready = await waitUntilElementReady(pdfElement);
+    const blob = await generatePdfBlobFromElement(ready || pdfElement, filename);
     pdfBase64 = await pdfBlobToBase64(blob);
   }
 

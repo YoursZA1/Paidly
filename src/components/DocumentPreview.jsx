@@ -1,7 +1,6 @@
-import { forwardRef, useMemo } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { format, isValid, parseISO } from "date-fns";
 import { formatCurrency } from "@/components/CurrencySelector";
-import LogoImage from "@/components/shared/LogoImage";
 import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
 import { mergeLiveBrandingForDocuments } from "@/utils/documentPreviewData";
 import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
@@ -9,21 +8,30 @@ import { useAuth } from "@/contexts/AuthContext";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
 import { formatDocumentPreviewBankingLines } from "@/utils/formatDocumentPreviewBankingLines";
-
-const SLATE_900 = "#0f172a";
-
-function formatWebsiteDisplay(url) {
-  const s = typeof url === "string" ? url.trim() : "";
-  if (!s) return "";
-  return s.replace(/^https?:\/\//i, "");
-}
-
-function websiteHref(url) {
-  const s = typeof url === "string" ? url.trim() : "";
-  if (!s) return "";
-  if (/^https?:\/\//i.test(s)) return s;
-  return `https://${s}`;
-}
+import {
+  CONTENT_HEIGHT_PX,
+  PAGE_OVERFLOW_SAFETY_PX,
+  createBlock,
+  pageBlockRuns,
+  paginateMeasuredDocument,
+  splitFlowableText,
+} from "@/lib/documentPdf";
+import { waitForPdfAssets } from "@/lib/documentPdf/waitForPdfDocumentReady";
+import {
+  BillToDates,
+  BrandBar,
+  ContinuationHeader,
+  FirstHeader,
+  LineItemRow,
+  LineItemsTable,
+  LineItemsTableHeader,
+  NotesBlock,
+  PageFooter,
+  TermsHeading,
+  TermsPart,
+  TotalsPaymentBlock,
+} from "@/components/documentPdf/PaidlyDocumentSections";
+import "@/components/documentPdf/paidlyDocumentPages.css";
 
 function safeFormatDate(value) {
   if (!value) return "—";
@@ -89,7 +97,6 @@ function normalizeLineItems(doc) {
   return [];
 }
 
-/** Status badge colors (sending/preparing use profile brand accent inside the component). */
 const STATUS_STYLES_BASE = {
   paid: { color: "#10b981", border: "#10b981" },
   partial_paid: { color: "#f59e0b", border: "#f59e0b" },
@@ -111,10 +118,110 @@ function statusLabel(status) {
 }
 
 /**
- * Styled invoice/quote preview for CreateDocument, ViewDocument, and capture ref (e.g. PDF export).
- * Accepts the same `doc` + `docType` + `clients` + `user` props as before.
- * @param {object|null} [bankingDetail] — Saved banking row; merged with profile defaults via effectiveBankingDetail.
- * @param {boolean} [hideStatus] — Omit status pill (use for PDF download / print capture).
+ * One-page fallback when measurement is slow or fails: all blocks on page 1.
+ * Still a block list — never a fixed item count.
+ */
+function fallbackPages(resolved) {
+  const blocks = [];
+  if (resolved.lineRows.length === 0) {
+    blocks.push(
+      createBlock({
+        id: "line-empty",
+        kind: "line-item-empty",
+        heightPx: 1,
+        repeatChrome: "line-table",
+      })
+    );
+  } else {
+    resolved.lineRows.forEach((_, i) => {
+      blocks.push(
+        createBlock({
+          id: `line:${i}`,
+          kind: "line-item",
+          heightPx: 1,
+          repeatChrome: "line-table",
+          meta: { rowIndex: i },
+        })
+      );
+    });
+  }
+  blocks.push(createBlock({ id: "totals-payment", kind: "totals-payment", heightPx: 1 }));
+  if (resolved.notes) {
+    blocks.push(createBlock({ id: "notes", kind: "notes", heightPx: 1 }));
+  }
+  resolved.termsParts.forEach((_, i) => {
+    blocks.push(
+      createBlock({
+        id: `terms:${i}`,
+        kind: "terms-part",
+        heightPx: 1,
+        policy: "flow-part",
+        flowGroup: "terms",
+        meta: { termsIndex: i },
+      })
+    );
+  });
+  return [{ isFirst: true, showFirstOnly: true, blocks, flowContinued: {} }];
+}
+
+function CommercialPageBody({ page, resolved, bankingLines, primary, secondary }) {
+  return pageBlockRuns(page.blocks).map((run, i) => {
+    if (run.type === "table") {
+      const isEmpty = run.blocks.some((b) => b.kind === "line-item-empty");
+      const rows = isEmpty
+        ? []
+        : run.blocks
+            .filter((b) => b.kind === "line-item")
+            .map((b) => resolved.lineRows[Number(b.meta.rowIndex)])
+            .filter(Boolean);
+      return (
+        <LineItemsTable
+          key={`tbl-${i}`}
+          rows={rows}
+          fmt={resolved.fmt}
+          secondary={secondary}
+          continued={!page.isFirst && rows.length > 0}
+        />
+      );
+    }
+    if (run.type === "flow" && run.group === "terms") {
+      return (
+        <div key={`terms-${i}`}>
+          <TermsHeading continued={Boolean(page.flowContinued?.terms)} />
+          {run.blocks.map((b) => (
+            <TermsPart
+              key={b.id}
+              text={resolved.termsParts[Number(b.meta.termsIndex)]}
+              index={Number(b.meta.termsIndex)}
+            />
+          ))}
+        </div>
+      );
+    }
+    const block = run.block;
+    if (block?.kind === "totals-payment") {
+      return (
+        <TotalsPaymentBlock
+          key={block.id}
+          resolved={resolved}
+          primary={primary}
+          bankingLines={bankingLines}
+        />
+      );
+    }
+    if (block?.kind === "notes") {
+      return <NotesBlock key={block.id} notes={resolved.notes} primary={primary} />;
+    }
+    return null;
+  });
+}
+
+/**
+ * Styled invoice/quote preview for CreateDocument, ViewDocument, and PDF capture.
+ *
+ * Document → Page → Blocks → measured content → pagination.
+ * Invoice and quote only differ in labels (QUOTE vs INVOICE, Valid until vs Due date).
+ * html2pdf maps one `.paidly-doc-page` to one A4 page.
  */
 const DocumentPreview = forwardRef(function DocumentPreview(
   { doc, docType: docTypeProp, clients = [], user, bankingDetail = null, hideStatus = false },
@@ -195,7 +302,21 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       Number(doc.total ?? doc.total_amount) ||
       Math.round((lineSubtotal - discount + tax_amount) * 100) / 100;
 
+    const amountPaidRaw = doc.amount_paid ?? doc.paid_amount;
+    const amount_paid =
+      amountPaidRaw != null && amountPaidRaw !== "" && !Number.isNaN(Number(amountPaidRaw))
+        ? Number(amountPaidRaw)
+        : null;
+    const balanceRaw = doc.balance_due ?? doc.balance;
+    const balance_due =
+      balanceRaw != null && balanceRaw !== "" && !Number.isNaN(Number(balanceRaw))
+        ? Number(balanceRaw)
+        : null;
+
     const fmt = (amount) => formatCurrency(amount, currency);
+    const notes = doc.notes || "";
+    const terms_conditions = doc.terms_conditions || "";
+    const termsParts = splitFlowableText(terms_conditions);
 
     return {
       docType,
@@ -212,607 +333,169 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       status,
       issue_date,
       due_date,
+      dueLabel: docType === "quote" ? "Valid until" : "Due date",
+      safeFormatDate,
       lineRows,
       lineSubtotal,
       discount,
       tax_rate,
       tax_amount,
       total,
-      notes: doc.notes || "",
-      terms_conditions: doc.terms_conditions || "",
+      amount_paid,
+      balance_due,
+      notes,
+      terms_conditions,
+      termsParts,
       fmt,
       logo_url,
     };
   }, [doc, docTypeProp, clients, effectiveUser]);
 
+  const measureRef = useRef(null);
+  const [plan, setPlan] = useState(null);
+  const measureKey = resolved
+    ? JSON.stringify({
+        n: resolved.number,
+        rows: resolved.lineRows,
+        notes: resolved.notes,
+        terms: resolved.terms_conditions,
+        total: resolved.total,
+        type: resolved.docType,
+      })
+    : "";
+
+  useLayoutEffect(() => {
+    setPlan(null);
+  }, [measureKey]);
+
+  useEffect(() => {
+    if (!resolved) return undefined;
+    const root = measureRef.current;
+    if (!root) return undefined;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await waitForPdfAssets(root);
+        if (cancelled) return;
+        const next = paginateMeasuredDocument(root, {
+          pageBudgetPx: CONTENT_HEIGHT_PX,
+          safetyPx: PAGE_OVERFLOW_SAFETY_PX,
+        });
+        if (!cancelled) setPlan(next);
+      } catch {
+        if (!cancelled) setPlan(fallbackPages(resolved));
+      }
+    })();
+
+    const t = window.setTimeout(() => {
+      if (!cancelled) {
+        setPlan((p) => p || fallbackPages(resolved));
+      }
+    }, 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [resolved, measureKey]);
+
   if (!doc || !resolved) return null;
 
-  const {
-    docType,
-    client_name,
-    client_email,
-    client_address,
-    company_name,
-    company_email,
-    company_phone,
-    company_website,
-    company_address,
-    number,
-    status,
-    issue_date,
-    due_date,
-    lineRows,
-    lineSubtotal,
-    discount,
-    tax_rate,
-    tax_amount,
-    total,
-    notes,
-    terms_conditions,
-    fmt,
-    logo_url,
-  } = resolved;
+  const showStatusPill = !hideStatus && resolved.status;
+  const st = showStatusPill ? statusStylesMap[resolved.status] || { color: "#9ca3af", border: "#9ca3af" } : null;
+  const pageCount = plan?.length || 1;
 
-  const showStatusPill = !hideStatus && status;
-  const st = showStatusPill ? statusStylesMap[status] || { color: "#9ca3af", border: "#9ca3af" } : null;
-  const dueLabel = docType === "quote" ? "Valid until" : "Due date";
+  const headerProps = {
+    resolved,
+    primary: BRAND_PRIMARY,
+    secondary: BRAND_SECONDARY,
+    showStatusPill,
+    statusStyle: st,
+    statusLabelFn: statusLabel,
+  };
 
   return (
-    <div
-      ref={ref}
-      className="document-preview-styled"
-      style={{
-        fontFamily: "system-ui, Inter, sans-serif",
-        backgroundColor: "#fff",
-        color: "#111827",
-        fontSize: "12px",
-        lineHeight: 1.4,
-        maxWidth: "720px",
-        margin: "0 auto",
-      }}
-    >
-      <div
-        style={{
-          background: `linear-gradient(135deg, ${SLATE_900} 0%, #431407 45%, ${BRAND_PRIMARY} 85%, ${BRAND_SECONDARY} 100%)`,
-          height: "6px",
-        }}
-      />
-
-      <div className="invoice-root" style={{ padding: "40px" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "24px",
-            flexWrap: "wrap",
-            gap: "24px",
-          }}
-        >
-          <div>
-            <div style={{ marginBottom: "12px", marginTop: "-3rem" }}>
-              {logo_url ? (
-                <LogoImage
-                  src={logo_url}
-                  alt=""
-                  className="shrink-0 object-contain object-left"
-                  style={{ maxHeight: 64, maxWidth: 180, width: "auto", height: "auto" }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: "80px",
-                    height: "80px",
-                    borderRadius: "10px",
-                    background: `linear-gradient(135deg, ${SLATE_900}, ${BRAND_PRIMARY})`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
+    <>
+      <div ref={measureRef} className="paidly-doc-measure" aria-hidden="true">
+        <div className="paidly-doc-sheet" style={{ width: "174mm" }}>
+          <FirstHeader {...headerProps} />
+          <ContinuationHeader resolved={resolved} primary={BRAND_PRIMARY} />
+          <BillToDates resolved={resolved} primary={BRAND_PRIMARY} />
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <LineItemsTableHeader secondary={BRAND_SECONDARY} />
+            <tbody>
+              {resolved.lineRows.length === 0 ? (
+                <tr
+                  data-measure="empty-row"
+                  data-doc-block="line-item-empty"
+                  data-doc-block-id="line-empty"
+                  data-doc-repeat-chrome="line-table"
                 >
-                  <span style={{ color: "#fff", fontWeight: 700, fontSize: "20px" }}>
-                    {(company_name || "C").charAt(0).toUpperCase()}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div style={{ marginTop: "4px" }}>
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  color: BRAND_PRIMARY,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  marginBottom: "10px",
-                }}
-              >
-                From
-              </div>
-              <div style={{ fontWeight: 700, fontSize: "12px", color: SLATE_900, marginBottom: "10px" }}>
-                {company_name}
-              </div>
-              {company_phone ? (
-                <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.35 }}>
-                  <span style={{ fontWeight: 600, color: "#374151" }}>Tel </span>
-                  {company_phone}
-                </div>
-              ) : null}
-              {company_email ? (
-                <div
-                  style={{
-                    fontSize: "12px",
-                    color: "#6b7280",
-                    lineHeight: 1.35,
-                    marginTop: company_phone ? "4px" : 0,
-                  }}
-                >
-                  <span style={{ fontWeight: 600, color: "#374151" }}>Email </span>
-                  {company_email}
-                </div>
-              ) : null}
-              {company_website ? (
-                <div
-                  style={{
-                    fontSize: "12px",
-                    lineHeight: 1.35,
-                    marginTop: company_phone || company_email ? "4px" : 0,
-                  }}
-                >
-                  <span style={{ fontWeight: 600, color: "#374151" }}>Web </span>
-                  <a
-                    href={websiteHref(company_website)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: BRAND_PRIMARY, textDecoration: "none", fontWeight: 500 }}
-                  >
-                    {formatWebsiteDisplay(company_website)}
-                  </a>
-                </div>
-              ) : null}
-              {company_address ? (
-                <div style={{ marginTop: company_phone || company_email || company_website ? "12px" : 0 }}>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      color: BRAND_PRIMARY,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    Location
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.35, whiteSpace: "pre-line" }}>
-                    {company_address}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div style={{ textAlign: "right", minWidth: "200px" }}>
-            <div
-              style={{
-                fontSize: "20px",
-                fontWeight: 600,
-                letterSpacing: "-1px",
-                color: SLATE_900,
-                textTransform: "uppercase",
-              }}
-            >
-              {docType === "quote" ? "Quote" : "Invoice"}
-            </div>
-            <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px", fontWeight: 600 }}>#{number}</div>
-            {showStatusPill && st && (
-              <div
-                style={{
-                  display: "inline-block",
-                  marginTop: "10px",
-                  padding: "3px 12px",
-                  borderRadius: "20px",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  color: st.color,
-                  border: `1.5px solid ${st.border}`,
-                }}
-              >
-                {statusLabel(status)}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div
-          style={{
-            height: "1px",
-            background: `linear-gradient(to right, rgba(15,23,42,0.12), rgba(242,78,0,0.22), transparent)`,
-            marginBottom: "36px",
-          }}
-        />
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "40px",
-            marginBottom: "32px",
-          }}
-        >
-          <div className="docpdf-keep-together">
-            <div
-              style={{
-                fontSize: "12px",
-                fontWeight: 700,
-                color: BRAND_PRIMARY,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                marginBottom: "10px",
-              }}
-            >
-              Bill to
-            </div>
-            <div style={{ fontWeight: 700, fontSize: "12px", color: SLATE_900, marginBottom: "4px" }}>
-              {client_name}
-            </div>
-            <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.35, whiteSpace: "pre-line" }}>
-              {client_address}
-            </div>
-            <div style={{ fontSize: "12px", color: "#6b7280" }}>{client_email}</div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ marginBottom: "16px" }}>
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  color: BRAND_PRIMARY,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  marginBottom: "4px",
-                }}
-              >
-                Issue date
-              </div>
-              <div style={{ fontSize: "13px", fontWeight: 600, color: SLATE_900 }}>{safeFormatDate(issue_date)}</div>
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  color: BRAND_PRIMARY,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  marginBottom: "4px",
-                }}
-              >
-                {dueLabel}
-              </div>
-              <div style={{ fontSize: "13px", fontWeight: 600, color: SLATE_900 }}>{safeFormatDate(due_date)}</div>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: "32px" }}>
-          {/* Mobile: stacked line-item cards (no horizontal table scroll) */}
-          <div className="document-line-items-cards space-y-3 md:hidden">
-            {lineRows.length === 0 ? (
-              <div
-                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-400"
-                style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
-              >
-                No line items
-              </div>
-            ) : (
-              lineRows.map((item, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3"
-                  style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
-                >
-                  <div
-                    className="text-sm font-semibold leading-snug text-slate-900"
-                    style={{ maxWidth: "min(100%, 300px)", wordBreak: "break-word" }}
-                  >
-                    {item.description || "—"}
-                  </div>
-                  <div className="mt-3 space-y-1.5 text-sm text-slate-600">
-                    <div>
-                      <span className="font-medium text-slate-500">Qty: </span>
-                      {item.quantity}
-                    </div>
-                    <div>
-                      <span className="font-medium text-slate-500">Unit price: </span>
-                      {fmt(item.unit_price)}
-                    </div>
-                    <div className="pt-0.5 text-base font-semibold text-slate-900">
-                      <span className="text-sm font-medium text-slate-500">Total: </span>
-                      {fmt(item.total)}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* md+: table layout; always used when printing */}
-          <div className="document-line-items-table-wrap hidden overflow-x-auto md:block" style={{ marginBottom: 0 }}>
-            <table
-              className="document-line-items-table"
-              style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}
-            >
-              <thead>
-                <tr style={{ background: SLATE_900 }}>
-                  <th
-                    style={{
-                      padding: "6px 0",
-                      textAlign: "left",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      color: "#94a3b8",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Description
-                  </th>
-                  <th
-                    style={{
-                      padding: "6px 0",
-                      textAlign: "right",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      color: "#94a3b8",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      width: "72px",
-                    }}
-                  >
-                    Qty
-                  </th>
-                  <th
-                    style={{
-                      padding: "6px 0",
-                      textAlign: "right",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      color: "#94a3b8",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      width: "100px",
-                    }}
-                  >
-                    Unit price
-                  </th>
-                  <th
-                    style={{
-                      padding: "6px 0",
-                      textAlign: "right",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      color: BRAND_SECONDARY,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      width: "108px",
-                    }}
-                  >
-                    Total
-                  </th>
+                  <td colSpan={4}>No line items</td>
                 </tr>
-              </thead>
-              <tbody>
-                {lineRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} style={{ padding: "6px 0", fontSize: "12px", color: "#9ca3af", lineHeight: "16px" }}>
-                      No line items
-                    </td>
-                  </tr>
-                ) : (
-                  lineRows.map((item, i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                      <td
-                        style={{
-                          padding: "6px 0",
-                          fontSize: "12px",
-                          lineHeight: "16px",
-                          color: "#374151",
-                          maxWidth: "300px",
-                          wordBreak: "break-word",
-                        }}
-                      >
-                        {item.description}
-                      </td>
-                      <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
-                        {item.quantity}
-                      </td>
-                      <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", color: "#374151", textAlign: "right" }}>
-                        {fmt(item.unit_price)}
-                      </td>
-                      <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", fontWeight: 600, color: SLATE_900, textAlign: "right" }}>
-                        {fmt(item.total)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div
-          className="docpdf-keep-together"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "32px",
-            alignItems: "start",
-            marginBottom: "16px",
-            paddingTop: "24px",
-            borderTop: "1px solid #f1f5f9",
-          }}
-        >
-          <div className="min-w-0">
-            <div
-              style={{
-                fontSize: "12px",
-                fontWeight: 700,
-                color: BRAND_PRIMARY,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                marginBottom: "6px",
-              }}
-            >
-              Payment details
-            </div>
-            {bankingLines ? (
-              <div
-                role="group"
-                aria-label="Bank details for payment"
-                style={{
-                  fontSize: "8px",
-                  color: "#374151",
-                  lineHeight: 1.45,
-                  whiteSpace: "pre-line",
-                  wordBreak: "break-word",
-                }}
-              >
-                {bankingLines}
-              </div>
-            ) : (
-              <p style={{ margin: 0, fontSize: "8px", color: "#9ca3af", lineHeight: 1.45 }}>
-                Add bank details in Settings or on the document.
-              </p>
-            )}
-          </div>
-          <div className="min-w-0" style={{ justifySelf: "end", width: "100%", maxWidth: "280px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "12px" }}>
-              <span style={{ color: "#6b7280" }}>Subtotal</span>
-              <span style={{ fontWeight: 500, color: SLATE_900 }}>{fmt(lineSubtotal)}</span>
-            </div>
-            {discount > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "12px" }}>
-                <span style={{ color: "#6b7280" }}>Discount</span>
-                <span style={{ fontWeight: 500, color: "#ef4444" }}>-{fmt(discount)}</span>
-              </div>
-            )}
-            {tax_rate > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "12px" }}>
-                <span style={{ color: "#6b7280" }}>Tax ({tax_rate}%)</span>
-                <span style={{ fontWeight: 500, color: SLATE_900 }}>{fmt(tax_amount)}</span>
-              </div>
-            )}
-            {tax_rate === 0 && tax_amount > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "12px" }}>
-                <span style={{ color: "#6b7280" }}>Tax</span>
-                <span style={{ fontWeight: 500, color: SLATE_900 }}>{fmt(tax_amount)}</span>
-              </div>
-            )}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                marginTop: "8px",
-                paddingTop: "8px",
-                borderTop: "1px solid #e5e7eb",
-                fontSize: "12px",
-                fontWeight: 600,
-                color: SLATE_900,
-              }}
-            >
-              <span>{docType === "quote" ? "Total" : "Total due"}</span>
-              <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(total)}</span>
-            </div>
-          </div>
-        </div>
-
-        {(notes || terms_conditions) && (
-          <>
-            <div style={{ height: "1px", background: "#f1f5f9", marginBottom: "10px" }} />
-            {notes ? (
-              <div style={{ marginBottom: terms_conditions ? "12px" : 0 }}>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: BRAND_PRIMARY,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    marginBottom: "8px",
-                  }}
-                >
-                  Notes
-                </div>
-                <div style={{ fontSize: "11px", color: "#6b7280", lineHeight: 1.5, whiteSpace: "pre-line", wordBreak: "break-word" }}>
-                  {notes}
-                </div>
-              </div>
-            ) : null}
-            {terms_conditions ? (
-              <div style={{ paddingRight: "28px" }}>
-                <div className="min-w-0" style={{ display: "flex", flexDirection: "column", alignItems: "stretch" }}>
-                  <p
-                    style={{
-                      margin: "0 0 6px 0",
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      color: "#737373",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                    }}
-                  >
-                    Terms
-                  </p>
-                  <p
-                    className="document-preview-terms-body"
-                    style={{
-                      margin: 0,
-                      maxWidth: "100%",
-                      fontSize: "11px",
-                      lineHeight: 1.45,
-                      color: "#9ca3af",
-                      wordBreak: "break-word",
-                      overflowWrap: "anywhere",
-                      overflow: "visible",
-                    }}
-                    title={String(terms_conditions).trim()}
-                  >
-                    {String(terms_conditions).replace(/\s+/g, " ").trim()}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-          </>
-        )}
-
-        <div
-          style={{
-            marginTop: "48px",
-            paddingTop: "20px",
-            borderTop: "1px solid #f1f5f9",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "8px",
-          }}
-        >
-          <div style={{ fontSize: "11px", lineHeight: 1.45, color: "#9ca3af" }}>Thank you for your business.</div>
-          <div style={{ fontSize: "11px", lineHeight: 1.45, color: "#9ca3af" }}>{company_email}</div>
+              ) : (
+                resolved.lineRows.map((item, i) => (
+                  <LineItemRow key={`m-${i}`} item={item} index={i} fmt={resolved.fmt} />
+                ))
+              )}
+            </tbody>
+          </table>
+          <TotalsPaymentBlock resolved={resolved} primary={BRAND_PRIMARY} bankingLines={bankingLines} />
+          <NotesBlock notes={resolved.notes} primary={BRAND_PRIMARY} />
+          <TermsHeading continued={false} />
+          <TermsHeading continued />
+          {resolved.termsParts.map((text, i) => (
+            <TermsPart key={`mt-${i}`} text={text} index={i} />
+          ))}
+          <PageFooter companyEmail={resolved.company_email} pageIndex={0} pageCount={2} />
         </div>
       </div>
 
       <div
-        style={{
-          background: `linear-gradient(135deg, ${SLATE_900} 0%, #431407 45%, ${BRAND_PRIMARY} 85%, ${BRAND_SECONDARY} 100%)`,
-          height: "4px",
-        }}
-      />
-    </div>
+        ref={ref}
+        className="document-preview-styled paidly-doc-sheet"
+        data-paidly-doc-ready={plan ? "true" : "false"}
+        data-invoice-pdf-capture="true"
+      >
+        {(plan || []).length === 0 ? (
+          <div style={{ minHeight: "400px", padding: "24px", color: "#9ca3af", fontSize: "12px" }}>
+            Preparing document pages…
+          </div>
+        ) : null}
+        {(plan || []).map((page, pageIndex) => {
+          return (
+            <section
+              key={`page-${pageIndex}`}
+              className="paidly-doc-page"
+              style={{ display: "flex", flexDirection: "column" }}
+            >
+              {page.isFirst ? (
+                <FirstHeader {...headerProps} />
+              ) : (
+                <ContinuationHeader resolved={resolved} primary={BRAND_PRIMARY} />
+              )}
+              {page.showFirstOnly ? <BillToDates resolved={resolved} primary={BRAND_PRIMARY} /> : null}
+              <CommercialPageBody
+                page={page}
+                resolved={resolved}
+                bankingLines={bankingLines}
+                primary={BRAND_PRIMARY}
+                secondary={BRAND_SECONDARY}
+              />
+              <PageFooter
+                companyEmail={resolved.company_email}
+                pageIndex={pageIndex}
+                pageCount={pageCount}
+              />
+              {pageIndex === pageCount - 1 ? (
+                <BrandBar primary={BRAND_PRIMARY} secondary={BRAND_SECONDARY} height={4} />
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
+    </>
   );
 });
 

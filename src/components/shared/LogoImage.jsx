@@ -21,6 +21,7 @@ function LogoImage({
   className = "",
   style = {},
   preflightStorage = false,
+  loading = "lazy",
 }) {
   /** `null` = not resolved yet; `""` = missing `src` prop */
   const [imageSrc, setImageSrc] = useState(/** @type {string | null} */ (null));
@@ -102,7 +103,7 @@ function LogoImage({
         alt={alt}
         className={className}
         style={style}
-        loading="lazy"
+        loading={loading}
         decoding="async"
       />
     );
@@ -123,7 +124,7 @@ function LogoImage({
       alt={alt}
       className={className}
       style={style}
-      loading="lazy"
+      loading={loading}
       decoding="async"
       {...(needsCorsForCapture ? { crossOrigin: "anonymous" } : {})}
       onError={(e) => {

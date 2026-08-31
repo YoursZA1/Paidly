@@ -99,15 +99,40 @@ export async function sendInvoiceEmail(
       ],
     };
     const key = typeof idempotencyKey === "string" ? idempotencyKey.trim().slice(0, 256) : "";
-    const data = key
+    const result = key
       ? await resend.emails.send(payload, { idempotencyKey: key })
       : await resend.emails.send(payload);
 
-    return { success: true, data };
+    return interpretResendSendResult(result);
   } catch (error) {
     console.error("Resend send-invoice error:", error);
     return { success: false, error: error?.message || String(error) };
   }
+}
+
+/**
+ * Resend's Node SDK returns `{ data, error }` and does not always throw.
+ * Treat a populated `error` as a failed submission — never mark email_sent on that.
+ * @param {unknown} result
+ */
+export function interpretResendSendResult(result) {
+  if (result == null) {
+    return { success: false, error: "Empty email provider response" };
+  }
+  if (typeof result !== "object") {
+    return { success: false, error: "Unexpected email provider response" };
+  }
+  const error = result.error;
+  if (error) {
+    const message =
+      (typeof error === "string" && error) ||
+      error.message ||
+      error.name ||
+      "Email provider rejected the message";
+    return { success: false, error: String(message) };
+  }
+  const data = result.data != null ? result.data : result;
+  return { success: true, data };
 }
 
 function isSendHtmlMailOptsObject(value) {
@@ -187,9 +212,8 @@ export async function sendHtmlEmail(to, subject, html, fromNameOrMailOpts = "Pai
   }
 
   try {
-    const data = await resend.emails.send(payload);
-
-    return { success: true, data };
+    const result = await resend.emails.send(payload);
+    return interpretResendSendResult(result);
   } catch (error) {
     console.error("Resend send-html-email error:", error);
     return { success: false, error: error?.message || String(error) };
