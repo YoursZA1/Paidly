@@ -121,6 +121,10 @@
       "destination": "/api/public-share?doc=email-track&mode=link"
     },
     {
+      "source": "/api/payments/webhook/:provider",
+      "destination": "/api/payment-intents/webhook/:provider"
+    },
+    {
       "source": "/api/payfast/subscription",
       "destination": "/api/payfast-handler?__pf=subscription"
     },

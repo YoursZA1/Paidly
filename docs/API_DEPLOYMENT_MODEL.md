@@ -9,6 +9,8 @@ This document is the **canonical map** of where `/api` traffic runs so rate limi
 | **A — Vercel Serverless** | `api/*.js` (and rewrites in `vercel.json` → e.g. `/api/keep-alive` → `/api/system?op=keep-alive`) | **Not used** — there is no Express `app` on these invocations unless you wrap them. | **Not used** unless you add middleware. |
 | **B — Node Express API** | `server/src/index.js` (e.g. dedicated host, `npm run server`, or a platform that runs this process) | **Yes** — `app.use("/api", createGlobalApiLimiter(...))` | **Yes** — chained after the global limiter. |
 
+Hobby production is capped at **12** serverless functions. Add a rewrite onto an existing `api/*.js` file instead of a new endpoint file. `/api/payments/webhook/:provider` is rewritten onto `api/payment-intents/[[...path]].js`.
+
 **Rule:** When debugging “429 from Paidly” or “100 requests / 15 minutes,” first confirm whether the failing URL is handled by **A** or **B**. Tuning `RATE_LIMIT_MAX` on Express does **nothing** for routes that only exist as Vercel functions.
 
 **SPA client:** `src/api/backendClient.js` uses same-origin `/api` in production when `VITE_SERVER_URL` is unset (typical Vercel app hosting). Those requests hit **A**, not **B**, unless you proxy `/api` to an external Express origin.
