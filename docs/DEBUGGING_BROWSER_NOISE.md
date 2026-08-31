@@ -14,6 +14,11 @@ Some console errors are browser-environment noise, not Paidly app defects.
 
 These are often emitted by extension message channels and can appear during normal app usage.
 
+Also ignore unless they reproduce without extensions:
+
+- `content.js` / `Error: no ad` — ad blockers
+- `Banner not shown: beforeinstallpromptevent.preventDefault()` — Chrome note when install is deferred until the user taps Install Paidly (not a crash)
+
 ## Triage Rule
 
 Do **not** open app bug tickets for this class of logs unless reproducible without extensions.

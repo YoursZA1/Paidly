@@ -122,7 +122,63 @@
     },
     {
       "source": "/api/payments/webhook/:provider",
-      "destination": "/api/payment-intents/webhook/:provider"
+      "destination": "/api/payment-intents/webhook-fwd?provider=:provider"
+    },
+    {
+      "source": "/api/payment-intents/webhook/:provider",
+      "destination": "/api/payment-intents/webhook-fwd?provider=:provider"
+    },
+    {
+      "source": "/api/pos/oauth/status",
+      "destination": "/api/pos/oauth-status"
+    },
+    {
+      "source": "/api/pos/oauth/square/start",
+      "destination": "/api/pos/oauth-square-start"
+    },
+    {
+      "source": "/api/pos/oauth/callback/square",
+      "destination": "/api/pos/oauth-square-callback"
+    },
+    {
+      "source": "/api/pos/oauth/yoco/connect",
+      "destination": "/api/pos/oauth-yoco-connect"
+    },
+    {
+      "source": "/api/pos/receipt/email",
+      "destination": "/api/pos/receipt-email"
+    },
+    {
+      "source": "/api/pos/webhook/provider/:provider",
+      "destination": "/api/pos/webhook-provider?provider=:provider"
+    },
+    {
+      "source": "/api/pos/webhook/:token",
+      "destination": "/api/pos/webhook-token?token=:token"
+    },
+    {
+      "source": "/api/pos/sales/:id/audit",
+      "destination": "/api/pos/sale-audit?id=:id"
+    },
+    {
+      "source": "/api/pos/registers/:id",
+      "destination": "/api/pos/register-by-id?id=:id"
+    },
+    {
+      "source": "/api/pos/sessions/:id/close",
+      "destination": "/api/pos/session-close?id=:id"
+    },
+    {
+      "source": "/api/pos/sessions/:id",
+      "destination": "/api/pos/session-by-id?id=:id"
+    },
+    {
+      "source": "/api/pos/connections/:id",
+      "destination": "/api/pos/connection-by-id?id=:id"
+    },
+    {
+      "source": "/api/pos/:a/:b/:c*",
+      "destination": "/api/pos/route?__pos=:a/:b/:c*"
     },
     {
       "source": "/api/payfast/subscription",
@@ -218,7 +274,7 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+          "value": "camera=(self), microphone=(), geolocation=(), payment=()"
         },
         {
           "key": "Content-Security-Policy",

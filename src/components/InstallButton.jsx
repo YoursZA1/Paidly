@@ -1,54 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Download, Smartphone } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 
 export default function InstallButton({ className }) {
-    const [deferredPrompt, setDeferredPrompt] = useState(null);
-    const [canInstall, setCanInstall] = useState(false);
+  const { canInstall, install } = useInstallPrompt();
 
-    useEffect(() => {
-        const handleBeforeInstallPrompt = (e) => {
-            e.preventDefault();
-            setDeferredPrompt(e);
-            setCanInstall(true);
-        };
+  if (!canInstall) return null;
 
-        const handleAppInstalled = () => {
-            setCanInstall(false);
-            setDeferredPrompt(null);
-        };
-
-        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-        window.addEventListener('appinstalled', handleAppInstalled);
-
-        return () => {
-            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-            window.removeEventListener('appinstalled', handleAppInstalled);
-        };
-    }, []);
-
-    const handleInstall = async () => {
-        if (!deferredPrompt) return;
-
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        
-        if (outcome === 'accepted') {
-            setDeferredPrompt(null);
-            setCanInstall(false);
-        }
-    };
-
-    if (!canInstall) return null;
-
-    return (
-        <Button 
-            onClick={handleInstall}
-            variant="outline"
-            className={className}
-        >
-            <Download className="w-4 h-4 mr-2" />
-            Install App
-        </Button>
-    );
+  return (
+    <Button onClick={() => void install()} variant="outline" className={className}>
+      <Download className="w-4 h-4 mr-2" />
+      Install App
+    </Button>
+  );
 }

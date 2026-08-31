@@ -36,118 +36,12 @@ import {
   handleYocoConnect,
   handlePosOAuthStatus,
 } from "../../server/src/pos/posOAuthRoutes.js";
+import { resolvePosRoute } from "../../server/src/pos/posVercelRoute.js";
 
 /**
- * Vercel: /api/pos/sales, /api/pos/webhook/:token, /api/pos/oauth/*, /api/pos/connections/*
+ * Vercel: one extra segment reaches this file (`/api/pos/registers`).
+ * Nested URLs are rewritten in vercel.json (same pattern as /api/company/team/*).
  */
-function normalizePosPathSegments(raw) {
-  if (Array.isArray(raw)) {
-    return raw.flatMap((part) => String(part).split("/")).filter(Boolean);
-  }
-  if (raw == null || raw === "") return [];
-  return String(raw).split("/").filter(Boolean);
-}
-
-function resolvePosRoute(req) {
-  const parts = normalizePosPathSegments(req.query?.path);
-  const head = parts[0] || "";
-  const second = parts[1] || "";
-  const third = parts[2] || "";
-
-  if (head === "webhook") {
-    if (second === "provider" && third) {
-      return { route: "webhook-provider", provider: third };
-    }
-    if (second) return { route: "webhook", token: second };
-  }
-
-  if (head === "oauth") {
-    if (second === "square" && third === "start") return { route: "oauth-square-start" };
-    if (second === "callback" && third === "square") return { route: "oauth-square-callback" };
-    if (second === "yoco" && third === "connect") return { route: "oauth-yoco-connect" };
-    if (second === "status") return { route: "oauth-status" };
-  }
-
-  if (head === "sales") {
-    if (parts[1] && parts[2] === "audit") return { route: "sale-audit", id: parts[1] };
-    return { route: "sales" };
-  }
-  if (head === "catalog") return { route: "catalog" };
-  if (head === "checkout") return { route: "checkout" };
-  if (head === "return") return { route: "return" };
-  if (head === "receipt" && second === "email") return { route: "receipt-email" };
-  if (head === "invoice") return { route: "invoice" };
-  if (head === "registers") {
-    if (parts.length === 1) return { route: "registers-list" };
-    if (parts[1]) return { route: "register-by-id", id: parts[1] };
-  }
-  if (head === "sessions") {
-    if (parts.length === 1) return { route: "sessions-list" };
-    if (parts[2] === "close") return { route: "session-close", id: parts[1] };
-    if (parts[1]) return { route: "session-by-id", id: parts[1] };
-  }
-
-  if (head === "connections") {
-    if (parts.length === 1) return { route: "connections-list", parts };
-    if (parts[1]) return { route: "connection-by-id", parts, id: parts[1] };
-  }
-
-  const urlPath = String(req.url || "").split("?")[0] || "";
-
-  if (/\/webhook\/provider\/([^/]+)/i.test(urlPath)) {
-    const m = urlPath.match(/\/webhook\/provider\/([^/]+)/i);
-    return { route: "webhook-provider", provider: m?.[1] };
-  }
-
-  const webhookMatch = urlPath.match(/\/api\/pos\/webhook\/([^/]+)/i);
-  if (webhookMatch?.[1] && webhookMatch[1] !== "provider") {
-    return { route: "webhook", token: webhookMatch[1] };
-  }
-
-  if (urlPath.includes("/oauth/square/start")) return { route: "oauth-square-start" };
-  if (urlPath.includes("/oauth/callback/square")) return { route: "oauth-square-callback" };
-  if (urlPath.includes("/oauth/yoco/connect")) return { route: "oauth-yoco-connect" };
-  if (urlPath.includes("/oauth/status")) return { route: "oauth-status" };
-
-  const saleAuditMatch = urlPath.match(/\/sales\/([^/]+)\/audit/i);
-  if (saleAuditMatch?.[1]) {
-    return { route: "sale-audit", id: saleAuditMatch[1] };
-  }
-  if (urlPath.endsWith("/sales") || /\/sales$/i.test(urlPath)) {
-    return { route: "sales" };
-  }
-  if (urlPath.endsWith("/catalog") || /\/catalog$/i.test(urlPath)) {
-    return { route: "catalog" };
-  }
-  if (urlPath.endsWith("/checkout") || /\/checkout$/i.test(urlPath)) {
-    return { route: "checkout" };
-  }
-  if (urlPath.endsWith("/return") || /\/return$/i.test(urlPath)) {
-    return { route: "return" };
-  }
-  if (urlPath.includes("/receipt/email")) {
-    return { route: "receipt-email" };
-  }
-  if (urlPath.endsWith("/invoice") || /\/invoice$/i.test(urlPath)) {
-    return { route: "invoice" };
-  }
-  if (/\/registers$/i.test(urlPath)) return { route: "registers-list" };
-  const registerMatch = urlPath.match(/\/registers\/([^/]+)/i);
-  if (registerMatch?.[1]) return { route: "register-by-id", id: registerMatch[1] };
-  if (/\/sessions$/i.test(urlPath)) return { route: "sessions-list" };
-  const sessionCloseMatch = urlPath.match(/\/sessions\/([^/]+)\/close/i);
-  if (sessionCloseMatch?.[1]) return { route: "session-close", id: sessionCloseMatch[1] };
-  const sessionMatch = urlPath.match(/\/sessions\/([^/]+)/i);
-  if (sessionMatch?.[1]) return { route: "session-by-id", id: sessionMatch[1] };
-
-  if (/\/connections$/i.test(urlPath)) return { route: "connections-list", parts: [] };
-  const connectionMatch = urlPath.match(/\/connections\/([^/]+)/i);
-  if (connectionMatch?.[1]) {
-    return { route: "connection-by-id", parts: ["connections", connectionMatch[1]], id: connectionMatch[1] };
-  }
-
-  return null;
-}
 
 export default async function handler(req, res) {
   const resolved = resolvePosRoute(req);

@@ -7,13 +7,37 @@ import {
   handleCustomerPaymentWebhook,
 } from "../../server/src/payments/paymentIntentRoutes.js";
 
+function firstQueryValue(value) {
+  if (Array.isArray(value)) return String(value[0] ?? "").trim();
+  if (value == null || value === "") return "";
+  return String(value).trim();
+}
+
 function pathParts(req) {
-  const raw = req.query?.path;
-  if (Array.isArray(raw)) return raw.flatMap((part) => String(part).split("/")).filter(Boolean);
-  if (raw != null && raw !== "") return String(raw).split("/").filter(Boolean);
-  const urlPath = String(req.url || "").split("?")[0] || "";
-  const rest = urlPath.replace(/^\/api\/payment-intents\/?/i, "");
-  return rest ? rest.split("/").filter(Boolean) : [];
+  const rewritten = firstQueryValue(req.query?.__pi);
+  const provider = firstQueryValue(req.query?.provider);
+  let parts;
+  if (rewritten) {
+    parts = rewritten.split("/").filter(Boolean);
+  } else {
+    const raw = req.query?.path;
+    if (Array.isArray(raw)) {
+      parts = raw.flatMap((part) => String(part).split("/")).filter(Boolean);
+    } else if (raw != null && raw !== "") {
+      parts = String(raw).split("/").filter(Boolean);
+    } else {
+      const urlPath = String(req.url || "").split("?")[0] || "";
+      const rest = urlPath.replace(/^\/api\/payment-intents\/?/i, "");
+      parts = rest ? rest.split("/").filter(Boolean) : [];
+    }
+  }
+  if (parts[0] === "webhook-fwd") {
+    return provider ? ["webhook", provider] : ["webhook"];
+  }
+  if (parts[0] === "webhook" && !parts[1] && provider) {
+    return ["webhook", provider];
+  }
+  return parts;
 }
 
 export default async function handler(req, res) {

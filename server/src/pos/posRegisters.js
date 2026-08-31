@@ -15,8 +15,8 @@ function jsonError(res, status, message, extra = {}) {
 
 function mapRegisterSchemaError(message) {
   const msg = String(message || "");
-  if (/pos_registers|register_id/i.test(msg) && /schema cache|does not exist|could not find the/i.test(msg)) {
-    return "POS registers need a database update. Run supabase/migrations/20260828210000_pos_registers.sql in the Supabase SQL Editor.";
+  if (/pos_registers|register_id|opening_balance|assigned_staff_id|company_id/i.test(msg) && /schema cache|does not exist|could not find the/i.test(msg)) {
+    return "POS registers need a database update. Run scripts/apply-native-pos.sql in the Supabase SQL Editor.";
   }
   if (/idx_pos_registers_org_brand_name|idx_pos_registers_org_name|duplicate key/i.test(msg)) {
     return "A register with this name already exists for this brand.";

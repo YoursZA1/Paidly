@@ -70,6 +70,14 @@ function emit() {
 }
 
 function onBeforeInstallPrompt(event) {
+  // Till shell has no Install control. Leave the native banner available.
+  try {
+    if (/^\/pos\/?$/i.test(window.location?.pathname || "")) {
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
   try {
     event.preventDefault();
   } catch {
