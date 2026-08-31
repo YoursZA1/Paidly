@@ -32,6 +32,7 @@ function parseApiJsonError(res, raw, fallbackMessage) {
     `${fallbackMessage} (HTTP ${res.status})`;
   const err = new Error(detail);
   if (json?.code) err.code = json.code;
+  if (json?.existing_id) err.existing_id = json.existing_id;
   throw err;
 }
 

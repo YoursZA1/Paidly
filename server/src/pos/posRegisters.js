@@ -6,6 +6,7 @@ import { registerHasOpenSession } from "./posRegisterSessions.js";
 import {
   normalizeRegisterWrite,
   publicRegisterView,
+  findConflictingRegister,
 } from "./posRegisterMath.js";
 
 function jsonError(res, status, message, extra = {}) {
@@ -17,8 +18,8 @@ function mapRegisterSchemaError(message) {
   if (/pos_registers|register_id/i.test(msg) && /schema cache|does not exist|could not find the/i.test(msg)) {
     return "POS registers need a database update. Run supabase/migrations/20260828210000_pos_registers.sql in the Supabase SQL Editor.";
   }
-  if (/idx_pos_registers_org_name|duplicate key/i.test(msg)) {
-    return "A register with this name already exists.";
+  if (/idx_pos_registers_org_brand_name|idx_pos_registers_org_name|duplicate key/i.test(msg)) {
+    return "A register with this name already exists for this brand.";
   }
   return msg || "Could not save register";
 }
@@ -103,6 +104,26 @@ async function assertStaffInOrg(orgId, userId) {
     .eq("id", orgId)
     .maybeSingle();
   return org?.owner_id === userId;
+}
+
+async function findNameConflict(orgId, { name, companyId, excludeId }) {
+  const { data, error } = await supabaseAdmin
+    .from("pos_registers")
+    .select(REGISTER_SELECT)
+    .eq("org_id", orgId);
+  if (error) throw error;
+  return findConflictingRegister(data || [], {
+    name,
+    companyId: companyId || null,
+    excludeId: excludeId || null,
+  });
+}
+
+function duplicateNameError(res, existing) {
+  return jsonError(res, 409, "A register with this name already exists for this brand.", {
+    code: "REGISTER_NAME_TAKEN",
+    existing_id: existing?.id || null,
+  });
 }
 
 export async function decorateRegisters(orgId, rows) {
@@ -212,7 +233,6 @@ export async function handlePosRegistersList(req, res) {
 
   const orgId = gate.membership.orgId;
   try {
-    await ensureDefaultPosRegister(orgId, gate.user.id);
     const { data, error } = await supabaseAdmin
       .from("pos_registers")
       .select(REGISTER_SELECT)
@@ -248,6 +268,12 @@ export async function handlePosRegisterCreate(req, res) {
       return jsonError(res, 422, "Assigned staff must be an organization member", { code: "STAFF_INVALID" });
     }
 
+    const conflict = await findNameConflict(orgId, {
+      name: parsed.data.name,
+      companyId: parsed.data.company_id,
+    });
+    if (conflict) return duplicateNameError(res, conflict);
+
     const { data, error } = await supabaseAdmin
       .from("pos_registers")
       .insert({
@@ -257,7 +283,10 @@ export async function handlePosRegisterCreate(req, res) {
       })
       .select(REGISTER_SELECT)
       .single();
-    if (error) return jsonError(res, 500, mapRegisterSchemaError(error.message));
+    if (error) {
+      if (error.code === "23505") return duplicateNameError(res, null);
+      return jsonError(res, 500, mapRegisterSchemaError(error.message));
+    }
 
     const [view] = await decorateRegisters(orgId, [data]);
     return res.status(201).json({ register: view });
@@ -292,6 +321,23 @@ export async function handlePosRegisterPatch(req, res) {
       return jsonError(res, 422, "Assigned staff must be an organization member", { code: "STAFF_INVALID" });
     }
 
+    if (parsed.data.name != null || parsed.data.company_id !== undefined) {
+      const { data: current, error: currentError } = await supabaseAdmin
+        .from("pos_registers")
+        .select("id, name, company_id")
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .maybeSingle();
+      if (currentError) return jsonError(res, 500, mapRegisterSchemaError(currentError.message));
+      if (!current) return jsonError(res, 404, "Register not found");
+      const conflict = await findNameConflict(orgId, {
+        name: parsed.data.name ?? current.name,
+        companyId: parsed.data.company_id !== undefined ? parsed.data.company_id : current.company_id,
+        excludeId: id,
+      });
+      if (conflict) return duplicateNameError(res, conflict);
+    }
+
     const { data, error } = await supabaseAdmin
       .from("pos_registers")
       .update({ ...parsed.data, updated_at: new Date().toISOString() })
@@ -299,7 +345,10 @@ export async function handlePosRegisterPatch(req, res) {
       .eq("org_id", orgId)
       .select(REGISTER_SELECT)
       .maybeSingle();
-    if (error) return jsonError(res, 500, mapRegisterSchemaError(error.message));
+    if (error) {
+      if (error.code === "23505") return duplicateNameError(res, null);
+      return jsonError(res, 500, mapRegisterSchemaError(error.message));
+    }
     if (!data) return jsonError(res, 404, "Register not found");
 
     const [view] = await decorateRegisters(orgId, [data]);

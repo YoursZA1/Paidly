@@ -32,6 +32,7 @@ import {
   disablePosRegister,
   listPosSessions,
 } from "@/services/PosIntegrationService";
+import { findConflictingRegister } from "@shared/posRegisters.js";
 
 const EMPTY = {
   id: null,
@@ -106,6 +107,20 @@ export default function PosRegistersSettings() {
   };
 
   const save = async () => {
+    const conflict = findConflictingRegister(registers, {
+      name: draft.name,
+      companyId: draft.company_id || null,
+      excludeId: draft.id,
+    });
+    if (conflict) {
+      toast({
+        title: "Could not save register",
+        description: `"${conflict.name}" already exists for this brand. Update that till instead.`,
+        variant: "destructive",
+      });
+      openEdit(conflict);
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -126,6 +141,10 @@ export default function PosRegistersSettings() {
         description: err?.message || "Try again.",
         variant: "destructive",
       });
+      if (err?.code === "REGISTER_NAME_TAKEN" && err.existing_id) {
+        const existing = registers.find((row) => row.id === err.existing_id);
+        if (existing) openEdit(existing);
+      }
     } finally {
       setSaving(false);
     }
@@ -273,7 +292,7 @@ export default function PosRegistersSettings() {
                 id="pos-register-name"
                 value={draft.name}
                 onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Main till"
+                placeholder="e.g. Front counter"
               />
             </div>
             <div className="space-y-1">
@@ -297,7 +316,8 @@ export default function PosRegistersSettings() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                This till only sells org-shared products plus private products of this brand. Another brand’s private catalog stays off this register.
+                This till only sells org-shared products plus private products of this brand. Another brand’s
+                private catalog stays off this register. The same name can be used on a different brand.
               </p>
             </div>
             <div className="space-y-1">

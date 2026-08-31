@@ -1,5 +1,9 @@
 /** Pure POS register helpers — unit-tested, no I/O. */
 
+import { findConflictingRegister, registerNameKey } from "../../../shared/posRegisters.js";
+
+export { findConflictingRegister, registerNameKey };
+
 export const POS_REGISTER_STATUSES = Object.freeze(["active", "disabled"]);
 
 const MAX_NAME = 80;

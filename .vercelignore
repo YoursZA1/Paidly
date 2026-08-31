@@ -1,0 +1,5 @@
+# Keep Hobby deploys at 12 serverless functions. macOS AppleDouble
+# sidecars on exFAT (._*.js next to api/*.js) look like extra endpoints.
+._*
+.DS_Store
+__MACOSX/

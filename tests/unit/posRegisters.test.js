@@ -3,6 +3,7 @@ import {
   normalizeRegisterWrite,
   publicRegisterView,
   POS_REGISTER_STATUSES,
+  findConflictingRegister,
 } from "../../server/src/pos/posRegisterMath.js";
 import { pickActiveRegister } from "@/lib/pos/posRegisterStorage";
 
@@ -39,6 +40,21 @@ describe("POS registers", () => {
     ];
     expect(pickActiveRegister(rows, "c").id).toBe("c");
     expect(pickActiveRegister(rows, "a").id).toBe("b");
+  });
+
+  it("treats register names as unique per brand, not org-wide", () => {
+    const rows = [
+      { id: "a", name: "Main till", company_id: "brand-1" },
+      { id: "b", name: "Main till", company_id: "brand-2" },
+    ];
+    expect(
+      findConflictingRegister(rows, { name: "Main Till", companyId: "brand-1" })?.id
+    ).toBe("a");
+    expect(findConflictingRegister(rows, { name: "Main Till", companyId: "brand-2" })?.id).toBe("b");
+    expect(findConflictingRegister(rows, { name: "Main Till", companyId: "brand-3" })).toBeNull();
+    expect(
+      findConflictingRegister(rows, { name: "Main Till", companyId: "brand-1", excludeId: "a" })
+    ).toBeNull();
   });
 
   it("exposes opening balance on the public view", () => {
