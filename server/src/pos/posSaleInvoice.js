@@ -2,6 +2,7 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 import { isValidUuid } from "../inputValidation.js";
 import { salePublicView } from "./posNativeCheckout.js";
 import { buildInvoiceFromPosSale } from "./posSaleInvoiceMath.js";
+import { loadPosTillCustomer } from "./posTillCustomer.js";
 
 export { buildInvoiceFromPosSale };
 
@@ -110,14 +111,11 @@ export async function handlePosConvertToInvoice(req, res, gate) {
         code: "CLIENT_REQUIRED",
       });
     }
-    const { data: client, error: clientError } = await supabaseAdmin
-      .from("clients")
-      .select("id, name, email")
-      .eq("id", clientId)
-      .eq("org_id", orgId)
-      .maybeSingle();
-    if (clientError) return jsonError(res, 500, clientError.message || "Could not load customer");
-    if (!client) return jsonError(res, 422, "Customer not found", { code: "CLIENT_NOT_FOUND" });
+    const loaded = await loadPosTillCustomer(supabaseAdmin, orgId, clientId);
+    if (!loaded.ok) {
+      return jsonError(res, loaded.status, loaded.message, { code: loaded.code });
+    }
+    const client = loaded.client;
 
     const snap = saleSnapshot(sale);
     snap.customer_name = client.name || snap.customer_name || null;

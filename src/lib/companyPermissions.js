@@ -1,3 +1,9 @@
+import {
+  isPosOnlyStaff,
+  membershipGrantsPermission,
+  POS_ONLY_PERMISSIONS,
+} from "@shared/posStaffInvite.js";
+
 /**
  * Company (org) permission system — permissions-based RBAC for tenant dashboards.
  *
@@ -145,6 +151,21 @@ export function companyRoleHasPermission(role, permission) {
 }
 
 /**
+ * Role grants plus POS-only scope. Cashiers are employees, but they do not inherit
+ * payslips / documents / notifications — only till permissions.
+ */
+export function permissionsForMembership(membership) {
+  if (isPosOnlyStaff(membership)) {
+    return new Set(POS_ONLY_PERMISSIONS);
+  }
+  return permissionsForCompanyRole(membership?.companyRole);
+}
+
+export function membershipHasPermission(membership, permission) {
+  return membershipGrantsPermission(membership, permission, companyRoleHasPermission);
+}
+
+/**
  * @typedef {{
  *   userId: string,
  *   companyId: string,
@@ -204,7 +225,12 @@ export function buildCompanyAccessContext({ userId, companyId, companyRole, memb
     orgId: companyId,
     companyRole: role,
     jobFunction: normalizeJobFunction(jobFunction),
-    permissions: permissionsForCompanyRole(role),
+    permissions: permissionsForMembership({
+      companyRole: role,
+      jobFunction: normalizeJobFunction(jobFunction),
+      isOrgOwner,
+    }),
+    scope: isPosOnlyStaff({ companyRole: role, jobFunction, isOrgOwner }) ? "pos" : "paidly",
     isOrgOwner,
     businessType: businessType ?? null,
   };
@@ -302,6 +328,9 @@ export function canViewCompanyReports(ctx) {
  */
 export function dataScopeForContext(ctx) {
   if (!ctx?.companyId) return { scope: "self" };
+  if (isPosOnlyStaff(ctx)) {
+    return { scope: "pos", userId: ctx.userId, companyId: ctx.companyId };
+  }
   if (ctx.companyRole === COMPANY_ROLES.ADMIN || ctx.companyRole === COMPANY_ROLES.MANAGER) {
     return { scope: "company", companyId: ctx.companyId };
   }

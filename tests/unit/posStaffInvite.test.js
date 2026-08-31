@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   appendPosInviteNext,
   isPosInviteDest,
+  isPosInviteUrl,
   isPosOnlyStaff,
   POS_INVITE_NEXT,
   POS_JOB_FUNCTION,
+  posInvitePath,
+  POS_ONLY_PERMISSIONS,
 } from "@shared/posStaffInvite.js";
-import { normalizeJobFunction } from "@/lib/companyPermissions";
+import { membershipHasPermission, normalizeJobFunction, PERMISSIONS } from "@/lib/companyPermissions";
 import { formatCompanyMemberRoleLabel } from "@/lib/companyJobFunctions";
 import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
 import { normalizeJobFunction as serverNormalizeJobFunction } from "../../server/src/companyRouteAccess.js";
@@ -68,17 +71,32 @@ describe("POS-only staff invite", () => {
     expect(filtered.map((row) => row.id)).not.toContain("nav-invoices");
   });
 
-  it("builds a special /invite link with next=POS", () => {
+  it("builds a dedicated /pos/invite/:token link", () => {
     expect(isPosInviteDest("POS")).toBe(true);
-    expect(isPosInviteDest("pos")).toBe(true);
+    expect(isPosInviteUrl("/pos/invite/abc")).toBe(true);
     expect(appendPosInviteNext("https://www.paidly.co.za/invite?token=abc")).toBe(
-      `https://www.paidly.co.za/invite?token=abc&next=${POS_INVITE_NEXT}`
+      "https://www.paidly.co.za/pos/invite/abc"
     );
-    expect(appendPosInviteNext("/invite?token=abc")).toBe(`/invite?token=abc&next=${POS_INVITE_NEXT}`);
+    expect(appendPosInviteNext("/invite?token=abc")).toBe("/pos/invite/abc");
+    expect(posInvitePath("tok", "https://www.paidly.co.za")).toBe(
+      "https://www.paidly.co.za/pos/invite/tok"
+    );
   });
 
   it("labels POS employees as POS staff", () => {
     expect(formatCompanyMemberRoleLabel("employee", "pos")).toBe("POS staff");
     expect(formatCompanyMemberRoleLabel("employee", "sales")).toBe("Sales Employee");
+  });
+
+  it("does not grant back-office permissions to POS-only staff", () => {
+    const cashier = { companyRole: "employee", jobFunction: "pos", isOrgOwner: false };
+    expect(membershipHasPermission(cashier, PERMISSIONS.POS_ACCESS)).toBe(true);
+    expect(membershipHasPermission(cashier, PERMISSIONS.POS_SELL)).toBe(true);
+    expect(membershipHasPermission(cashier, PERMISSIONS.POS_CLOSE_REGISTER)).toBe(true);
+    expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_OWN_PAYSLIPS)).toBe(false);
+    expect(membershipHasPermission(cashier, PERMISSIONS.MANAGE_COMPANY_SETTINGS)).toBe(false);
+    expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_COMPANY_REPORTS)).toBe(false);
+    expect(POS_ONLY_PERMISSIONS).toContain("pos_close_register");
+    expect(POS_INVITE_NEXT).toBe("POS");
   });
 });

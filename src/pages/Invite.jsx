@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Building2, Loader2, AlertCircle } from "lucide-react";
@@ -10,14 +10,13 @@ import { storePendingInviteToken } from "@/services/TenantRoleService";
 import { isPosInviteDest, POS_JOB_FUNCTION } from "@shared/posStaffInvite.js";
 
 /**
- * Entry point for company invitation links: /invite?token=xxxxxxxx
- * Validates the token, stores it for signup metadata, and directs the user to register or sign in.
- * Supabase auth invite emails remain the primary acceptance path; this page supports shareable links.
+ * Entry point for company invitation links: /invite?token=… or /pos/invite/:token
  */
 export default function InvitePage() {
   const [searchParams] = useSearchParams();
+  const { token: tokenParam } = useParams();
   const navigate = useNavigate();
-  const token = String(searchParams.get("token") || "").trim();
+  const token = String(tokenParam || searchParams.get("token") || "").trim();
 
   const [loading, setLoading] = useState(Boolean(token));
   const [invite, setInvite] = useState(null);
@@ -69,6 +68,7 @@ export default function InvitePage() {
   const continueToSignup = () => {
     const email = invite?.email ? `&email=${encodeURIComponent(invite.email)}` : "";
     const posInvite =
+      Boolean(tokenParam) ||
       isPosInviteDest(searchParams.get("next")) ||
       String(invite?.job_function || "").toLowerCase() === POS_JOB_FUNCTION ||
       String(invite?.source || "").toLowerCase() === "pos";
@@ -77,6 +77,7 @@ export default function InvitePage() {
   };
 
   const posInviteCopy =
+    Boolean(tokenParam) ||
     isPosInviteDest(searchParams.get("next")) ||
     String(invite?.job_function || "").toLowerCase() === POS_JOB_FUNCTION ||
     String(invite?.source || "").toLowerCase() === "pos";
@@ -93,7 +94,7 @@ export default function InvitePage() {
           </CardTitle>
           <p className="text-sm text-slate-500">
             {posInviteCopy
-              ? "Join the till with this special link. You will only be able to use POS — not invoices or the rest of Paidly."
+              ? "This link gives POS-only access. You can use the till, take sales, and manage your shift — not invoices, clients, reports, or settings."
               : "Join your team on Paidly with the role and company assigned by your administrator."}
           </p>
         </CardHeader>

@@ -878,7 +878,7 @@ export class EntityManager {
         'tax_id', 'fax', 'alternate_email', 'notes', 'internal_notes', 'industry',
         'payment_terms', 'payment_terms_days', 'follow_up_enabled',
         'segment', 'total_spent', 'last_invoice_date', 'created_by_id',
-        'created_at', 'updated_at'
+        'created_at', 'updated_at', 'pos_enabled'
       ];
       if (supabaseTable === 'clients') {
         if (!supabaseData.created_by_id) {
@@ -1304,7 +1304,7 @@ export class EntityManager {
         'name', 'email', 'phone', 'address', 'contact_person', 'website',
         'tax_id', 'fax', 'alternate_email', 'notes', 'internal_notes', 'industry',
         'payment_terms', 'payment_terms_days', 'follow_up_enabled',
-        'segment', 'total_spent', 'last_invoice_date', 'updated_at'
+        'segment', 'total_spent', 'last_invoice_date', 'updated_at', 'pos_enabled'
       ];
       if (supabaseTable === 'clients') {
         Object.keys(updateData).forEach(key => {

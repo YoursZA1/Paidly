@@ -23,6 +23,8 @@ const files = [
   "supabase/migrations/20260828280000_plans_pos_feature.sql",
   "supabase/migrations/20260828290000_pos_staff_invite.sql",
   "supabase/migrations/20260828300000_pos_registers_unique_per_brand.sql",
+  "supabase/migrations/20260828310000_pos_only_staff_scope.sql",
+  "supabase/migrations/20260828320000_pos_customers.sql",
 ];
 
 const header = `-- Native POS schema for Supabase SQL Editor. Safe to re-run.

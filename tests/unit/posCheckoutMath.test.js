@@ -13,6 +13,7 @@ import {
   roundMoney,
   posSaleCompletesWhenPaid,
   clientBelongsToCheckoutOrg,
+  posCustomerEligibleForTill,
 } from "../../server/src/pos/posCheckoutMath.js";
 
 function product(overrides = {}) {
@@ -170,5 +171,12 @@ describe("posCheckoutMath", () => {
   it("rejects customers that belong to another organization", () => {
     expect(clientBelongsToCheckoutOrg({ id: "c1", org_id: "org-1" }, "org-1")).toBe(true);
     expect(clientBelongsToCheckoutOrg({ id: "c1", org_id: "org-2" }, "org-1")).toBe(false);
+  });
+
+  it("allows till attach only for POS-enabled org customers", () => {
+    expect(posCustomerEligibleForTill({ id: "c1", org_id: "org-1", pos_enabled: true }, "org-1")).toBe(true);
+    expect(posCustomerEligibleForTill({ id: "c1", org_id: "org-1", pos_enabled: false }, "org-1")).toBe(false);
+    expect(posCustomerEligibleForTill({ id: "c1", org_id: "org-1" }, "org-1")).toBe(false);
+    expect(posCustomerEligibleForTill({ id: "c1", org_id: "org-2", pos_enabled: true }, "org-1")).toBe(false);
   });
 });

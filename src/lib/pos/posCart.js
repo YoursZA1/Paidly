@@ -6,6 +6,18 @@ export function posProductStock(product) {
 }
 
 /**
+ * @param {number} stock
+ * @param {{ low?: number }} [opts]
+ * @returns {{ text: string, tone: "out" | "low" | "ok" }}
+ */
+export function posStockLabel(stock, { low = 5 } = {}) {
+  const n = Number(stock);
+  if (!Number.isFinite(n) || n <= 0) return { text: "Out of stock", tone: "out" };
+  if (n <= low) return { text: "LOW STOCK", tone: "low" };
+  return { text: `${n} available`, tone: "ok" };
+}
+
+/**
  * Device cart only — catalog stock_quantity is unchanged until a paid sale commits.
  * @returns {{ cart: object[], error: string | null, stock?: number }}
  */

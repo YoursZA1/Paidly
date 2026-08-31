@@ -1,6 +1,6 @@
 import PropTypes from "prop-types";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useTheme } from "next-themes";
 
@@ -683,6 +683,13 @@ export default function Layout({ children, currentPageName }) {
 
   usePostAuthHomeRedirect({ enabled: !isAdminV2Route, posOnlyStaff });
 
+  const posOnlyBlockedPath = (() => {
+    if (companyContextLoading || !posOnlyStaff || isPosTerminal || isAdminV2Route) return false;
+    const path = String(location.pathname || "").toLowerCase();
+    if (/\/(login|signup|forgotpassword|resetpassword|home|invite)(\/|$)/i.test(path)) return false;
+    return true;
+  })();
+
   useEffect(() => {
     if (!user?.id || inviteAcceptRef.current) return;
     inviteAcceptRef.current = true;
@@ -935,6 +942,10 @@ export default function Layout({ children, currentPageName }) {
   const onSettingsRoute = pathLower === settingsPathLower || pathLower.endsWith("/settings");
   const onBillingInvoicesRoute =
     pathLower === billingPathLower || pathLower.endsWith("/billingandinvoices");
+
+  if (posOnlyBlockedPath) {
+    return <Navigate to={createPageUrl("POS")} replace />;
+  }
 
   if (expired && !billingBypassRole && !isAdminV2Route && !onSettingsRoute && !onBillingInvoicesRoute) {
     return <UpgradeScreen onLogout={handleLogout} />;

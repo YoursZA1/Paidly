@@ -54,6 +54,7 @@ ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS last_invoice_date timestampt
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS created_by_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS pos_enabled boolean NOT NULL DEFAULT false;
 
 -- If you had an old "tax_number" column, copy to tax_id and drop (optional, uncomment if needed):
 -- UPDATE public.clients SET tax_id = tax_number WHERE tax_id IS NULL AND tax_number IS NOT NULL;

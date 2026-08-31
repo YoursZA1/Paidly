@@ -59,7 +59,7 @@ async function authHeaders() {
 
 /**
  * Invite or attach an existing user to the company org with a role and job function.
- * @param {{ email: string, fullName?: string, role?: string, jobFunction?: string }} payload
+ * @param {{ email: string, fullName?: string, role?: string, jobFunction?: string, source?: string, registerId?: string | null }} payload
  */
 export async function inviteCompanyMember({
   email,
@@ -67,6 +67,7 @@ export async function inviteCompanyMember({
   role = COMPANY_ROLES.EMPLOYEE,
   jobFunction = "general",
   source,
+  registerId,
 } = {}) {
   const trimmed = String(email || "").trim().toLowerCase();
   if (!trimmed) throw new Error("Email is required");
@@ -80,6 +81,7 @@ export async function inviteCompanyMember({
     job_function: normalizeJobFunction(jobFunction),
   };
   if (source) payload.source = String(source).trim().toLowerCase();
+  if (registerId) payload.register_id = registerId;
   const res = await apiRequest(`${apiBase}/api/company/invite`, {
     method: "POST",
     headers,

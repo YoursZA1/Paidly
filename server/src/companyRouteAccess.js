@@ -1,3 +1,5 @@
+import { isPosOnlyStaff, membershipGrantsPermission } from "../../shared/posStaffInvite.js";
+
 /**
  * Server-side company (org) authorization — mirrors client companyPermissions.js.
  * Use on /api routes that return company-scoped data.
@@ -142,11 +144,12 @@ export function companyRoleHasPermission(role, permission) {
   return set.has(permission);
 }
 
-/**
- * @returns {boolean} true when the response was already sent (forbidden)
- */
+export function membershipHasPermission(membership, permission) {
+  return membershipGrantsPermission(membership, permission, companyRoleHasPermission);
+}
+
 export function forbidUnlessPermission(res, membership, permission, message = "Forbidden — POS permission required") {
-  if (companyRoleHasPermission(membership?.companyRole, permission)) return false;
+  if (membershipHasPermission(membership, permission)) return false;
   res.status(403).json({ error: message, code: "POS_FORBIDDEN", permission });
   return true;
 }
@@ -250,8 +253,8 @@ export function requireCompanyPermission(permission) {
       if (!membership) {
         return res.status(403).json({ error: "No company membership" });
       }
-      if (!companyRoleHasPermission(membership.companyRole, permission)) {
-        return res.status(403).json({ error: "Forbidden" });
+      if (!membershipHasPermission(membership, permission)) {
+        return res.status(403).json({ error: "Forbidden", code: isPosOnlyStaff(membership) ? "POS_SCOPE" : undefined });
       }
       req.company = membership;
       return next();

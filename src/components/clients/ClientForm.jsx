@@ -32,6 +32,7 @@ function emptyClientState(client) {
         payment_terms: client?.payment_terms || "net_30",
         payment_terms_days: client?.payment_terms_days || 30,
         follow_up_enabled: client?.follow_up_enabled !== false,
+        pos_enabled: client?.pos_enabled === true,
     };
 }
 
@@ -344,6 +345,24 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
         </div>
     );
 
+    const posTillRow = (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-muted/40 p-4">
+            <div>
+                <Label htmlFor="pos_enabled" className="text-sm font-semibold text-foreground">
+                    Available on POS
+                </Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    When on, cashiers can attach this client as a POS customer. The till never lists the full client database.
+                </p>
+            </div>
+            <Switch
+                id="pos_enabled"
+                checked={Boolean(formData.pos_enabled)}
+                onCheckedChange={(checked) => handleInputChange("pos_enabled", checked)}
+            />
+        </div>
+    );
+
     const followUpRow = (
         <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-muted/40 p-4">
             <div>
@@ -411,7 +430,8 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                         {notesGrid}
                     </SectionCollapsible>
                     <SectionCollapsible title="Preferences" defaultOpen={false}>
-                        {followUpRow}
+                        {posTillRow}
+                        <div className="mt-3">{followUpRow}</div>
                     </SectionCollapsible>
                 </form>
             </motion.div>
@@ -445,6 +465,7 @@ export default function ClientForm({ client = null, onSave, onCancel, layout = "
                         {paymentTermsBlock}
                         {addressBlock}
                         {notesGrid}
+                        {posTillRow}
                         {followUpRow}
                         {footerButtons}
                     </form>
@@ -472,6 +493,7 @@ ClientForm.propTypes = {
         payment_terms: PropTypes.string,
         payment_terms_days: PropTypes.number,
         follow_up_enabled: PropTypes.bool,
+        pos_enabled: PropTypes.bool,
     }),
     onSave: PropTypes.func.isRequired,
     onCancel: PropTypes.func.isRequired,

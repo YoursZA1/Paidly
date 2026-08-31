@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createPageUrl } from "@/utils";
 import { isPosTerminalPage } from "@/lib/posNavAccess";
 import { filterPosProducts, buildPosCodeIndex } from "@/lib/pos/posProductSearch";
-import { addPosCartLine, posCartSubtotal, posProductStock, setPosCartQty } from "@/lib/pos/posCart";
+import { addPosCartLine, posCartSubtotal, posProductStock, posStockLabel, setPosCartQty } from "@/lib/pos/posCart";
 import {
   applyPosSaleDiscount,
   buildCheckoutLines,
   clientBelongsToCheckoutOrg,
+  posCustomerEligibleForTill,
   computeCashChange,
   paymentIntentMatchesPayable,
   posSaleCompletesWhenPaid,
@@ -71,6 +72,9 @@ describe("Task 28 POS acceptance", () => {
     expect(added.cart[0]).toMatchObject({ product_id: "p1", quantity: 1, unit_price: 25 });
     expect(row.stock_quantity).toBe(4);
     expect(posProductStock(row)).toBe(4);
+    expect(posStockLabel(4).text).toBe("LOW STOCK");
+    expect(posStockLabel(0).text).toBe("Out of stock");
+    expect(posStockLabel(24).text).toBe("24 available");
   });
 
   it("TEST 4 Increase quantity — cart and total update", () => {
@@ -162,14 +166,19 @@ describe("Task 28 POS acceptance", () => {
     expect(html).toMatch(/not an invoice/i);
   });
 
-  it("TEST 10 Customer — existing org client can be attached", () => {
+  it("TEST 10 Customer — only POS-enabled org clients can be attached", () => {
     const clients = [
-      { id: "c1", name: "Ada Khosa", email: "ada@shop.test", org_id: "org-1" },
-      { id: "c2", name: "Other Co", org_id: "org-2" },
+      { id: "c1", name: "Ada Khosa", phone: "0821112222", org_id: "org-1", pos_enabled: true },
+      { id: "c2", name: "Other Co", org_id: "org-2", pos_enabled: true },
+      { id: "c3", name: "Invoice Co", email: "billing@invoice.test", org_id: "org-1", pos_enabled: false },
     ];
     expect(matchPosCustomer(clients[0], "khosa")).toBe(true);
+    expect(matchPosCustomer(clients[0], "invoice.test")).toBe(false);
     expect(filterPosCustomers(clients, "ada").map((row) => row.id)).toEqual(["c1"]);
+    expect(filterPosCustomers(clients, "invoice")).toEqual([]);
     expect(clientBelongsToCheckoutOrg(clients[0], "org-1")).toBe(true);
+    expect(posCustomerEligibleForTill(clients[0], "org-1")).toBe(true);
+    expect(posCustomerEligibleForTill(clients[2], "org-1")).toBe(false);
     expect(clientBelongsToCheckoutOrg(clients[1], "org-1")).toBe(false);
     expect(clientBelongsToCheckoutOrg(null, "org-1")).toBe(false);
   });

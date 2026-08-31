@@ -13,8 +13,8 @@ import {
   quotedCheckoutMoneyConflict,
   paymentIntentMatchesPayable,
   posSaleCompletesWhenPaid,
-  clientBelongsToCheckoutOrg,
 } from "./posCheckoutMath.js";
+import { loadPosTillCustomer } from "./posTillCustomer.js";
 import {
   allocateReturnLines,
   paymentMethodForRefundRail,
@@ -484,14 +484,9 @@ export async function handleNativePosCheckout(req, res, gate) {
   }
 
   if (clientId) {
-    const { data: client, error: clientError } = await supabaseAdmin
-      .from("clients")
-      .select("id, org_id")
-      .eq("id", clientId)
-      .eq("org_id", gate.membership.orgId)
-      .maybeSingle();
-    if (clientError || !clientBelongsToCheckoutOrg(client, gate.membership.orgId)) {
-      return jsonError(res, 422, "Customer is not in this organization");
+    const loaded = await loadPosTillCustomer(supabaseAdmin, gate.membership.orgId, clientId);
+    if (!loaded.ok) {
+      return jsonError(res, loaded.status, loaded.message, { code: loaded.code });
     }
   }
 

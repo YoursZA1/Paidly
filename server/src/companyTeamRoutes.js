@@ -5,23 +5,25 @@ import { normalizeRequestBody } from "./validateBody.js";
 import {
   loadCompanyMembership,
   companyRoleHasPermission,
+  membershipHasPermission,
   normalizeCompanyRole,
   normalizeJobFunction,
   PERMISSIONS,
   COMPANY_ROLES,
 } from "./companyRouteAccess.js";
 import {
+  isPosOnlyStaff,
+  POS_INVITE_SOURCE,
+  POS_JOB_FUNCTION,
+  posInvitePath,
+} from "../../shared/posStaffInvite.js";
+import {
   companyInviteRedirectUrl,
   sendCompanyTeamInviteEmail,
 } from "./companyTeamInviteDelivery.js";
-import {
-  POS_INVITE_SOURCE,
-  POS_JOB_FUNCTION,
-  appendPosInviteNext,
-} from "../../shared/posStaffInvite.js";
 
-function jsonError(res, status, message) {
-  return res.status(status).json({ error: message });
+function jsonError(res, status, message, extra = {}) {
+  return res.status(status).json({ error: message, ...extra });
 }
 
 const INVITE_TTL_DAYS = 14;
@@ -33,7 +35,7 @@ function companyInviteAppUrl(token, { source } = {}) {
     process.env.APP_URL ||
     "https://www.paidly.co.za";
   const url = `${String(origin).replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
-  return source === POS_INVITE_SOURCE ? appendPosInviteNext(url) : url;
+  return source === POS_INVITE_SOURCE ? posInvitePath(token, String(origin).replace(/\/$/, "")) : url;
 }
 
 function generateInviteToken() {
@@ -47,6 +49,7 @@ async function persistCompanyInvite({
   createdBy,
   source = "company_admin",
   jobFunction = "general",
+  registerId = null,
 }) {
   const token = generateInviteToken();
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -61,9 +64,14 @@ async function persistCompanyInvite({
     source,
     job_function: jobFunction,
   };
+  if (registerId) row.register_id = registerId;
   let { error } = await supabaseAdmin.from("company_invites").insert(row);
+  if (error && /register_id/i.test(error.message || "")) {
+    const { register_id: _omitRegister, ...withoutRegister } = row;
+    ({ error } = await supabaseAdmin.from("company_invites").insert(withoutRegister));
+  }
   if (error && /job_function/i.test(error.message || "")) {
-    const { job_function: _omit, ...withoutJobFunction } = row;
+    const { job_function: _omit, register_id: _omitRegister, ...withoutJobFunction } = row;
     ({ error } = await supabaseAdmin.from("company_invites").insert(withoutJobFunction));
   }
   if (error) throw new Error(error.message || "Could not store invite");
@@ -87,6 +95,9 @@ async function requireCompanyAdmin(req, res) {
     }
     if (!companyRoleHasPermission(membership.companyRole, PERMISSIONS.MANAGE_EMPLOYEES)) {
       return { ok: false, response: jsonError(res, 403, "Forbidden — company admin required") };
+    }
+    if (isPosOnlyStaff(membership)) {
+      return { ok: false, response: jsonError(res, 403, "POS staff cannot manage the rest of Paidly", { code: "POS_SCOPE" }) };
     }
     return { ok: true, user, membership };
   } catch (err) {
@@ -140,9 +151,22 @@ export async function handleCompanyTeamInvite(req, res) {
     const source = sourceRaw === POS_INVITE_SOURCE ? POS_INVITE_SOURCE : "company_admin";
     let role = normalizeCompanyRole(body.role);
     let jobFunction = normalizeJobFunction(body.job_function ?? body.jobFunction ?? "general");
+    let registerId = String(body.register_id || body.registerId || "").trim() || null;
     if (source === POS_INVITE_SOURCE) {
       role = COMPANY_ROLES.EMPLOYEE;
       jobFunction = POS_JOB_FUNCTION;
+    }
+    if (registerId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(registerId)) {
+      return jsonError(res, 422, "POS location is invalid");
+    }
+    if (registerId) {
+      const { data: registerRow } = await supabaseAdmin
+        .from("pos_registers")
+        .select("id")
+        .eq("id", registerId)
+        .eq("org_id", gate.membership.companyId)
+        .maybeSingle();
+      if (!registerRow?.id) return jsonError(res, 422, "POS location was not found for this business");
     }
 
     if (!email) return jsonError(res, 400, "Email is required");
@@ -168,6 +192,13 @@ export async function handleCompanyTeamInvite(req, res) {
         jobFunction
       );
       if (memErr) return jsonError(res, 500, memErr.message || "Could not add member");
+      if (registerId) {
+        await supabaseAdmin
+          .from("pos_registers")
+          .update({ assigned_staff_id: existingProfile.id })
+          .eq("id", registerId)
+          .eq("org_id", gate.membership.companyId);
+      }
       const { error: roleErr } = await supabaseAdmin.rpc("upsert_user_company_role", {
         p_user_id: existingProfile.id,
         p_org_id: gate.membership.companyId,
@@ -228,6 +259,7 @@ export async function handleCompanyTeamInvite(req, res) {
         createdBy: gate.user.id,
         source,
         jobFunction,
+        registerId,
       });
     } catch (persistErr) {
       console.warn("[company/invite] persist company_invites failed:", persistErr?.message);
@@ -368,9 +400,8 @@ export async function handleCompanyContextGet(req, res) {
       org_id: membership.orgId,
       company_role: membership.companyRole,
       job_function: membership.jobFunction,
-      permissions: Object.values(PERMISSIONS).filter((p) =>
-        companyRoleHasPermission(membership.companyRole, p)
-      ),
+      scope: isPosOnlyStaff(membership) ? "pos" : "paidly",
+      permissions: Object.values(PERMISSIONS).filter((p) => membershipHasPermission(membership, p)),
     });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Could not load company context");

@@ -14,7 +14,6 @@ import {
   Printer,
   Download,
   Mail,
-  User,
   X,
   Package,
   Loader2,
@@ -25,7 +24,6 @@ import {
   Play,
   FileText,
   Store,
-  Clock,
   UserPlus,
   LogOut,
 } from "lucide-react";
@@ -51,7 +49,6 @@ import { useCompanyContext } from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 import PosStaffInviteSheet from "@/components/pos/PosStaffInviteSheet";
-import { useClientsList } from "@/hooks/useClientsList";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { createPageUrl, triggerHaptic } from "@/utils";
 import {
@@ -69,7 +66,6 @@ import {
   fetchPosSaleAudit,
 } from "@/services/PosIntegrationService";
 import { cn } from "@/lib/utils";
-import PosConnectivityBar from "@/components/pos/PosConnectivityBar";
 import { usePosConnectivity } from "@/hooks/usePosConnectivity";
 import BarcodeScannerDialog from "@/components/inventory/BarcodeScannerDialog";
 import {
@@ -80,7 +76,7 @@ import {
   lookupPosProductByCode,
 } from "@/lib/pos/posProductSearch";
 import { applyPosSaleDiscount, catalogUnitPrice, computeCashChange } from "../../../server/src/pos/posCheckoutMath.js";
-import { addPosCartLine, posCartSubtotal, posProductStock, setPosCartQty } from "@/lib/pos/posCart";
+import { addPosCartLine, posCartSubtotal, posProductStock, posStockLabel, setPosCartQty } from "@/lib/pos/posCart";
 import { refundRailForSale, remainingLinesForTill } from "../../../server/src/pos/posReturnMath.js";
 import { clearHeldCart, hydrateHeldCart, readHeldCart, writeHeldCart } from "@/lib/pos/posHeldCart";
 import { pickActiveRegister, readActiveRegisterId, writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
@@ -135,16 +131,22 @@ function CartLineList({ cart, currency, onQty }) {
   };
 
   if (cart.length === 0) {
-    return <p className="px-4 py-6 text-sm text-muted-foreground">Tap a product or scan a barcode.</p>;
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+        <ShoppingCart className="size-8 text-muted-foreground" />
+        <p className="text-sm font-medium">Cart is empty</p>
+        <p className="text-xs text-muted-foreground">Tap a product or scan a barcode.</p>
+      </div>
+    );
   }
   return (
     <ul className="divide-y divide-border">
       {cart.map((line) => (
-        <li key={line.product_id} className="flex items-center gap-2 px-3 py-2">
+        <li key={line.product_id} className="flex items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{line.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(line.unit_price, currency)} × {line.quantity}
+            <p className="truncate font-medium leading-tight">{line.name}</p>
+            <p className="mt-0.5 text-sm tabular-nums text-muted-foreground">
+              {formatCurrency(line.unit_price * line.quantity, currency)}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -162,7 +164,7 @@ function CartLineList({ cart, currency, onQty }) {
               <Input
                 autoFocus
                 inputMode="numeric"
-                className="h-10 w-14 px-1 text-center text-sm font-semibold tabular-nums"
+                className="h-10 w-12 px-1 text-center text-sm font-semibold tabular-nums"
                 value={draft}
                 aria-label={`Quantity for ${line.name}`}
                 onChange={(e) => setDraft(e.target.value)}
@@ -199,14 +201,11 @@ function CartLineList({ cart, currency, onQty }) {
               <Plus className="size-3.5" />
             </Button>
           </div>
-          <span className="w-16 text-right text-sm font-semibold tabular-nums">
-            {formatCurrency(line.unit_price * line.quantity, currency)}
-          </span>
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            className="size-10 min-h-10 min-w-10 touch-manipulation"
+            className="size-10 min-h-10 min-w-10 touch-manipulation text-muted-foreground"
             onClick={() => onQty(line.product_id, 0)}
             aria-label={`Remove ${line.name}`}
           >
@@ -233,7 +232,6 @@ export default function PosTerminal() {
   const { checkoutAllowed, serverWriteAllowed, blockedReason, state: connectivityState } =
     usePosConnectivity();
   const { brands, orgId } = useOrgBrands();
-  const { clients, refetch: refetchClients, fetchNextPage } = useClientsList(user);
   const currency = profile?.currency || user?.currency || "ZAR";
   const cashierName = profile?.full_name || user?.email || "";
 
@@ -396,11 +394,6 @@ export default function PosTerminal() {
   useEffect(() => {
     searchRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    if (!customerOpen) return;
-    void fetchNextPage();
-  }, [customerOpen, fetchNextPage]);
 
   useEffect(() => {
     if (checkoutAllowed) return;
@@ -1040,12 +1033,15 @@ export default function PosTerminal() {
     setReturnSale(sale);
   };
 
-  const selectedClient =
-    clientId && attachedCustomer?.id === clientId
-      ? attachedCustomer
-      : (Array.isArray(clients) ? clients : []).find((c) => c.id === clientId) || attachedCustomer;
-
-  const customerLabel = selectedClient?.name || (clientId ? clientQuery : "") || WALK_IN_CUSTOMER_LABEL;
+  const customerLabel = attachedCustomer?.name || WALK_IN_CUSTOMER_LABEL;
+  const staffFirstName = (activeRegister?.assigned_staff_name || cashierName || "Staff")
+    .split(/\s+/)[0];
+  const presenceLabel =
+    connectivityState === "online"
+      ? "Online"
+      : connectivityState === "reconnecting"
+        ? "Reconnecting"
+        : "Offline";
 
   const handlePosLogout = async () => {
     try {
@@ -1063,144 +1059,108 @@ export default function PosTerminal() {
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-2 sm:px-4">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:gap-4 sm:px-5">
         {posOnlyStaff ? (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="touch-manipulation"
+            className="size-9 shrink-0 touch-manipulation text-muted-foreground"
             aria-label="Sign out"
             onClick={() => void handlePosLogout()}
           >
-            <LogOut className="size-5" />
+            <LogOut className="size-4" />
           </Button>
         ) : (
-          <Button type="button" variant="ghost" size="icon" className="touch-manipulation" asChild>
+          <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-muted-foreground" asChild>
             <Link to={createPageUrl("Dashboard")} aria-label="Back to dashboard">
-              <ArrowLeft className="size-5" />
+              <ArrowLeft className="size-4" />
             </Link>
           </Button>
         )}
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary">
-            <img src="/logo.svg" alt="" className="size-7" aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-base font-semibold leading-tight sm:text-lg">Paidly POS</h1>
-            <p className="truncate text-xs text-muted-foreground">{tillBrandName}</p>
-          </div>
-        </div>
-        <div className="hidden items-center gap-3 text-sm sm:flex">
-          <button
-            type="button"
-            className="max-w-[11rem] text-right hover:opacity-80"
-            onClick={() => setRegisterOpen(true)}
-          >
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Till</p>
-            <p className="truncate font-medium">{activeRegister?.name || "Main till"}</p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {activeRegister?.company_name || tillBrandName}
-            </p>
-            {openSession ? (
-              <p className="truncate text-[11px] text-emerald-600">Shift open</p>
-            ) : needsShift ? (
-              <p className="truncate text-[11px] text-amber-700">Start shift</p>
-            ) : null}
-          </button>
-          <div className="h-8 w-px bg-border" />
-          <div className="max-w-[10rem] text-right">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Staff</p>
-            <p className="truncate font-medium">
-              {activeRegister?.assigned_staff_name || cashierName || "—"}
-            </p>
-          </div>
-        </div>
-        <PosConnectivityBar state={connectivityState} className="shrink-0" />
-        {openSession && canCloseRegister ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="hidden h-11 touch-manipulation px-3 sm:inline-flex"
-            onClick={() => void openCloseShift()}
-          >
-            <Clock className="size-4" />
-            Close shift
-          </Button>
-        ) : needsShift ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="hidden h-11 touch-manipulation px-3 sm:inline-flex"
-            onClick={() => {
-              setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
-              setStartShiftOpen(true);
-            }}
-          >
-            <Clock className="size-4" />
-            Start shift
-          </Button>
-        ) : null}
-        <Button
+        <h1 className="shrink-0 font-display text-base font-semibold tracking-tight">Paidly POS</h1>
+        <button
           type="button"
-          variant="outline"
-          size="icon"
-          className="h-11 w-11 sm:hidden"
+          className="hidden min-w-0 max-w-[14rem] truncate rounded-input px-1.5 py-1 text-sm font-medium hover:bg-muted sm:block"
           onClick={() => setRegisterOpen(true)}
-          aria-label={`Register ${activeRegister?.name || "Main till"}`}
         >
-          <Store className="size-4" />
-        </Button>
-        {openSession && canCloseRegister ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-11 w-11 sm:hidden"
-            onClick={() => void openCloseShift()}
-            aria-label="Close shift"
+          {activeRegister?.name || "Main Till"}
+        </button>
+        <p className="hidden min-w-0 truncate text-sm text-muted-foreground md:block">
+          {staffFirstName}
+          <span
+            className={cn(
+              "ml-1.5",
+              connectivityState === "online" ? "text-emerald-600" : "text-amber-600"
+            )}
           >
-            <Clock className="size-4" />
-          </Button>
-        ) : needsShift ? (
+            · {presenceLabel}
+          </span>
+        </p>
+        <div className="ml-auto flex items-center gap-1.5">
+          {openSession && canCloseRegister ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 touch-manipulation"
+              onClick={() => void openCloseShift()}
+            >
+              Shift
+            </Button>
+          ) : needsShift ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 touch-manipulation"
+              onClick={() => {
+                setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
+                setStartShiftOpen(true);
+              }}
+            >
+              Shift
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" size="sm" className="h-8" disabled>
+              Shift
+            </Button>
+          )}
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon"
-            className="h-11 w-11 sm:hidden"
+            className="size-8 sm:hidden"
+            onClick={() => setRegisterOpen(true)}
+            aria-label={`Register ${activeRegister?.name || "Main Till"}`}
+          >
+            <Store className="size-4" />
+          </Button>
+          {canInvitePosStaff ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-muted-foreground sm:px-3"
+              onClick={() => setInviteOpen(true)}
+              aria-label="Invite staff"
+            >
+              <UserPlus className="size-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Invite</span>
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-muted-foreground"
             onClick={() => {
-              setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
-              setStartShiftOpen(true);
+              setTodayOpen(true);
+              void loadToday();
             }}
-            aria-label="Start shift"
           >
-            <Clock className="size-4" />
+            Today
           </Button>
-        ) : null}
-        {canInvitePosStaff ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 touch-manipulation px-3"
-            onClick={() => setInviteOpen(true)}
-            aria-label="Invite staff"
-          >
-            <UserPlus className="size-4" />
-            <span className="hidden sm:inline">Invite staff</span>
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11 touch-manipulation px-3 tabular-nums"
-          onClick={() => {
-            setTodayOpen(true);
-            void loadToday();
-          }}
-        >
-          Today
-          <span className="hidden font-semibold sm:inline">{formatCurrency(todayTotal, currency)}</span>
-        </Button>
+        </div>
       </header>
       {blockedReason ? (
         <div
@@ -1222,12 +1182,12 @@ export default function PosTerminal() {
                     ref={searchRef}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Scan barcode or search"
+                    placeholder="Search products / Scan barcode"
                     className="h-12 pl-12 pr-12 text-base"
                     autoComplete="off"
                     inputMode="search"
                     enterKeyHint="go"
-                    aria-label="Scan barcode or search products by name, SKU, or code"
+                    aria-label="Search products or scan barcode"
                     onPaste={handleSearchPaste}
                   />
                   {query ? (
@@ -1256,20 +1216,9 @@ export default function PosTerminal() {
               >
                 <ScanBarcode className="size-5" />
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 max-w-[11rem] shrink-0 touch-manipulation px-3"
-                onClick={() => setCustomerOpen(true)}
-                aria-label={customerLabel}
-              >
-                <User className="size-4 shrink-0" />
-                <span className="truncate">{customerLabel}</span>
-              </Button>
             </div>
 
             <div>
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Categories</p>
               <div
                 className="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 role="tablist"
@@ -1289,9 +1238,6 @@ export default function PosTerminal() {
                   )}
                 >
                   All
-                  <span className={cn("ml-1.5 tabular-nums", category === "all" ? "opacity-90" : "text-muted-foreground")}>
-                    {products.length}
-                  </span>
                 </button>
                 {categories.map((row) => {
                   const selected = category === row.name;
@@ -1311,9 +1257,6 @@ export default function PosTerminal() {
                       )}
                     >
                       {row.name}
-                      <span className={cn("ml-1.5 tabular-nums", selected ? "opacity-90" : "text-muted-foreground")}>
-                        {row.count}
-                      </span>
                     </button>
                   );
                 })}
@@ -1351,7 +1294,7 @@ export default function PosTerminal() {
                 >
                   Show all products
                 </Button>
-              ) : (
+              ) : posOnlyStaff ? null : (
                 <Button asChild className="h-12">
                   <Link to={createPageUrl("Services")}>Open catalog</Link>
                 </Button>
@@ -1359,10 +1302,11 @@ export default function PosTerminal() {
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-4">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {filteredProducts.map((product) => {
                   const stock = posProductStock(product);
-                  const out = stock <= 0;
+                  const stockUi = posStockLabel(stock);
+                  const out = stockUi.tone === "out";
                   const inCart = cart.find((line) => line.product_id === product.id);
                   return (
                     <button
@@ -1372,41 +1316,40 @@ export default function PosTerminal() {
                       aria-label={`Add ${product.name} to cart`}
                       onClick={() => addProduct(product)}
                       className={cn(
-                        "flex min-h-[7.5rem] flex-col items-stretch gap-2 rounded-xl border border-border bg-card p-3 text-left touch-manipulation select-none active:scale-[0.98]",
-                        out ? "opacity-45" : "hover:border-primary hover:bg-muted/40",
-                        inCart ? "border-primary bg-primary/5" : ""
+                        "flex min-h-[11rem] flex-col items-stretch overflow-hidden rounded-2xl border border-border bg-card text-left touch-manipulation select-none active:scale-[0.98]",
+                        out ? "opacity-45" : "hover:border-primary",
+                        inCart ? "border-primary ring-1 ring-primary/40" : ""
                       )}
                     >
-                      <div className="flex items-start gap-2">
+                      <div className="relative aspect-[4/3] w-full bg-muted/40">
                         <ProductThumbnail
                           imageUrl={product.image_url}
                           name={product.name}
-                          className="h-12 w-12 rounded-xl"
+                          className="h-full w-full rounded-none border-0"
                         />
-                        <div className="min-w-0 flex-1">
-                          <p className="line-clamp-2 text-sm font-semibold leading-tight">{product.name}</p>
-                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {product.sku || product.barcode || " "}
-                          </p>
-                        </div>
                         {inCart ? (
-                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                          <span className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                             {inCart.quantity}
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-auto flex items-end justify-between gap-2">
-                        <span className="text-sm font-semibold tabular-nums">
+                      <div className="flex flex-1 flex-col gap-1 p-3">
+                        <p className="line-clamp-2 text-sm font-semibold leading-tight">{product.name}</p>
+                        <p className="text-base font-semibold tabular-nums">
                           {formatCurrency(catalogUnitPrice(product), currency)}
-                        </span>
-                        <span
+                        </p>
+                        <p
                           className={cn(
-                            "text-xs font-medium",
-                            out ? "text-destructive" : stock <= 5 ? "text-status-pending" : "text-muted-foreground"
+                            "mt-auto text-xs font-medium",
+                            stockUi.tone === "out"
+                              ? "text-destructive"
+                              : stockUi.tone === "low"
+                                ? "font-semibold uppercase tracking-wide text-amber-600"
+                                : "text-muted-foreground"
                           )}
                         >
-                          {out ? "Out" : `${stock} left`}
-                        </span>
+                          {stockUi.text}
+                        </p>
                       </div>
                     </button>
                   );
@@ -1416,14 +1359,13 @@ export default function PosTerminal() {
           )}
         </section>
 
-        <div className="grid shrink-0 grid-cols-1 border-t border-border bg-card md:grid-cols-2 md:h-[min(38vh,22rem)]">
+        <div className="grid shrink-0 grid-cols-1 border-t border-border bg-card md:grid-cols-2 md:h-[min(46vh,28rem)]">
           <section className="flex min-h-0 flex-col border-border md:border-r">
-            <div className="hidden items-center justify-between gap-2 px-4 py-2.5 md:flex">
-              <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-                <ShoppingCart className="size-4" />
+            <div className="hidden items-center justify-between gap-2 px-4 py-3 md:flex">
+              <h2 className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wider">
                 Cart
                 {cartCount > 0 ? (
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium normal-case tabular-nums tracking-normal text-muted-foreground">
                     {cartCount}
                   </span>
                 ) : null}
@@ -1467,25 +1409,25 @@ export default function PosTerminal() {
                 onClick={() => setCartSheetOpen(true)}
               >
                 <span className="text-muted-foreground">
-                  {cartCount === 0 ? "Cart is empty" : `${cartCount} items`}
+                  {cartCount === 0 ? "Cart is empty" : `${cartCount} items · Checkout`}
                 </span>
                 <span className="font-semibold tabular-nums">{formatCurrency(cartTotal, currency)}</span>
               </button>
             )}
           </section>
 
-          <section className="flex flex-col justify-between p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <section className="hidden flex-col justify-between p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:flex">
             <div>
-              <h2 className="mb-3 text-sm font-semibold">Checkout</h2>
+              <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider">Checkout</h2>
               <button
                 type="button"
-                className="mb-3 flex h-10 w-full items-center justify-between gap-2 rounded-input border border-border px-3 text-sm"
+                className="mb-4 flex w-full flex-col items-start gap-0.5 text-left"
                 onClick={() => setCustomerOpen(true)}
               >
-                <span className="text-muted-foreground">Customer</span>
+                <span className="text-sm text-muted-foreground">POS Customer</span>
                 <span className="truncate font-medium">{customerLabel}</span>
               </button>
-              <dl className="space-y-1.5 text-sm">
+              <dl className="space-y-2 text-sm">
                 {moneyRows.map((row) => (
                   <div key={row.label} className="flex items-center justify-between gap-4">
                     <dt className="text-muted-foreground">{row.label}</dt>
@@ -1507,8 +1449,8 @@ export default function PosTerminal() {
                     </dd>
                   </div>
                 ))}
-                <div className="mt-2 flex items-baseline justify-between gap-4 border-t border-border pt-2">
-                  <dt className="text-sm font-semibold">Total</dt>
+                <div className="mt-2 flex items-baseline justify-between gap-4 border-t border-border pt-3">
+                  <dt className="text-xs font-semibold uppercase tracking-wider">Total</dt>
                   <dd className="font-display text-2xl font-bold tabular-nums tracking-tight">
                     {formatCurrency(cartTotal, currency)}
                   </dd>
@@ -1534,7 +1476,7 @@ export default function PosTerminal() {
                 : needsShift
                   ? "Start shift"
                   : canSell
-                    ? "Pay"
+                    ? `Pay ${formatCurrency(cartTotal, currency)}`
                     : "No sell access"}
             </Button>
           </section>
@@ -1558,7 +1500,21 @@ export default function PosTerminal() {
             <CartLineList cart={cart} currency={currency} onQty={setQty} />
           </div>
           {cart.length > 0 || (orgId && heldCart) ? (
-            <div className="space-y-2 border-t border-border p-4">
+            <div className="space-y-3 border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 text-left"
+                onClick={() => setCustomerOpen(true)}
+              >
+                <span className="text-sm text-muted-foreground">POS Customer</span>
+                <span className="truncate font-medium">{customerLabel}</span>
+              </button>
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-semibold">Total</span>
+                <span className="font-display text-xl font-bold tabular-nums">
+                  {formatCurrency(cartTotal, currency)}
+                </span>
+              </div>
               {orgId && heldCart && cart.length === 0 ? (
                 <Button type="button" variant="outline" className="h-11 w-full" onClick={resumeHeldCart}>
                   <Play className="size-4" />
@@ -1569,6 +1525,19 @@ export default function PosTerminal() {
                 <Button type="button" variant="outline" className="h-11 w-full" onClick={holdCart}>
                   <Pause className="size-4" />
                   Hold on this device
+                </Button>
+              ) : null}
+              {cart.length > 0 ? (
+                <Button
+                  type="button"
+                  className="h-14 w-full text-base font-semibold"
+                  disabled={submitting || sessionLoading || !serverWriteAllowed || !canSell}
+                  onClick={() => {
+                    setCartSheetOpen(false);
+                    openPay();
+                  }}
+                >
+                  {needsShift ? "Start shift" : `Pay ${formatCurrency(cartTotal, currency)}`}
                 </Button>
               ) : null}
               {cart.length > 0 ? (
@@ -1898,7 +1867,6 @@ export default function PosTerminal() {
           setCustomerOpen(open);
           if (!open) setInvoiceClientPick(false);
         }}
-        clients={clients}
         orgId={orgId}
         selectedId={clientId}
         allowWalkIn={!invoiceClientPick}
@@ -1917,8 +1885,7 @@ export default function PosTerminal() {
         }}
         onCreated={(created) => {
           invalidateClientDomain(queryClient, { scopeKey: user?.id || null, skipInvoiceCascade: true });
-          void refetchClients();
-          toast({ title: "Customer saved", description: created.name });
+          toast({ title: "POS customer saved", description: created.name });
         }}
       />
 
@@ -2260,7 +2227,11 @@ export default function PosTerminal() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <PosStaffInviteSheet open={inviteOpen} onOpenChange={setInviteOpen} />
+      <PosStaffInviteSheet
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        defaultRegisterId={activeRegister?.id || ""}
+      />
     </div>
   );
 }

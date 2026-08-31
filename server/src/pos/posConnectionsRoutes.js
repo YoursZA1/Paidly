@@ -4,6 +4,7 @@ import { getUserFromRequest } from "../supabaseAuth.js";
 import {
   loadCompanyMembership,
   companyRoleHasPermission,
+  membershipHasPermission,
   PERMISSIONS,
 } from "../companyRouteAccess.js";
 import { postgrestErrorToApiBody } from "../postgrestErrorToApiBody.js";
@@ -298,7 +299,7 @@ export async function requireOrgMember(req, res) {
 export async function requirePosPermission(req, res, permission) {
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate;
-  if (!companyRoleHasPermission(gate.membership.companyRole, permission)) {
+  if (!membershipHasPermission(gate.membership, permission)) {
     return {
       ok: false,
       response: jsonError(res, 403, "Forbidden — POS permission required", {
@@ -335,8 +336,8 @@ export async function handlePosSalesList(req, res) {
   }
 
   const todayOnly = String(req.query?.today || "").trim() === "1";
-  const canToday = companyRoleHasPermission(gate.membership.companyRole, PERMISSIONS.POS_ACCESS);
-  const canReports = companyRoleHasPermission(gate.membership.companyRole, PERMISSIONS.POS_VIEW_REPORTS);
+  const canToday = membershipHasPermission(gate.membership, PERMISSIONS.POS_ACCESS);
+  const canReports = membershipHasPermission(gate.membership, PERMISSIONS.POS_VIEW_REPORTS);
   if (todayOnly ? !canToday && !canReports : !canReports) {
     return jsonError(res, 403, "Forbidden — POS permission required", {
       code: "POS_FORBIDDEN",

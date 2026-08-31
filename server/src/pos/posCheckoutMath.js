@@ -215,6 +215,11 @@ export function clientBelongsToCheckoutOrg(client, orgId) {
   return Boolean(client?.id && tenant && String(client.org_id || "") === tenant);
 }
 
+/** Till attach is POS customers only (created on the till or explicitly enabled). */
+export function posCustomerEligibleForTill(client, orgId) {
+  return clientBelongsToCheckoutOrg(client, orgId) && client?.pos_enabled === true;
+}
+
 export function remainingReturnQuantities(originalItems, returnedItems) {
   const remaining = new Map();
   for (const item of originalItems || []) {

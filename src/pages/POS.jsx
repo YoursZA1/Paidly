@@ -6,6 +6,7 @@ import PosTerminal from "@/components/pos/PosTerminal";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { createPageUrl } from "@/utils";
+import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 import useCompanyContext from "@/hooks/useCompanyContext";
 
 function PosPlanLock() {
@@ -57,7 +58,8 @@ function PosBusinessTypeLock() {
 
 export default function POS() {
   const { profile } = useAuth();
-  const { loading, posEnabled } = useCompanyContext();
+  const { loading, posEnabled, isOrgOwner, companyRole, jobFunction } = useCompanyContext();
+  const posOnlyStaff = isPosOnlyStaff({ isOrgOwner, companyRole, jobFunction });
   const userPlan = useMemo(
     () => profile?.subscription_plan || profile?.plan || "Individual",
     [profile]
@@ -71,9 +73,12 @@ export default function POS() {
     );
   }
 
+  const till = posEnabled ? <PosTerminal /> : <PosBusinessTypeLock />;
+  if (posOnlyStaff) return till;
+
   return (
     <FeatureGate feature="pos" userPlan={userPlan} fallback={<PosPlanLock />}>
-      {posEnabled ? <PosTerminal /> : <PosBusinessTypeLock />}
+      {till}
     </FeatureGate>
   );
 }
