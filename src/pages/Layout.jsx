@@ -56,7 +56,7 @@ import usePostAuthHomeRedirect from "@/hooks/usePostAuthHomeRedirect";
 import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
-import { isPosTerminalPage } from "@/lib/posNavAccess";
+import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
 import UpgradeScreen from "@/components/subscription/UpgradeScreen";
@@ -646,7 +646,7 @@ export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdminV2Route = location.pathname.startsWith("/admin-v2");
-  const isPosTerminal = isPosTerminalPage(currentPageName);
+  const isPosTerminal = isPosTerminalPage(currentPageName) || isPosTerminalPath(location.pathname);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);

@@ -35,6 +35,7 @@ import {
   startSquareOAuthConnect,
   connectYocoPos,
 } from "@/services/PosIntegrationService";
+import { posAccessPath } from "@shared/posStaffInvite.js";
 
 function CopyField({ label, value, description }) {
   const { toast } = useToast();
@@ -261,17 +262,25 @@ export default function PosIntegrationSettings() {
   };
 
   const squareConfigured = oauthStatus?.square?.configured !== false;
+  const posAccessUrl = posAccessPath(
+    typeof window !== "undefined" ? window.location.origin : "https://www.paidly.co.za"
+  );
 
   return (
     <div className="space-y-6">
+      <CopyField
+        label="Paidly POS"
+        value={posAccessUrl}
+        description="Dedicated POS link for this business. Staff still sign in. Bookmark it on devices, or copy a till-specific link from Registers below."
+      />
       <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/30 p-4">
         <Plug className="h-5 w-5 text-primary mt-0.5 shrink-0" />
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">Connect your point of sale</p>
           <p className="text-sm text-muted-foreground">
-            Paidly POS is a till inside the app (sidebar → POS). These connections are for external
-            hardware — Square, Yoco, or a generic webhook. All of them write the same sales events
-            and decrement catalog stock when SKU or barcode matches.
+            Paidly POS is a till inside the app. Open it at the link above, or from sidebar → POS.
+            These connections are for external hardware — Square, Yoco, or a generic webhook. All of
+            them write the same sales events and decrement catalog stock when SKU or barcode matches.
           </p>
         </div>
       </div>

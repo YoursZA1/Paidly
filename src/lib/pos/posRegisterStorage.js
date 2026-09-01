@@ -26,12 +26,29 @@ export function writeActiveRegisterId(orgId, registerId) {
   }
 }
 
-export function pickActiveRegister(registers, storedId) {
+/**
+ * Prefer a till from the URL (`/pos/till/{id}`), then the membership-assigned till
+ * (email invite activation), then this device's last till, then the first active register.
+ * A requested id that is not in the list returns null — never silently open another till.
+ */
+export function pickActiveRegister(registers, storedId, assignedId, requestedId) {
   const list = Array.isArray(registers) ? registers : [];
   const active = list.filter((row) => (row.status || "active") === "active");
+  if (requestedId) {
+    return (
+      active.find((row) => row.id === requestedId) ||
+      list.find((row) => row.id === requestedId) ||
+      null
+    );
+  }
+  if (assignedId) {
+    const assigned =
+      active.find((row) => row.id === assignedId) || list.find((row) => row.id === assignedId);
+    if (assigned) return assigned;
+  }
   if (storedId) {
-    const match = active.find((row) => row.id === storedId);
-    if (match) return match;
+    const stored = active.find((row) => row.id === storedId);
+    if (stored) return stored;
   }
   return active[0] || null;
 }

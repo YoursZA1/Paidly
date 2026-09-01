@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Store } from "lucide-react";
+import { Copy, Loader2, Plus, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +33,7 @@ import {
   listPosSessions,
 } from "@/services/PosIntegrationService";
 import { findConflictingRegister } from "@shared/posRegisters.js";
+import { posTillPath } from "@shared/posStaffInvite.js";
 
 const EMPTY = {
   id: null,
@@ -221,6 +222,30 @@ export default function PosRegistersSettings() {
                 </p>
               </div>
               <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const url = posTillPath(
+                      row.id,
+                      typeof window !== "undefined" ? window.location.origin : "https://www.paidly.co.za"
+                    );
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      toast({ title: "Till link copied", description: url });
+                    } catch {
+                      toast({
+                        title: "Copy failed",
+                        description: url,
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  <Copy className="size-3.5" />
+                  Copy till link
+                </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row)}>
                   Edit
                 </Button>

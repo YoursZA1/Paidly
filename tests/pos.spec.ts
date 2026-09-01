@@ -9,7 +9,21 @@ test.describe('POS till (Task 28)', () => {
     test('TEST 12 guest cannot open the till', async ({ page, baseURL }) => {
       test.skip(!baseURL, 'baseURL not set');
       await page.goto(`${baseURL}${APP_PATHS.pos}`, { waitUntil: 'domcontentloaded' });
-      await expect(page).toHaveURL(/\/(Home|Login)/i);
+      await expect(page).toHaveURL(/\/pos\/?$/i);
+      await expect(page.getByRole('heading', { name: /Paidly POS/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Open Paidly POS/i })).toBeVisible();
+      await expect(page.getByLabel(/scan barcode or search products/i)).toHaveCount(0);
+    });
+
+    test('guest cannot open a till URL without signing in', async ({ page, baseURL }) => {
+      test.skip(!baseURL, 'baseURL not set');
+      await page.goto(`${baseURL}/pos/till/11111111-1111-4111-8111-111111111111`, {
+        waitUntil: 'domcontentloaded',
+      });
+      await expect(page).toHaveURL(/\/pos\/till\//i);
+      await expect(page.getByRole('heading', { name: /Paidly POS/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Open Paidly POS/i })).toBeVisible();
+      await expect(page.getByLabel(/scan barcode or search products/i)).toHaveCount(0);
     });
   });
 

@@ -47,9 +47,11 @@ function product(overrides = {}) {
 
 describe("Task 28 POS acceptance", () => {
   it("TEST 1 Open POS — dedicated till URL and shell, not back-office chrome", () => {
-    expect(createPageUrl("POS")).toBe("/POS");
+    expect(createPageUrl("POS")).toBe("/pos");
     expect(isPosTerminalPage("POS")).toBe(true);
     expect(isPosTerminalPage("pos")).toBe(true);
+    expect(isPosTerminalPage("pos/till/11111111-1111-4111-8111-111111111111")).toBe(true);
+    expect(isPosTerminalPage("/pos/till/11111111-1111-4111-8111-111111111111")).toBe(true);
     expect(isPosTerminalPage("Dashboard")).toBe(false);
     expect(isPosTerminalPage("Settings")).toBe(false);
   });

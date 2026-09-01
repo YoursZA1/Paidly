@@ -4,7 +4,7 @@ export const APP_PATHS = {
   invoices: '/Invoices',
   quotes: '/Quotes',
   services: '/Services',
-  pos: '/POS',
+  pos: '/pos',
   payslips: '/Payslips',
   cashFlow: '/CashFlow',
   reports: '/Reports',

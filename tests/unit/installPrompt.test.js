@@ -134,7 +134,9 @@ describe("install prompt", () => {
 
   it("treats /POS and till invite paths as POS-related", () => {
     expect(isPosRelatedPath("/POS")).toBe(true);
+    expect(isPosRelatedPath("/pos")).toBe(true);
     expect(isPosRelatedPath("/pos/invite/abc")).toBe(true);
+    expect(isPosRelatedPath("/pos/till/11111111-1111-4111-8111-111111111111")).toBe(true);
     expect(isPosRelatedPath("/Dashboard")).toBe(false);
   });
 

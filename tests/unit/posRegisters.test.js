@@ -42,6 +42,9 @@ describe("POS registers", () => {
     ];
     expect(pickActiveRegister(rows, "c").id).toBe("c");
     expect(pickActiveRegister(rows, "a").id).toBe("b");
+    expect(pickActiveRegister(rows, "c", "b").id).toBe("b");
+    expect(pickActiveRegister(rows, "c", "b", "c").id).toBe("c");
+    expect(pickActiveRegister(rows, "c", "b", "missing")).toBeNull();
   });
 
   it("treats register names as unique per brand, not org-wide", () => {

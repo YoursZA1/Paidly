@@ -38,7 +38,8 @@ import { isStaffDashboardRole, staffDashboardHomePath } from "@/lib/staffDashboa
 import AuthSocialButtons from "@/components/auth/AuthSocialButtons";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { tryAcceptStoredInviteToken, peekPendingInviteToken } from "@/services/TenantRoleService";
-import { isPosInviteDest } from "@shared/posStaffInvite.js";
+import { isPosInviteDest, posTillPath } from "@shared/posStaffInvite.js";
+import { writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
 
 const USERS_STORAGE_KEY = "breakapi_users";
 const SIGNUP_ONBOARDING_DRAFT_KEY = "paidly_signup_onboarding_draft";
@@ -146,6 +147,7 @@ export default function Signup() {
 
   const inviteLockedEmail = String(searchParams.get("email") || "").trim().toLowerCase();
   const isInviteSignup = searchParams.get("invite") === "1" || Boolean(inviteLockedEmail);
+  const posInviteSignup = isPosInviteDest(searchParams.get("next"));
 
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
@@ -161,6 +163,7 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [showEmailConfirmPopup, setShowEmailConfirmPopup] = useState(false);
+  const [posAwaitingConfirm, setPosAwaitingConfirm] = useState(false);
   const [resendStatus, setResendStatus] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -197,6 +200,23 @@ export default function Signup() {
     const sessionEmail = String(session?.user?.email || "").trim().toLowerCase();
     const draftEmail = String(draft?.email || "").trim().toLowerCase();
     const sessionMatchesDraft = !draftEmail || (sessionEmail && sessionEmail === draftEmail);
+    const resumePosInvite = posInviteSignup || draft?.posInvite === true;
+    if (resumePosInvite) {
+      hydratedFromDraftRef.current = true;
+      setShowEmailConfirmPopup(false);
+      if (confirmedAt && sessionMatchesDraft) {
+        const pending = peekPendingInviteToken();
+        navigate(pending ? `/pos/invite/${encodeURIComponent(pending)}` : createPageUrl("POS"), {
+          replace: true,
+        });
+      } else if (shouldResumeFromEmailConfirm) {
+        const pending = peekPendingInviteToken();
+        if (pending) {
+          navigate(`/pos/invite/${encodeURIComponent(pending)}`, { replace: true });
+        }
+      }
+      return;
+    }
     if (confirmedAt && sessionMatchesDraft) {
       setStep(2);
       setShowEmailConfirmPopup(false);
@@ -207,7 +227,7 @@ export default function Signup() {
     }
 
     hydratedFromDraftRef.current = true;
-  }, [searchParams, session?.user?.email, session?.user?.email_confirmed_at]);
+  }, [searchParams, session?.user?.email, session?.user?.email_confirmed_at, posInviteSignup, navigate]);
 
   const validateStepOne = () => {
     if (!fullName.trim()) {
@@ -299,6 +319,11 @@ export default function Signup() {
       try {
         const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
         const selectedPlan = normalizeSignupPlan(plan);
+        const pendingToken = peekPendingInviteToken();
+        const posEmailRedirect =
+          posInviteSignup && pendingToken && typeof window !== "undefined"
+            ? `${window.location.origin}/pos/invite/${encodeURIComponent(pendingToken)}`
+            : null;
         const { user: createdAuthUser } = await SupabaseAuthService.signUpWithEmail(
           normalizedEmail,
           password,
@@ -312,8 +337,9 @@ export default function Signup() {
             subscription_plan: selectedPlan,
             // Shareable company-invite signup: suppress personal-org creation in
             // handle_new_user; the validated invite is bound post-auth. Grants no role/org.
-            ...(peekPendingInviteToken() ? { pending_company_invite: "true" } : {}),
-          }
+            ...(pendingToken ? { pending_company_invite: "true" } : {}),
+          },
+          posEmailRedirect ? { emailRedirectTo: posEmailRedirect } : {}
         );
         authUserId = createdAuthUser?.id || null;
         if (!authUserId) {
@@ -376,10 +402,13 @@ export default function Signup() {
 
       setCreatedUserId(authUserId);
 
+      let acceptedInvite = null;
+      let hadSession = false;
       try {
         const sessionWrap = await SupabaseAuthService.getSession();
-        if (sessionWrap?.session?.user?.id) {
-          await tryAcceptStoredInviteToken();
+        hadSession = Boolean(sessionWrap?.session?.user?.id);
+        if (hadSession) {
+          acceptedInvite = await tryAcceptStoredInviteToken();
         }
       } catch {
         /* non-fatal — e.g. email confirmation required before session */
@@ -393,7 +422,33 @@ export default function Signup() {
         phone: phone.trim(),
         plan,
         createdUserId: authUserId,
+        posInvite: posInviteSignup,
       });
+
+      if (posInviteSignup) {
+        if (acceptedInvite?.org_id && acceptedInvite?.register_id) {
+          writeActiveRegisterId(acceptedInvite.org_id, acceptedInvite.register_id);
+        }
+        if (acceptedInvite?.ok) {
+          clearSignupOnboardingDraft();
+          navigate(
+            acceptedInvite?.register_id
+              ? posTillPath(acceptedInvite.register_id)
+              : createPageUrl("POS"),
+            { replace: true }
+          );
+          return;
+        }
+        const pending = peekPendingInviteToken();
+        if (hadSession && pending) {
+          navigate(`/pos/invite/${encodeURIComponent(pending)}`, { replace: true });
+          return;
+        }
+        setShowEmailConfirmPopup(true);
+        setPosAwaitingConfirm(true);
+        return;
+      }
+
       setShowEmailConfirmPopup(true);
       setStep(2);
     } catch (err) {
@@ -475,6 +530,15 @@ export default function Signup() {
         /* non-fatal */
       }
 
+      if (posInviteSignup) {
+        clearSignupOnboardingDraft();
+        const pending = peekPendingInviteToken();
+        navigate(pending ? `/pos/invite/${encodeURIComponent(pending)}` : createPageUrl("POS"), {
+          replace: true,
+        });
+        return;
+      }
+
       const sessionWrapAfterLogin = await SupabaseAuthService.getSession().catch(() => null);
       const profileUserId = sessionWrapAfterLogin?.user?.id || createdUserId;
       if (!profileUserId) {
@@ -552,7 +616,9 @@ export default function Signup() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-green-700 font-medium">
-            We&apos;ve sent a confirmation link to <span className="font-semibold">{email}</span>. Please check your inbox and click the link to verify your account, then continue with the setup below.
+            We&apos;ve sent a confirmation link to <span className="font-semibold">{email}</span>.
+            Please check your inbox and click the link to verify your account
+            {posInviteSignup ? ", then Paidly POS will open on your assigned till." : ", then continue with the setup below."}.
           </p>
           <p className="text-sm text-muted-foreground">
             If you don&apos;t see it, check your spam or junk folder.
@@ -583,8 +649,14 @@ export default function Signup() {
           <div className="w-10 h-10 sm:w-11 sm:h-11 bg-[#FF4F00] rounded-xl flex items-center justify-center mx-auto mb-1.5 sm:mb-2 shadow-lg shadow-[#FF4F00]/25">
             <img src="/logo.svg" alt="Paidly" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
           </div>
-          <CardTitle className="text-base sm:text-lg font-semibold text-zinc-50 font-display">Create your account</CardTitle>
-          <p className="text-xs text-zinc-400">Step {step} of 2</p>
+          <CardTitle className="text-base sm:text-lg font-semibold text-zinc-50 font-display">
+            {posInviteSignup ? "Create your POS account" : "Create your account"}
+          </CardTitle>
+          {posInviteSignup ? (
+            <p className="text-xs text-zinc-400">You&apos;ll join the till you were invited to.</p>
+          ) : (
+            <p className="text-xs text-zinc-400">Step {step} of 2</p>
+          )}
         </CardHeader>
         <CardContent className="px-4 sm:px-5 pb-4 sm:pb-5 overflow-y-auto min-h-0 flex-1">
           {success ? (
@@ -614,7 +686,16 @@ export default function Signup() {
                 </p>
               )}
             </div>
-          ) : step === 1 ? (
+          ) : posAwaitingConfirm ? (
+            <div className="space-y-4 py-6 text-center">
+              <p className="text-sm text-zinc-200">
+                Confirm your email, then open Paidly POS from your invitation. You will land on your assigned till — Start Shift.
+              </p>
+              <p className="text-xs text-zinc-400">
+                If you don&apos;t see the message, check spam. You can also use the original invitation email.
+              </p>
+            </div>
+          ) : step === 1 || posInviteSignup ? (
             <form onSubmit={handleStepOne} className="space-y-2.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="space-y-1.5">

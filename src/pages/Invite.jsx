@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams, useLocation, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,47 +12,71 @@ import {
 } from "@/services/TenantRoleService";
 import { validatePublicInviteToken } from "@/services/CompanyInvitesService";
 import { formatPosTillInviteCode, normalizePosTillInviteCode } from "@shared/posTillInviteCode.js";
-import { isPosInviteDest, POS_JOB_FUNCTION } from "@shared/posStaffInvite.js";
+import { isPosInviteDest, POS_JOB_FUNCTION, posJoinPath, posTillPath, posAccessPath } from "@shared/posStaffInvite.js";
 import { invitePublicErrorMessage } from "@shared/companyInviteMessages.js";
 import { useAuth } from "@/contexts/AuthContext";
 import { JOB_FUNCTION_LABELS } from "@/lib/companyJobFunctions";
 import { COMPANY_ROLE_LABELS } from "@/lib/companyPermissions";
 import { resolveCompanyHomePath } from "@/lib/postAuthNavigation.js";
+import { writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
+import { clearCompanyAccessContextCache } from "@/services/CompanyContextService";
 
 function emailsMatch(a, b) {
   return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 }
 
+function isPosJoinPath(pathname) {
+  return /\/pos\/join\/?$/i.test(pathname || "");
+}
+
+function isPosInvitePath(pathname) {
+  return /\/pos\/invite\//i.test(pathname || "");
+}
+
+function lockTillFromInvite(result, invite) {
+  const orgId = result?.org_id || invite?.org_id;
+  const registerId = result?.register_id || invite?.register_id;
+  if (orgId && registerId) writeActiveRegisterId(orgId, registerId);
+}
+
 /**
  * Company invitation links: /invite/:token or /invite?token=…
- * POS till invites: /pos/invite/:code or /pos/join (manual code).
+ * POS email activation: /pos/invite/:secure-token (no typing).
+ * Backup device activation: /pos/join (typed till code).
  */
 export default function InvitePage() {
   const [searchParams] = useSearchParams();
   const { token: tokenParam } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, authUserId } = useAuth() || {};
-  const tokenFromUrl = String(tokenParam || searchParams.get("token") || "").trim();
+  const { user, authUserId, loading: authLoading } = useAuth() || {};
+  const backupJoin = isPosJoinPath(location.pathname);
+  const tokenFromUrl = backupJoin ? "" : String(tokenParam || searchParams.get("token") || "").trim();
 
-  const [codeDraft, setCodeDraft] = useState(tokenFromUrl ? formatPosTillInviteCode(tokenFromUrl) : "");
+  const [codeDraft, setCodeDraft] = useState("");
   const [token, setToken] = useState(tokenFromUrl);
   const [loading, setLoading] = useState(Boolean(tokenFromUrl));
   const [invite, setInvite] = useState(null);
   const [error, setError] = useState(null);
   const [accepting, setAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState(null);
+  const activateOnceRef = useRef(false);
+
+  useEffect(() => {
+    setToken(tokenFromUrl);
+  }, [tokenFromUrl]);
 
   useEffect(() => {
     if (!token) {
       setLoading(false);
-      if (!/\/pos\/(invite|join)/i.test(location.pathname || "") && !searchParams.get("token")) {
+      if (!backupJoin && !isPosInvitePath(location.pathname) && !searchParams.get("token")) {
         setError(invitePublicErrorMessage("missing_token"));
       }
       return;
     }
 
     let cancelled = false;
+    activateOnceRef.current = false;
 
     (async () => {
       setLoading(true);
@@ -74,9 +98,9 @@ export default function InvitePage() {
     return () => {
       cancelled = true;
     };
-  }, [token, location.pathname, searchParams]);
+  }, [token, backupJoin, location.pathname, searchParams]);
 
-  const posFromPath = /\/pos\/(invite|join)/i.test(location.pathname || "");
+  const posFromPath = backupJoin || isPosInvitePath(location.pathname);
 
   const posInviteCopy = useMemo(() => {
     if (posFromPath || isPosInviteDest(searchParams.get("next"))) return true;
@@ -89,6 +113,16 @@ export default function InvitePage() {
   const invitedEmail = String(invite?.email || "").trim().toLowerCase();
   const signedIn = Boolean(authUserId || user?.id);
   const emailMismatch = signedIn && invitedEmail && sessionEmail && !emailsMatch(sessionEmail, invitedEmail);
+  const alreadyUsed =
+    Boolean(error) &&
+    /already been accepted|no longer active|already belong/i.test(String(error));
+
+  const goToPos = (result) => {
+    lockTillFromInvite(result, invite);
+    clearCompanyAccessContextCache();
+    const registerId = result?.register_id || invite?.register_id;
+    navigate(registerId ? posTillPath(registerId) : posAccessPath(), { replace: true });
+  };
 
   const continueToSignup = () => {
     const email = invite?.email ? `&email=${encodeURIComponent(invite.email)}` : "";
@@ -100,7 +134,7 @@ export default function InvitePage() {
     event.preventDefault();
     const normalized = normalizePosTillInviteCode(codeDraft);
     if (!normalized) {
-      setError("Enter your till invite code.");
+      setError("Enter the backup device code.");
       return;
     }
     setInvite(null);
@@ -117,23 +151,47 @@ export default function InvitePage() {
     setAcceptError(null);
     try {
       const result = await acceptPendingInviteToken(token);
-      const destination = posInviteCopy
-        ? createPageUrl("POS")
-        : resolveCompanyHomePath({
-            companyId: result?.org_id || "joined",
-            companyRole: result?.role || invite.role,
-            jobFunction: result?.job_function || invite.job_function,
-            isOrgOwner: false,
-          });
-      navigate(destination, { replace: true });
+      if (posInviteCopy) {
+        goToPos(result);
+        return;
+      }
+      navigate(
+        resolveCompanyHomePath({
+          companyId: result?.org_id || "joined",
+          companyRole: result?.role || invite.role,
+          jobFunction: result?.job_function || invite.job_function,
+          isOrgOwner: false,
+        }),
+        { replace: true }
+      );
     } catch (e) {
-      setAcceptError(e?.message || invitePublicErrorMessage("not_found"));
+      const message = e?.message || invitePublicErrorMessage("not_found");
+      if (posInviteCopy && /already been accepted|already belong/i.test(message)) {
+        goToPos(null);
+        return;
+      }
+      setAcceptError(message);
     } finally {
       setAccepting(false);
     }
   };
 
-  const showJoinForm = posFromPath && !tokenFromUrl && !invite && !loading;
+  useEffect(() => {
+    if (authLoading || loading || activateOnceRef.current) return;
+    if (posInviteCopy && alreadyUsed && signedIn && !emailMismatch) {
+      activateOnceRef.current = true;
+      goToPos(null);
+      return;
+    }
+    if (!posInviteCopy || !invite || !token || !signedIn || emailMismatch) return;
+    activateOnceRef.current = true;
+    void handleAccept();
+    // handleAccept reads latest invite/token; run once per validated invite.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, loading, invite, token, signedIn, emailMismatch, posInviteCopy, alreadyUsed]);
+
+  const showJoinForm = backupJoin && !invite && !loading && !token;
+  const waitingOnAuth = Boolean(invite) && authLoading;
   const roleLabel =
     COMPANY_ROLE_LABELS[String(invite?.role || "").toLowerCase()] || invite?.role || "Employee";
   const functionLabel = posInviteCopy
@@ -152,9 +210,9 @@ export default function InvitePage() {
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             {showJoinForm
-              ? "Enter your till invite code."
+              ? "Enter the backup device code from your manager to activate this till."
               : posInviteCopy
-                ? "POS-only access to the assigned till. Not the dashboard, invoices, clients, reports, or settings."
+                ? "Opening Paidly POS on your assigned till. POS-only — not the dashboard, invoices, clients, reports, or settings."
                 : "Join your team on Paidly with the role assigned by your administrator."}
           </p>
         </CardHeader>
@@ -162,7 +220,7 @@ export default function InvitePage() {
           {showJoinForm ? (
             <form className="space-y-3" onSubmit={submitCode}>
               <div className="space-y-2">
-                <Label htmlFor="till-invite-code">Till invite code</Label>
+                <Label htmlFor="till-invite-code">Backup device code</Label>
                 <Input
                   id="till-invite-code"
                   value={codeDraft}
@@ -181,26 +239,28 @@ export default function InvitePage() {
                 </div>
               ) : null}
               <Button type="submit" className="h-12 w-full">
-                Join till
+                Activate this device
               </Button>
             </form>
           ) : null}
 
-          {loading && (
+          {(loading || waitingOnAuth || accepting) && (
             <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              Validating invitation…
+              {accepting || (invite && signedIn && !emailMismatch)
+                ? "Activating POS…"
+                : "Verifying invitation…"}
             </div>
           )}
 
-          {!loading && error && !showJoinForm && (
+          {!loading && !waitingOnAuth && error && !showJoinForm && !(alreadyUsed && posInviteCopy && signedIn) && (
             <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
               <AlertCircle className="size-5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {!loading && invite && (
+          {!loading && !waitingOnAuth && invite && (
             <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
               <p>
                 Business: <strong>{invite.company_name || "your company"}</strong>
@@ -215,9 +275,6 @@ export default function InvitePage() {
                   </p>
                   <p>
                     Access: <strong>POS only</strong>
-                  </p>
-                  <p className="font-mono tracking-widest">
-                    Invite code: {formatPosTillInviteCode(token) || token}
                   </p>
                 </>
               ) : (
@@ -252,23 +309,16 @@ export default function InvitePage() {
             </div>
           ) : null}
 
-          {!loading && invite && signedIn && !emailMismatch ? (
+          {!loading && !waitingOnAuth && invite && signedIn && !emailMismatch && !accepting ? (
             <Button type="button" onClick={() => void handleAccept()} disabled={accepting} className="h-12 w-full">
-              {accepting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  Accepting…
-                </>
-              ) : (
-                "Accept invitation"
-              )}
+              {posInviteCopy ? "Open Paidly POS" : "Accept invitation"}
             </Button>
           ) : null}
 
-          {!loading && invite && !signedIn && (
+          {!loading && !waitingOnAuth && invite && !signedIn && (
             <>
               <Button type="button" onClick={continueToSignup} className="h-12 w-full">
-                {posInviteCopy ? "Create POS account" : "Create account"}
+                {posInviteCopy ? "Open Paidly POS" : "Create account"}
               </Button>
               <Button
                 type="button"
@@ -285,7 +335,7 @@ export default function InvitePage() {
             </>
           )}
 
-          {!invite && !showJoinForm ? (
+          {!invite && !showJoinForm && !loading && !waitingOnAuth ? (
             <Button
               type="button"
               variant="outline"
@@ -302,12 +352,12 @@ export default function InvitePage() {
 
           {posInviteCopy || showJoinForm ? (
             <p className="text-center text-xs text-muted-foreground">
-              {tokenFromUrl ? (
-                <Link to="/pos/join" className="text-primary underline">
-                  Enter a code instead
-                </Link>
+              {backupJoin ? (
+                "Ask your manager for the backup device code if the invitation email cannot open."
               ) : (
-                "Ask your manager for the till invite code if you do not have a link."
+                <Link to={posJoinPath()} className="text-primary underline">
+                  Activate this device with a backup code
+                </Link>
               )}
             </p>
           ) : (

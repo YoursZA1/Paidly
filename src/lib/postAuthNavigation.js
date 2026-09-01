@@ -6,7 +6,7 @@ import {
   shouldRedirectToAppAfterAuth,
 } from "@/lib/appOrigin";
 import { normalizeCompanyRole, COMPANY_ROLES } from "@/lib/companyPermissions";
-import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
+import { isPosAccessPath, isPosOnlyStaff } from "@shared/posStaffInvite.js";
 
 /**
  * Resolve home route from company membership (post-auth, does not touch login/signup).
@@ -32,6 +32,11 @@ export function resolveCompanyHomePath(companyCtx) {
 export function resolvePostLoginPath(userLike, fallbackPath, companyCtx = null) {
   const role = String(userLike?.role || "").toLowerCase();
   if (isStaffDashboardRole(role)) return staffDashboardHomePath();
+
+  const posReturn = String(fallbackPath || "");
+  if (isPosAccessPath(posReturn.split("?")[0])) {
+    return posReturn;
+  }
 
   if (companyCtx?.companyId) {
     const home = resolveCompanyHomePath(companyCtx);

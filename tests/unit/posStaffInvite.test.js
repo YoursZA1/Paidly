@@ -7,12 +7,16 @@ import {
   POS_INVITE_NEXT,
   POS_JOB_FUNCTION,
   posInvitePath,
+  posAccessPath,
+  posTillPath,
+  normalizePosTillId,
+  isPosAccessPath,
   POS_ONLY_PERMISSIONS,
 } from "@shared/posStaffInvite.js";
 import { membershipHasPermission, normalizeJobFunction, PERMISSIONS } from "@/lib/companyPermissions";
 import { formatCompanyMemberRoleLabel } from "@/lib/companyJobFunctions";
 import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
-import { resolveCompanyHomePath } from "@/lib/postAuthNavigation.js";
+import { resolveCompanyHomePath, resolvePostLoginPath } from "@/lib/postAuthNavigation.js";
 import { createPageUrl } from "@/utils";
 import { normalizeJobFunction as serverNormalizeJobFunction } from "../../server/src/companyRouteAccess.js";
 
@@ -84,9 +88,21 @@ describe("POS-only staff invite", () => {
     expect(posInvitePath("tok", "https://www.paidly.co.za")).toBe(
       "https://www.paidly.co.za/pos/invite/tok"
     );
+    expect(posInvitePath("a".repeat(64), "https://www.paidly.co.za")).toContain("/pos/invite/");
+    expect(isPosInviteUrl("/pos/join")).toBe(true);
     expect(posInvitePath("7K4M-X92Q", "https://www.paidly.co.za")).toBe(
       "https://www.paidly.co.za/pos/invite/7K4M-X92Q"
     );
+    expect(posAccessPath("https://www.paidly.co.za")).toBe("https://www.paidly.co.za/pos");
+    const tillId = "11111111-1111-4111-8111-111111111111";
+    expect(normalizePosTillId("till-id")).toBe("");
+    expect(normalizePosTillId(tillId)).toBe(tillId);
+    expect(posTillPath(tillId, "https://www.paidly.co.za")).toBe(
+      `https://www.paidly.co.za/pos/till/${tillId}`
+    );
+    expect(isPosAccessPath("/pos")).toBe(true);
+    expect(isPosAccessPath(`/pos/till/${tillId}`)).toBe(true);
+    expect(isPosAccessPath("/pos/invite/abc")).toBe(false);
   });
 
   it("labels POS employees as POS staff", () => {
@@ -123,5 +139,13 @@ describe("POS-only staff invite", () => {
         isOrgOwner: false,
       })
     ).toBe(createPageUrl("Dashboard"));
+  });
+
+  it("returns to /pos or a till URL after sign-in instead of the employee dashboard", () => {
+    const tillId = "11111111-1111-4111-8111-111111111111";
+    const employee = { role: "user", companyRole: "employee", companyId: "o1" };
+    expect(resolvePostLoginPath(employee, "/pos")).toBe("/pos");
+    expect(resolvePostLoginPath(employee, `/pos/till/${tillId}`)).toBe(`/pos/till/${tillId}`);
+    expect(resolvePostLoginPath(employee, "/Dashboard")).toBe(createPageUrl("employee-dashboard"));
   });
 });

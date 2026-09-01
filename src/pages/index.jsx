@@ -65,7 +65,7 @@ const EditCatalogItem = lazy(() => import("./EditCatalogItem"));
 const QuoteTemplates = lazy(() => import("./QuoteTemplates"));
 const Vendors = lazy(() => import("./Vendors"));
 const PurchaseOrders = lazy(() => import("./PurchaseOrders"));
-const POS = lazy(() => import("./POS"));
+const PosAccess = lazy(() => import("./PosAccess"));
 const Budgets = lazy(() => import("./Budgets"));
 const Accounting = lazy(() => import("./Accounting"));
 const AdminV2Dashboard = lazy(() => import("./AdminV2Dashboard"));
@@ -92,11 +92,12 @@ const NotFoundPage = lazy(() =>
   import("./ApplicationErrorPage").then((m) => ({ default: m.NotFoundPage }))
 );
 
-import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { RequireCompanyPermissionRedirect } from "@/components/auth/RequireCompanyPermission";
 import RequireBusinessOwner from "@/components/auth/RequireBusinessOwner";
 import { PERMISSIONS } from "@/lib/companyPermissions";
+import { isPosAccessPath, posTillPath } from "@shared/posStaffInvite.js";
 import AuthProtectedRouteInvariant from "@/components/auth/AuthProtectedRouteInvariant";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 import { useAuth } from "@/contexts/AuthContext";
@@ -161,6 +162,12 @@ function RedirectPreserveSearch({ to }) {
     return <Navigate to={`${to}${search}${hash}`} replace />;
 }
 
+function RedirectPosTillCanonical() {
+    const { tillId } = useParams();
+    const { search, hash } = useLocation();
+    return <Navigate to={`${posTillPath(tillId)}${search}${hash}`} replace />;
+}
+
 // --- Main App Pages ---
 const MAIN_ROUTES = [
     { path: "/", element: <Home /> },
@@ -194,8 +201,10 @@ const MAIN_ROUTES = [
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
     { path: "/PurchaseOrders", element: ownerRoute(<PurchaseOrders />) },
     { path: "/purchaseorders", element: ownerRoute(<PurchaseOrders />) },
-    { path: "/POS", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.POS_ACCESS}><POS /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/pos", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.POS_ACCESS}><POS /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/POS", element: <RedirectPreserveSearch to="/pos" /> },
+    { path: "/POS/till/:tillId", element: <RedirectPosTillCanonical /> },
+    { path: "/pos/till/:tillId", element: <PosAccess /> },
+    { path: "/pos", element: <PosAccess /> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
     { path: "/PrivacyPolicy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },
@@ -401,9 +410,11 @@ function PagesContent() {
     const location = useLocation();
     const { loading, user } = useAuth();
     const authUserId = getAuthUserId(user);
-    const needsAppShell = !shouldBypassAppLayout(location.pathname);
+    const posAccessGuest = isPosAccessPath(location.pathname) && !authUserId;
+    const needsAppShell = !shouldBypassAppLayout(location.pathname) && !posAccessGuest;
 
     // Avoid mounting the main shell (nav, store hydration) until session bootstrap knows if there is a user.
+    // POS guests skip this wait so /pos can render sign-in without the dashboard bootstrap.
     if (needsAppShell && loading && !authUserId) {
         return <AuthBootstrapShell />;
     }
@@ -436,7 +447,7 @@ function PagesContent() {
         </>
     );
 
-    if (shouldBypassAppLayout(location.pathname)) {
+    if (shouldBypassAppLayout(location.pathname) || posAccessGuest) {
         return (
             <>
                 {content}

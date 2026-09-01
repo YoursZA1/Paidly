@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { isPosInviteUrl } from "@shared/posStaffInvite.js";
+import { isPosInviteUrl, posAccessPath, posTillPath } from "@shared/posStaffInvite.js";
 import { buildPosTillInviteMessage, formatPosTillInviteCode } from "@shared/posTillInviteCode.js";
 import { JOB_FUNCTION_LABELS } from "@/lib/companyJobFunctions";
 import { COMPANY_ROLE_LABELS } from "@/lib/companyPermissions";
@@ -65,6 +65,10 @@ function functionLabel(jobFunction, posOnly) {
 export default function CompanyTeamInviteResultDialog({ notice, onOpenChange, onRetryEmail }) {
   const open = notice != null;
   const posOnly = notice?.posOnly === true || isPosInviteUrl(notice?.inviteLink);
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://www.paidly.co.za";
+  const posAccessUrl = notice?.registerId
+    ? posTillPath(notice.registerId, origin)
+    : posAccessPath(origin);
   const code = formatPosTillInviteCode(notice?.inviteCode) || notice?.inviteCode || "";
   const shareText = posOnly
     ? buildPosTillInviteMessage({
@@ -150,9 +154,15 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange, on
 
             {posOnly && code ? (
               <div>
-                <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Invite code</p>
+                <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+                  Backup device code
+                </p>
                 <p className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-center font-mono text-2xl font-bold tracking-[0.18em]">
                   {code}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Staff should open the invitation link. Use this code only to activate a device at{" "}
+                  <span className="font-mono">/pos/join</span>.
                 </p>
               </div>
             ) : null}
@@ -163,6 +173,17 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange, on
                 {notice.inviteLink || "—"}
               </p>
             </div>
+
+            {posOnly ? (
+              <div>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {notice.registerId ? "Till URL (after they activate)" : "POS access (after they activate)"}
+                </p>
+                <p className="min-w-0 break-all rounded-md border border-border bg-muted/40 p-2 font-mono text-xs leading-relaxed">
+                  {posAccessUrl}
+                </p>
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Button
@@ -175,6 +196,17 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange, on
                 <Copy className="h-4 w-4" aria-hidden />
                 Copy invite link
               </Button>
+              {posOnly ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-11"
+                  onClick={() => void copyText(posAccessUrl, "POS access link copied")}
+                >
+                  <Copy className="h-4 w-4" aria-hidden />
+                  Copy POS access
+                </Button>
+              ) : null}
               {onRetryEmail ? (
                 <Button
                   type="button"
@@ -217,7 +249,7 @@ export default function CompanyTeamInviteResultDialog({ notice, onOpenChange, on
                   onClick={() => void copyText(code, "Invite code copied")}
                 >
                   <Copy className="h-4 w-4" aria-hidden />
-                  Copy code
+                  Copy backup code
                 </Button>
               ) : null}
             </div>

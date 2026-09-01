@@ -1,6 +1,6 @@
 /**
  * Back-office POS entry (sidebar, dashboard, search).
- * The till itself stays a dedicated shell at `/POS` — this module only decides
+ * The till itself stays a dedicated shell at `/pos` — this module only decides
  * whether staff can see a link to it.
  *
  * Show POS when the org opted into a till (retail/mixed), the plan includes
@@ -11,8 +11,16 @@
 const POS_QUERY_KEYS = ["pos", "till", "checkout", "register"];
 
 /** Dedicated till shell — Layout skips sidebar/header/footer/mobile nav. */
+export function isPosTerminalPath(pathname) {
+  const p = String(pathname || "");
+  return /^\/pos\/?$/i.test(p) || /^\/pos\/till\/[^/]+\/?$/i.test(p);
+}
+
 export function isPosTerminalPage(pageName) {
-  return /^pos$/i.test(String(pageName || ""));
+  const raw = String(pageName || "");
+  if (/^pos$/i.test(raw)) return true;
+  if (/^pos\/till\//i.test(raw)) return true;
+  return isPosTerminalPath(raw.startsWith("/") ? raw : `/${raw}`);
 }
 
 /**

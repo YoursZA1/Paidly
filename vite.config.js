@@ -115,6 +115,9 @@ export default defineConfig(async ({ mode }) => {
     },
     envDir: '.',
     server: {
+      watch: {
+        ignored: ["**/playwright-report/**", "**/playwright/test-results/**", "**/test-results/**"],
+      },
       proxy: {
         '/api': {
           target: backendTarget,

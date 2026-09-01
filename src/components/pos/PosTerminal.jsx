@@ -86,6 +86,7 @@ import { addPosCartLine, posCartSubtotal, posProductStock, posStockLabel, setPos
 import { refundRailForSale, remainingLinesForTill } from "../../../server/src/pos/posReturnMath.js";
 import { clearHeldCart, hydrateHeldCart, readHeldCart, writeHeldCart } from "@/lib/pos/posHeldCart";
 import { pickActiveRegister, readActiveRegisterId, writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
+import { resolveAssignedTill } from "../../../server/src/pos/posRegisterMath.js";
 import { WALK_IN_CUSTOMER_LABEL } from "@/lib/pos/posCustomerSearch";
 import { invalidateClientDomain, invalidateRevenueReadModels } from "@/lib/queryInvalidation";
 import PosCustomerDialog from "@/components/pos/PosCustomerDialog";
@@ -318,7 +319,7 @@ function CartLineList({ cart, currency, onQty }) {
   );
 }
 
-export default function PosTerminal() {
+export default function PosTerminal({ requestedTillId = null } = {}) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -381,6 +382,7 @@ export default function PosTerminal() {
   const [convertBusy, setConvertBusy] = useState(false);
   const [registers, setRegisters] = useState([]);
   const [activeRegister, setActiveRegister] = useState(null);
+  const [tillGateError, setTillGateError] = useState(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [openSession, setOpenSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -439,13 +441,47 @@ export default function PosTerminal() {
     try {
       const data = await listPosRegisters();
       setRegisters(data.registers);
-      const next = pickActiveRegister(data.registers, readActiveRegisterId(orgId));
+      if (requestedTillId) {
+        const allowed = resolveAssignedTill(
+          {
+            companyRole,
+            jobFunction,
+            isOrgOwner,
+            posRegisterId: companyCtx?.posRegisterId || null,
+          },
+          requestedTillId
+        );
+        if (!allowed.ok) {
+          setTillGateError(allowed.error || "This till is not assigned to you.");
+          setActiveRegister(null);
+          return;
+        }
+      }
+      const next = pickActiveRegister(
+        data.registers,
+        readActiveRegisterId(orgId),
+        companyCtx?.posRegisterId || null,
+        requestedTillId || null
+      );
+      if (requestedTillId && !next) {
+        setTillGateError("This till is not available on your account.");
+        setActiveRegister(null);
+        return;
+      }
+      setTillGateError(null);
       setActiveRegister(next);
       if (next?.id) writeActiveRegisterId(orgId, next.id);
     } catch {
       setRegisters([]);
     }
-  }, [orgId]);
+  }, [
+    orgId,
+    companyCtx?.posRegisterId,
+    requestedTillId,
+    companyRole,
+    jobFunction,
+    isOrgOwner,
+  ]);
 
   const loadSession = useCallback(async (register) => {
     if (!register?.id) {
@@ -1309,6 +1345,21 @@ export default function PosTerminal() {
     { label: "Discount", amount: totals.discount_amount, action: cart.length > 0 && canDiscount ? "discount" : null },
     { label: "Tax", amount: totals.tax_amount },
   ];
+
+  if (tillGateError) {
+    return (
+      <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+        <Store className="size-10 text-muted-foreground" aria-hidden />
+        <div>
+          <p className="font-display text-xl font-semibold">Till not available</p>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">{tillGateError}</p>
+        </div>
+        <Button type="button" className="h-12" onClick={() => navigate(createPageUrl("POS"))}>
+          Open Paidly POS
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-background">
@@ -2277,6 +2328,13 @@ export default function PosTerminal() {
                     activeRegister?.id === row.id ? "bg-muted/60" : ""
                   )}
                   onClick={() => {
+                    if (
+                      posOnlyStaff &&
+                      companyCtx?.posRegisterId &&
+                      row.id !== companyCtx.posRegisterId
+                    ) {
+                      return;
+                    }
                     setActiveRegister(row);
                     if (orgId) writeActiveRegisterId(orgId, row.id);
                     setRegisterOpen(false);

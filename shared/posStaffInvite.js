@@ -50,6 +50,41 @@ export function posInvitePath(token, origin = "") {
   return base ? `${base}${path}` : path;
 }
 
+/** Dedicated till URL for the business (bookmark / device home). Not an invite token. */
+export function posAccessPath(origin = "") {
+  const path = "/pos";
+  const base = String(origin || "").replace(/\/$/, "");
+  return base ? `${base}${path}` : path;
+}
+
+const TILL_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Register id from `/pos/till/{till-id}`. Empty if the segment is not a UUID. */
+export function normalizePosTillId(raw) {
+  const id = String(raw || "").trim();
+  return TILL_ID_RE.test(id) ? id : "";
+}
+
+/**
+ * Specific till URL. Knowing this path is not authentication — Auth + pos_access
+ * (and POS-only assignment) still apply.
+ */
+export function posTillPath(tillId, origin = "") {
+  const id = normalizePosTillId(tillId);
+  if (!id) return posAccessPath(origin);
+  const path = `/pos/till/${encodeURIComponent(id)}`;
+  const base = String(origin || "").replace(/\/$/, "");
+  return base ? `${base}${path}` : path;
+}
+
+/** Backup device activation (typed till code). Not the email CTA. */
+export function posJoinPath(origin = "") {
+  const path = "/pos/join";
+  const base = String(origin || "").replace(/\/$/, "");
+  return base ? `${base}${path}` : path;
+}
+
 /**
  * Employee + POS function (or explicit source=pos) is a till invite.
  * Function never promotes RBAC; manager/admin with function=pos stay back-office.
@@ -69,8 +104,13 @@ export function isPosStaffInviteRequest(input = {}) {
 
 export function isPosInviteUrl(raw) {
   const text = String(raw || "");
-  if (/\/pos\/invite\//i.test(text)) return true;
+  if (/\/pos\/invite\//i.test(text) || /\/pos\/join\/?$/i.test(text)) return true;
   return /[?&]next=POS\b/i.test(text);
+}
+
+export function isPosAccessPath(pathname) {
+  const p = String(pathname || "");
+  return /^\/pos\/?$/i.test(p) || /^\/pos\/till\/[^/]+\/?$/i.test(p);
 }
 
 /**
