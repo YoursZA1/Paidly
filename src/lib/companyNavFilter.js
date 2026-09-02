@@ -51,12 +51,17 @@ export function filterNavigationForCompanyRole(items, membership) {
     for (const id of MANAGER_EXTRA_NAV_IDS) allowed.add(id);
     if (hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_LEAVE)) {
       allowed.add("nav-documents");
+      allowed.add("nav-leave");
     }
   }
 
   if (membership.companyRole === "admin") {
     if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_PAYROLL)) {
       allowed.add("nav-payslips");
+      allowed.add("nav-payroll");
+    }
+    if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_LEAVE)) {
+      allowed.add("nav-leave");
     }
     if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
       allowed.add("nav-settings");

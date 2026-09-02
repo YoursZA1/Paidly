@@ -46,6 +46,11 @@ const EditRecurringInvoice = lazy(() => import("./EditRecurringInvoice"));
 const CompanyWorkspace = lazy(() => import("./CompanyWorkspace"));
 const Reports = lazy(() => import("./Reports"));
 const Payslips = lazy(() => import("./Payslips"));
+const Payroll = lazy(() => import("./Payroll"));
+const PayRun = lazy(() => import("./PayRun"));
+const MyPayroll = lazy(() => import("./MyPayroll"));
+const Leave = lazy(() => import("./Leave"));
+const LeaveCalendar = lazy(() => import("./LeaveCalendar"));
 const CreatePayslip = lazy(() => import("./CreatePayslip"));
 const CreateLeaveRequest = lazy(() => import("./CreateLeaveRequest"));
 const CreateExpenseClaim = lazy(() => import("./CreateExpenseClaim"));
@@ -261,6 +266,16 @@ const QUOTE_ROUTES = [
 
 // --- Payslip & Report Pages ---
 const PAYSLIP_REPORT_ROUTES = [
+    { path: "/Payroll", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><Payroll /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/payroll", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><Payroll /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/PayRun", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><PayRun /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/payrun", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><PayRun /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/MyPayroll", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><MyPayroll /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/mypayroll", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><MyPayroll /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Leave", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><Leave /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/leave", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><Leave /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/LeaveCalendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><LeaveCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/leavecalendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><LeaveCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Payslips", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><Payslips /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/CreatePayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><CreatePayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/EditPayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><EditPayslip /></RequireCompanyPermissionRedirect></RequireAuth> },

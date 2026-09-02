@@ -12,7 +12,7 @@ import { formatCurrency } from "../components/CurrencySelector";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAutoDraft } from "@/hooks/useAutoDraft";
-import { calculateFullPayroll } from "@/components/payroll/PayeTaxCalculator";
+import { useServerPayrollPreview } from "@/hooks/useServerPayrollPreview";
 import { useToast } from "@/components/ui/use-toast";
 
 export default function EditPayslip() {
@@ -129,49 +129,25 @@ export default function EditPayslip() {
         }));
     };
 
-    const calculatedPayroll = useMemo(() => {
-        if (!payslipData) return null;
-        const basicSalary = parseFloat(payslipData.basic_salary) || 0;
-        const overtimeHours = parseFloat(payslipData.overtime_hours) || 0;
-        const overtimeRate = parseFloat(payslipData.overtime_rate) || 0;
-        const medicalAidDeduction = parseFloat(payslipData.medical_aid_deduction) || 0;
-        const pensionDeduction = parseFloat(payslipData.pension_deduction) || 0;
-        const parsedAllowances = (payslipData.allowances || []).map((allowance) => ({
-            ...allowance,
-            amount: parseFloat(allowance.amount) || 0,
-        }));
-        if (basicSalary <= 0 && overtimeHours <= 0 && parsedAllowances.length === 0) return null;
-        return calculateFullPayroll(
-            basicSalary,
-            parsedAllowances,
-            overtimeHours,
-            overtimeRate,
-            medicalAidDeduction,
-            pensionDeduction
-        );
-    }, [
-        payslipData,
-        payslipData?.basic_salary,
-        payslipData?.allowances,
-        payslipData?.overtime_hours,
-        payslipData?.overtime_rate,
-        payslipData?.medical_aid_deduction,
-        payslipData?.pension_deduction,
-    ]);
+    const { calculatedPayroll } = useServerPayrollPreview({
+        basicSalary: payslipData?.basic_salary,
+        allowances: payslipData?.allowances || [],
+        overtimeHours: payslipData?.overtime_hours,
+        overtimeRate: payslipData?.overtime_rate,
+        medicalAid: payslipData?.medical_aid_deduction,
+        pensionFund: payslipData?.pension_deduction,
+        otherDeductions: payslipData?.other_deductions || [],
+        periodEnd: payslipData?.pay_period_end,
+    });
 
     const { grossPay, totalDeductions, netPay, payeDeduction, uifDeduction } = useMemo(() => {
         if (!payslipData || !calculatedPayroll) {
             return { grossPay: 0, totalDeductions: 0, netPay: 0, payeDeduction: 0, uifDeduction: 0 };
         }
-        const totalOtherDeductions = (payslipData.other_deductions || []).reduce(
-            (sum, deduction) => sum + (parseFloat(deduction.amount) || 0),
-            0
-        );
-        const computedTotalDeductions = calculatedPayroll.totalDeductions + totalOtherDeductions;
         return {
             grossPay: calculatedPayroll.grossPay,
-            totalDeductions: computedTotalDeductions,
-            netPay: calculatedPayroll.grossPay - computedTotalDeductions,
+            totalDeductions: calculatedPayroll.totalDeductions,
+            netPay: calculatedPayroll.netPay,
             payeDeduction: calculatedPayroll.payeDeduction || 0,
             uifDeduction: calculatedPayroll.uifDeduction || 0,
         };

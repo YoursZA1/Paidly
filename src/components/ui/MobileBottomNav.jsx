@@ -78,13 +78,13 @@ function MobileBottomNav({ onOpenMenu }) {
           </Link>
           {/* Invoices (owners) / My Payslips (employees) */}
           <Link
-            to={isCompanyMemberNav ? createPageUrl("Payslips") : createPageUrl("Invoices")}
+            to={isCompanyMemberNav ? createPageUrl("MyPayroll") : createPageUrl("Invoices")}
             onClick={() => handlePress()}
             className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
-              isActive(isCompanyMemberNav ? createPageUrl("Payslips") : createPageUrl("Invoices")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+              isActive(isCompanyMemberNav ? createPageUrl("MyPayroll") : createPageUrl("Invoices")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
             }`}
-            aria-label={isCompanyMemberNav ? "My Payslips" : "Invoices"}
-            aria-current={isActive(isCompanyMemberNav ? createPageUrl("Payslips") : createPageUrl("Invoices")) ? "page" : undefined}
+            aria-label={isCompanyMemberNav ? "My Payroll" : "Invoices"}
+            aria-current={isActive(isCompanyMemberNav ? createPageUrl("MyPayroll") : createPageUrl("Invoices")) ? "page" : undefined}
           >
             {isCompanyMemberNav ? (
               <BanknotesIcon className="w-6 h-6 shrink-0" />

@@ -81,6 +81,8 @@ import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js
 import dashboardBootstrapHandler from "./dashboardBootstrapHandler.js";
 import { registerCompanyTeamRoutes } from "./companyTeamRoutes.js";
 import { registerPosRoutes } from "./pos/posApiRoutes.js";
+import { handlePayrollRoute, resolvePayrollRoute } from "./payroll/payrollRoutes.js";
+import { handleLeaveRoute, resolveLeaveRoute } from "./leave/leaveRoutes.js";
 import { registerPaymentIntentRoutes } from "./payments/registerPaymentIntentRoutes.js";
 import { registerAdminCompanyInviteRoutes } from "./adminCompanyInviteRoutes.js";
 import authSignInHandler from "./auth/authSignInApi.js";
@@ -699,6 +701,18 @@ app.get("/api/exchange-rates", (req, res) => handleLatestExchangeRates(req, res)
 app.get("/api/dashboard/bootstrap", dashboardBootstrapHandler);
 registerCompanyTeamRoutes(app);
 registerPosRoutes(app);
+app.all("/api/payroll", (req, res) => res.status(404).json({ error: "Not found" }));
+app.all("/api/payroll/*", (req, res) => {
+  const resolved = resolvePayrollRoute(req);
+  if (!resolved) return res.status(404).json({ error: "Not found" });
+  return handlePayrollRoute(req, res, resolved);
+});
+app.all("/api/leave", (req, res) => res.status(404).json({ error: "Not found" }));
+app.all("/api/leave/*", (req, res) => {
+  const resolved = resolveLeaveRoute(req);
+  if (!resolved) return res.status(404).json({ error: "Not found" });
+  return handleLeaveRoute(req, res, resolved);
+});
 registerPaymentIntentRoutes(app);
 registerAdminCompanyInviteRoutes(app);
 

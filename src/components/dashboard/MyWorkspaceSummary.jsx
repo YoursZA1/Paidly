@@ -66,15 +66,15 @@ export default function MyWorkspaceSummary() {
       </h2>
       <div className="grid gap-3 sm:grid-cols-3">
         <StatTile
-          to={createPageUrl("Payslips")}
-          title="My Payslips"
+          to={createPageUrl("MyPayroll")}
+          title="My Payroll"
           value={data.payslips?.count ?? 0}
           hint={data.payslips?.latest ? "View latest" : "View payslips"}
           icon={Receipt}
         />
         <StatTile
-          to={`${createPageUrl("Documents")}?type=leave_request`}
-          title="My Leave Applications"
+          to={createPageUrl("MyPayroll?tab=leave")}
+          title="My Leave"
           value={data.leave?.count ?? 0}
           hint={leavePending ? `${leavePending} pending approval` : "Track requests"}
           icon={CalendarOff}

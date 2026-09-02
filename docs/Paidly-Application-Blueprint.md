@@ -208,13 +208,34 @@ Do not create a second tenant system. `CompanyContext` remains org RBAC. Active 
 |---------------------------|---------|
 | Invoice | `invoices` |
 | Quote | `quotes` |
-| Payslip | `payslips` |
+| Payslip | `payslips` (issued pay statement; generated from a pay run, not the employee source of truth) |
 | Recurring invoice | `recurring_invoices` |
-| Other business documents (leave, expenses, contracts, …) | `documents` (+ `document_items`, `document_events`) |
+| Payroll run | `pay_runs` + `pay_run_items` + `payroll_profiles` (identity remains `memberships`) |
+| Leave | `leave_types`, `leave_balances`, `leave_transactions`, `leave_requests` |
+| Other business documents (expenses, contracts, …) | `documents` (+ `document_items`, `document_events`) |
 
 **Do not dual-write.** Invoices, quotes, payslips, and recurring invoices must not be copied into `documents`. The Documents Hub is not a second store for commercial documents.
 
 **Persistence:** commercial documents remain on specialised Supabase tables. Shared UI and helpers live in `src/document-engine/`. Ownership policy: `src/document-engine/documentSystemOfRecord.js`.
+
+### 2b. Payroll & Leave (people operations)
+
+**Job:** Pay employees and manage leave without a second identity system.
+
+```
+organizations → memberships (employee identity)
+  → payroll_profiles → pay_runs → pay_run_items → payslips
+  → leave_types / leave_balances / leave_transactions / leave_requests
+```
+
+- **Identity:** `memberships` + `profiles`. Do not create a parallel employees table.
+- **Calculation:** `shared/payroll/calculatePayroll.js` is the only payroll math. `/api/payroll/*` is the source of truth; the SPA displays server results. Statutory rates live in versioned `payroll_statutory_rules` (not in React).
+- **Locking:** Finalized pay runs and locked payslips cannot be silently rewritten. Corrections use an adjustment pay run.
+- **Leave:** Server-side working-day counts (`Africa/Johannesburg`), overlap checks, and a leave ledger (`leave_transactions`). Approvals update balances transactionally via `/api/leave`.
+- **RBAC:** Existing company permissions (`MANAGE_PAYROLL`, `VIEW_OWN_PAYSLIPS`, `APPROVE_LEAVE`, …). POS-only staff cannot administer payroll.
+- **Delivery:** Issued payslips stay on `payslips` with authenticated / email-gated public share tokens. Email uses the existing Resend path.
+
+**Migration status:** `supabase/migrations/20260902120000_payroll_engine_and_leave_ledger.sql`.
 
 **Migration status (implementation):**
 
@@ -224,6 +245,7 @@ Do not create a second tenant system. `CompanyContext` remains org RBAC. Active 
   - Shared pagination and shared export assembly service paths.
 - **Documents Hub (generic types only):**
   - Leave requests, expense claims, contracts, and other catalog types persist in `public.documents`.
+  - **HR leave (balances, accrual, approval ledger)** is canonical on `leave_requests` / `leave_balances` / `leave_transactions`. New applications go through `/api/leave`. Existing hub `leave_request` documents remain visible; they are not the leave ledger.
   - Hub **Convert to invoice / quote** (job cards, reports, proposals, scopes) opens specialised compose (`CreateDocument/invoice|quote?fromHubDocument=`) and writes to `invoices` / `quotes`. It does not insert commercial types into `documents`.
   - Quote → invoice remains on the Quotes page (`CreateInvoice?quoteId=` / `CreateDocument/invoice?quoteId=`).
   - Leftover `documents` rows with `type=invoice|quote|payslip` (if any exist from earlier experiments) are **hidden from the hub list**. Opening a direct URL shows a cleanup screen: go to the specialised list, or archive/remove the leftover hub row. Rows are not migrated and not auto-deleted.

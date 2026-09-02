@@ -80,7 +80,7 @@ export default function PayslipDocument({
         </div>
       </section>
 
-      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2" style={{ pageBreakInside: "avoid" }}>
         <div className="rounded-xl border border-border bg-white p-4 sm:p-5">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Earnings</h3>
           <div className="mt-3 divide-y divide-border/80">
@@ -112,12 +112,42 @@ export default function PayslipDocument({
         </div>
       </section>
 
-      <section className="mt-6 flex justify-end">
+      <section className="mt-6 flex justify-end" style={{ pageBreakInside: "avoid" }}>
         <div className="w-full rounded-xl border border-primary/20 bg-primary/10 px-5 py-4 text-right sm:max-w-sm">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary">Net Pay</p>
           <p className="mt-1 text-3xl font-bold tabular-nums text-primary">{money(payslip?.net_pay, currency)}</p>
         </div>
       </section>
+
+      {Array.isArray(payslip?.leave_summary) && payslip.leave_summary.length > 0 ? (
+        <section className="mt-6 rounded-xl border border-border bg-white p-4 sm:p-5" style={{ pageBreakInside: "avoid" }}>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Leave summary</h3>
+          <table className="mt-3 w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-600">
+                <th className="py-1 font-medium">Type</th>
+                <th className="py-1 font-medium">Accrued</th>
+                <th className="py-1 font-medium">Used</th>
+                <th className="py-1 font-medium">Available</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payslip.leave_summary.map((row) => (
+                <tr key={row.code || row.name} style={{ pageBreakInside: "avoid" }}>
+                  <td className="py-1">{valueOrDash(row.name)}</td>
+                  <td className="py-1 tabular-nums">{row.accrued}</td>
+                  <td className="py-1 tabular-nums">{row.used}</td>
+                  <td className="py-1 tabular-nums">{row.available}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+
+      <footer className="mt-8 flex items-center justify-between border-t border-border pt-3 text-[11px] text-slate-500">
+        <span>Paidly payslip · {valueOrDash(payslip?.payslip_number)}</span>
+      </footer>
     </article>
   );
 }

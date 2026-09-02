@@ -37,6 +37,7 @@ const FEATURE_ALIASES = {
   expenses: 'expenses',
   purchase_orders: 'purchase_orders',
   payslips: 'payslips',
+  leave_management: 'leave_management',
   vat_reports: 'vat_reports',
   email_templates: 'email_templates',
   recurring_invoices: 'recurring_invoices',

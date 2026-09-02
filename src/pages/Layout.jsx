@@ -85,7 +85,9 @@ import {
   Receipt,
   Layers,
   ShoppingCart,
-  Store
+  Store,
+  Wallet,
+  CalendarOff
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -233,12 +235,28 @@ const allNavigationItems = [
   },
   { type: "section", title: "Finance", id: "nav-section-finance" },
   {
+    title: "Payroll",
+    url: createPageUrl("Payroll"),
+    icon: Wallet,
+    feature: null,
+    roles: MAIN_APP_NAV_ROLES,
+    id: "nav-payroll",
+  },
+  {
     title: "Payslips",
-    url: createPageUrl("Payslips"),
+    url: createPageUrl("MyPayroll"),
     icon: Receipt,
     feature: null,
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-payslips",
+  },
+  {
+    title: "Leave",
+    url: createPageUrl("Leave"),
+    icon: CalendarOff,
+    feature: null,
+    roles: MAIN_APP_NAV_ROLES,
+    id: "nav-leave",
   },
   {
     title: "Cash Flow",
