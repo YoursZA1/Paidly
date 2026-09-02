@@ -1,4 +1,5 @@
 import { supabaseAdmin, writePayrollAudit, notifyUser } from "../payroll/payrollGate.js";
+import { insertPayrollProfileRow } from "../payroll/payrollService.js";
 import { johannesburgYmd, leaveYearForDate, formatIsoDate } from "../../../shared/payroll/dates.js";
 import { countWorkingDays, computeLeaveBalance, yearToDateAccrual } from "../../../shared/leave/leaveMath.js";
 import { validateLeaveApplication } from "../../../shared/leave/validateLeave.js";
@@ -57,21 +58,21 @@ async function getOrCreateProfile(orgId, userId) {
     .select("id", { count: "exact", head: true })
     .eq("org_id", orgId);
   const number = `EMP-${String((count || 0) + 1).padStart(3, "0")}`;
-  const { data: created, error } = await supabaseAdmin
-    .from("payroll_profiles")
-    .insert({
-      org_id: orgId,
-      membership_id: membership.id,
-      user_id: userId,
-      employee_number: number,
-      full_name: name,
-      email: person?.email || null,
-      job_title: person?.job_title || null,
-      department: person?.department || null,
-    })
-    .select("*")
-    .maybeSingle();
-  if (error) throw error;
+  const created = await insertPayrollProfileRow({
+    org_id: orgId,
+    membership_id: membership.id,
+    user_id: userId,
+    employee_number: number,
+    full_name: name,
+    email: person?.email || null,
+    job_title: person?.job_title || null,
+    department: person?.department || null,
+  });
+  if (!created) {
+    const err = new Error("Could not create a payroll profile for this employee.");
+    err.status = 400;
+    throw err;
+  }
   return created;
 }
 

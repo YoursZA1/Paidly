@@ -104,6 +104,32 @@ function displayName(profile, fallbackEmail) {
   return String(profile?.full_name || joined || fallbackEmail || "Employee").trim();
 }
 
+function isMissingAuthUserFk(error) {
+  const msg = String(error?.message || "");
+  return error?.code === "23503" || /payroll_profiles_user_id_fkey|foreign key constraint/i.test(msg);
+}
+
+/**
+ * memberships.user_id can be an orphan (no auth.users row). Do not fail the
+ * whole payroll load — store the membership and drop the invalid user link.
+ */
+export async function insertPayrollProfileRow(row) {
+  const first = await supabaseAdmin.from("payroll_profiles").insert(row).select("*").maybeSingle();
+  if (!first.error) return first.data;
+  if (isMissingAuthUserFk(first.error) && row.user_id) {
+    const retry = await supabaseAdmin
+      .from("payroll_profiles")
+      .insert({ ...row, user_id: null })
+      .select("*")
+      .maybeSingle();
+    if (!retry.error) return retry.data;
+    if (!/duplicate|unique/i.test(retry.error.message || "")) throw retry.error;
+    return null;
+  }
+  if (!/duplicate|unique/i.test(first.error.message || "")) throw first.error;
+  return null;
+}
+
 export async function syncPayrollProfiles(orgId) {
   await ensurePayrollDefaults(orgId);
   const members = await listMemberships(orgId);
@@ -122,10 +148,10 @@ export async function syncPayrollProfiles(orgId) {
     const person = people.get(member.user_id);
     const number = buildEmployeeNumber(seq);
     seq += 1;
-    const { error } = await supabaseAdmin.from("payroll_profiles").insert({
+    await insertPayrollProfileRow({
       org_id: orgId,
       membership_id: member.id,
-      user_id: member.user_id,
+      user_id: member.user_id || null,
       employee_number: number,
       full_name: displayName(person, person?.email),
       email: person?.email || null,
@@ -136,7 +162,6 @@ export async function syncPayrollProfiles(orgId) {
       pay_frequency: "monthly",
       pay_type: "monthly_salary",
     });
-    if (error && !/duplicate|unique/i.test(error.message || "")) throw error;
   }
 
   const { data: profiles } = await supabaseAdmin
@@ -218,12 +243,24 @@ export async function upsertPayrollProfile(orgId, actorId, payload) {
       .eq("org_id", orgId)
       .select("*")
       .maybeSingle();
-    if (error) throw error;
-    row = data;
+    if (error && isMissingAuthUserFk(error) && patch.user_id) {
+      const retry = await supabaseAdmin
+        .from("payroll_profiles")
+        .update({ ...patch, user_id: null })
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .select("*")
+        .maybeSingle();
+      if (retry.error) throw retry.error;
+      row = retry.data;
+    } else if (error) {
+      throw error;
+    } else {
+      row = data;
+    }
   } else {
-    const { data, error } = await supabaseAdmin.from("payroll_profiles").insert(patch).select("*").maybeSingle();
-    if (error) throw error;
-    row = data;
+    row = await insertPayrollProfileRow(patch);
+    if (!row) throw new Error("Could not save payroll profile.");
   }
   await writePayrollAudit({
     orgId,
