@@ -26,7 +26,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import useOrgBrands from "@/hooks/useOrgBrands";
 import { OrgBrandService } from "@/services/OrgBrandService";
 import { uploadLogo, validateLogoFile, logoMaxSizeLabel } from "@/lib/logoUpload";
-import AssetService from "@/services/AssetService";
 import LogoImage from "@/components/shared/LogoImage";
 
 const EMPTY_DRAFT = { id: null, name: "", logo_url: "" };
@@ -51,13 +50,13 @@ export default function OrgBrandsSettings() {
 
   useEffect(() => {
     if (!logoFile) {
-      setPreviewSrc(draft.logo_url ? AssetService.getLogo(draft.logo_url) : "");
+      setPreviewSrc("");
       return undefined;
     }
     const url = URL.createObjectURL(logoFile);
     setPreviewSrc(url);
     return () => URL.revokeObjectURL(url);
-  }, [logoFile, draft.logo_url]);
+  }, [logoFile]);
 
   const openCreate = () => {
     setDraft(EMPTY_DRAFT);
@@ -130,8 +129,8 @@ export default function OrgBrandsSettings() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Brands are trading names and logos on invoices. They belong to this Paidly organization — not a
-        second login or workspace.
+        Brands are extra trading names for invoices. They belong to this organization — not a second
+        login or storage bucket. Leave the brand logo empty to use your Business Logo.
       </p>
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -205,7 +204,9 @@ export default function OrgBrandsSettings() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{draft.id ? "Edit brand" : "New brand"}</DialogTitle>
-            <DialogDescription>Name and logo stored on this organization&apos;s companies table.</DialogDescription>
+            <DialogDescription>
+              Name is required. Logo is optional — leave it empty to use your official Business Logo.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -218,12 +219,16 @@ export default function OrgBrandsSettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="brand-logo">Logo</Label>
-              <p className="text-xs text-muted-foreground">PNG, JPEG, or SVG up to {logoMaxSizeLabel()}.</p>
+              <Label htmlFor="brand-logo">Logo (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Only upload if this trading name needs a different mark. Same paidly bucket as your Business Logo. PNG, JPEG, or SVG up to {logoMaxSizeLabel()}.
+              </p>
               <div className="flex items-center gap-3">
                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
-                  {previewSrc ? (
+                  {logoFile && previewSrc ? (
                     <img src={previewSrc} alt="" className="h-full w-full object-contain" />
+                  ) : draft.logo_url ? (
+                    <LogoImage src={draft.logo_url} alt="" className="h-full w-full object-contain" />
                   ) : (
                     <ImageIcon className="h-5 w-5 text-muted-foreground" />
                   )}
@@ -231,9 +236,23 @@ export default function OrgBrandsSettings() {
                 <Button type="button" variant="outline" className="gap-2" asChild>
                   <label htmlFor="brand-logo" className="cursor-pointer">
                     <UploadCloud className="h-4 w-4" />
-                    {logoFile ? logoFile.name : "Upload"}
+                    {logoFile ? logoFile.name : draft.logo_url ? "Replace" : "Upload"}
                   </label>
                 </Button>
+                {(logoFile || draft.logo_url) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    onClick={() => {
+                      setLogoFile(null);
+                      setDraft((d) => ({ ...d, logo_url: "" }));
+                    }}
+                  >
+                    Use Business Logo
+                  </Button>
+                )}
                 <input
                   id="brand-logo"
                   type="file"

@@ -1,27 +1,24 @@
 import { resolveProfileLogoUrl } from "@/lib/profileLogo";
 
 /**
- * Canonical business / document identity.
+ * Canonical business identity for documents, profile, and POS.
  * DB: profiles.logo_url (aliased as company_logo_url).
- * Never read profiles.pos_logo_url here — invoices, quotes, payslips, and
- * statements must not pick up POS branding.
  */
 export function resolveBusinessLogoUrl(source) {
   return resolveProfileLogoUrl(source);
 }
 
-/** Optional POS-only logo. DB: profiles.pos_logo_url */
+/** Legacy column only — Settings no longer writes a separate POS logo. */
 export function resolvePosLogoUrl(source) {
   if (!source || typeof source !== "object") return "";
   return String(source.pos_logo_url || "").trim();
 }
 
 /**
- * POS screen, till, and POS receipts.
- * POS logo when set; otherwise the business logo. Documents never use this.
+ * POS screen, till, and POS receipts use the official Business Logo.
  */
 export function resolveEffectivePosLogoUrl(source) {
-  return resolvePosLogoUrl(source) || resolveBusinessLogoUrl(source);
+  return resolveBusinessLogoUrl(source);
 }
 
 /** Prefer a non-empty incoming POS logo; never wipe with an empty auth snapshot. */

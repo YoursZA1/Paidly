@@ -6,11 +6,11 @@ import { resolveBusinessLogoUrl } from "@/lib/brandingLogos";
 /**
  * Resolves the current organisation's branding data in priority order:
  *
- *   1. profile.logo_url / profile.company_logo_url  (Business Logo — documents + profile)
+ *   1. profile.logo_url / profile.company_logo_url  (official Business Logo)
  *   2. user.logo_url / user.company_logo_url         (auth session user — may be minimal on cold load)
  *   3. auth user_metadata.*                          (set by some third-party OAuth providers)
  *
- * Does not read profiles.pos_logo_url. POS uses resolveEffectivePosLogoUrl.
+ * POS till uses this same Business Logo via resolveEffectivePosLogoUrl.
  *
  * `profile` and `user` come from the same AuthContext; `profile` is preferred because the
  * auth session user can be a trimmed "minimal" snapshot during initial hydration, whereas

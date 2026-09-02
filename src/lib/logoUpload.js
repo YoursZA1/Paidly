@@ -176,45 +176,6 @@ export async function uploadLogo(file, companyId) {
 }
 
 /**
- * Upload a POS-only logo. Distinct filename so it cannot overwrite the business logo.
- * Save the returned value to profiles.pos_logo_url (for example: pos-logo-<uuid>.png).
- *
- * @param {File} file
- * @param {string} [userId]
- * @returns {Promise<string>} Storage file name
- */
-export async function uploadPosLogo(file, userId) {
-  void userId;
-  const normalizedFile = await normalizeLogoFileForUpload(file);
-  const validation = validateLogoFile(normalizedFile);
-  if (!validation.valid) {
-    throw new Error(validation.message);
-  }
-
-  let ext = logoExtension(normalizedFile).replace(/[^a-z0-9]/g, "");
-  if (ext === "jpeg") ext = "jpg";
-  if (!["png", "jpg", "svg"].includes(ext)) {
-    const ct = inferredLogoContentType(normalizedFile);
-    ext = ct === "image/svg+xml" ? "svg" : ct === "image/jpeg" || ct === "image/jpg" ? "jpg" : "png";
-  }
-  const unique =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  const fileName = `pos-logo-${unique}.${ext}`;
-
-  const { error } = await supabase.storage.from(PAIDLY_LOGO_BUCKET).upload(fileName, normalizedFile, {
-    upsert: true,
-    contentType: inferredLogoContentType(normalizedFile) || normalizedFile.type || undefined,
-  });
-
-  if (error) throw error;
-  await verifyLogoExists(fileName);
-
-  return fileName;
-}
-
-/**
  * Upload a logo used only for a specific invoice/quote (does not replace profile logo).
  * Stored under `document-logos/{userId}/{uuid}.{ext}` in the paidly bucket.
  *

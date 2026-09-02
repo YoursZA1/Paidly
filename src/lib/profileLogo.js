@@ -1,7 +1,7 @@
 /**
- * Single source for the Business Logo path used on invoices, quotes, payslips,
- * statements, and profile chrome. DB: profiles.logo_url (paidly bucket).
- * POS uses src/lib/brandingLogos.js (pos_logo_url || logo_url).
+ * Single source for the official Business Logo path used on invoices, quotes,
+ * payslips, statements, profile chrome, and POS. DB: profiles.logo_url
+ * (paidly bucket).
  */
 export function resolveProfileLogoUrl(source) {
   if (!source || typeof source !== "object") return "";

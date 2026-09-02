@@ -21,7 +21,7 @@ export default function SettingsLogoPreviews({ businessLogoUrl }) {
       </div>
       <p className="text-xs font-medium text-foreground mt-2">Business Logo</p>
       <p className="text-[10px] text-muted-foreground mt-0.5 max-w-[14rem]">
-        Used on: Profile · Invoices · Quotes · Payslips · Statements
+        Used on: Profile · Documents · POS
       </p>
     </div>
   );
