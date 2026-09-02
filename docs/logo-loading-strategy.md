@@ -12,7 +12,7 @@
 | `paidly` | Current primary logo bucket |
 | `company-logos` | Legacy bucket (still read; never written) |
 
-Logos are stored as public objects. `AssetService.getLogo(path)` calls `supabase.storage.from(bucket).getPublicUrl(cleanedPath)` which is **synchronous** — no network round-trip for URL generation, only for the eventual image fetch.
+Logos are stored as **public** objects on the `paidly` bucket. `AssetService.getLogo(path)` calls `getPublicUrl`. If that bucket is private, `/object/public/paidly/*` returns HTTP 400 `"Bucket not found"` even when the file exists. Keep `storage.buckets.public = true` for `paidly`. Authenticated Settings previews can fall back to `signLogoUrl` (1 hour). Public invoice/quote viewers cannot — they need the public bucket.
 
 ---
 

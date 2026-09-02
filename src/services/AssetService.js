@@ -130,6 +130,19 @@ async function listLogoAssets(limit = 100) {
   return data || [];
 }
 
+/**
+ * Authenticated fallback when the public URL 400s (private bucket).
+ * Public invoice viewers still need the bucket itself to be public.
+ */
+async function signLogoUrl(path) {
+  const { bucket, cleaned } = resolveLogoSource(path);
+  if (!cleaned || cleaned.startsWith("blob:") || cleaned.startsWith("data:")) return FALLBACK_LOGO;
+  if (!isValidLogoStorageObjectKey(cleaned)) return FALLBACK_LOGO;
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(cleaned, 60 * 60);
+  if (error || !data?.signedUrl) return FALLBACK_LOGO;
+  return data.signedUrl;
+}
+
 function clearLogoSessionCache() {
   SESSION_LOGO_BY_INPUT.clear();
 }
@@ -139,6 +152,7 @@ const AssetService = {
   FALLBACK_LOGO,
   cleanPath,
   getLogo,
+  signLogoUrl,
   listLogoAssets,
   markStorageAssetFailed,
   isValidLogoStorageObjectKey,
@@ -146,4 +160,4 @@ const AssetService = {
 };
 
 export default AssetService;
-export { cleanPath, getLogo, markStorageAssetFailed, isValidLogoStorageObjectKey, clearLogoSessionCache };
+export { cleanPath, getLogo, signLogoUrl, markStorageAssetFailed, isValidLogoStorageObjectKey, clearLogoSessionCache };

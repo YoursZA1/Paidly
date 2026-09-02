@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, memo } from "react";
 import AssetService from "@/services/AssetService";
 import { clearLogoUrlDiskCacheForSrc } from "@/lib/logoUrlDiskCache";
-import { markStorageAssetFailed, verifyPublicStorageUrlOnce } from "@/lib/paidlyStorageAssetGuard";
+import { markStorageAssetFailed } from "@/lib/paidlyStorageAssetGuard";
 
 const DEFAULT_LOGO_SRC = AssetService.FALLBACK_LOGO;
 
@@ -10,10 +10,11 @@ function normalizeUrlKey(url) {
 }
 
 /**
- * LogoImage — resolves paths via {@link AssetService.getLogo} (includes path validation + failed-URL cache).
+ * LogoImage — prefers a signed storage URL so Settings works when the
+ * `paidly` bucket is private (public /object/public/paidly/* returns 400).
  *
  * @param {string} src - Stored path or full URL
- * @param {boolean} [preflightStorage] — If true, runs a one-shot HEAD before assigning `src` (extra latency; stricter).
+ * @param {boolean} [preflightStorage] — unused; kept so existing callers compile
  */
 function LogoImage({
   src,
@@ -23,11 +24,10 @@ function LogoImage({
   preflightStorage = false,
   loading = "lazy",
 }) {
-  /** `null` = not resolved yet; `""` = missing `src` prop */
+  void preflightStorage;
   const [imageSrc, setImageSrc] = useState(/** @type {string | null} */ (null));
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
-  /** After the fallback asset also errors, ignore further `error` events (browser may repeat). */
   const terminalRef = useRef(false);
 
   useEffect(() => {
@@ -51,50 +51,24 @@ function LogoImage({
       return undefined;
     }
 
-    const applyResolved = () => {
-      const resolvedUrl = AssetService.getLogo(src);
-      if (cancelled) return;
-      if (!resolvedUrl || resolvedUrl === DEFAULT_LOGO_SRC) {
-        setImageSrc(DEFAULT_LOGO_SRC);
-        setIsLoading(false);
-        return;
-      }
-      setImageSrc(resolvedUrl);
-      setIsLoading(false);
-    };
-
-    if (!preflightStorage) {
-      applyResolved();
-      return () => {
-        cancelled = true;
-      };
-    }
-
     (async () => {
-      const resolvedUrl = AssetService.getLogo(src);
+      const signed = await AssetService.signLogoUrl(src);
       if (cancelled) return;
-      if (!resolvedUrl || resolvedUrl === DEFAULT_LOGO_SRC) {
-        setImageSrc(DEFAULT_LOGO_SRC);
+      if (signed && signed !== DEFAULT_LOGO_SRC) {
+        setImageSrc(signed);
         setIsLoading(false);
         return;
       }
-      if (/^https?:\/\//i.test(resolvedUrl)) {
-        const ok = await verifyPublicStorageUrlOnce(resolvedUrl);
-        if (cancelled) return;
-        if (!ok) {
-          markStorageAssetFailed(resolvedUrl);
-          clearLogoUrlDiskCacheForSrc(src);
-        }
-      }
+      const resolvedUrl = AssetService.getLogo(src);
       if (cancelled) return;
-      setImageSrc(AssetService.getLogo(src));
+      setImageSrc(resolvedUrl && resolvedUrl !== DEFAULT_LOGO_SRC ? resolvedUrl : DEFAULT_LOGO_SRC);
       setIsLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [src, preflightStorage]);
+  }, [src]);
 
   if (hasError || imageSrc === "") {
     return (
@@ -133,6 +107,7 @@ function LogoImage({
         if (failed && failed !== normalizeUrlKey(DEFAULT_LOGO_SRC)) {
           markStorageAssetFailed(failed);
           clearLogoUrlDiskCacheForSrc(src);
+          terminalRef.current = true;
           setImageSrc(DEFAULT_LOGO_SRC);
           setHasError(false);
           setIsLoading(false);

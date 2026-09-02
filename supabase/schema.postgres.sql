@@ -1098,12 +1098,14 @@ create policy "org members write payments" on public.payments
   ));
 
 -- Create storage buckets if they don't exist
+-- paidly stays public: getPublicUrl is used on invoices, quotes, and Settings.
+-- A private bucket makes /object/public/paidly/* return HTTP 400 "Bucket not found".
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values 
-  ('paidly', 'paidly', false, 52428800, ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf'])
+  ('paidly', 'paidly', true, 52428800, ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf'])
 on conflict (id) do update set
   name = excluded.name,
-  public = excluded.public,
+  public = true,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 

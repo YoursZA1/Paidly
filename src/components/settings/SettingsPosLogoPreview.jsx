@@ -16,7 +16,7 @@ export default function SettingsPosLogoPreview({ posLogoUrl, businessLogoUrl }) 
           previewUrl.startsWith("blob:") ? (
             <img src={previewUrl} alt="POS Logo" className="object-contain w-16 h-16" />
           ) : (
-            <LogoImage src={previewUrl} alt="POS Logo" className="object-contain w-16 h-16" preflightStorage />
+            <LogoImage src={previewUrl} alt="POS Logo" className="object-contain w-16 h-16" />
           )
         ) : (
           <Store className="w-8 h-8 text-muted-foreground" />

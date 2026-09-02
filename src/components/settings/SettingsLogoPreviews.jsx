@@ -13,7 +13,7 @@ export default function SettingsLogoPreviews({ businessLogoUrl }) {
           businessLogoUrl.startsWith("blob:") ? (
             <img src={businessLogoUrl} alt="Business Logo" className="object-contain w-16 h-16" />
           ) : (
-            <LogoImage src={businessLogoUrl} alt="Business Logo" className="object-contain w-16 h-16" preflightStorage />
+            <LogoImage src={businessLogoUrl} alt="Business Logo" className="object-contain w-16 h-16" />
           )
         ) : (
           <ImageIcon className="w-8 h-8 text-muted-foreground" />

@@ -10,6 +10,10 @@ vi.mock("@/lib/supabaseClient", () => ({
         getPublicUrl: (path) => ({
           data: { publicUrl: `https://proj.supabase.co/storage/v1/object/public/paidly/${path}` },
         }),
+        createSignedUrl: async (path) => ({
+          data: { signedUrl: `https://proj.supabase.co/storage/v1/object/sign/paidly/${path}?token=t` },
+          error: null,
+        }),
       }),
     },
   },
@@ -35,5 +39,11 @@ describe("AssetService.getLogo + storage guard", () => {
     markStorageAssetFailed(first);
     const second = AssetService.getLogo(path);
     expect(second).toBe(AssetService.FALLBACK_LOGO);
+  });
+
+  it("signLogoUrl returns a signed object URL for a valid key", async () => {
+    const { default: AssetService } = await import("@/services/AssetService");
+    const signed = await AssetService.signLogoUrl("logo-abc.png");
+    expect(signed).toContain("/object/sign/paidly/logo-abc.png");
   });
 });
