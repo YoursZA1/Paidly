@@ -229,7 +229,7 @@ organizations → memberships (employee identity)
 ```
 
 - **Identity:** `memberships` + `profiles`. Do not create a parallel employees table.
-- **Calculation:** `shared/payroll/calculatePayroll.js` is the only payroll math. `/api/payroll/*` is the source of truth; the SPA displays server results. Statutory rates live in versioned `payroll_statutory_rules` (not in React).
+- **Calculation:** `shared/payroll/calculatePayroll.js` is the only payroll math. `/api/payroll/*` and `/api/leave/*` are the source of truth (Vercel Hobby rewrites them onto `api/company`). Statutory rates live in versioned `payroll_statutory_rules` (not in React).
 - **Locking:** Finalized pay runs and locked payslips cannot be silently rewritten. Corrections use an adjustment pay run.
 - **Leave:** Server-side working-day counts (`Africa/Johannesburg`), overlap checks, and a leave ledger (`leave_transactions`). Approvals update balances transactionally via `/api/leave`.
 - **RBAC:** Existing company permissions (`MANAGE_PAYROLL`, `VIEW_OWN_PAYSLIPS`, `APPROVE_LEAVE`, …). POS-only staff cannot administer payroll.

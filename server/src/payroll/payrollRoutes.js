@@ -197,7 +197,10 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "runs" && segs[1]) return { route: "run-by-id", id: segs[1] };
 
   if (req.query?.__payroll) {
-    return resolvePayrollRoute({ ...req, query: { path: String(req.query.__payroll).split("/") } });
+    return resolvePayrollRoute({
+      ...req,
+      query: { ...req.query, path: String(req.query.__payroll).split("/"), __payroll: undefined },
+    });
   }
   return null;
 }

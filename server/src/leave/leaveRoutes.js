@@ -162,7 +162,10 @@ export function resolveLeaveRoute(req) {
   if (segs[0] === "cancel") return { route: "cancel", id: req.query?.id || segs[1] };
 
   if (req.query?.__leave) {
-    return resolveLeaveRoute({ ...req, query: { path: String(req.query.__leave).split("/") } });
+    return resolveLeaveRoute({
+      ...req,
+      query: { ...req.query, path: String(req.query.__leave).split("/"), __leave: undefined },
+    });
   }
   return null;
 }

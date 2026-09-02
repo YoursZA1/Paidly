@@ -9,6 +9,8 @@ import {
 } from "../../server/src/companyTeamRoutes.js";
 import { applyApiCors } from "../../server/src/auth/applyApiCors.js";
 import { normalizeRequestBody } from "../../server/src/validateBody.js";
+import { handlePayrollRoute, resolvePayrollRoute } from "../../server/src/payroll/payrollRoutes.js";
+import { handleLeaveRoute, resolveLeaveRoute } from "../../server/src/leave/leaveRoutes.js";
 
 /**
  * Vercel: /api/company/invite | /api/company/role | /api/company/context
@@ -57,12 +59,25 @@ function resolveCompanyRoute(req) {
 
 export default async function handler(req, res) {
   applyApiCors(req, res, {
-    methods: "GET, POST, PATCH, DELETE, OPTIONS",
+    methods: "GET, POST, PATCH, PUT, DELETE, OPTIONS",
     headers: "Content-Type, Authorization",
   });
   if (req.method === "OPTIONS") return res.status(200).end();
 
   req.body = normalizeRequestBody(req);
+
+  const rawPath = req.query?.path;
+  const pathHead = Array.isArray(rawPath) ? rawPath[0] : rawPath;
+  if (pathHead === "payroll" || req.query?.__payroll) {
+    const resolvedPayroll = resolvePayrollRoute(req);
+    if (!resolvedPayroll) return res.status(404).json({ error: "Not found" });
+    return handlePayrollRoute(req, res, resolvedPayroll);
+  }
+  if (pathHead === "leave" || req.query?.__leave) {
+    const resolvedLeave = resolveLeaveRoute(req);
+    if (!resolvedLeave) return res.status(404).json({ error: "Not found" });
+    return handleLeaveRoute(req, res, resolvedLeave);
+  }
 
   const resolved = resolveCompanyRoute(req);
   if (!resolved) return res.status(404).json({ error: "Not found" });

@@ -181,56 +181,12 @@
       "destination": "/api/pos/route?__pos=:a/:b/:c*"
     },
     {
-      "source": "/api/payroll/runs/:id/calculate",
-      "destination": "/api/payroll/run-calculate?id=:id"
+      "source": "/api/payroll/:path*",
+      "destination": "/api/company/payroll?__payroll=:path*"
     },
     {
-      "source": "/api/payroll/runs/:id/submit",
-      "destination": "/api/payroll/run-submit?id=:id"
-    },
-    {
-      "source": "/api/payroll/runs/:id/approve",
-      "destination": "/api/payroll/run-approve?id=:id"
-    },
-    {
-      "source": "/api/payroll/runs/:id/finalize",
-      "destination": "/api/payroll/run-finalize?id=:id"
-    },
-    {
-      "source": "/api/payroll/runs/:id/paid",
-      "destination": "/api/payroll/run-paid?id=:id"
-    },
-    {
-      "source": "/api/payroll/runs/:id/cancel",
-      "destination": "/api/payroll/run-cancel?id=:id"
-    },
-    {
-      "source": "/api/payroll/runs/:id/send",
-      "destination": "/api/payroll/run-send?id=:id"
-    },
-    {
-      "source": "/api/payroll/runs/:id",
-      "destination": "/api/payroll/run-by-id?id=:id"
-    },
-    {
-      "source": "/api/leave/requests/:id/approve",
-      "destination": "/api/leave/approve?id=:id"
-    },
-    {
-      "source": "/api/leave/requests/:id/reject",
-      "destination": "/api/leave/reject?id=:id"
-    },
-    {
-      "source": "/api/leave/requests/:id/cancel",
-      "destination": "/api/leave/cancel?id=:id"
-    },
-    {
-      "source": "/api/payroll/:a/:b/:c*",
-      "destination": "/api/payroll/route?__payroll=:a/:b/:c*"
-    },
-    {
-      "source": "/api/leave/:a/:b/:c*",
-      "destination": "/api/leave/route?__leave=:a/:b/:c*"
+      "source": "/api/leave/:path*",
+      "destination": "/api/company/leave?__leave=:path*"
     },
     {
       "source": "/api/payfast/subscription",

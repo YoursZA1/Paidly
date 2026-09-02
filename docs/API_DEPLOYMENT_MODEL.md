@@ -13,6 +13,8 @@ Hobby production is capped at **12** serverless functions. Add a rewrite onto an
 
 **Nested catch-all paths:** Vercel Hobby only invokes `api/<name>/[[...path]].js` for **one** extra segment (`/api/pos/registers`). `/api/pos/oauth/status`, `/api/pos/sales/:id/audit`, and `/api/payment-intents/webhook/:provider` 404 at the platform unless `vercel.json` flattens them onto a one-segment alias (same pattern as `/api/company/team/invite` → `/api/company/invite`). Do not add another `api/*.js` file.
 
+**Payroll / leave:** `/api/payroll/*` and `/api/leave/*` rewrite onto `api/company/[[...path]].js` (`/api/company/payroll`, `/api/company/leave`). Do not add `api/payroll` or `api/leave` function files.
+
 **Rule:** When debugging “429 from Paidly” or “100 requests / 15 minutes,” first confirm whether the failing URL is handled by **A** or **B**. Tuning `RATE_LIMIT_MAX` on Express does **nothing** for routes that only exist as Vercel functions.
 
 **SPA client:** `src/api/backendClient.js` uses same-origin `/api` in production when `VITE_SERVER_URL` is unset (typical Vercel app hosting). Those requests hit **A**, not **B**, unless you proxy `/api` to an external Express origin.

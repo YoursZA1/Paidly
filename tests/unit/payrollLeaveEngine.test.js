@@ -4,6 +4,8 @@ import { buildPayslipNumber, buildEmployeeNumber, nextEmployeeSequence } from "@
 import { countWorkingDays, computeLeaveBalance, accrueLeaveDays } from "@shared/leave/leaveMath.js";
 import { validateLeaveApplication } from "@shared/leave/validateLeave.js";
 import { isLeapYear, daysInMonth, eachIsoDateInclusive, johannesburgYmd } from "@shared/payroll/dates.js";
+import { resolvePayrollRoute } from "../../server/src/payroll/payrollRoutes.js";
+import { resolveLeaveRoute } from "../../server/src/leave/leaveRoutes.js";
 
 const payeTemplate = {
   code: "PAYE",
@@ -175,5 +177,34 @@ describe("johannesburg calendar", () => {
   it("formats a known UTC instant in Africa/Johannesburg", () => {
     const ymd = johannesburgYmd("2026-09-01T22:00:00.000Z");
     expect(ymd.iso).toBe("2026-09-02");
+  });
+});
+
+describe("Hobby payroll/leave rewrites onto /api/company", () => {
+  it("resolves payroll overview from __payroll", () => {
+    expect(
+      resolvePayrollRoute({
+        url: "/api/company/payroll",
+        query: { path: "payroll", __payroll: "overview" },
+      })
+    ).toEqual({ route: "overview" });
+  });
+
+  it("resolves nested pay-run calculate from __payroll path", () => {
+    expect(
+      resolvePayrollRoute({
+        url: "/api/company/payroll",
+        query: { path: "payroll", __payroll: "runs/abc/calculate" },
+      })
+    ).toEqual({ route: "run-calculate", id: "abc" });
+  });
+
+  it("resolves leave approve from __leave path", () => {
+    expect(
+      resolveLeaveRoute({
+        url: "/api/company/leave",
+        query: { path: "leave", __leave: "requests/abc/approve" },
+      })
+    ).toEqual({ route: "approve", id: "abc" });
   });
 });
