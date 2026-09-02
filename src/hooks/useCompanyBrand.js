@@ -1,25 +1,27 @@
 import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import AssetService from "@/services/AssetService";
-import { resolveProfileLogoUrl } from "@/lib/profileLogo";
+import { resolveBusinessLogoUrl } from "@/lib/brandingLogos";
 
 /**
  * Resolves the current organisation's branding data in priority order:
  *
- *   1. profile.logo_url / profile.company_logo_url  (fresh profile row — fullest data)
+ *   1. profile.logo_url / profile.company_logo_url  (Business Logo — documents + profile)
  *   2. user.logo_url / user.company_logo_url         (auth session user — may be minimal on cold load)
  *   3. auth user_metadata.*                          (set by some third-party OAuth providers)
+ *
+ * Does not read profiles.pos_logo_url. POS uses resolveEffectivePosLogoUrl.
  *
  * `profile` and `user` come from the same AuthContext; `profile` is preferred because the
  * auth session user can be a trimmed "minimal" snapshot during initial hydration, whereas
  * `profile` is always the full profiles-table row once auth has settled.
  *
  * Returns:
- *   - `logoPath`   – raw value stored in the profile (short path or full URL); null if absent
- *   - `logoUrl`    – fully resolved public URL via AssetService; null if absent / failed
+ *   - `logoPath` / `businessLogoUrl` – Business Logo (resolved public URL when available)
+ *   - `logoUrl`    – alias of businessLogoUrl (dashboard / profile chrome)
  *   - `initials`   – one-or-two character fallback derived from company/user name
  *   - `companyName` – display name for the organisation
- *   - `hasLogo`    – true when a resolvable logo URL exists
+ *   - `hasLogo`    – true when a resolvable business logo URL exists
  */
 export function useCompanyBrand() {
   const { user, profile } = useAuth();
@@ -35,9 +37,8 @@ export function useCompanyBrand() {
       "My Business";
 
     const rawPath =
-      resolveProfileLogoUrl(source) ||
-      // Also check the auth-session user in case profile is still loading.
-      resolveProfileLogoUrl(user) ||
+      resolveBusinessLogoUrl(source) ||
+      resolveBusinessLogoUrl(user) ||
       user?.user_metadata?.company_logo_url ||
       user?.user_metadata?.avatar_url ||
       null;
@@ -62,6 +63,7 @@ export function useCompanyBrand() {
     return {
       logoPath: rawPath,
       logoUrl,
+      businessLogoUrl: logoUrl,
       initials,
       companyName,
       hasLogo: Boolean(logoUrl),

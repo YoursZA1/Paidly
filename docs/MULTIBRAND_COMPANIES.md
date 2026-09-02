@@ -62,9 +62,18 @@ RLS: org members CRUD only their org’s `companies` rows; platform admins have 
 2. When creating or updating an invoice, set `company_id` to the chosen company’s `id` (or leave null to keep using the owner snapshot / profile).
 3. EntityManager invoice insert/update whitelists include `company_id`.
 
+## Business Logo vs POS Logo
+
+Settings → Company Profile has two independent logos on `profiles`:
+
+- **Business Logo** (`profiles.logo_url`) — invoices, quotes, payslips, statements, and profile chrome. `companies.logo_url` is still the per-brand document logo.
+- **POS Logo** (`profiles.pos_logo_url`, optional) — POS till chrome and POS receipts. If unset, POS uses the Business Logo. Changing POS Logo never writes document branding.
+
+Helpers: `src/lib/brandingLogos.js` (`resolveBusinessLogoUrl`, `resolveEffectivePosLogoUrl`). Documents use `documentIssuerBrand.js` and never read `pos_logo_url`.
+
 ## POS (register + catalog)
 
-A POS register belongs to a brand (`pos_registers.company_id` → `companies.id`). Native checkout stamps `pos_sales_events.company_id` from **the register only**. The header brand switcher does not decide which products the till can sell.
+A POS register belongs to a brand (`pos_registers.company_id` → `companies.id`). Native checkout stamps `pos_sales_events.company_id` from **the register only**. The header brand switcher does not decide which products the till can sell. Till **logo** is `pos_logo_url || logo_url` on the organization profile, not `companies.logo_url`.
 
 Catalog remains `public.services`. Optional `services.company_id`:
 

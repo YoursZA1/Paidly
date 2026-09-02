@@ -21,6 +21,7 @@ create table if not exists public.profiles (
   email text,
   avatar_url text,
   logo_url text,
+  pos_logo_url text,
   company_name text,
   company_address text,
   phone text,
@@ -42,6 +43,7 @@ alter table if exists public.profiles add column if not exists full_name text;
 alter table if exists public.profiles add column if not exists email text;
 alter table if exists public.profiles add column if not exists avatar_url text;
 alter table if exists public.profiles add column if not exists logo_url text;
+alter table if exists public.profiles add column if not exists pos_logo_url text;
 alter table if exists public.profiles add column if not exists company_name text;
 alter table if exists public.profiles add column if not exists company_address text;
 alter table if exists public.profiles add column if not exists phone text;

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { User, BankingDetail } from "@/api/entities";
 import {
   uploadLogo,
+  uploadPosLogo,
   validateLogoFile,
   LOGO_CONSTRAINTS,
   logoMaxSizeLabel,
@@ -20,7 +21,9 @@ import { supabase } from "@/lib/supabaseClient";
 import { selectProfileByUserId } from "@/api/auth/profileSelect";
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import SettingsLogoPreviews from "@/components/settings/SettingsLogoPreviews";
+import SettingsPosLogoPreview from "@/components/settings/SettingsPosLogoPreview";
 import { mergeProfileLogo, resolveProfileLogoUrl } from "@/lib/profileLogo";
+import { mergePosLogo, resolveBusinessLogoUrl, resolvePosLogoUrl } from "@/lib/brandingLogos";
 import AssetService from "@/services/AssetService";
 import { clearLogoUrlDiskCacheForSrc } from "@/lib/logoUrlDiskCache";
 
@@ -166,6 +169,7 @@ function CompanyProfileSettings() {
         phone: "",
         company_website: "",
         logo_url: "",
+        pos_logo_url: "",
         currency: "USD",
         country: "",
         timezone: "",
@@ -180,6 +184,7 @@ function CompanyProfileSettings() {
         business_type: "",
     }));
     const [logoFile, setLogoFile] = useState(null);
+    const [posLogoFile, setPosLogoFile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isSavingTemplate, setIsSavingTemplate] = useState(false);
@@ -205,6 +210,7 @@ function CompanyProfileSettings() {
             phone: authUser.phone ?? prev.phone ?? "",
             company_website: authUser.company_website ?? prev.company_website ?? "",
             logo_url: mergeProfileLogo(prev.logo_url, authUser),
+            pos_logo_url: mergePosLogo(prev.pos_logo_url, authUser),
             currency: authUser.currency || prev.currency || "USD",
             timezone: authUser.timezone ?? prev.timezone,
             invoice_template: authUser.invoice_template || prev.invoice_template || DEFAULT_INVOICE_TEMPLATE,
@@ -223,6 +229,7 @@ function CompanyProfileSettings() {
         authUser?.phone,
         authUser?.company_website,
         authUser?.logo_url,
+        authUser?.pos_logo_url,
         authUser?.currency,
         authUser?.timezone,
         authUser?.invoice_template,
@@ -256,6 +263,7 @@ function CompanyProfileSettings() {
                         phone: data.phone || "",
                         company_website: data.company_website || "",
                         logo_url: mergeProfileLogo(prev.logo_url, data),
+                        pos_logo_url: mergePosLogo(prev.pos_logo_url, data),
                         currency: data.currency || "USD",
                         timezone: data.timezone || "",
                         invoice_template: data.invoice_template || DEFAULT_INVOICE_TEMPLATE,
@@ -310,8 +318,11 @@ function CompanyProfileSettings() {
             if (formData.logo_url && formData.logo_url.startsWith('blob:')) {
                 URL.revokeObjectURL(formData.logo_url);
             }
+            if (formData.pos_logo_url && formData.pos_logo_url.startsWith('blob:')) {
+                URL.revokeObjectURL(formData.pos_logo_url);
+            }
         };
-    }, [formData.logo_url]);
+    }, [formData.logo_url, formData.pos_logo_url]);
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -341,8 +352,8 @@ function CompanyProfileSettings() {
             
             // Show success message
             toast({
-                title: "✓ Logo selected",
-                description: `${file.name} is ready to upload. Click "Save Changes" to apply.`,
+                title: "✓ Business Logo selected",
+                description: `${file.name} is ready to upload. Click "Save Changes" to apply to documents and your profile.`,
                 variant: "success"
             });
         }
@@ -355,8 +366,47 @@ function CompanyProfileSettings() {
         setFormData(prev => ({ ...prev, logo_url: "" }));
         setLogoFile(null);
         toast({
-            title: "Logo removed",
-            description: "Click \"Save Changes\" to confirm removal.",
+            title: "Business Logo removed",
+            description: "Documents will fall back to your business name. Click \"Save Changes\" to confirm.",
+            variant: "default"
+        });
+    };
+
+    const handlePosLogoChange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            const validation = validateLogoFile(file);
+            if (!validation.valid) {
+                toast({
+                    title: "Invalid POS logo",
+                    description: validation.message,
+                    variant: "destructive"
+                });
+                return;
+            }
+            if (formData.pos_logo_url && formData.pos_logo_url.startsWith('blob:')) {
+                URL.revokeObjectURL(formData.pos_logo_url);
+            }
+            const previewUrl = URL.createObjectURL(file);
+            setFormData(prev => ({ ...prev, pos_logo_url: previewUrl }));
+            setPosLogoFile(file);
+            toast({
+                title: "✓ POS logo selected",
+                description: `${file.name} is ready. Click "Save Changes" to apply. Invoices and quotes are unchanged.`,
+                variant: "success"
+            });
+        }
+    };
+
+    const handleRemovePosLogo = () => {
+        if (formData.pos_logo_url && formData.pos_logo_url.startsWith('blob:')) {
+            URL.revokeObjectURL(formData.pos_logo_url);
+        }
+        setFormData(prev => ({ ...prev, pos_logo_url: "" }));
+        setPosLogoFile(null);
+        toast({
+            title: "POS Logo removed",
+            description: "POS will use your Business Logo. Click \"Save Changes\" to confirm.",
             variant: "default"
         });
     };
@@ -395,6 +445,38 @@ function CompanyProfileSettings() {
                     return;
                 }
             }
+
+            if (posLogoFile) {
+                if (formData.pos_logo_url && formData.pos_logo_url.startsWith('blob:')) {
+                    URL.revokeObjectURL(formData.pos_logo_url);
+                }
+                try {
+                    const userId = authUser?.id;
+                    if (!userId) {
+                        toast({
+                            title: "Not signed in",
+                            description: "You must be signed in to update profile. Please sign in and try again.",
+                            variant: "destructive"
+                        });
+                        return;
+                    }
+                    updatedData.pos_logo_url = await uploadPosLogo(posLogoFile, userId);
+                } catch (uploadError) {
+                    console.error("POS logo upload error:", uploadError);
+                    toast({
+                        title: "✗ Upload Failed",
+                        description: `Failed to upload POS logo: ${uploadError.message || 'Unknown error'}`,
+                        variant: "destructive"
+                    });
+                    return;
+                }
+            } else if (typeof updatedData.pos_logo_url === "string" && updatedData.pos_logo_url.startsWith("blob:")) {
+                updatedData.pos_logo_url = resolvePosLogoUrl(authUser);
+            }
+
+            if (typeof updatedData.logo_url === "string" && updatedData.logo_url.startsWith("blob:")) {
+                updatedData.logo_url = resolveBusinessLogoUrl(authUser);
+            }
             
             // Map display_name to full_name for Supabase profile (saved per user, restored on login)
             const payload = {
@@ -403,6 +485,7 @@ function CompanyProfileSettings() {
                 phone: (updatedData.phone || "").trim(),
                 company_website: (updatedData.company_website || "").trim(),
                 logo_url: updatedData.logo_url,
+                pos_logo_url: updatedData.pos_logo_url || "",
                 currency: updatedData.currency || "USD",
                 timezone: updatedData.timezone || "",
                 invoice_template: updatedData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
@@ -434,9 +517,14 @@ function CompanyProfileSettings() {
                     ...payload,
                     updated_at: new Date().toISOString(),
                 };
-                const { error: directSaveError } = await supabase
+                let { error: directSaveError } = await supabase
                     .from("profiles")
                     .upsert(directProfilePayload, { onConflict: "id" });
+                if (directSaveError && /pos_logo_url/i.test(directSaveError.message || "")) {
+                    const { pos_logo_url: _omitPosLogo, ...withoutPosLogo } = directProfilePayload;
+                    const retry = await supabase.from("profiles").upsert(withoutPosLogo, { onConflict: "id" });
+                    directSaveError = retry.error;
+                }
                 if (directSaveError) {
                     throw directSaveError;
                 }
@@ -452,8 +540,13 @@ function CompanyProfileSettings() {
                 business_branch_code: updatedData.business_branch_code,
             }));
             setLogoFile(null);
+            setPosLogoFile(null);
             if (payload.logo_url) {
                 clearLogoUrlDiskCacheForSrc(payload.logo_url);
+                AssetService.clearLogoSessionCache();
+            }
+            if (payload.pos_logo_url) {
+                clearLogoUrlDiskCacheForSrc(payload.pos_logo_url);
                 AssetService.clearLogoSessionCache();
             }
             await refreshUser();
@@ -509,7 +602,7 @@ function CompanyProfileSettings() {
             email: formData.email || authUser?.email || "",
             phone: (formData.phone || "").trim(),
             company_website: (formData.company_website || "").trim(),
-            logo_url: resolveProfileLogoUrl(formData),
+            logo_url: resolveBusinessLogoUrl(formData),
             currency: formData.currency || "ZAR",
             invoice_template: previewTemplateId,
             invoice_header: formData.invoice_header || "",
@@ -625,7 +718,7 @@ function CompanyProfileSettings() {
                     {[
                         { label: "Company name", done: !!formData.company_name },
                         { label: "Address", done: !!formData.company_address },
-                        { label: "Logo", done: !!formData.logo_url },
+                        { label: "Business logo", done: !!resolveBusinessLogoUrl(formData) },
                     ].map(({ label, done }) => (
                         <span key={label} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                             done
@@ -775,23 +868,31 @@ function CompanyProfileSettings() {
             </SettingsCard>
 
             <SettingsCard
-                title="Logo & Branding"
-                description="Upload your high-res logo for professional document headers."
+                title="Business Branding"
+                description="Set your official business identity for your profile and business documents."
             >
                 <div className="flex flex-col md:flex-row items-center gap-8 p-6 bg-muted/50 rounded-2xl border border-dashed border-border">
-                    <SettingsLogoPreviews logoUrl={formData.logo_url} />
+                    <SettingsLogoPreviews businessLogoUrl={formData.logo_url} />
                     <div className="flex-1 space-y-2 text-center md:text-left">
+                        <p className="text-sm font-semibold text-foreground">Business Logo</p>
+                        <p className="text-xs text-muted-foreground">
+                            Your official business logo. This appears on your invoices, quotes, payslips, statements and business profile.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            Use a high-resolution logo for your official business documents.
+                        </p>
                         <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
                             <label
                                 htmlFor="logo-upload"
                                 className="cursor-pointer inline-flex items-center justify-center gap-2 px-6 py-2 bg-background border border-border rounded-xl font-bold text-foreground hover:bg-muted/60 transition-colors"
                             >
                                 <UploadCloud className="w-4 h-4" />
-                                {logoFile ? logoFile.name : (formData.logo_url ? "Change Image" : "Upload Image")}
+                                {logoFile ? logoFile.name : (formData.logo_url ? "Change logo" : "Upload logo")}
                             </label>
                             {formData.logo_url && (
                                 <Button type="button" variant="outline" size="sm" className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={handleRemoveLogo}>
                                     <Trash2 className="w-4 h-4" />
+                                    <span className="sr-only">Remove business logo</span>
                                 </Button>
                             )}
                         </div>
@@ -803,15 +904,71 @@ function CompanyProfileSettings() {
                           className="hidden"
                           onChange={handleLogoChange}
                         />
-                        <p className="text-xs text-muted-foreground dark:text-muted-foreground">
-                            One logo for profile, invoices, and quotes — saved to your profile and loaded from storage on each visit.
+                        <p className="text-xs text-muted-foreground">
+                            Used on your profile, invoices, quotes, payslips and statements.
                         </p>
-                        <p className="text-xs text-muted-foreground dark:text-muted-foreground">
-                            JPEG, PNG, or SVG (SVG scales best in PDFs). Max {logoMaxSizeLabel()}. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
+                        <p className="text-xs text-muted-foreground">
+                            PNG, JPG/JPEG, or SVG. Max {logoMaxSizeLabel()}. Width under {LOGO_CONSTRAINTS.RECOMMENDED_WIDTH_PX}px.
                         </p>
                         {logoFile && (
                             <p className="text-xs text-emerald-600 dark:text-emerald-500 flex items-center gap-1 justify-center md:justify-start">
                                 <Check className="w-3 h-3" /> Ready: {logoFile.name}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </SettingsCard>
+
+            <SettingsCard
+                title="POS Branding"
+                description="Customize how your business appears inside Paidly POS."
+            >
+                <div className="flex flex-col md:flex-row items-center gap-8 p-6 bg-muted/50 rounded-2xl border border-dashed border-border">
+                    <SettingsPosLogoPreview
+                        posLogoUrl={formData.pos_logo_url}
+                        businessLogoUrl={formData.logo_url}
+                    />
+                    <div className="flex-1 space-y-2 text-center md:text-left">
+                        <p className="text-sm font-semibold text-foreground">POS Logo</p>
+                        <p className="text-xs text-muted-foreground">
+                            Optional. Used for your POS and till experience. If no POS logo is uploaded, your Business Logo will be used.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            Changing this does not change invoices, quotes, payslips, statements, or your business profile.
+                        </p>
+                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                            <label
+                                htmlFor="pos-logo-upload"
+                                className="cursor-pointer inline-flex items-center justify-center gap-2 px-6 py-2 bg-background border border-border rounded-xl font-bold text-foreground hover:bg-muted/60 transition-colors"
+                            >
+                                <UploadCloud className="w-4 h-4" />
+                                {posLogoFile
+                                    ? posLogoFile.name
+                                    : formData.pos_logo_url
+                                      ? "Change POS Logo"
+                                      : "Upload POS Logo"}
+                            </label>
+                            {formData.pos_logo_url && (
+                                <Button type="button" variant="outline" size="sm" className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={handleRemovePosLogo}>
+                                    <Trash2 className="w-4 h-4" />
+                                    Remove POS Logo
+                                </Button>
+                            )}
+                        </div>
+                        <input
+                          id="pos-logo-upload"
+                          name="pos-logo-upload"
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/svg+xml"
+                          className="hidden"
+                          onChange={handlePosLogoChange}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            PNG, JPG/JPEG, or SVG. Same size limits as Business Logo. Fallback: Business Logo.
+                        </p>
+                        {posLogoFile && (
+                            <p className="text-xs text-emerald-600 dark:text-emerald-500 flex items-center gap-1 justify-center md:justify-start">
+                                <Check className="w-3 h-3" /> Ready: {posLogoFile.name}
                             </p>
                         )}
                     </div>

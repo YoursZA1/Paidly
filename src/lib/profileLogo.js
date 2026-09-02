@@ -1,6 +1,7 @@
 /**
- * Single source for profile logo path used on invoices, quotes, and settings previews.
- * DB column: profiles.logo_url (storage path in paidly bucket).
+ * Single source for the Business Logo path used on invoices, quotes, payslips,
+ * statements, and profile chrome. DB: profiles.logo_url (paidly bucket).
+ * POS uses src/lib/brandingLogos.js (pos_logo_url || logo_url).
  */
 export function resolveProfileLogoUrl(source) {
   if (!source || typeof source !== "object") return "";

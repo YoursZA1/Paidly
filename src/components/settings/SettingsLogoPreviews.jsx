@@ -1,54 +1,32 @@
 import PropTypes from "prop-types";
-import { FileText, Image as ImageIcon, User as UserIcon } from "lucide-react";
+import { Image as ImageIcon } from "lucide-react";
 import LogoImage from "@/components/shared/LogoImage";
 
-function PreviewFrame({ label, shape, logoUrl }) {
-  const isRound = shape === "round";
-  const frameClass = isRound
-    ? "w-20 h-20 rounded-full"
-    : "w-20 h-20 rounded-lg";
-  const imgClass = isRound ? "object-cover w-full h-full" : "object-contain w-12 h-12";
-
+/**
+ * Single Business Logo preview. One canonical logo — not three separate settings.
+ */
+export default function SettingsLogoPreviews({ businessLogoUrl }) {
   return (
-    <div className="text-center">
-      <div
-        className={`${frameClass} bg-background border border-border flex items-center justify-center overflow-hidden`}
-      >
-        {logoUrl ? (
-          logoUrl.startsWith("blob:") ? (
-            <img src={logoUrl} alt={label} className={imgClass} />
+    <div className="text-center md:text-left">
+      <div className="mx-auto md:mx-0 w-24 h-24 rounded-xl bg-background border border-border flex items-center justify-center overflow-hidden">
+        {businessLogoUrl ? (
+          businessLogoUrl.startsWith("blob:") ? (
+            <img src={businessLogoUrl} alt="Business Logo" className="object-contain w-16 h-16" />
           ) : (
-            <LogoImage src={logoUrl} alt={label} className={imgClass} preflightStorage />
+            <LogoImage src={businessLogoUrl} alt="Business Logo" className="object-contain w-16 h-16" preflightStorage />
           )
-        ) : isRound ? (
-          <UserIcon className="w-10 h-10 text-muted-foreground" />
-        ) : shape === "quote" ? (
-          <FileText className="w-6 h-6 text-muted-foreground" />
         ) : (
-          <ImageIcon className="w-6 h-6 text-muted-foreground" />
+          <ImageIcon className="w-8 h-8 text-muted-foreground" />
         )}
       </div>
-      <p className="text-[10px] text-muted-foreground mt-1">{label}</p>
-    </div>
-  );
-}
-
-PreviewFrame.propTypes = {
-  label: PropTypes.string.isRequired,
-  shape: PropTypes.oneOf(["round", "square", "quote"]).isRequired,
-  logoUrl: PropTypes.string,
-};
-
-export default function SettingsLogoPreviews({ logoUrl }) {
-  return (
-    <div className="flex flex-wrap justify-center gap-4 md:justify-start">
-      <PreviewFrame label="Profile" shape="round" logoUrl={logoUrl} />
-      <PreviewFrame label="Invoice" shape="square" logoUrl={logoUrl} />
-      <PreviewFrame label="Quote" shape="quote" logoUrl={logoUrl} />
+      <p className="text-xs font-medium text-foreground mt-2">Business Logo</p>
+      <p className="text-[10px] text-muted-foreground mt-0.5 max-w-[14rem]">
+        Used on: Profile · Invoices · Quotes · Payslips · Statements
+      </p>
     </div>
   );
 }
 
 SettingsLogoPreviews.propTypes = {
-  logoUrl: PropTypes.string,
+  businessLogoUrl: PropTypes.string,
 };

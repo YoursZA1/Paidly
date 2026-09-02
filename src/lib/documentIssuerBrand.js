@@ -10,12 +10,14 @@
  *   1. Document-specific compose override (company_name / document_logo_url)
  *   2. Assigned brand (invoice.company from companies)
  *   3. Document snapshot (owner_*)
- *   4. Profile / organization default
+ *   4. Profile / organization default (profiles.logo_url — Business Logo)
+ *
+ * POS logos (profiles.pos_logo_url) are never read here.
  *
  * New documents use the active brand as a default only. Changing the global
  * active brand must not mutate existing rows.
  */
-import { resolveProfileLogoUrl } from "@/lib/profileLogo";
+import { resolveBusinessLogoUrl } from "@/lib/brandingLogos";
 
 /**
  * @param {{ document?: object, company?: object, profile?: object, selectedBrand?: object }} args
@@ -45,7 +47,7 @@ export function resolveIssuerLogoPath({ document, company, profile, selectedBran
   if (snapshot) return snapshot;
   const selected = selectedBrand?.logo_url && String(selectedBrand.logo_url).trim();
   if (selected) return selected;
-  return resolveProfileLogoUrl(profile) || null;
+  return resolveBusinessLogoUrl(profile) || null;
 }
 
 /**
@@ -60,7 +62,7 @@ export function snapshotForNewDocument({ brand, profile } = {}) {
     companyId: brandId,
     owner_company_name: (brand?.name && String(brand.name).trim()) || profile?.company_name || null,
     owner_logo_url:
-      (brand?.logo_url && String(brand.logo_url).trim()) || resolveProfileLogoUrl(profile) || null,
+      (brand?.logo_url && String(brand.logo_url).trim()) || resolveBusinessLogoUrl(profile) || null,
     owner_company_address: profile?.company_address || null,
     owner_email: profile?.email || profile?.company_email || null,
   };

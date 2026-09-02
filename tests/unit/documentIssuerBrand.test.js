@@ -89,4 +89,14 @@ describe("documentIssuerBrand", () => {
     expect(snap.owner_company_name).toBe("Org Default");
     expect(snap.owner_logo_url).toBe("org-logo.png");
   });
+
+  it("never reads a POS logo for invoices or quotes", () => {
+    const mixed = {
+      company_name: "Org Default",
+      logo_url: "org-logo.png",
+      pos_logo_url: "pos-retail.png",
+    };
+    expect(resolveIssuerLogoPath({ document: {}, company: null, profile: mixed })).toBe("org-logo.png");
+    expect(snapshotForNewDocument({ brand: null, profile: mixed }).owner_logo_url).toBe("org-logo.png");
+  });
 });

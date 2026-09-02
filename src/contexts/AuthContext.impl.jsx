@@ -146,6 +146,7 @@ function minimalUserFromJwtUser(su) {
     company_address: "",
     currency: "ZAR",
     logo_url: "",
+    pos_logo_url: "",
     timezone: "UTC",
   };
 }

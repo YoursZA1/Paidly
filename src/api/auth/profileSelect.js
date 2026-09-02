@@ -2,7 +2,7 @@ import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
 
 const PROFILES_SELECT_FULL =
-  "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, reminder_settings, quote_reminder_settings, created_at, updated_at";
+  "id, full_name, email, avatar_url, logo_url, pos_logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, reminder_settings, quote_reminder_settings, created_at, updated_at";
 
 const PROFILES_SELECT_WITHOUT_BUSINESS =
   "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, subscription_plan, plan, subscription_status, currency, timezone, role, user_role, invoice_template, invoice_header, reminder_settings, quote_reminder_settings, created_at, updated_at";
@@ -53,6 +53,7 @@ export async function selectProfileByUserId(supabaseClient, authUserId) {
         if (d.plan === undefined) d.plan = null;
         if (d.subscription_status === undefined) d.subscription_status = null;
         if (d.trial_ends_at === undefined) d.trial_ends_at = null;
+        if (d.pos_logo_url === undefined) d.pos_logo_url = null;
         if (d.avatar_url === undefined) d.avatar_url = null;
         if (d.role === undefined) d.role = null;
         if (d.user_role === undefined) d.user_role = null;
