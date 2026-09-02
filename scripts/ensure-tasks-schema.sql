@@ -22,6 +22,43 @@ create table if not exists public.tasks (
   is_sample boolean default false
 );
 
+-- Existing DBs: CREATE TABLE IF NOT EXISTS does not add org_id.
+alter table if exists public.tasks add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.tasks add column if not exists title text;
+alter table if exists public.tasks add column if not exists description text;
+alter table if exists public.tasks add column if not exists client_id uuid;
+alter table if exists public.tasks add column if not exists assigned_to text;
+alter table if exists public.tasks add column if not exists due_date date;
+alter table if exists public.tasks add column if not exists priority text default 'medium';
+alter table if exists public.tasks add column if not exists status text default 'pending';
+alter table if exists public.tasks add column if not exists category text default 'other';
+alter table if exists public.tasks add column if not exists created_by_id uuid references auth.users(id) on delete set null;
+alter table if exists public.tasks add column if not exists created_at timestamptz default now();
+alter table if exists public.tasks add column if not exists updated_at timestamptz default now();
+alter table if exists public.tasks add column if not exists is_sample boolean default false;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'tasks' and column_name = 'created_by_id'
+  ) then
+    update public.tasks t
+    set org_id = m.org_id
+    from public.memberships m
+    where t.org_id is null and t.created_by_id = m.user_id;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'tasks' and column_name = 'user_id'
+  ) then
+    update public.tasks t
+    set org_id = m.org_id
+    from public.memberships m
+    where t.org_id is null and t.user_id = m.user_id;
+  end if;
+end $$;
+
 alter table public.tasks enable row level security;
 
 drop policy if exists "admin full access tasks" on public.tasks;

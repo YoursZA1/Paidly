@@ -38,6 +38,26 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+alter table if exists public.profiles add column if not exists full_name text;
+alter table if exists public.profiles add column if not exists email text;
+alter table if exists public.profiles add column if not exists avatar_url text;
+alter table if exists public.profiles add column if not exists logo_url text;
+alter table if exists public.profiles add column if not exists company_name text;
+alter table if exists public.profiles add column if not exists company_address text;
+alter table if exists public.profiles add column if not exists phone text;
+alter table if exists public.profiles add column if not exists subscription_plan text default 'starter';
+alter table if exists public.profiles add column if not exists currency text default 'USD';
+alter table if exists public.profiles add column if not exists timezone text default 'UTC';
+alter table if exists public.profiles add column if not exists invoice_template text default 'classic';
+alter table if exists public.profiles add column if not exists invoice_header text;
+alter table if exists public.profiles add column if not exists business jsonb;
+alter table if exists public.profiles add column if not exists reminder_settings jsonb;
+alter table if exists public.profiles add column if not exists quote_reminder_settings jsonb;
+alter table if exists public.profiles add column if not exists last_active_at timestamptz;
+alter table if exists public.profiles add column if not exists last_active_path text;
+alter table if exists public.profiles add column if not exists created_at timestamptz default now();
+alter table if exists public.profiles add column if not exists updated_at timestamptz default now();
+
 create table if not exists public.memberships (
   id uuid primary key default uuid_generate_v4(),
   org_id uuid not null references public.organizations(id) on delete cascade,
@@ -455,6 +475,104 @@ create table if not exists public.notifications (
   read boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+-- Existing DBs: CREATE TABLE IF NOT EXISTS does not add columns. Live `tasks`
+-- (and siblings) often predate org_id; RLS below references table.org_id.
+alter table if exists public.clients add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.clients add column if not exists name text;
+alter table if exists public.clients add column if not exists email text;
+alter table if exists public.clients add column if not exists phone text;
+alter table if exists public.clients add column if not exists address text;
+alter table if exists public.clients add column if not exists contact_person text;
+alter table if exists public.clients add column if not exists website text;
+alter table if exists public.clients add column if not exists tax_id text;
+alter table if exists public.clients add column if not exists fax text;
+alter table if exists public.clients add column if not exists alternate_email text;
+alter table if exists public.clients add column if not exists notes text;
+alter table if exists public.clients add column if not exists created_by_id uuid references auth.users(id) on delete set null;
+alter table if exists public.clients add column if not exists created_at timestamptz default now();
+alter table if exists public.clients add column if not exists updated_at timestamptz default now();
+alter table if exists public.services add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.services add column if not exists name text;
+alter table if exists public.services add column if not exists item_type text default 'service';
+alter table if exists public.services add column if not exists is_active boolean default true;
+alter table if exists public.services add column if not exists category text;
+alter table if exists public.services add column if not exists created_at timestamptz default now();
+alter table if exists public.services add column if not exists updated_at timestamptz default now();
+alter table if exists public.services add column if not exists usage_count integer default 0;
+alter table if exists public.services add column if not exists last_used_date timestamptz;
+alter table if exists public.invoices add column if not exists client_id uuid;
+alter table if exists public.invoices add column if not exists status text default 'draft';
+alter table if exists public.invoices add column if not exists invoice_number text;
+alter table if exists public.invoices add column if not exists created_at timestamptz default now();
+alter table if exists public.invoices add column if not exists updated_at timestamptz default now();
+alter table if exists public.quotes add column if not exists client_id uuid;
+alter table if exists public.quotes add column if not exists quote_number text;
+alter table if exists public.quotes add column if not exists status text default 'draft';
+alter table if exists public.quotes add column if not exists created_at timestamptz default now();
+alter table if exists public.quotes add column if not exists updated_at timestamptz default now();
+alter table if exists public.quotes add column if not exists public_share_token text;
+alter table if exists public.payments add column if not exists created_at timestamptz default now();
+alter table if exists public.payments add column if not exists updated_at timestamptz default now();
+alter table if exists public.banking_details add column if not exists created_at timestamptz default now();
+alter table if exists public.banking_details add column if not exists updated_at timestamptz default now();
+alter table if exists public.recurring_invoices add column if not exists created_at timestamptz default now();
+alter table if exists public.recurring_invoices add column if not exists updated_at timestamptz default now();
+alter table if exists public.packages add column if not exists created_at timestamptz default now();
+alter table if exists public.packages add column if not exists updated_at timestamptz default now();
+alter table if exists public.invoice_views add column if not exists invoice_id uuid;
+alter table if exists public.invoice_views add column if not exists viewed_at timestamptz default now();
+alter table if exists public.payslips add column if not exists pay_date date;
+alter table if exists public.payslips add column if not exists created_at timestamptz default now();
+alter table if exists public.payslips add column if not exists updated_at timestamptz default now();
+alter table if exists public.expenses add column if not exists date date default (current_date);
+alter table if exists public.expenses add column if not exists created_at timestamptz default now();
+alter table if exists public.expenses add column if not exists updated_at timestamptz default now();
+alter table if exists public.services add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.quotes add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.invoices add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.payments add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.banking_details add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.recurring_invoices add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.packages add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.invoice_views add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.payslips add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.expenses add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.tasks add column if not exists org_id uuid references public.organizations(id) on delete cascade;
+alter table if exists public.tasks add column if not exists title text;
+alter table if exists public.tasks add column if not exists description text;
+alter table if exists public.tasks add column if not exists client_id uuid;
+alter table if exists public.tasks add column if not exists assigned_to text;
+alter table if exists public.tasks add column if not exists due_date date;
+alter table if exists public.tasks add column if not exists priority text default 'medium';
+alter table if exists public.tasks add column if not exists status text default 'pending';
+alter table if exists public.tasks add column if not exists category text default 'other';
+alter table if exists public.tasks add column if not exists created_by_id uuid references auth.users(id) on delete set null;
+alter table if exists public.tasks add column if not exists created_at timestamptz default now();
+alter table if exists public.tasks add column if not exists updated_at timestamptz default now();
+alter table if exists public.tasks add column if not exists is_sample boolean default false;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'tasks' and column_name = 'created_by_id'
+  ) then
+    update public.tasks t
+    set org_id = m.org_id
+    from public.memberships m
+    where t.org_id is null and t.created_by_id = m.user_id;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'tasks' and column_name = 'user_id'
+  ) then
+    update public.tasks t
+    set org_id = m.org_id
+    from public.memberships m
+    where t.org_id is null and t.user_id = m.user_id;
+  end if;
+end $$;
 
 alter table public.organizations enable row level security;
 alter table public.profiles enable row level security;
