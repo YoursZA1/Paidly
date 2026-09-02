@@ -57,6 +57,9 @@ describe("public invite origin", () => {
     expect(
       companyInviteShareUrl("7K4M-X92Q", { origin: "https://paidly.co.za", source: "pos" })
     ).toBe("https://paidly.co.za/pos/invite/7K4M-X92Q");
+    expect(
+      companyInviteShareUrl(token, { origin: "https://paidly.co.za", source: "pos" })
+    ).toBe(`https://paidly.co.za/pos/invite/${token}`);
   });
 });
 

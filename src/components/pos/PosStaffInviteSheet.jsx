@@ -13,7 +13,8 @@ import { POS_INVITE_SOURCE, POS_JOB_FUNCTION } from "@shared/posStaffInvite.js";
 import { COMPANY_ROLES } from "@/lib/companyPermissions";
 
 /**
- * Till-facing invite: employee + job_function pos, unique hashed till code, /pos/invite/:code.
+ * Till-facing invite: employee + job_function pos. Email uses /pos/invite/:token.
+ * Short till code is backup device activation only (/pos/join).
  */
 export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegisterId, onCreated }) {
   const { toast } = useToast();
@@ -82,6 +83,7 @@ export default function PosStaffInviteSheet({ open, onOpenChange, defaultRegiste
           inviteLink: result.invite_link || "",
           inviteCode: result.invite_code || null,
           registerName: result.register_name || selectedTill?.name || null,
+          registerId: result.register_id || registerId || null,
           expiresAt: result.expires_at || null,
           emailSent: result.email_sent === true,
           emailError: result.email_error || null,

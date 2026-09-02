@@ -1,6 +1,7 @@
 import { sendHtmlEmail } from "./sendInvoice.js";
 import { sanitizeOneLine } from "./inputValidation.js";
 import { resolvePublicAppOrigin } from "./companyInviteAppUrl.js";
+import { posJoinPath } from "../../shared/posStaffInvite.js";
 
 export function companyInviteRedirectUrl() {
   return `${resolvePublicAppOrigin()}/ResetPassword`;
@@ -31,6 +32,7 @@ export async function sendCompanyTeamInviteEmail({
   const safeInviter = sanitizeOneLine(inviterName, 120) || "Your team admin";
   const safeRole = sanitizeOneLine(roleLabel, 80) || "team member";
   const safeTill = sanitizeOneLine(tillName, 80);
+  const joinUrl = posJoinPath(resolvePublicAppOrigin());
   const safeCode = sanitizeOneLine(inviteCode, 24);
 
   if (posOnly) {
@@ -42,17 +44,17 @@ export async function sendCompanyTeamInviteEmail({
   <p><strong>Business:</strong> ${escapeHtml(safeCompany)}<br/>
   <strong>Till:</strong> ${escapeHtml(safeTill || "Assigned till")}<br/>
   <strong>Role:</strong> POS Staff</p>
-  ${
-    safeCode
-      ? `<p>Your Till Invite Code:</p><p style="font-size: 28px; letter-spacing: 0.12em; font-weight: 700;">${escapeHtml(safeCode)}</p>`
-      : ""
-  }
   <p style="margin: 24px 0;">
     <a href="${escapeHtml(inviteLink)}" style="display: inline-block; background: #ea580c; color: #ffffff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;">
-      Open your invitation
+      Open Paidly POS
     </a>
   </p>
   <p style="font-size: 13px; word-break: break-all; color: #334155;">${escapeHtml(inviteLink)}</p>
+  ${
+    safeCode
+      ? `<p style="font-size: 13px; color: #64748b; margin-top: 24px;">If this device cannot open the link, use the backup activation code at <a href="${escapeHtml(joinUrl)}">${escapeHtml(joinUrl)}</a>:</p><p style="font-size: 18px; letter-spacing: 0.12em; font-weight: 700; color: #334155;">${escapeHtml(safeCode)}</p>`
+      : ""
+  }
   <p style="font-size: 13px; color: #64748b; margin-top: 24px;">This invitation provides POS-only access. It does not provide access to the main Paidly dashboard, invoices, reports, settings or other business information.</p>
 </body>
 </html>`;
@@ -63,10 +65,10 @@ export async function sendCompanyTeamInviteEmail({
       `Till: ${safeTill || "Assigned till"}`,
       "Role: POS Staff",
       "",
-      safeCode ? `Your Till Invite Code:\n${safeCode}` : null,
-      "",
-      "Open your invitation:",
+      "Open Paidly POS:",
       inviteLink,
+      "",
+      safeCode ? `Backup device code (only if the link cannot open):\n${safeCode}\n${joinUrl}` : null,
       "",
       "This invitation provides POS-only access.",
       "It does not provide access to the main Paidly dashboard, invoices, reports, settings or other business information.",

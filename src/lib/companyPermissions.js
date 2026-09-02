@@ -210,7 +210,15 @@ export function normalizeJobFunction(raw) {
   return KNOWN_JOB_FUNCTIONS.has(key) ? key : "general";
 }
 
-export function buildCompanyAccessContext({ userId, companyId, companyRole, membershipRole, jobFunction, businessType }) {
+export function buildCompanyAccessContext({
+  userId,
+  companyId,
+  companyRole,
+  membershipRole,
+  jobFunction,
+  businessType,
+  posRegisterId,
+}) {
   const rawMembership = String(membershipRole || "")
     .trim()
     .toLowerCase();
@@ -225,6 +233,7 @@ export function buildCompanyAccessContext({ userId, companyId, companyRole, memb
     orgId: companyId,
     companyRole: role,
     jobFunction: normalizeJobFunction(jobFunction),
+    posRegisterId: posRegisterId || null,
     permissions: permissionsForMembership({
       companyRole: role,
       jobFunction: normalizeJobFunction(jobFunction),

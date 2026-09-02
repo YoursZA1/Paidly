@@ -18,7 +18,6 @@ import {
   POS_JOB_FUNCTION,
 } from "../../shared/posStaffInvite.js";
 import {
-  formatPosTillInviteCode,
   generatePosTillInviteCode,
   hashPosTillInviteCode,
 } from "./pos/posTillInviteCode.js";
@@ -203,13 +202,12 @@ async function persistCompanyInvite({
     }
     const inserted = await tryInsert(row);
     if (!inserted.error) {
-      const linkToken = posInvite ? formatPosTillInviteCode(inviteCode) || inviteCode : row.token;
       return {
         id: inserted.id,
         token: row.token,
         inviteCode,
         expiresAt,
-        inviteLink: inviteShareLink(linkToken, source),
+        inviteLink: inviteShareLink(row.token, source),
       };
     }
     lastError = inserted.error;
@@ -627,13 +625,12 @@ async function rotateCompanyInvite(row, { posInvite, registerId } = {}) {
   }
   if (updateErr) throw new Error(updateErr.message || "Could not refresh invite");
 
-  const linkToken = usePos ? formatPosTillInviteCode(inviteCode) || inviteCode : newToken;
   return {
     id: row.id,
     token: newToken,
     inviteCode,
     expiresAt,
-    inviteLink: inviteShareLink(linkToken, usePos ? POS_INVITE_SOURCE : row.source),
+    inviteLink: inviteShareLink(newToken, usePos ? POS_INVITE_SOURCE : row.source),
   };
 }
 
@@ -788,6 +785,8 @@ export async function handleCompanyInviteValidate(req, res) {
       email: data.email,
       invited_name: data.invited_name || null,
       company_name: data.company_name,
+      org_id: data.org_id || null,
+      register_id: data.register_id || null,
       register_name: data.register_name || null,
       role: data.role,
       job_function: data.job_function,

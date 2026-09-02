@@ -15,6 +15,7 @@ export function triggerHaptic(ms = 12) {
 /** Canonical route paths (PascalCase). Use for Links; router has lowercase aliases. */
 export function createPageUrl(pageName: string) {
     const slug = pageName.replace(/\s+/g, '');
+    if (slug.toLowerCase() === "pos") return "/pos";
     return '/' + (slug.charAt(0).toUpperCase() + slug.slice(1));
 }
 

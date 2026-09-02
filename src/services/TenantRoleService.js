@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { validatePublicInviteToken } from "@/services/CompanyInvitesService";
 import { invitePublicErrorMessage } from "@shared/companyInviteMessages.js";
+import { writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
 
 export const INVITE_TOKEN_KEY = "paidly_company_invite_token";
 
@@ -120,6 +121,9 @@ export async function acceptPendingInviteToken(token) {
   }
   clearPendingInviteToken();
   clearTenantContextCache();
+  if (data?.org_id && data?.register_id) {
+    writeActiveRegisterId(data.org_id, data.register_id);
+  }
   return data;
 }
 

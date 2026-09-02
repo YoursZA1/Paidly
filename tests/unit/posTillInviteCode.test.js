@@ -31,13 +31,17 @@ describe("pos till invite codes", () => {
     expect(isLegacyCompanyInviteToken("a".repeat(64))).toBe(true);
   });
 
-  it("builds a POS-only share message with code and link", () => {
+  it("builds a POS-only share message with Open Paidly POS and a backup code", () => {
+    const hex = "a".repeat(64);
     const text = buildPosTillInviteMessage({
       companyName: "Acme",
       tillName: "Main Till",
       inviteCode: "7k4m-x92q",
-      inviteLink: "https://www.paidly.co.za/pos/invite/7K4M-X92Q",
+      inviteLink: `https://www.paidly.co.za/pos/invite/${hex}`,
     });
+    expect(text).toContain("Open Paidly POS");
+    expect(text).toContain(`/pos/invite/${hex}`);
+    expect(text).toContain("Backup device code");
     expect(text).toContain("7K4M-X92Q");
     expect(text).toContain("Main Till");
     expect(text).toContain("POS-only");

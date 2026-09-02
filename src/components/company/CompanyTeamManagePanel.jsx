@@ -132,6 +132,7 @@ export default function CompanyTeamManagePanel() {
           role: result.role || inviteRole,
           jobFunction: result.job_function || inviteJobFunction,
           registerName: result.register_name || selectedTill?.name || null,
+          registerId: result.register_id || inviteRegisterId || null,
           expiresAt: result.expires_at || null,
           reused: result.reused === true || result.pending_exists === true,
         });

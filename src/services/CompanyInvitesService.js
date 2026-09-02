@@ -79,7 +79,7 @@ export async function resendCompanyInvite(inviteId) {
  */
 export async function validatePublicInviteToken(token) {
   const code = String(token || "").trim();
-  if (!code) throw new Error("Enter your till invite code");
+  if (!code) throw new Error(invitePublicErrorMessage("missing_token"));
   const res = await fetch(
     `${apiBase()}/api/company/invite/validate?token=${encodeURIComponent(code)}`
   );
