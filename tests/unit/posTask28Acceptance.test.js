@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createPageUrl } from "@/utils";
-import { isPosTerminalPage } from "@/lib/posNavAccess";
+import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { filterPosProducts, buildPosCodeIndex } from "@/lib/pos/posProductSearch";
 import { addPosCartLine, posCartSubtotal, posProductStock, posStockLabel, setPosCartQty } from "@/lib/pos/posCart";
 import {
@@ -54,6 +54,8 @@ describe("Task 28 POS acceptance", () => {
     expect(isPosTerminalPage("/pos/till/11111111-1111-4111-8111-111111111111")).toBe(true);
     expect(isPosTerminalPage("Dashboard")).toBe(false);
     expect(isPosTerminalPage("Settings")).toBe(false);
+    expect(isPosTerminalPath("/pos")).toBe(true);
+    expect(isPosTerminalPath("/Dashboard")).toBe(false);
   });
 
   it("TEST 2 Search product — product appears", () => {

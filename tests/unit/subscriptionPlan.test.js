@@ -4,6 +4,8 @@ import {
   pickPreferredSubscriptionRow,
   describeSubscriptionState,
   slugFromProfile,
+  isSubscriptionExpired,
+  shouldShowExpiredSubscriptionLock,
 } from "@/lib/subscriptionPlan";
 
 describe("normalizePaidPackageKey", () => {
@@ -86,5 +88,28 @@ describe("slugFromProfile", () => {
     expect(slugFromProfile({ plan: "sme", subscription_plan: "individual" })).toBe("individual");
     expect(slugFromProfile({ plan: "individual", subscription_plan: "sme" })).toBe("sme");
     expect(slugFromProfile({ subscription_plan: "corporate" })).toBe("corporate");
+  });
+});
+
+describe("shouldShowExpiredSubscriptionLock", () => {
+  it("locks back office when the subscription is expired", () => {
+    expect(isSubscriptionExpired({ subscription_status: "expired" })).toBe(true);
+    expect(shouldShowExpiredSubscriptionLock({ expired: true })).toBe(true);
+  });
+
+  it("keeps the POS till open so cashiers can sell during a billing lock", () => {
+    expect(
+      shouldShowExpiredSubscriptionLock({
+        expired: true,
+        isPosTerminal: true,
+      })
+    ).toBe(false);
+  });
+
+  it("still allows Settings, Billing, admin, and staff bypass", () => {
+    expect(shouldShowExpiredSubscriptionLock({ expired: true, onSettingsRoute: true })).toBe(false);
+    expect(shouldShowExpiredSubscriptionLock({ expired: true, onBillingRoute: true })).toBe(false);
+    expect(shouldShowExpiredSubscriptionLock({ expired: true, isAdminRoute: true })).toBe(false);
+    expect(shouldShowExpiredSubscriptionLock({ expired: true, billingBypassRole: true })).toBe(false);
   });
 });

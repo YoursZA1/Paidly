@@ -89,6 +89,24 @@ export function isSubscriptionExpired(profileOrUser) {
   return false;
 }
 
+/**
+ * App-shell billing wall. The till (`/pos`) stays open so staff can sell while
+ * owners resolve billing on Settings / Billing.
+ */
+export function shouldShowExpiredSubscriptionLock({
+  expired = false,
+  billingBypassRole = false,
+  isAdminRoute = false,
+  isPosTerminal = false,
+  onSettingsRoute = false,
+  onBillingRoute = false,
+} = {}) {
+  if (!expired) return false;
+  if (billingBypassRole || isAdminRoute || isPosTerminal) return false;
+  if (onSettingsRoute || onBillingRoute) return false;
+  return true;
+}
+
 /** True while subscription_status is trial/trialing and trial_ends_at is unset or still in the future. */
 export function isOnTrialSubscription(profile) {
   if (!profile) return false;

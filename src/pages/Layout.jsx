@@ -58,7 +58,7 @@ import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
-import { isSubscriptionExpired } from "@/lib/subscriptionPlan";
+import { isSubscriptionExpired, shouldShowExpiredSubscriptionLock } from "@/lib/subscriptionPlan";
 import UpgradeScreen from "@/components/subscription/UpgradeScreen";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
@@ -804,7 +804,7 @@ export default function Layout({ children, currentPageName }) {
   // Fetch shared app data when the auth user is known. Admins need this too — Invoices, Clients, Cash Flow read useAppStore.
   useEffect(() => {
     if (!user?.id) return;
-    if (isAdminV2Route) return;
+    if (isAdminV2Route || isPosTerminal) return;
     // Company members use MemberDashboardService — skip heavy invoice/client bootstrap.
     if (companyCtx?.companyId && !showBusinessDashboard) return;
     const hasFreshData = lastFetchedAt != null && Date.now() - lastFetchedAt < SHARED_STORE_STALE_MS;
@@ -815,11 +815,11 @@ export default function Layout({ children, currentPageName }) {
     lastFetchAllRequestAtRef.current = now;
     // Omit profile display fields in deps (full_name, company_name) to avoid refetch loops on every Settings save.
     fetchAll(user, { accessToken: session?.accessToken ?? null });
-  }, [user?.id, user?.role, fetchAll, isAdminV2Route, lastFetchedAt, userProfile, session?.accessToken, companyCtx?.companyId, showBusinessDashboard]);
+  }, [user?.id, user?.role, fetchAll, isAdminV2Route, isPosTerminal, lastFetchedAt, userProfile, session?.accessToken, companyCtx?.companyId, showBusinessDashboard]);
 
   // Auto refetch shared Zustand data when the user returns to the tab (if cache is stale — same window as React Query).
   useEffect(() => {
-    if (!user?.id || isAdminV2Route) return undefined;
+    if (!user?.id || isAdminV2Route || isPosTerminal) return undefined;
     if (companyCtx?.companyId && !showBusinessDashboard) return undefined;
     let debounceId = null;
     const handleVisibility = () => {
@@ -841,7 +841,7 @@ export default function Layout({ children, currentPageName }) {
       if (debounceId) clearTimeout(debounceId);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [user?.id, fetchAll, isAdminV2Route, lastFetchedAt, session?.accessToken, companyCtx?.companyId, showBusinessDashboard]);
+  }, [user?.id, fetchAll, isAdminV2Route, isPosTerminal, lastFetchedAt, session?.accessToken, companyCtx?.companyId, showBusinessDashboard]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo
@@ -877,7 +877,7 @@ export default function Layout({ children, currentPageName }) {
 
   // Reminder and follow-up checks
   useEffect(() => {
-    if (!user) return;
+    if (!user || isPosTerminal) return;
 
     const checkDueDateReminders = async () => {
       const lastDueDateCheck = localStorage.getItem('lastDueDateCheck');
@@ -938,7 +938,7 @@ export default function Layout({ children, currentPageName }) {
     checkDueDateReminders();
     checkClientFollowUps();
     checkTrialSubscriptionNotifications();
-  }, [user]);
+  }, [user, isPosTerminal]);
 
   const handleLogout = async () => {
     // Force logout: always reset local state and go to Login.
@@ -965,7 +965,16 @@ export default function Layout({ children, currentPageName }) {
     return <Navigate to={createPageUrl("POS")} replace />;
   }
 
-  if (expired && !billingBypassRole && !isAdminV2Route && !onSettingsRoute && !onBillingInvoicesRoute) {
+  if (
+    shouldShowExpiredSubscriptionLock({
+      expired,
+      billingBypassRole,
+      isAdminRoute: isAdminV2Route,
+      isPosTerminal,
+      onSettingsRoute,
+      onBillingRoute: onBillingInvoicesRoute,
+    })
+  ) {
     return <UpgradeScreen onLogout={handleLogout} />;
   }
 

@@ -35,6 +35,9 @@ async function loadCompanyAccessContextInner(userId) {
   if (!orgId) {
     orgId = await ensureUserHasOrganization(userId);
   }
+  if (!orgId) {
+    throw new Error("Could not resolve your company. Refresh and try again.");
+  }
 
   let { data: org, error: orgError } = await supabase
     .from("organizations")

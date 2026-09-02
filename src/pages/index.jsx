@@ -425,11 +425,11 @@ function PagesContent() {
     const location = useLocation();
     const { loading, user } = useAuth();
     const authUserId = getAuthUserId(user);
-    const posAccessGuest = isPosAccessPath(location.pathname) && !authUserId;
-    const needsAppShell = !shouldBypassAppLayout(location.pathname) && !posAccessGuest;
+    const posTillPath = isPosAccessPath(location.pathname);
+    const needsAppShell = !shouldBypassAppLayout(location.pathname) && !posTillPath;
 
     // Avoid mounting the main shell (nav, store hydration) until session bootstrap knows if there is a user.
-    // POS guests skip this wait so /pos can render sign-in without the dashboard bootstrap.
+    // /pos is a dedicated till shell — guests and signed-in cashiers skip dashboard bootstrap.
     if (needsAppShell && loading && !authUserId) {
         return <AuthBootstrapShell />;
     }
@@ -462,7 +462,7 @@ function PagesContent() {
         </>
     );
 
-    if (shouldBypassAppLayout(location.pathname) || posAccessGuest) {
+    if (shouldBypassAppLayout(location.pathname) || posTillPath) {
         return (
             <>
                 {content}

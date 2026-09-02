@@ -61,7 +61,7 @@ function PosBusinessTypeLock({ posOnlyStaff = false }) {
 }
 
 export default function POS({ requestedTillId = null } = {}) {
-  const { profile } = useAuth();
+  const { profile, authReady } = useAuth();
   const { loading, posEnabled, isOrgOwner, companyRole, jobFunction } = useCompanyContext();
   const posOnlyStaff = isPosOnlyStaff({ isOrgOwner, companyRole, jobFunction });
   const userPlan = useMemo(
@@ -69,7 +69,7 @@ export default function POS({ requestedTillId = null } = {}) {
     [profile]
   );
 
-  if (loading) {
+  if (loading || (!posOnlyStaff && !authReady)) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-background" aria-label="Loading POS">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />

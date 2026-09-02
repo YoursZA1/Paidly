@@ -1,18 +1,40 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Store } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthUserId } from "@/lib/authUserId";
 import { PERMISSIONS } from "@/lib/companyPermissions";
+import { CompanyContextProvider } from "@/contexts/CompanyContext";
+import { OrgBrandProvider } from "@/contexts/OrgBrandContext";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import PosAccessSignIn from "@/components/pos/PosAccessSignIn";
+import { Button } from "@/components/ui/button";
 import { normalizePosTillId } from "@shared/posStaffInvite.js";
 
 const POS = lazy(() => import("./POS"));
+const POS_CONTEXT_WAIT_MS = 12_000;
 
 function PosLoading() {
   return (
     <div className="flex h-[100dvh] items-center justify-center bg-background" aria-label="Loading POS">
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    </div>
+  );
+}
+
+function PosLoadError({ message, onRetry }) {
+  return (
+    <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+      <Store className="size-10 text-muted-foreground" aria-hidden />
+      <div>
+        <p className="font-display text-xl font-semibold">POS could not load</p>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          {message || "Check your connection and try again."}
+        </p>
+      </div>
+      <Button type="button" className="h-12 min-w-[10rem]" onClick={onRetry}>
+        Try again
+      </Button>
     </div>
   );
 }
@@ -34,15 +56,47 @@ export default function PosAccess() {
   }
 
   return (
-    <AuthenticatedPosTill requestedTillId={requestedTillId} tillLinkInvalid={tillLinkInvalid} />
+    <CompanyContextProvider>
+      <OrgBrandProvider>
+        <AuthenticatedPosTill requestedTillId={requestedTillId} tillLinkInvalid={tillLinkInvalid} />
+      </OrgBrandProvider>
+    </CompanyContextProvider>
   );
 }
 
 function AuthenticatedPosTill({ requestedTillId, tillLinkInvalid }) {
   const { user } = useAuth() || {};
-  const { loading, hasPermission } = useCompanyContext();
+  const { loading, error, hasPermission, refresh } = useCompanyContext();
+  const [slowLoad, setSlowLoad] = useState(false);
 
-  if (loading) return <PosLoading />;
+  useEffect(() => {
+    if (!loading) {
+      setSlowLoad(false);
+      return undefined;
+    }
+    const id = window.setTimeout(() => setSlowLoad(true), POS_CONTEXT_WAIT_MS);
+    return () => window.clearTimeout(id);
+  }, [loading]);
+
+  if (loading && !slowLoad) return <PosLoading />;
+
+  if (error) {
+    return (
+      <PosLoadError
+        message={error}
+        onRetry={() => void refresh({ invalidateCache: true })}
+      />
+    );
+  }
+
+  if (loading && slowLoad) {
+    return (
+      <PosLoadError
+        message="POS is taking too long to load. Check your connection and try again."
+        onRetry={() => void refresh({ invalidateCache: true })}
+      />
+    );
+  }
 
   if (!hasPermission(PERMISSIONS.POS_ACCESS)) {
     return (
