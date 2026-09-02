@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Crown, Lock, Store } from "lucide-react";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import PosTerminal from "@/components/pos/PosTerminal";
+import { PosLoading } from "@/components/pos/PosShellStates";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { createPageUrl } from "@/utils";
@@ -70,11 +71,7 @@ export default function POS({ requestedTillId = null } = {}) {
   );
 
   if (loading || (!posOnlyStaff && !authReady)) {
-    return (
-      <div className="flex h-[100dvh] items-center justify-center bg-background" aria-label="Loading POS">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
+    return <PosLoading />;
   }
 
   const till = posEnabled ? (

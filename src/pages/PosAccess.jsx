@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Store } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthUserId } from "@/lib/authUserId";
 import { PERMISSIONS } from "@/lib/companyPermissions";
@@ -8,35 +7,15 @@ import { CompanyContextProvider } from "@/contexts/CompanyContext";
 import { OrgBrandProvider } from "@/contexts/OrgBrandContext";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import PosAccessSignIn from "@/components/pos/PosAccessSignIn";
-import { Button } from "@/components/ui/button";
+import PosErrorBoundary from "@/components/pos/PosErrorBoundary";
+import { PosLoadError, PosLoading } from "@/components/pos/PosShellStates";
 import { normalizePosTillId } from "@shared/posStaffInvite.js";
 
 const POS = lazy(() => import("./POS"));
 const POS_CONTEXT_WAIT_MS = 12_000;
 
-function PosLoading() {
-  return (
-    <div className="flex h-[100dvh] items-center justify-center bg-background" aria-label="Loading POS">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-    </div>
-  );
-}
-
-function PosLoadError({ message, onRetry }) {
-  return (
-    <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-      <Store className="size-10 text-muted-foreground" aria-hidden />
-      <div>
-        <p className="font-display text-xl font-semibold">POS could not load</p>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          {message || "Check your connection and try again."}
-        </p>
-      </div>
-      <Button type="button" className="h-12 min-w-[10rem]" onClick={onRetry}>
-        Try again
-      </Button>
-    </div>
-  );
+function isLikelyConnectFailure(message) {
+  return /failed to fetch|network|timeout|unavailable|connect/i.test(String(message || ""));
 }
 
 /**
@@ -46,10 +25,14 @@ function PosLoadError({ message, onRetry }) {
  */
 export default function PosAccess() {
   const { tillId: tillParam } = useParams();
-  const { user } = useAuth() || {};
+  const { user, loading: authLoading } = useAuth() || {};
   const authUserId = getAuthUserId(user);
   const requestedTillId = normalizePosTillId(tillParam);
   const tillLinkInvalid = Boolean(tillParam) && !requestedTillId;
+
+  if (authLoading && !authUserId) {
+    return <PosLoading />;
+  }
 
   if (!authUserId) {
     return <PosAccessSignIn />;
@@ -78,13 +61,20 @@ function AuthenticatedPosTill({ requestedTillId, tillLinkInvalid }) {
     return () => window.clearTimeout(id);
   }, [loading]);
 
+  const retry = () => void refresh({ invalidateCache: true });
+
   if (loading && !slowLoad) return <PosLoading />;
 
   if (error) {
     return (
       <PosLoadError
-        message={error}
-        onRetry={() => void refresh({ invalidateCache: true })}
+        title={isLikelyConnectFailure(error) ? "Unable to connect to Paidly" : "POS couldn't load"}
+        message={
+          isLikelyConnectFailure(error)
+            ? "Check your connection and try again. Sales are not recorded until Paidly confirms them."
+            : error
+        }
+        onRetry={retry}
       />
     );
   }
@@ -92,8 +82,9 @@ function AuthenticatedPosTill({ requestedTillId, tillLinkInvalid }) {
   if (loading && slowLoad) {
     return (
       <PosLoadError
+        title="Unable to connect to Paidly"
         message="POS is taking too long to load. Check your connection and try again."
-        onRetry={() => void refresh({ invalidateCache: true })}
+        onRetry={retry}
       />
     );
   }
@@ -119,8 +110,10 @@ function AuthenticatedPosTill({ requestedTillId, tillLinkInvalid }) {
   }
 
   return (
-    <Suspense fallback={<PosLoading />}>
-      <POS requestedTillId={requestedTillId || null} />
-    </Suspense>
+    <PosErrorBoundary>
+      <Suspense fallback={<PosLoading />}>
+        <POS requestedTillId={requestedTillId || null} />
+      </Suspense>
+    </PosErrorBoundary>
   );
 }

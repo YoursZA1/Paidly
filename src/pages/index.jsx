@@ -3,17 +3,6 @@ import Layout from "./Layout.jsx";
 import AuthenticatedShell from "@/components/layout/AuthenticatedShell";
 import AuthLayout from "@/components/layout/AuthLayout";
 
-/**
- * Lazy load all page components so the initial bundle only loads the current route.
- * Each page is loaded on demand when the user navigates (major performance gain).
- * Suspense shows this fallback while the chunk loads.
- */
-const RouteFallback = () => (
-  <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading page">
-    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-  </div>
-);
-
 const Dashboard = lazy(() => import("./Dashboard"));
 const Signup = lazy(() => import("./Signup"));
 const Home = lazy(() => import("./Home"));
@@ -97,18 +86,30 @@ const NotFoundPage = lazy(() =>
   import("./ApplicationErrorPage").then((m) => ({ default: m.NotFoundPage }))
 );
 
-import { BrowserRouter as Router, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { RequireCompanyPermissionRedirect } from "@/components/auth/RequireCompanyPermission";
 import RequireBusinessOwner from "@/components/auth/RequireBusinessOwner";
 import { PERMISSIONS } from "@/lib/companyPermissions";
-import { isPosAccessPath, posTillPath } from "@shared/posStaffInvite.js";
+import { isPosAccessPath } from "@shared/posStaffInvite.js";
+import PosErrorBoundary from "@/components/pos/PosErrorBoundary";
+import { PosLoading } from "@/components/pos/PosShellStates";
 import AuthProtectedRouteInvariant from "@/components/auth/AuthProtectedRouteInvariant";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthUserId } from "@/lib/authUserId";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+
+function RouteFallback() {
+    const { pathname } = useLocation();
+    if (isPosAccessPath(pathname)) return <PosLoading />;
+    return (
+        <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading page">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+    );
+}
 
 
 // --- Auth & Public Pages ---
@@ -167,10 +168,12 @@ function RedirectPreserveSearch({ to }) {
     return <Navigate to={`${to}${search}${hash}`} replace />;
 }
 
-function RedirectPosTillCanonical() {
-    const { tillId } = useParams();
-    const { search, hash } = useLocation();
-    return <Navigate to={`${posTillPath(tillId)}${search}${hash}`} replace />;
+function PosAccessRoute() {
+    return (
+        <PosErrorBoundary>
+            <PosAccess />
+        </PosErrorBoundary>
+    );
 }
 
 // --- Main App Pages ---
@@ -206,10 +209,10 @@ const MAIN_ROUTES = [
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
     { path: "/PurchaseOrders", element: ownerRoute(<PurchaseOrders />) },
     { path: "/purchaseorders", element: ownerRoute(<PurchaseOrders />) },
-    { path: "/POS", element: <RedirectPreserveSearch to="/pos" /> },
-    { path: "/POS/till/:tillId", element: <RedirectPosTillCanonical /> },
-    { path: "/pos/till/:tillId", element: <PosAccess /> },
-    { path: "/pos", element: <PosAccess /> },
+    // React Router matches case-insensitively. Do not add /POS → /pos <Navigate> —
+    // that redirect matches /pos as well and never commits UI (blank till).
+    { path: "/pos/till/:tillId", element: <PosAccessRoute /> },
+    { path: "/pos", element: <PosAccessRoute /> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
     { path: "/PrivacyPolicy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },

@@ -44,10 +44,10 @@ export default defineConfig(async ({ mode }) => {
           filename: 'sw.js',
           manifest: false,
           workbox: {
-            globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2,webmanifest}'],
+            globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2,webmanifest}', 'index.html'],
             globIgnores: ['**/*.map', '**/paidly_data.xlsx'],
-            navigateFallback: '/index.html',
-            navigateFallbackDenylist: [/^\/api\//i],
+            navigateFallback: 'index.html',
+            navigateFallbackDenylist: [/^\/api(?:\/|$)/i, /^\/sw\.js$/i, /^\/workbox-/i],
             cleanupOutdatedCaches: true,
             skipWaiting: false,
             clientsClaim: false,
@@ -72,19 +72,6 @@ export default defineConfig(async ({ mode }) => {
                 urlPattern: ({ url }) =>
                   url.hostname === 'sentry.io' || url.hostname.endsWith('.sentry.io'),
                 handler: 'NetworkOnly',
-              },
-              {
-                urlPattern: ({ request }) => request.mode === 'navigate',
-                handler: 'NetworkFirst',
-                options: {
-                  cacheName: 'paidly-shell',
-                  networkTimeoutSeconds: 4,
-                  expiration: {
-                    maxEntries: 8,
-                    maxAgeSeconds: 60 * 60 * 24,
-                  },
-                  cacheableResponse: { statuses: [200] },
-                },
               },
             ],
           },

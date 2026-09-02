@@ -10,7 +10,7 @@
     "server": "npm --prefix server run dev",
     "react:generate-pdf": "npm --prefix server run react:generate-pdf",
     "react:generate-quote-pdf": "npm --prefix server run react:generate-quote-pdf",
-    "build": "npm run check:forbidden-ui-admin-writes && npm run check:forbidden-client-rpcs && npm run check:session-boundaries && npm run check:session-reason-matrix && npm run check:getSession-bypass && vite build",
+    "build": "npm run check:forbidden-ui-admin-writes && npm run check:forbidden-client-rpcs && npm run check:session-boundaries && npm run check:session-reason-matrix && npm run check:getSession-bypass && vite build && node scripts/check-pwa-build.mjs",
     "start": "vite preview",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
