@@ -9,7 +9,7 @@ import { recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
 import { buildInvoiceTemplatePdfCaptureProps } from "./InvoiceTemplatePdfCapture";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 import { getLogoUrl } from "@/lib/logoUrl";
-import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
+import { resolveIssuerBrand } from "@/lib/documentIssuerBrand";
 
 function bankBlockFromBankingRow(bankingDetail, refNumber) {
   if (!bankingDetail) return null;
@@ -57,23 +57,15 @@ function bankBlockFromUserBusiness(business, refNumber) {
  * @param {object|null} bankingDetail — optional row from BankingDetail.get (bank_name, account_name, etc.)
  */
 export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
-  const brand =
-    resolveIssuerName({
-      document: invoice,
-      company: invoice?.company,
-      profile: user,
-    }) ||
-    user?.company_name ||
-    "Company";
+  const issuerBrand = resolveIssuerBrand({
+    document: invoice,
+    company: invoice?.company,
+    profile: user,
+  });
+  const brand = issuerBrand.name || user?.company_name || "Company";
   const address = invoice?.owner_company_address || user?.company_address || "";
   const number = invoice?.invoice_number || invoice?.reference_number || "—";
-  const logo_url = getLogoUrl(
-    resolveIssuerLogoPath({
-      document: invoice,
-      company: invoice?.company,
-      profile: user,
-    })
-  );
+  const logo_url = getLogoUrl(issuerBrand.logo);
   const status = (invoice?.status || "draft").toString();
   const clientName = client?.name || "Client";
   const clientAddress =
@@ -153,6 +145,7 @@ export function mapToInvoiceData(invoice, client, user, bankingDetail = null) {
     bankBlockFromUserBusiness(user?.business, refNumber);
 
   return {
+    issuerBrand,
     brand,
     address,
     logo_url,

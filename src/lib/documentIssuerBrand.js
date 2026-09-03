@@ -12,7 +12,7 @@
  *   3. Live Business Logo (profiles.logo_url) — latest uploaded / updated logo
  *   4. Document snapshot (owner_*) as fallback when the live logo is empty
  *
- * POS logos (profiles.pos_logo_url) are never read here.
+ * POS uses the same Business Logo (profiles.logo_url).
  *
  * New documents use the active brand as a default only. Changing the global
  * active brand must not mutate existing rows.
@@ -50,6 +50,58 @@ export function resolveIssuerLogoPath({ document, company, profile, selectedBran
   const selected = selectedBrand?.logo_url && String(selectedBrand.logo_url).trim();
   if (selected) return selected;
   return null;
+}
+
+/**
+ * True when `value` is an already-resolved issuer brand from this module.
+ * Downstream renderers must consume it instead of re-running fallbacks.
+ * @param {unknown} value
+ */
+export function hasResolvedIssuerBrand(value) {
+  return Boolean(value && typeof value === "object" && "logo" in value && "name" in value);
+}
+
+/**
+ * Single issuer-brand decision for compose, preview, save, PDF, and public views.
+ * If `document.issuerBrand` is already resolved, that object is returned unchanged.
+ *
+ * @param {{ document?: object, company?: object, profile?: object, selectedBrand?: object }} args
+ * @returns {{ name: string | null, logo: string | null, companyId: string | null }}
+ */
+export function resolveIssuerBrand(args = {}) {
+  if (hasResolvedIssuerBrand(args.document?.issuerBrand)) {
+    return args.document.issuerBrand;
+  }
+  const company = args.company || args.selectedBrand || null;
+  return {
+    name: resolveIssuerName({ ...args, company }),
+    logo: resolveIssuerLogoPath({ ...args, company }),
+    companyId: company?.id || args.document?.company_id || null,
+  };
+}
+
+/**
+ * Persistable snapshot fields taken from a resolved issuer brand.
+ * Preview and save must use the same `issuerBrand` object.
+ * @param {{ name?: string | null, logo?: string | null, companyId?: string | null }} issuerBrand
+ */
+export function snapshotFieldsFromIssuerBrand(issuerBrand) {
+  return {
+    owner_company_name: issuerBrand?.name || null,
+    owner_logo_url: issuerBrand?.logo || null,
+    company_id: issuerBrand?.companyId || null,
+  };
+}
+
+/**
+ * Only `document-logos/...` uploads are compose overrides.
+ * Snapshot or brand paths must not be copied into `document_logo_url`.
+ * @param {unknown} path
+ * @returns {string}
+ */
+export function composeLogoOverridePath(path) {
+  const s = String(path || "").trim();
+  return s.startsWith("document-logos/") ? s : "";
 }
 
 /**

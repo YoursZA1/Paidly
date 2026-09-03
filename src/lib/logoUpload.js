@@ -135,7 +135,7 @@ export function validateLogoFile(file) {
 
 /**
  * Upload a logo file to the paidly bucket and return its storage file name.
- * Save only this value to profiles.logo_url (for example: logo-<user-id>.png).
+ * Save only this value to profiles.logo_url (for example: logo-<uuid>.png).
  * Validates format (JPEG, PNG, or SVG) and max size (2MB) before upload.
  *
  * @param {File} file - Logo image file (JPEG, PNG, or SVG, max 2MB)
@@ -211,7 +211,6 @@ export async function retargetLogoReferences(oldPath, newPath) {
     { table: "companies", column: "logo_url" },
     { table: "invoices", column: "owner_logo_url" },
     { table: "quotes", column: "owner_logo_url" },
-    { table: "profiles", column: "pos_logo_url" },
   ];
   await Promise.all(
     targets.flatMap(({ table, column }) =>

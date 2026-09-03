@@ -1,7 +1,7 @@
 import { effectiveInvoiceTermsForDisplay } from "@/constants/invoiceTerms";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { resolveProfileLogoUrl } from "@/lib/profileLogo";
-import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
+import { resolveIssuerBrand } from "@/lib/documentIssuerBrand";
 
 /**
  * Overlay current session profile branding on a possibly stale `user` snapshot (e.g. ViewInvoice
@@ -46,20 +46,17 @@ export function profileForQuotePreview(quoteData, user) {
   if (!quoteData && !user) return {};
   const qp = parseDocumentBrandHex(quoteData?.document_brand_primary);
   const qs = parseDocumentBrandHex(quoteData?.document_brand_secondary);
+  const issuerBrand = resolveIssuerBrand({
+    document: quoteData,
+    company: quoteData?.company,
+    profile: user,
+  });
   return {
     ...(user || {}),
     document_brand_primary: qp ?? user?.document_brand_primary ?? null,
     document_brand_secondary: qs ?? user?.document_brand_secondary ?? null,
-    logo_url: resolveIssuerLogoPath({
-      document: quoteData,
-      company: quoteData?.company,
-      profile: user,
-    }),
-    company_name: resolveIssuerName({
-      document: quoteData,
-      company: quoteData?.company,
-      profile: user,
-    }) || "",
+    logo_url: issuerBrand.logo,
+    company_name: issuerBrand.name || "",
     company_address: quoteData?.owner_company_address || user?.company_address || "",
     email: quoteData?.owner_email || user?.email || "",
     phone: user?.phone || "",
@@ -112,6 +109,12 @@ export function recordToStyledPreviewDoc(record, client, docType, profile) {
       ? String(record.delivery_date).split("T")[0]
       : "";
 
+  const issuerBrand = resolveIssuerBrand({
+    document: record,
+    company: record.company,
+    profile,
+  });
+
   return {
     number: isQuote ? record.quote_number : record.invoice_number,
     status: record.status,
@@ -130,20 +133,13 @@ export function recordToStyledPreviewDoc(record, client, docType, profile) {
     terms_conditions: isQuote
       ? record.terms_conditions || ""
       : effectiveInvoiceTermsForDisplay(record.terms_conditions),
-    company_name: resolveIssuerName({
-      document: record,
-      company: record.company,
-      profile,
-    }) || "",
+    issuerBrand,
+    company_name: issuerBrand.name || "",
     company_email: record.owner_email || profile?.email || "",
     company_phone: profile?.phone || "",
     company_website: profile?.company_website || profile?.website || "",
     company_address: record.owner_company_address || profile?.company_address || "",
-    owner_logo_url: resolveIssuerLogoPath({
-      document: record,
-      company: record.company,
-      profile,
-    }),
+    owner_logo_url: issuerBrand.logo,
     subtotal: Number(record.subtotal) || 0,
     tax_amount: Number(record.tax_amount) || 0,
     total: Number(record.total_amount) || 0,

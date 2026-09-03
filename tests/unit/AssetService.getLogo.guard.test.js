@@ -6,12 +6,14 @@ import { __clearStorageAssetFailuresForTests } from "@/lib/paidlyStorageAssetGua
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     storage: {
-      from: () => ({
+      from: (bucket) => ({
         getPublicUrl: (path) => ({
-          data: { publicUrl: `https://proj.supabase.co/storage/v1/object/public/paidly/${path}` },
+          data: { publicUrl: `https://proj.supabase.co/storage/v1/object/public/${bucket}/${path}` },
         }),
         createSignedUrl: async (path) => ({
-          data: { signedUrl: `https://proj.supabase.co/storage/v1/object/sign/paidly/${path}?token=t` },
+          data: {
+            signedUrl: `https://proj.supabase.co/storage/v1/object/sign/${bucket}/${path}?token=t`,
+          },
           error: null,
         }),
       }),
@@ -45,5 +47,11 @@ describe("AssetService.getLogo + storage guard", () => {
     const { default: AssetService } = await import("@/services/AssetService");
     const signed = await AssetService.signLogoUrl("logo-abc.png");
     expect(signed).toContain("/object/sign/paidly/logo-abc.png");
+  });
+
+  it("resolves legacy profile-logos paths for read-only display", async () => {
+    const { default: AssetService } = await import("@/services/AssetService");
+    const signed = await AssetService.signLogoUrl("user-123/logo.png");
+    expect(signed).toContain("/object/sign/profile-logos/user-123/logo.png");
   });
 });

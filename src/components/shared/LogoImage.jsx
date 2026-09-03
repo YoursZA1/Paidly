@@ -10,10 +10,11 @@ function normalizeUrlKey(url) {
 }
 
 /**
- * LogoImage — prefers a signed storage URL so Settings works when the
- * `paidly` bucket is private (public /object/public/paidly/* returns 400).
+ * LogoImage — public `paidly` URLs by default so anonymous invoice viewers never
+ * depend on createSignedUrl(). Settings may set preferSignedUrl for authenticated previews.
  *
  * @param {string} src - Stored path or full URL
+ * @param {boolean} [preferSignedUrl] — Settings/private preview only; never for public invoices
  * @param {boolean} [preflightStorage] — unused; kept so existing callers compile
  */
 function LogoImage({
@@ -21,6 +22,7 @@ function LogoImage({
   alt = "Logo",
   className = "",
   style = {},
+  preferSignedUrl = false,
   preflightStorage = false,
   loading = "lazy",
 }) {
@@ -52,12 +54,14 @@ function LogoImage({
     }
 
     (async () => {
-      const signed = await AssetService.signLogoUrl(src);
-      if (cancelled) return;
-      if (signed && signed !== DEFAULT_LOGO_SRC) {
-        setImageSrc(signed);
-        setIsLoading(false);
-        return;
+      if (preferSignedUrl) {
+        const signed = await AssetService.signLogoUrl(src);
+        if (cancelled) return;
+        if (signed && signed !== DEFAULT_LOGO_SRC) {
+          setImageSrc(signed);
+          setIsLoading(false);
+          return;
+        }
       }
       const resolvedUrl = AssetService.getLogo(src);
       if (cancelled) return;
@@ -68,7 +72,7 @@ function LogoImage({
     return () => {
       cancelled = true;
     };
-  }, [src]);
+  }, [src, preferSignedUrl]);
 
   if (hasError || imageSrc === "") {
     return (

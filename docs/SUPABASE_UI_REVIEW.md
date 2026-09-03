@@ -79,12 +79,11 @@ Same pattern: entities are used from pages/components (Services.jsx, ViewInvoice
 
 | API call | Service / usage | UI trigger | Success | Error |
 |----------|------------------|------------|--------|-------|
-| **uploadProfileLogo** | SupabaseStorageService | Settings (Save with logo), SetupWizard.uploadLogo | Updated logo_url, form save | Toast (Settings), or error in wizard |
-| **upload** (profile-logos/paidly) | SupabaseStorageService, customClient Core.UploadFile/UploadPrivateFile | Settings logo, onboarding SetupWizard (uploadToBucket) | URL returned, profile updated | Throw → toast or catch in caller |
+| **uploadLogo** | logoUpload.js | Settings (Save with logo), SetupWizard.uploadLogo, OrgBrandsSettings | Stored path in logo_url, form save | Toast (Settings), or error in wizard |
+| **upload** (paidly / private buckets) | logoUpload.js, customClient Core.UploadFile/UploadPrivateFile | Settings logo, onboarding SetupWizard, expense/bank attachments | Path or URL returned, profile updated | Throw → toast or catch in caller |
 | **UploadToActivities** | customClient.Core + integrations | ExpenseForm (file attach, receipt scan), ReceiptScanner, MessageComposer (attach) | file_url in attachments | console.error + state (e.g. attachment not added) |
 | **UploadToBankDetails** | customClient.Core + integrations | BankImportModal (file upload) | file_url for processing | try/catch in handleFileUpload |
-| **createSignedUrl / getPublicUrl** | SupabaseStorageService, LogoImage, customClient buildFileUrl | Logo display, after upload | Image displays | Fallback to public URL or placeholder, console.warn |
-| **listBuckets** | SupabaseStorageService.ensureBucketExists | Before logo upload | Decides bucket | Fallback to main bucket, warn |
+| **createSignedUrl / getPublicUrl** | AssetService, LogoImage, customClient buildFileUrl | Logo display, after upload | Image displays | Fallback to public URL or placeholder, console.warn |
 
 **Summary:** All storage writes are triggered by upload buttons or save-with-logo; reads are for display or post-upload URL. Errors are either thrown and caught in the page (toast) or logged with fallback behavior.
 

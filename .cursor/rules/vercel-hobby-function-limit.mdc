@@ -1,0 +1,35 @@
+---
+description: Paidly is at the 12 Vercel Hobby function ceiling — never add api/* functions without approval
+alwaysApply: true
+---
+
+# Vercel Hobby function ceiling (hard constraint)
+
+Paidly production is at **exactly 12** Vercel Hobby serverless functions. That is the limit.
+
+**Do not create a new `api/*.js` or `api/**/*.js` serverless function unless the user explicitly approves it.**
+
+`src/api/*` is browser/client code and does **not** count. Underscore helpers (`api/_*.js`, `api/client-portal/_shared.js`) do **not** count.
+
+## Current 12 functions (do not add a 13th)
+
+`admin/[resource]`, `auth/[route]`, `client-portal/[path]`, `company/[[...path]]`, `cron`, `exchange-rates/[[...slug]]`, `payfast-handler`, `payment-intents/[[...path]]`, `pos/[[...path]]`, `public-share`, `subscriptions/[[...path]]`, `system`
+
+Map and rewrites: `docs/API_DEPLOYMENT_MODEL.md`, `vercel.json`.
+
+## Before any API change
+
+1. Search `api/` and count function files (exclude `_*.js`).
+2. If the count would rise, **stop and flag it**. Do not silently add a file.
+3. Prefer: extend the existing domain handler, or add a `vercel.json` rewrite onto an existing file.
+4. Do not create functions for small helpers, CRUD variants, public/private twins, or debug endpoints.
+5. Rewrites must not loop, must not skip auth, and must flatten nested Hobby paths (one extra segment only).
+
+```text
+Need /api/foo
+  → Can company / system / public-share / cron / pos / admin handle it?
+  → YES: add routing or a rewrite
+  → NO: stop. Ask before creating api/foo.js
+```
+
+Existing pattern: `/api/payroll/*` and `/api/leave/*` rewrite onto `api/company`. `/api/public-invoice` rewrites onto `api/public-share`. Do not add `api/payroll.js` or `api/public-invoice.js`.

@@ -25,7 +25,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import useOrgBrands from "@/hooks/useOrgBrands";
 import { OrgBrandService } from "@/services/OrgBrandService";
-import { uploadLogo, deleteStoredLogo, validateLogoFile, logoMaxSizeLabel } from "@/lib/logoUpload";
+import { uploadLogo, deleteStoredLogo, retargetLogoReferences, validateLogoFile, logoMaxSizeLabel } from "@/lib/logoUpload";
 import LogoImage from "@/components/shared/LogoImage";
 
 const EMPTY_DRAFT = { id: null, name: "", logo_url: "" };
@@ -109,7 +109,12 @@ export default function OrgBrandsSettings() {
         previousBrandLogo !== nextBrandLogo &&
         previousBrandLogo !== businessLogo
       ) {
-        await deleteStoredLogo(previousBrandLogo);
+        try {
+          await retargetLogoReferences(previousBrandLogo, nextBrandLogo || null);
+          await deleteStoredLogo(previousBrandLogo);
+        } catch (cleanupErr) {
+          console.warn("Brand logo cleanup failed:", cleanupErr);
+        }
       }
       setDialogOpen(false);
       await refresh();
@@ -157,7 +162,7 @@ export default function OrgBrandsSettings() {
             <li key={brand.id} className="flex items-center gap-3 p-3">
               <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
                 {brand.logo_url ? (
-                  <LogoImage src={brand.logo_url} className="h-full w-full object-contain" alt="" />
+                  <LogoImage src={brand.logo_url} className="h-full w-full object-contain" alt="" preferSignedUrl />
                 ) : (
                   <ImageIcon className="h-4 w-4 text-muted-foreground" aria-hidden />
                 )}
@@ -238,7 +243,7 @@ export default function OrgBrandsSettings() {
                   {logoFile && previewSrc ? (
                     <img src={previewSrc} alt="" className="h-full w-full object-contain" />
                   ) : draft.logo_url ? (
-                    <LogoImage src={draft.logo_url} alt="" className="h-full w-full object-contain" />
+                    <LogoImage src={draft.logo_url} alt="" className="h-full w-full object-contain" preferSignedUrl />
                   ) : (
                     <ImageIcon className="h-5 w-5 text-muted-foreground" />
                   )}

@@ -5,7 +5,7 @@ import {
 } from "@/utils/invoiceTemplateData";
 import LogoImage from "@/components/shared/LogoImage";
 import { paginateInvoice } from "./invoicePageLayout";
-import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
+import { resolveIssuerBrand } from "@/lib/documentIssuerBrand";
 
 /**
  * Typography scale (print + PDF): title 20–24px, section headers 11–12px, body 12–13px,
@@ -451,11 +451,12 @@ export default function UnifiedInvoiceTemplate({
   documentTitle,
 }) {
   const cfg = VARIANT_CONFIG[variant] || VARIANT_CONFIG.classic;
-  const issuerName = resolveIssuerName({
+  const issuerBrand = resolveIssuerBrand({
     document: invoice,
     company: invoice?.company,
     profile: user,
   });
+  const issuerName = issuerBrand.name;
   const brandedUser = user
     ? { ...user, company_name: issuerName || user.company_name }
     : { company_name: issuerName || "Company" };
@@ -481,11 +482,7 @@ export default function UnifiedInvoiceTemplate({
     ? invoice.quote_number ?? invoice.number ?? "—"
     : invoice.invoice_number ?? invoice.number ?? "—";
 
-  const logoPath = resolveIssuerLogoPath({
-    document: invoice,
-    company: invoice?.company,
-    profile: user,
-  });
+  const logoPath = issuerBrand.logo;
   const businessContactRows = accountInfoRowsFromUser(brandedUser);
   const accountBankRows = accountDetailsBankRows(bankingDetail, user);
   const hasAccountDetailsSection = accountBankRows.length > 0 || businessContactRows.length > 0;

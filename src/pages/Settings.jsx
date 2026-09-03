@@ -375,6 +375,7 @@ function CompanyProfileSettings() {
         e.preventDefault();
         setIsSaving(true);
         let updatedData = { ...formData };
+        let saved = false;
 
         try {
             const previousLogo = resolveBusinessLogoUrl(authUser);
@@ -470,6 +471,7 @@ function CompanyProfileSettings() {
             }));
             setLogoFile(null);
             pendingLogoChangeRef.current = false;
+            saved = true;
             if (previousLogo && previousLogo !== nextLogo) {
                 try {
                     await retargetLogoReferences(previousLogo, nextLogo || null);
@@ -496,6 +498,16 @@ function CompanyProfileSettings() {
                 variant: "destructive"
             });
         } finally {
+            if (!saved) {
+                pendingLogoChangeRef.current = false;
+                const serverLogo = resolveBusinessLogoUrl(authUser);
+                setFormData((prev) => {
+                    if (prev.logo_url && prev.logo_url.startsWith("blob:")) {
+                        URL.revokeObjectURL(prev.logo_url);
+                    }
+                    return { ...prev, logo_url: serverLogo };
+                });
+            }
             setIsSaving(false);
         }
     };

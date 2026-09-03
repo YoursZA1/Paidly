@@ -35,7 +35,6 @@
 | `src/services/billingService.js` | `import { supabase } from "@/lib/supabaseClient"` |
 | `src/services/SupabaseAuthService.js` | `import { supabase } from "@/lib/supabaseClient"` |
 | `src/services/SupabaseMultiBucketService.js` | `import { supabase } from "@/lib/supabaseClient"` |
-| `src/services/SupabaseStorageService.js` | `import { supabase } from "@/lib/supabaseClient"` |
 
 ## Other runtimes (intentionally separate clients)
 

@@ -21,9 +21,12 @@ All application tables and storage use RLS so that access is restricted by user 
 
 ### Storage (buckets)
 
-- **User-owned objects** (e.g. logos): Path first segment must equal `auth.uid()::text` for insert/select/update/delete.
-- **Org-scoped objects**: Path first segment must equal the user’s `org_id` (via membership) for all operations.
+- **`paidly` (public):** Logos and public document assets. Writes allow `logo-{uuid}.{ext}`, `document-logos/{userId}/…`, and `inventory/{userId}/…`. Anyone can read via public URL. Path does **not** have to start with `auth.uid()`.
+- **Legacy `profile-logos` (private):** Path first segment = `auth.uid()::text`. Read-only in the app; no new uploads.
+- **Org-scoped private buckets** (`receipts`, `bank-details`, `activities`, plus `{org_id}/…` on `paidly`): first segment = the user’s `org_id` via membership. Use signed URLs.
 - **Admin**: Full access to the configured buckets when `is_admin()`.
+
+See [SUPABASE_STORAGE.md](SUPABASE_STORAGE.md).
 
 RLS ensures that even if the frontend or an attacker sends a request for another org’s data, Supabase will not return or modify rows that don’t match the policies. This provides **data protection** for compliance: access is enforced at the database layer regardless of client behaviour.
 

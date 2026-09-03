@@ -23,10 +23,8 @@ This project uses **Vitest** for unit tests. Tests cover Supabase-related error 
   - Auth **error handling**: signInWithEmail, signOut, getSession throw with normalized message on Supabase error.  
   - **Success paths**: signInWithEmail returns normalized session; signOut resolves when no error.
 
-- **`tests/unit/supabaseStorage.service.test.js`** (mocked client)  
-  - Storage **error handling**: uploadProfileLogo throws user-friendly message on “Bucket not found” and on permission-style errors.
-
-- **`tests/unit/supabaseDatabase.errors.test.js`**  
+- **`tests/unit/AssetService.getLogo.guard.test.js`** (mocked client)  
+  - Logo URL resolution, invalid key fallback, signed URL helper, and failed-asset cache behavior.  
   - **Database/RLS**: normalization of RLS, permission denied, duplicate key, and JWT-expired style messages for consistent error handling.
 
 Together these validate **error handling and edge cases** (permission errors, missing messages, bucket/session-style failures) without hitting Supabase.

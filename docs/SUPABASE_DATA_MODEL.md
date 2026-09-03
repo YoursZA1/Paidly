@@ -95,7 +95,7 @@ Apply the Supabase schema (including any new columns/triggers) from the project 
 ## 6. Canonical logo storage contract
 
 - **Authoritative bucket**: `paidly`
-- **URL model**: public URLs only via `supabase.storage.from("paidly").getPublicUrl(path)` (no signed URLs for logos)
+- **URL model**: public invoices/quotes/PDFs use `getPublicUrl` only. Settings previews may call `signLogoUrl` first (`LogoImage preferSignedUrl`). Never persist signed or public `https://` URLs in the DB.
 - **DB persistence rule**: store **path only** in DB fields (`logo_url`, `owner_logo_url`), never full `https://...` URLs
 - **Accepted logo path shapes**:
   - profile/company logo: `logo-<uuid>.<ext>`

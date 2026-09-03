@@ -11,7 +11,7 @@ When **adding, updating, or refactoring** application behavior (new routes, APIs
    - `docs/Paidly-Application-Blueprint.md` (primary; searchable in-repo)
    - `docs/Paidly-Application-Blueprint.pdf` (same document; use when the team treats PDF as canonical)
 
-2. **Match architecture** — Respect layers and services described there (e.g. SPA + Supabase + Vercel `/api`, what runs in `server/` vs serverless, RLS and auth boundaries).
+2. **Match architecture** — Respect layers and services described there (e.g. SPA + Supabase + Vercel `/api`, what runs in `server/` vs serverless, RLS and auth boundaries). Vercel Hobby is at **12 functions**; do not add `api/*.js` files — see `.cursor/rules/vercel-hobby-function-limit.mdc`.
 
 3. **After implementation** — If the change materially alters architecture, data flow, or product scope described in the blueprint, **update the blueprint** (`Paidly-Application-Blueprint.md` and regenerate PDF if your process requires it) in the same change set when practical.
 

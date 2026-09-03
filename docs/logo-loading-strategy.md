@@ -3,6 +3,8 @@
 **Date:** 2026-05-18  
 **Scope:** How company logos are fetched, validated, cached, and rendered across all surfaces.
 
+**Which path is chosen** for invoices/quotes/PDFs is not this file. Use `src/lib/documentIssuerBrand.js` (same priority as `docs/MULTIBRAND_COMPANIES.md` and `docs/branding-rendering-flow.md`): live Business Logo beats a stale `owner_logo_url`. This document only covers turning a stored path into a public URL.
+
 ---
 
 ## Storage Architecture
@@ -12,7 +14,7 @@
 | `paidly` | Current primary logo bucket (Business Logo, optional brand logos, document overrides) |
 | `company-logos` | Legacy bucket (still read; never written) |
 
-Logos are stored as **public** objects on the `paidly` bucket. `AssetService.getLogo(path)` calls `getPublicUrl`. If that bucket is private, `/object/public/paidly/*` returns HTTP 400 `"Bucket not found"` even when the file exists. Keep `storage.buckets.public = true` for `paidly`. Authenticated Settings previews can fall back to `signLogoUrl` (1 hour). Public invoice/quote viewers cannot — they need the public bucket.
+Logos are stored as **public** objects on the `paidly` bucket. `AssetService.getLogo(path)` calls `getPublicUrl`. Public invoice/quote/PDF viewers **must** use that public URL — they never call `createSignedUrl()`. If the bucket is private, `/object/public/paidly/*` returns HTTP 400 `"Bucket not found"` even when the file exists. Keep `storage.buckets.public = true` for `paidly`. Authenticated Settings previews may opt into `signLogoUrl` via `LogoImage preferSignedUrl`. Receipts and bank files stay on private buckets + signed URLs.
 
 ---
 

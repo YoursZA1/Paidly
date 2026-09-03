@@ -1,5 +1,9 @@
 # Logo Upload & Display Fix - Complete
 
+**Historical.** Uploads no longer go through `SupabaseStorageService` or `{userId}/logo.ext`. Use `src/lib/logoUpload.js` → `paidly` / `logo-{uuid}.{ext}`. See [docs/SUPABASE_STORAGE.md](docs/SUPABASE_STORAGE.md).
+
+---
+
 ## Summary
 Fixed logo upload, storage, and display functionality to properly work with Supabase Storage and database persistence.
 

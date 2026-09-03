@@ -48,7 +48,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrgBrands } from "@/hooks/useOrgBrands";
-import { resolveEffectivePosLogoUrl } from "@/lib/brandingLogos";
+import { resolveBusinessLogoUrl } from "@/lib/brandingLogos";
 import LogoImage from "@/components/shared/LogoImage";
 import { useCompanyContext } from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
@@ -402,7 +402,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   );
   const tillBrandName =
     registerBrand?.name || activeRegister?.company_name || profile?.company_name || "Paidly";
-  const posLogoUrl = resolveEffectivePosLogoUrl(profile || user);
+  const businessLogoUrl = resolveBusinessLogoUrl(profile || user);
 
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
@@ -587,7 +587,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     if (!Number.isFinite(counted) || counted < 0) return null;
     return roundMoney(counted - (Number(openSession.expected_cash) || 0));
   }, [openSession, closingDraft]);
-  const receiptLogoUrl = posLogoUrl || null;
+  const receiptLogoUrl = businessLogoUrl || null;
   const receiptView = useMemo(() => {
     if (!completedSale) return null;
     return buildPosReceiptView(completedSale, {
@@ -1386,11 +1386,11 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         )}
         <div className="min-w-0 shrink-0">
           <div className="flex items-center gap-2">
-            {posLogoUrl ? (
-              posLogoUrl.startsWith("blob:") ? (
-                <img src={posLogoUrl} alt="" className="size-8 shrink-0 rounded-md object-contain" />
+            {businessLogoUrl ? (
+              businessLogoUrl.startsWith("blob:") ? (
+                <img src={businessLogoUrl} alt="" className="size-8 shrink-0 rounded-md object-contain" />
               ) : (
-                <LogoImage src={posLogoUrl} alt="" className="size-8 shrink-0 rounded-md object-contain" preflightStorage />
+                <LogoImage src={businessLogoUrl} alt="" className="size-8 shrink-0 rounded-md object-contain" preflightStorage />
               )
             ) : null}
             <h1 className="font-display text-base font-semibold leading-none tracking-tight">Paidly POS</h1>

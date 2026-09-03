@@ -198,7 +198,7 @@ Quick reference for maintenance and debugging.
 | **Auth** | Sign up, sign in, sign out, session, magic link | `src/components/auth/AuthContext.jsx`, `src/services/SupabaseAuthService.js`, Login/Signup pages |
 | **Database (CRUD)** | Clients, services, invoices, quotes, payments, org/profile | `src/api/customClient.js` (EntityManager, AuthManager), entities in `src/api/entities.js`; pages use `Client.*`, `Invoice.*`, etc. |
 | **Database (admin)** | Subscriptions, users, audit data | `src/pages/AdminSubscriptions.jsx`, `src/pages/AdminInvoicesQuotes.jsx`, `src/components/notifications/NotificationBell.jsx` (direct `supabase.from(...)`) |
-| **Storage** | Logos, receipts, attachments, bank imports | `src/services/SupabaseStorageService.js`, `src/services/SupabaseMultiBucketService.js`, `src/api/customClient.js` (IntegrationManager), `src/api/integrations.js` |
+| **Storage** | Logos, receipts, attachments, bank imports | `src/lib/logoUpload.js`, `src/services/AssetService.js`, `src/services/SupabaseMultiBucketService.js`, `src/api/customClient.js` (IntegrationManager), `src/api/integrations.js` |
 | **Realtime** | Live list updates (invoices, quotes) | `src/hooks/useSupabaseRealtime.js`, used in `Invoices.jsx`, `Quotes.jsx` |
 
 ### 2.1 Authentication & Access Control
@@ -254,7 +254,7 @@ Use it together with **[SUPABASE_INTEGRATION_CHECKLIST.md](SUPABASE_INTEGRATION_
 ### Add or change a bucket
 
 1. Define the bucket and its RLS policies in **`supabase/schema.postgres.sql`** (see existing `storage.buckets` and `storage.objects` policies in [SUPABASE_STORAGE.md](SUPABASE_STORAGE.md)).
-2. Run the SQL. In the app, use `SupabaseStorageService` or `SupabaseMultiBucketService` with the new bucket name and the correct path convention (e.g. `org_id/...` for org-scoped).
+2. Run the SQL. In the app, use `logoUpload.js` for logos or `SupabaseMultiBucketService` for other buckets with the correct path convention (e.g. `org_id/...` for org-scoped).
 
 ### Enable Realtime for a new table
 
@@ -274,7 +274,7 @@ Use it together with **[SUPABASE_INTEGRATION_CHECKLIST.md](SUPABASE_INTEGRATION_
 
 - Confirm **RLS** is enabled and policies match the current role (see [SUPABASE_SECURITY.md](SUPABASE_SECURITY.md)).
 - Confirm the user has a **membership** and the resource’s `org_id` matches (for org-scoped tables).
-- For storage: confirm path convention (e.g. first segment = `auth.uid()` or `org_id`) and bucket name.
+- For storage: logos on `paidly` are `logo-{uuid}.{ext}` (or `document-logos/{userId}/…`), not `{auth.uid()}/…`. Private buckets and org branding use first segment = `org_id`. See [SUPABASE_STORAGE.md](SUPABASE_STORAGE.md).
 
 ### Check what the frontend sends
 

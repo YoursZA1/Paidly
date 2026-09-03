@@ -1,49 +1,20 @@
-# Supabase Buckets Setup for Client Activities
+# Supabase Buckets Setup (deprecated wishlist)
 
-To ensure clean data recovery and separation of concerns, create the following Supabase Storage buckets for your SaaS platform:
+**Do not create the extra buckets listed in older versions of this file.**  
+Those names (`invoices`, `customers`, `products-services`, `quotes`, `payroll`) are not used by the app.
 
-## Recommended Buckets
+Canonical storage lives in `supabase/schema.postgres.sql` and is documented in [docs/SUPABASE_STORAGE.md](docs/SUPABASE_STORAGE.md).
 
-- `profile-logos` — User profile and company logos
-- `invoices` — All invoice PDFs and related files
-- `customers` — Customer-related documents (attachments, KYC, etc.)
-- `products-services` — Product/service images, catalogs, or docs
-- `quotes` — Quote PDFs and attachments
-- `payroll` — Payroll documents (payslips, reports)
-- `bank-details` — Bank verification docs, statements
-- `activities` — General activity logs, exports, or audit files
+## What production uses
 
-## How to Create Buckets
-1. Go to your Supabase dashboard → Storage → Create bucket
-2. Enter the bucket name (e.g., `invoices`)
-3. Set public/private as needed (most should be private except logos)
-4. Repeat for each bucket above
+| Bucket | Public | Paths / access |
+|---|---|---|
+| **paidly** | Yes | `logo-{uuid}.{ext}`, `document-logos/{userId}/…`, `inventory/{userId}/…`, plus org-scoped branding (`{org_id}/…`). Public URL for invoices/quotes/PDFs. Settings previews may use a signed URL first. |
+| **receipts** | No | `{org_id}/…` — signed URL |
+| **bank-details** | No | `{org_id}/…` — signed URL |
+| **activities** | No | `{org_id}/…` — signed URL |
+| **profile-logos** | No | Legacy `{userId}/logo.{ext}` only. No new uploads. |
 
-## Security
-- Enable Row Level Security (RLS) for all buckets
-- Add policies to allow only authenticated users (or owners) to upload/download
-- For public assets (like logos), allow public read
+Upload logos with `src/lib/logoUpload.js` (`uploadLogo`). Do not use `SupabaseStorageService` (removed). Do not require `paidly` object names to start with `auth.uid()`.
 
-## Example Policy (Authenticated Upload)
-```sql
-CREATE POLICY "Allow authenticated uploads"
-ON storage.objects
-FOR INSERT
-WITH CHECK (auth.role() = 'authenticated');
-```
-
-## Example Policy (Public Read)
-```sql
-CREATE POLICY "Allow public read"
-ON storage.objects
-FOR SELECT
-USING (bucket_id = 'profile-logos');
-```
-
-## Recovery
-- Each bucket stores only one type of data for easy backup and restore
-- Download/export bucket contents from Supabase dashboard for recovery
-
----
-
-**After creating these buckets and policies, update your app to use the correct bucket for each activity.**
+Apply buckets and RLS by running `supabase/schema.postgres.sql` or `supabase db push`. Do not run `CREATE_BUCKET_NOW.sql` or `VERIFY_BUCKET_SETUP.sql` policy-create sections.

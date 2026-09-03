@@ -22,7 +22,7 @@ import PayfastService from '@/services/PayfastService';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
-import { resolveIssuerLogoPath, resolveIssuerName } from '@/lib/documentIssuerBrand';
+import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 
 export default function PublicInvoice() {
     const location = useLocation();
@@ -242,19 +242,14 @@ export default function PublicInvoice() {
     const ownerCurrency = invoice.owner_currency || invoice.currency || 'ZAR';
     const templateKey =
       normalizeInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
+    const issuerBrand = resolveIssuerBrand({
+        document: invoice,
+        company: invoice.company,
+        profile: null,
+    });
     const publicUser = {
-        logo_url:
-            resolveIssuerLogoPath({
-                document: invoice,
-                company: invoice.company,
-                profile: null,
-            }) || '',
-        company_name:
-            resolveIssuerName({
-                document: invoice,
-                company: invoice.company,
-                profile: null,
-            }) || '',
+        logo_url: issuerBrand.logo || '',
+        company_name: issuerBrand.name || '',
         company_address: invoice.owner_company_address || '',
         email: invoice.owner_email || '',
         currency: ownerCurrency,
@@ -343,7 +338,7 @@ export default function PublicInvoice() {
                 <div className="bg-card border border-border shadow-xl rounded-lg p-4 sm:p-6 overflow-x-auto">
                     <InvoicePreview
                         embedded
-                        invoiceData={invoice}
+                        invoiceData={{ ...invoice, issuerBrand }}
                         client={client}
                         clients={[]}
                         user={publicUser}

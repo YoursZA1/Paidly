@@ -15,7 +15,7 @@ When uploading a logo, you get: `Failed to upload logo: Bucket not found`
 2. **Create Bucket**
    - Click **"New bucket"** button
    - Name: `paidly` (exactly this, case-sensitive)
-   - Public: **No** (keep it private)
+   - Public: **Yes** (paidly must be PUBLIC)
    - Click **Create**
 
 3. **Done!** Try uploading logo again.
@@ -28,8 +28,9 @@ When uploading a logo, you get: `Failed to upload logo: Bucket not found`
 2. **Run This SQL:**
    ```sql
    INSERT INTO storage.buckets (id, name, public, file_size_limit)
-   VALUES ('paidly', 'paidly', false, 52428800)
-   ON CONFLICT (id) DO NOTHING;
+   VALUES ('paidly', 'paidly', true, 52428800)
+   ON CONFLICT (id) DO UPDATE
+   SET public = true;
    ```
 
 3. **Click Run**
@@ -66,10 +67,10 @@ SELECT id, name, public FROM storage.buckets WHERE id = 'paidly';
 
 ## 📋 What Was Fixed
 
-1. ✅ **Schema updated** - Buckets are created automatically in migration
-2. ✅ **Storage service improved** - Better error messages and bucket checking
-3. ✅ **Policies added** - Users can upload their own logos
-4. ✅ **Fallback bucket** - Tries `profile-logos` first, then `paidly`
+1. ✅ **Schema updated** - `paidly` is created **public** in `supabase/schema.postgres.sql`
+2. ✅ **Uploader** - `src/lib/logoUpload.js` → `logo-{uuid}.{ext}` on `paidly`
+3. ✅ **Policies** - `logo-%` / `document-logos/%` writes plus public read (not uid-first-segment)
+4. ✅ **Legacy** - `profile-logos` is read-only; do not upload there
 
 ## 🆘 Still Not Working?
 
@@ -96,6 +97,5 @@ SELECT id, name, public FROM storage.buckets WHERE id = 'paidly';
 
 ## 📚 More Help
 
-- See `scripts/fix-storage-buckets.md` for detailed setup
-- See `scripts/create-storage-buckets.sql` for bucket creation SQL
+- Storage bucket setup scripts are deprecated; use `supabase/schema.postgres.sql` instead.
 - See `supabase/schema.postgres.sql` for full migration

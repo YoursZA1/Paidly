@@ -11,7 +11,7 @@ import {
   DOCUMENT_TEMPLATE_KEY,
 } from "@/utils/invoiceTemplateData";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
-import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
+import { resolveIssuerBrand } from "@/lib/documentIssuerBrand";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
 import InvoiceTemplateDocument from "./InvoiceTemplateDocument";
 
@@ -50,35 +50,23 @@ function normalizeClientForTemplate(client) {
 export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, bankingDetail) {
   const templateKey = resolveInvoiceTemplateKey(invoice?.invoice_template, user?.invoice_template);
 
+  const issuerBrand = resolveIssuerBrand({
+    document: invoice,
+    company: invoice?.company,
+    profile: user || null,
+  });
   const resolvedUser = user
     ? {
         ...user,
-        // Profile / live branding first so Settings logo appears on invoices; snapshot as fallback.
-        logo_url: resolveIssuerLogoPath({
-          document: invoice,
-          company: invoice?.company,
-          profile: user,
-        }),
-        company_name: resolveIssuerName({
-          document: invoice,
-          company: invoice?.company,
-          profile: user,
-        }) || user.company_name,
+        logo_url: issuerBrand.logo,
+        company_name: issuerBrand.name || user.company_name,
         company_address: invoice?.owner_company_address || user.company_address,
         currency: invoice?.currency || invoice?.owner_currency || user.currency || "ZAR",
         invoice_template: templateKey,
       }
     : {
-        company_name: resolveIssuerName({
-          document: invoice,
-          company: invoice?.company,
-          profile: null,
-        }) || "Company",
-        logo_url: resolveIssuerLogoPath({
-          document: invoice,
-          company: invoice?.company,
-          profile: null,
-        }),
+        company_name: issuerBrand.name || "Company",
+        logo_url: issuerBrand.logo,
         company_address: invoice?.owner_company_address || "",
         currency: invoice?.currency || invoice?.owner_currency || "ZAR",
         invoice_template: templateKey,
@@ -96,7 +84,13 @@ export function buildInvoiceTemplatePdfCaptureProps(invoice, client, user, banki
 
   const TemplateComponent =
     templateKey === DOCUMENT_TEMPLATE_KEY ? TEMPLATES.classic : TEMPLATES[templateKey] || TEMPLATES.classic;
-  const templateInvoice = mapInvoiceDataForTemplate(invoice);
+  const templateInvoice = {
+    ...mapInvoiceDataForTemplate(invoice),
+    issuerBrand,
+    company: invoice?.company,
+    owner_logo_url: issuerBrand.logo,
+    document_logo_url: invoice?.document_logo_url,
+  };
   const userCurrency =
     resolvedUser?.currency || invoice?.currency || invoice?.owner_currency || "ZAR";
   const bankingForTemplate = effectiveBankingDetail(bankingDetail, resolvedUser);

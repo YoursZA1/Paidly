@@ -17,7 +17,6 @@ import { normalizePaidlyPlan } from "@/api/auth/planNormalize.js";
 import { clearOrgIdCache } from "@/api/auth/orgCache.js";
 import { selectProfileByUserId } from "@/api/auth/profileSelect.js";
 import { mergeProfileLogo, resolveProfileLogoUrl, syncProfileLogoAliases } from "@/lib/profileLogo";
-import { mergePosLogo, resolvePosLogoUrl } from "@/lib/brandingLogos";
 
 export class AuthManager {
   constructor() {
@@ -94,7 +93,6 @@ export class AuthManager {
             company_address: profile.company_address,
             currency: profile.currency,
             logo_url: profile.logo_url,
-            pos_logo_url: profile.pos_logo_url || "",
             timezone: profile.timezone,
             invoice_template: profile.invoice_template,
             invoice_header: profile.invoice_header,
@@ -146,7 +144,6 @@ export class AuthManager {
       company_address: companyProfile.company_address || credentials.company_address || '',
       currency: companyProfile.currency || credentials.currency || 'ZAR',
       logo_url: companyProfile.logo_url || '',
-      pos_logo_url: companyProfile.pos_logo_url || '',
       timezone: companyProfile.timezone || credentials.timezone || 'UTC',
       invoice_template: companyProfile.invoice_template || DEFAULT_INVOICE_TEMPLATE,
       invoice_header: companyProfile.invoice_header || '',
@@ -318,7 +315,6 @@ export class AuthManager {
           logo_url: Object.prototype.hasOwnProperty.call(profile, "logo_url")
             ? resolveProfileLogoUrl(profile)
             : mergeProfileLogo(this.user.logo_url, profile),
-          pos_logo_url: mergePosLogo(this.user.pos_logo_url, profile),
           company_name: profile.company_name || this.user.company_name || '',
           company_address: profile.company_address || this.user.company_address || '',
           currency: profile.currency || this.user.currency || 'USD',
@@ -435,7 +431,6 @@ export class AuthManager {
         company_address: profileData.company_address || "",
         currency: profileData.currency || "ZAR",
         logo_url: resolveProfileLogoUrl(profileData),
-        pos_logo_url: resolvePosLogoUrl(profileData),
         timezone: profileData.timezone || "UTC",
         invoice_template: profileData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
         invoice_header: profileData.invoice_header || "",
@@ -556,7 +551,6 @@ export class AuthManager {
       email: safeData.email ?? updatedUser.email,
       avatar_url: safeData.avatar_url ?? updatedUser.avatar_url,
       logo_url: safeData.logo_url !== undefined ? safeData.logo_url : updatedUser.logo_url,
-      pos_logo_url: safeData.pos_logo_url !== undefined ? safeData.pos_logo_url : updatedUser.pos_logo_url,
       company_name: safeData.company_name !== undefined ? safeData.company_name : updatedUser.company_name,
       company_address: safeData.company_address !== undefined ? safeData.company_address : updatedUser.company_address,
       phone: safeData.phone !== undefined ? safeData.phone : updatedUser.phone,
@@ -616,10 +610,6 @@ export class AuthManager {
           Object.prototype.hasOwnProperty.call(profileData, "quote_reminder_settings")) &&
         (profileColumnMissing(errMsg, "reminder_settings") ||
           profileColumnMissing(errMsg, "quote_reminder_settings"));
-      const stripPosLogo =
-        !!error &&
-        Object.prototype.hasOwnProperty.call(profileData, "pos_logo_url") &&
-        profileColumnMissing(errMsg, "pos_logo_url");
 
       if (
         error &&
@@ -627,8 +617,7 @@ export class AuthManager {
           stripCompanyAddress ||
           stripDocumentBrand ||
           stripCompanyWebsite ||
-          stripReminderJson ||
-          stripPosLogo)
+          stripReminderJson)
       ) {
         const fallback = { ...profileData };
         if (stripBusiness) delete fallback.business;
@@ -642,7 +631,6 @@ export class AuthManager {
           delete fallback.reminder_settings;
           delete fallback.quote_reminder_settings;
         }
-        if (stripPosLogo) delete fallback.pos_logo_url;
         Object.keys(fallback).forEach((key) => {
           if (fallback[key] === undefined) delete fallback[key];
         });

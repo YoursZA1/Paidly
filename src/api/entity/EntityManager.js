@@ -1001,6 +1001,8 @@ export class EntityManager {
         'basic_salary', 'overtime_hours', 'overtime_rate', 'allowances', 'gross_pay',
         'tax_deduction', 'uif_deduction', 'pension_deduction', 'medical_aid_deduction',
         'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token', 'sent_to_email',
+        'pay_run_id', 'pay_run_item_id', 'payroll_profile_id', 'calculation_breakdown', 'leave_summary',
+        'finalized_at', 'locked',
         'created_by_id', 'created_at', 'updated_at', 'is_sample'
       ];
       if (supabaseTable === 'payslips') {
@@ -1390,7 +1392,10 @@ export class EntityManager {
         'position', 'department', 'pay_period_start', 'pay_period_end', 'pay_date',
         'basic_salary', 'overtime_hours', 'overtime_rate', 'allowances', 'gross_pay',
         'tax_deduction', 'uif_deduction', 'pension_deduction', 'medical_aid_deduction',
-        'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token', 'sent_to_email', 'is_sample', 'updated_at'
+        'other_deductions', 'total_deductions', 'net_pay', 'status', 'public_share_token', 'sent_to_email',
+        'pay_run_id', 'pay_run_item_id', 'payroll_profile_id', 'calculation_breakdown', 'leave_summary',
+        'finalized_at', 'locked',
+        'is_sample', 'updated_at'
       ];
       if (supabaseTable === 'payslips') {
         if (typeof updateData.allowances === 'string') {

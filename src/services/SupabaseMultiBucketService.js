@@ -45,4 +45,4 @@ export async function uploadToBucket(file, bucket, path) {
 // await uploadToBucket(file, 'payroll', `${userId}/2026-02/payslip.pdf`);
 // await uploadToBucket(file, 'bank-details', `${userId}/bank-statement.pdf`);
 // await uploadToBucket(file, 'activities', `${userId}/export-2026-02-10.csv`);
-// await uploadToBucket(file, 'profile-logos', `${userId}/logo.png`);
+// Logos: use uploadLogo() from @/lib/logoUpload (paidly bucket, logo-{uuid}.ext).

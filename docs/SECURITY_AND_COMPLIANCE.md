@@ -87,7 +87,7 @@ RLS is the primary mechanism for **data protection** in the database: even if th
   A function **`public.is_admin()`** (based on `auth.jwt() -> 'app_metadata' ->> 'role' = 'admin'`) is used in policies so that admin users have full access to the listed tables and storage where configured.
 
 - **Storage**  
-  Policies restrict upload/read/update/delete by path (e.g. user-owned by `auth.uid()`, org-scoped by `org_id`). Admins have full access to the configured buckets.
+  `paidly` writes use `logo-%` / `document-logos/%` / `inventory/{uid}/%` (public read). Private buckets and org branding use first path segment = `org_id`. Legacy `profile-logos` still uses `{auth.uid()}/…`. Admins have full access to the configured buckets.
 
 ### 3.3 Applying and verifying RLS
 

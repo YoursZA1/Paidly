@@ -8,7 +8,13 @@ import { readLogoUrlDiskCache, writeLogoUrlDiskCache } from "@/lib/logoUrlDiskCa
 
 const LOGO_BUCKET = "paidly";
 const LEGACY_LOGO_BUCKET = "company-logos";
+/** Pre-standardization bucket for read-only `{userId}/logo.ext` paths (no new uploads). */
+const LEGACY_PROFILE_LOGOS_BUCKET = "profile-logos";
 const FALLBACK_LOGO = "/fallback-logo.png";
+
+function isLegacyProfileLogoPath(cleaned) {
+  return /^[^/]+\/logo\.[a-z0-9]+$/i.test(String(cleaned || ""));
+}
 
 /** In-memory resolved public URLs per profile path (session); avoids repeat getPublicUrl + disk reads). */
 const SESSION_LOGO_BY_INPUT = new Map();
@@ -60,14 +66,24 @@ function resolveLogoSource(path) {
   }
 
   const lower = raw.toLowerCase();
-  const bucket =
+  let bucket = LOGO_BUCKET;
+  if (
     lower.startsWith("storage/v1/object/public/company-logos/") ||
     lower.startsWith("storage/v1/object/sign/company-logos/") ||
     lower.startsWith("public/company-logos/") ||
     lower.startsWith("sign/company-logos/") ||
     lower.startsWith("company-logos/")
-      ? LEGACY_LOGO_BUCKET
-      : LOGO_BUCKET;
+  ) {
+    bucket = LEGACY_LOGO_BUCKET;
+  } else if (
+    lower.startsWith("storage/v1/object/public/profile-logos/") ||
+    lower.startsWith("storage/v1/object/sign/profile-logos/") ||
+    lower.startsWith("public/profile-logos/") ||
+    lower.startsWith("sign/profile-logos/") ||
+    lower.startsWith("profile-logos/")
+  ) {
+    bucket = LEGACY_PROFILE_LOGOS_BUCKET;
+  }
 
   const cleaned = raw
     .replace(/^storage\/v1\/object\/public\/paidly\//, "")
@@ -79,7 +95,12 @@ function resolveLogoSource(path) {
     .replace(/^public\/company-logos\//, "")
     .replace(/^sign\/company-logos\//, "")
     .replace(/^paidly\//, "")
-    .replace(/^company-logos\//, "");
+    .replace(/^company-logos\//, "")
+    .replace(/^profile-logos\//, "");
+
+  if (cleaned && bucket === LOGO_BUCKET && isLegacyProfileLogoPath(cleaned)) {
+    bucket = LEGACY_PROFILE_LOGOS_BUCKET;
+  }
 
   return { bucket, cleaned: cleaned || null };
 }
@@ -131,8 +152,8 @@ async function listLogoAssets(limit = 100) {
 }
 
 /**
- * Authenticated fallback when the public URL 400s (private bucket).
- * Public invoice viewers still need the bucket itself to be public.
+ * Authenticated Settings/private preview only. Public invoices must use getLogo()
+ * (getPublicUrl on the public paidly bucket) — never this helper.
  */
 async function signLogoUrl(path) {
   const { bucket, cleaned } = resolveLogoSource(path);

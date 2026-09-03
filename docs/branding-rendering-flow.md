@@ -1,25 +1,54 @@
 # Branding Rendering Flow
 
-**Date:** 2026-05-18  
+**Date:** 2026-09-03  
 **Scope:** Company logo across app header, invoice/quote previews, PDFs, and email templates.
+
+**Document issuer branding (invoices, quotes, public pages, PDF):** `src/lib/documentIssuerBrand.js` is the only priority list. Same model as `docs/MULTIBRAND_COMPANIES.md`. Do not add a competing snapshot-first chain in templates.
+
+```
+Current Business Brand / live profile
+        ↓
+documentIssuerBrand.js
+        ↓
+Document issuer branding
+        ↓
+Invoice / quote / PDF / public document
+```
 
 ---
 
-## Data Sources (Priority Order)
+## Data Sources
+
+Two different surfaces, two helpers:
+
+| Surface | Helper | What it resolves |
+|---|---|---|
+| App header / dashboard chrome | `useCompanyBrand()` | Live organization Business Logo only |
+| Invoice, quote, public document, PDF | `documentIssuerBrand.js` | Issuer name + logo for that document |
+
+### App chrome (`useCompanyBrand`)
 
 ```
-1. profile.logo_url            — Full profiles-table row (freshest after auth settles)
-2. profile.company_logo_url    — Legacy alias in profiles table
-3. user.logo_url               — Auth-session user (may be "minimal" during cold hydration)
-4. user.company_logo_url       — Legacy alias in auth session user
-5. user.user_metadata.company_logo_url  — OAuth provider metadata
-6. user.user_metadata.avatar_url        — OAuth avatar fallback
-7. invoice.owner_logo_url              — Snapshot snapped at invoice-creation time
-8. invoice.company.logo_url            — Org table snapshot
+1. profile.logo_url / company_logo_url   — official Business Logo (full profiles row)
+2. user.logo_url / company_logo_url      — auth session (may be minimal on cold load)
+3. user.user_metadata.company_logo_url / avatar_url — OAuth leftover
 ```
 
-Priority 1–2 are accessed via `useCompanyBrand()` (reads from `profile` first, then `user`).  
-Priority 7–8 are used in invoice/quote templates as fallback when the live profile logo is absent.
+Does **not** read `owner_logo_url` or `companies.logo_url`.
+
+### Commercial documents (`resolveIssuerLogoPath`)
+
+```
+1. document.document_logo_url     — compose override for this document
+2. company.logo_url               — assigned brand mark (invoices.company)
+3. Live Business Logo             — profiles.logo_url (latest official logo)
+4. document.owner_logo_url        — create-time snapshot; fallback only
+5. selectedBrand.logo_url         — header brand, compose default only
+```
+
+`owner_logo_url` is still written when a document is created (`snapshotForNewDocument`). It must not override the current Business Logo when that live logo exists.
+
+Issuer **name** (`resolveIssuerName`) is slightly different: compose name → assigned brand name → `owner_company_name` → selected brand → profile name.
 
 ---
 
@@ -78,14 +107,16 @@ Same two-layer pattern; `brand` is passed as a prop to `MobileNav`.
 **File:** `src/components/invoice/templates/UnifiedInvoiceTemplate.jsx`
 
 Logo path resolution at render time:
+
 ```js
-const logoPath =
-  user?.logo_url ||
-  user?.company_logo_url ||
-  invoice?.owner_logo_url ||
-  invoice?.company?.logo_url ||
-  null;
+const logoPath = resolveIssuerLogoPath({
+  document: invoice,
+  company: invoice?.company,
+  profile: user,
+});
 ```
+
+Public invoice/quote pages, `DocumentPreview`, and `documentPreviewData.js` use the same two functions. Do not inline `owner_logo_url` ahead of the live profile.
 
 Renders:
 ```jsx
@@ -96,7 +127,7 @@ Renders:
 )}
 ```
 
-`LogoImage` runs `AssetService.getLogo(src)` internally and renders a loading skeleton while the URL resolves.
+`LogoImage` uses the public `paidly` URL (`getPublicUrl`). Public invoice viewers never depend on signed URLs. Settings previews may pass `preferSignedUrl`.
 
 ---
 
@@ -104,10 +135,7 @@ Renders:
 
 **File:** `src/components/pdf/InvoiceTemplatePdfCapture.jsx`
 
-`buildInvoiceTemplatePdfCaptureProps` assembles `resolvedUser.logo_url` from:
-```js
-user.logo_url || user.company_logo_url || invoice?.owner_logo_url || invoice?.company?.logo_url
-```
+`buildInvoiceTemplatePdfCaptureProps` sets `resolvedUser.logo_url` / `company_name` from `resolveIssuerLogoPath` / `resolveIssuerName` (live Business Logo before `owner_logo_url`).
 
 The same `UnifiedInvoiceTemplate` renders into the DOM and is then captured to PDF via `html2canvas` + `jsPDF`. `LogoImage` adds `crossOrigin="anonymous"` for Supabase-hosted URLs so `html2canvas` can include the image cross-origin.
 

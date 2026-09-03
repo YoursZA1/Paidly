@@ -98,9 +98,7 @@ const styles = StyleSheet.create({
 
 export default function InvoiceEmailPDF({ invoice, currency = "ZAR" }) {
   const fmt = (value) => formatCurrency(value, currency);
-  const logoUrl = getLogoUrl(
-    invoice.company?.logo_url ?? invoice.logo_url ?? invoice.owner_logo_url
-  );
+  const logoUrl = getLogoUrl(invoice.issuerBrand?.logo || invoice.logo_url);
 
   return (
     <Document>

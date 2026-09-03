@@ -9,7 +9,9 @@ This document is the **canonical map** of where `/api` traffic runs so rate limi
 | **A — Vercel Serverless** | `api/*.js` (and rewrites in `vercel.json` → e.g. `/api/keep-alive` → `/api/system?op=keep-alive`) | **Not used** — there is no Express `app` on these invocations unless you wrap them. | **Not used** unless you add middleware. |
 | **B — Node Express API** | `server/src/index.js` (e.g. dedicated host, `npm run server`, or a platform that runs this process) | **Yes** — `app.use("/api", createGlobalApiLimiter(...))` | **Yes** — chained after the global limiter. |
 
-Hobby production is capped at **12** serverless functions. Add a rewrite onto an existing `api/*.js` file instead of a new endpoint file.
+Hobby production is capped at **exactly 12** serverless functions (the current ceiling). **Do not add `api/*.js` files** unless explicitly approved. Add a rewrite onto an existing function, or extend that handler. `src/api/*` is client code and does not count. `api/_*.js` helpers do not count.
+
+**Current 12 functions:** `api/admin/[resource].js`, `api/auth/[route].js`, `api/client-portal/[path].js`, `api/company/[[...path]].js`, `api/cron.js`, `api/exchange-rates/[[...slug]].js`, `api/payfast-handler.js`, `api/payment-intents/[[...path]].js`, `api/pos/[[...path]].js`, `api/public-share.js`, `api/subscriptions/[[...path]].js`, `api/system.js`.
 
 **Nested catch-all paths:** Vercel Hobby only invokes `api/<name>/[[...path]].js` for **one** extra segment (`/api/pos/registers`). `/api/pos/oauth/status`, `/api/pos/sales/:id/audit`, and `/api/payment-intents/webhook/:provider` 404 at the platform unless `vercel.json` flattens them onto a one-segment alias (same pattern as `/api/company/team/invite` → `/api/company/invite`). Do not add another `api/*.js` file.
 

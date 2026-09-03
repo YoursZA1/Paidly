@@ -25,7 +25,7 @@ import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
-import { resolveIssuerLogoPath, resolveIssuerName } from '@/lib/documentIssuerBrand';
+import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 import { useToast } from '@/components/ui/use-toast';
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 /** Payments for one invoice only — avoids Payment.list() pulling a large slice of the org. */
@@ -322,6 +322,11 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
         normalizeInvoiceTemplateKey(company?.invoice_template) ||
         DEFAULT_INVOICE_TEMPLATE;
 
+    const issuerBrand = resolveIssuerBrand({
+        document: invoice,
+        company: invoice.company,
+        profile: company,
+    });
     const userForTemplate =
         invoice &&
         ({
@@ -334,20 +339,8 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                 parseDocumentBrandHex(invoice.document_brand_secondary) != null
                     ? invoice.document_brand_secondary
                     : company?.document_brand_secondary,
-            logo_url:
-                resolveIssuerLogoPath({
-                    document: invoice,
-                    company: invoice.company,
-                    profile: company,
-                }) || '',
-            company_name:
-                resolveIssuerName({
-                    document: invoice,
-                    company: invoice.company,
-                    profile: company,
-                }) ||
-                company?.company_name ||
-                '',
+            logo_url: issuerBrand.logo || '',
+            company_name: issuerBrand.name || company?.company_name || '',
             company_address: invoice.owner_company_address || company?.company_address || '',
             email: invoice.owner_email || company?.email || '',
             currency: userCurrency,
@@ -483,7 +476,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                             <CardContent className="p-4 sm:p-6 lg:p-8">
                                 <InvoicePreview
                                     embedded
-                                    invoiceData={invoice}
+                                    invoiceData={{ ...invoice, issuerBrand }}
                                     client={client}
                                     clients={[]}
                                     user={userForTemplate}

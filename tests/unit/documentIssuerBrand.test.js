@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  composeLogoOverridePath,
+  resolveIssuerBrand,
   resolveIssuerName,
   resolveIssuerLogoPath,
+  snapshotFieldsFromIssuerBrand,
   snapshotForNewDocument,
 } from "@/lib/documentIssuerBrand";
 
@@ -100,13 +103,55 @@ describe("documentIssuerBrand", () => {
     expect(snap.owner_logo_url).toBe("org-logo.png");
   });
 
-  it("never reads a POS logo for invoices or quotes", () => {
+  it("uses the official Business Logo from profile.logo_url", () => {
     const mixed = {
       company_name: "Org Default",
       logo_url: "org-logo.png",
-      pos_logo_url: "pos-retail.png",
+      company_logo_url: "ignored-alias.png",
     };
     expect(resolveIssuerLogoPath({ document: {}, company: null, profile: mixed })).toBe("org-logo.png");
     expect(snapshotForNewDocument({ brand: null, profile: mixed }).owner_logo_url).toBe("org-logo.png");
+  });
+
+  it("resolveIssuerBrand is the single decision for preview and save", () => {
+    const args = {
+      document: { company_name: "On this invoice", owner_logo_url: "old-snap.png" },
+      company: null,
+      profile: { company_name: "Org Default", logo_url: "logo-a.png" },
+    };
+    const issuerBrand = resolveIssuerBrand(args);
+    expect(issuerBrand.logo).toBe("logo-a.png");
+    expect(issuerBrand.name).toBe("On this invoice");
+    expect(snapshotFieldsFromIssuerBrand(issuerBrand)).toEqual({
+      owner_company_name: "On this invoice",
+      owner_logo_url: "logo-a.png",
+      company_id: null,
+    });
+  });
+
+  it("reuses a resolved issuerBrand instead of re-running fallbacks", () => {
+    const resolved = { name: "Locked Name", logo: "locked.png", companyId: "brand-a" };
+    expect(
+      resolveIssuerBrand({
+        document: { issuerBrand: resolved, owner_logo_url: "other.png" },
+        company: brandB,
+        profile,
+      })
+    ).toBe(resolved);
+  });
+
+  it("falls back to the document snapshot when there is no Business Logo", () => {
+    expect(
+      resolveIssuerBrand({
+        document: { owner_logo_url: "snap-only.png" },
+        company: null,
+        profile: { company_name: "Org Default", logo_url: "" },
+      }).logo
+    ).toBe("snap-only.png");
+  });
+
+  it("treats only document-logos paths as compose overrides", () => {
+    expect(composeLogoOverridePath("logo-a.png")).toBe("");
+    expect(composeLogoOverridePath("document-logos/user/abc.png")).toBe("document-logos/user/abc.png");
   });
 });

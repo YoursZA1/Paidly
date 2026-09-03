@@ -21,7 +21,6 @@ create table if not exists public.profiles (
   email text,
   avatar_url text,
   logo_url text,
-  pos_logo_url text,
   company_name text,
   company_address text,
   phone text,
@@ -43,7 +42,6 @@ alter table if exists public.profiles add column if not exists full_name text;
 alter table if exists public.profiles add column if not exists email text;
 alter table if exists public.profiles add column if not exists avatar_url text;
 alter table if exists public.profiles add column if not exists logo_url text;
-alter table if exists public.profiles add column if not exists pos_logo_url text;
 alter table if exists public.profiles add column if not exists company_name text;
 alter table if exists public.profiles add column if not exists company_address text;
 alter table if exists public.profiles add column if not exists phone text;
@@ -1097,9 +1095,12 @@ create policy "org members write payments" on public.payments
     where m.org_id = payments.org_id and m.user_id = (select auth.uid())
   ));
 
--- Create storage buckets if they don't exist
--- paidly stays public: getPublicUrl is used on invoices, quotes, and Settings.
--- A private bucket makes /object/public/paidly/* return HTTP 400 "Bucket not found".
+-- Canonical storage (must stay in this dump — do not paste uid-only helper SQL instead).
+-- paidly is PUBLIC. Writes: logo-{uuid}.{ext}, document-logos/{userId}/..., inventory/{userId}/...
+-- receipts, bank-details, activities, profile-logos stay PRIVATE.
+-- Omitting the logo-% / public-read policies leaves new logo uploads failing
+-- (flat logo-{uuid} names do not start with auth.uid() or org_id).
+-- A private paidly bucket makes /object/public/paidly/* return HTTP 400 "Bucket not found".
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values 
   ('paidly', 'paidly', true, 52428800, ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf'])
@@ -1109,13 +1110,13 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
--- Profile logos (private; use signed URLs)
+-- Profile logos (legacy private bucket; read-only in app; no new uploads)
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values 
   ('profile-logos', 'profile-logos', false, 5242880, ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'])
 on conflict (id) do update set
   name = excluded.name,
-  public = excluded.public,
+  public = false,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
@@ -1125,7 +1126,7 @@ values
   ('activities', 'activities', false, 52428800, ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/csv', 'application/csv'])
 on conflict (id) do update set
   name = excluded.name,
-  public = excluded.public,
+  public = false,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
@@ -1135,17 +1136,77 @@ values
   ('bank-details', 'bank-details', false, 52428800, ARRAY['application/pdf', 'text/csv', 'application/csv', 'application/vnd.ms-excel'])
 on conflict (id) do update set
   name = excluded.name,
-  public = excluded.public,
+  public = false,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
--- Policy: Users can upload/read their own objects (path first segment = auth.uid(), e.g. logos)
+-- Receipts (private; use signed URLs)
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values 
+  ('receipts', 'receipts', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'])
+on conflict (id) do update set
+  name = excluded.name,
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+-- Public invoice/quote viewers load logos via getPublicUrl (no signed URL).
+drop policy if exists "Public can read paidly assets" on storage.objects;
+create policy "Public can read paidly assets"
+  on storage.objects
+  for select
+  to anon, authenticated
+  using (bucket_id = 'paidly');
+
+-- Authenticated writes for current logo / document / inventory paths (not uid-first-segment).
+drop policy if exists "Users can upload paidly assets" on storage.objects;
+create policy "Users can upload paidly assets"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'paidly'
+    and (
+      name like 'logo-%'
+      or name like 'document-logos/%'
+      or name like 'inventory/' || (select auth.uid())::text || '/%'
+    )
+  );
+
+drop policy if exists "Users can update paidly assets" on storage.objects;
+create policy "Users can update paidly assets"
+  on storage.objects
+  for update
+  to authenticated
+  using (
+    bucket_id = 'paidly'
+    and owner = (select auth.uid())
+    and (name like 'logo-%' or name like 'document-logos/%' or name like 'inventory/%')
+  )
+  with check (
+    bucket_id = 'paidly'
+    and owner = (select auth.uid())
+    and (name like 'logo-%' or name like 'document-logos/%' or name like 'inventory/%')
+  );
+
+drop policy if exists "Users can delete paidly assets" on storage.objects;
+create policy "Users can delete paidly assets"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'paidly'
+    and owner = (select auth.uid())
+    and (name like 'logo-%' or name like 'document-logos/%' or name like 'inventory/%')
+  );
+
+-- Legacy profile-logos only: path first segment = auth.uid(). Do not apply this to paidly.
 drop policy if exists "Users can upload own logos" on storage.objects;
 create policy "Users can upload own logos" on storage.objects
   for insert
   to authenticated
   with check (
-    bucket_id IN ('paidly', 'profile-logos') AND
+    bucket_id = 'profile-logos' AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
@@ -1154,21 +1215,20 @@ create policy "Users can read own logos" on storage.objects
   for select
   to authenticated
   using (
-    bucket_id IN ('paidly', 'profile-logos') AND
+    bucket_id = 'profile-logos' AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
--- Policy: Users can update/delete their own objects (e.g. replace or remove logo)
 drop policy if exists "Users can update delete own storage" on storage.objects;
 create policy "Users can update delete own storage" on storage.objects
   for update
   to authenticated
   using (
-    bucket_id IN ('paidly', 'profile-logos') AND
+    bucket_id = 'profile-logos' AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   )
   with check (
-    bucket_id IN ('paidly', 'profile-logos') AND
+    bucket_id = 'profile-logos' AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
@@ -1177,38 +1237,188 @@ create policy "Users can delete own storage" on storage.objects
   for delete
   to authenticated
   using (
-    bucket_id IN ('paidly', 'profile-logos') AND
+    bucket_id = 'profile-logos' AND
     (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
--- Policy: Organization members can access org-scoped objects (path first segment = org_id)
+-- Org-scoped objects (path first segment = org_id): branding, receipts, bank files, activities
 drop policy if exists "org members access assets" on storage.objects;
 create policy "org members access assets" on storage.objects
   for all
   using (
-    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details') AND exists (
+    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details', 'receipts') AND exists (
       select 1 from public.memberships m
       where m.user_id = (select auth.uid())
         and (storage.foldername(name))[1] = m.org_id::text
     )
   )
   with check (
-    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details') AND exists (
+    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details', 'receipts') AND exists (
       select 1 from public.memberships m
       where m.user_id = (select auth.uid())
         and (storage.foldername(name))[1] = m.org_id::text
     )
   );
+
+drop policy if exists "org members insert receipts" on storage.objects;
+create policy "org members insert receipts" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'receipts' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members select receipts" on storage.objects;
+create policy "org members select receipts" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'receipts' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members update receipts" on storage.objects;
+create policy "org members update receipts" on storage.objects
+  for update to authenticated
+  using (
+    bucket_id = 'receipts' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members delete receipts" on storage.objects;
+create policy "org members delete receipts" on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'receipts' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "admin full access receipts" on storage.objects;
+create policy "admin full access receipts" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'receipts' AND public.is_admin())
+  with check (bucket_id = 'receipts' AND public.is_admin());
+
+drop policy if exists "org members insert bank-details" on storage.objects;
+create policy "org members insert bank-details" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'bank-details' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members select bank-details" on storage.objects;
+create policy "org members select bank-details" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'bank-details' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members update bank-details" on storage.objects;
+create policy "org members update bank-details" on storage.objects
+  for update to authenticated
+  using (
+    bucket_id = 'bank-details' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members delete bank-details" on storage.objects;
+create policy "org members delete bank-details" on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'bank-details' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "admin full access bank-details" on storage.objects;
+create policy "admin full access bank-details" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'bank-details' AND public.is_admin())
+  with check (bucket_id = 'bank-details' AND public.is_admin());
+
+drop policy if exists "org members insert activities" on storage.objects;
+create policy "org members insert activities" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'activities' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members select activities" on storage.objects;
+create policy "org members select activities" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'activities' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members update activities" on storage.objects;
+create policy "org members update activities" on storage.objects
+  for update to authenticated
+  using (
+    bucket_id = 'activities' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "org members delete activities" on storage.objects;
+create policy "org members delete activities" on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'activities' AND exists (
+      select 1 from public.memberships m
+      where m.user_id = (select auth.uid())
+        and (storage.foldername(name))[1] = m.org_id::text
+    )
+  );
+
+drop policy if exists "admin full access activities" on storage.objects;
+create policy "admin full access activities" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'activities' AND public.is_admin())
+  with check (bucket_id = 'activities' AND public.is_admin());
 
 -- Policy: Admin full access to all storage buckets
 drop policy if exists "admin access storage buckets" on storage.objects;
 create policy "admin access storage buckets" on storage.objects
   for all
   using (
-    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details') AND public.is_admin()
+    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details', 'receipts') AND public.is_admin()
   )
   with check (
-    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details') AND public.is_admin()
+    bucket_id IN ('paidly', 'profile-logos', 'activities', 'bank-details', 'receipts') AND public.is_admin()
   );
 
 -- Indexes for better query performance

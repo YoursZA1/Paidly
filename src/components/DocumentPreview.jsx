@@ -3,7 +3,7 @@ import { format, isValid, parseISO } from "date-fns";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
 import { mergeLiveBrandingForDocuments } from "@/utils/documentPreviewData";
-import { resolveIssuerLogoPath, resolveIssuerName } from "@/lib/documentIssuerBrand";
+import { resolveIssuerBrand } from "@/lib/documentIssuerBrand";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
@@ -266,25 +266,19 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       [clientFromList?.address, clientFromList?.city, clientFromList?.country].filter(Boolean).join("\n") ||
       "";
 
-    const company_name =
-      resolveIssuerName({
-        document: doc,
-        company: doc.company,
-        profile: effectiveUser,
-      }) ||
-      doc.company_name ||
-      "Your Company";
+    const issuerBrand = resolveIssuerBrand({
+      document: doc,
+      company: doc.company,
+      profile: effectiveUser,
+    });
+    const company_name = issuerBrand.name || doc.company_name || "Your Company";
     const company_email = doc.company_email || effectiveUser?.email || "";
     const company_phone = String(doc.company_phone || effectiveUser?.phone || "").trim();
     const company_website = String(
       doc.company_website || effectiveUser?.company_website || effectiveUser?.website || ""
     ).trim();
     const company_address = doc.company_address || effectiveUser?.company_address || "";
-    const logo_url = resolveIssuerLogoPath({
-      document: doc,
-      company: doc.company,
-      profile: effectiveUser,
-    });
+    const logo_url = issuerBrand.logo;
 
     const number = doc.number || doc.invoice_number || doc.quote_number || "—";
     const status = doc.status || "draft";

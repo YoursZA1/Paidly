@@ -48,7 +48,8 @@ export function isStorageAssetKnownFailed(url) {
 
 /**
  * Reject path traversal and obvious garbage before `getPublicUrl` / `<img>`.
- * Allows `userId/logo.png`, `logo-uuid.jpg`, encoded segments (`%20`), and legacy nested keys.
+ * Allows canonical `logo-{uuid}.ext`, document-logos paths, legacy read-only keys
+ * (e.g. `userId/logo.png` on profile-logos), encoded segments (`%20`), and nested keys.
  * @param {string} cleaned — object key inside the bucket (not full URL)
  * @returns {boolean}
  */

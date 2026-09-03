@@ -35,7 +35,12 @@ import { DocumentService } from "@/services/DocumentService";
 import { useAutoDraft } from "@/hooks/useAutoDraft";
 import useOrgBrands from "@/hooks/useOrgBrands";
 import BrandSelect from "@/components/brands/BrandSelect";
-import { snapshotForNewDocument } from "@/lib/documentIssuerBrand";
+import {
+  composeLogoOverridePath,
+  resolveIssuerBrand,
+  snapshotFieldsFromIssuerBrand,
+  snapshotForNewDocument,
+} from "@/lib/documentIssuerBrand";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
@@ -220,8 +225,10 @@ function CreateDocumentCore({ docType }) {
     company_address: "",
     banking_detail_id: "",
     terms_conditions: initialTerms,
-    /** Public URL for logo on this document only; empty = use profile logo */
+    /** Document-only upload (`document-logos/...`); empty = resolver uses brand / Business Logo */
     document_logo_url: "",
+    /** Snapshot fallback from a source quote; resolver uses this only when live logo is empty */
+    owner_logo_url: "",
     company_id: "",
   });
 
@@ -327,12 +334,10 @@ function CreateDocumentCore({ docType }) {
 
   useEffect(() => {
     setForm((f) => {
-      const override = String(f.document_logo_url || "").trim();
-      const keepOverride = override.startsWith("document-logos/");
       return {
         ...f,
         number: generateNumber(docType, f.client_name || ""),
-        document_logo_url: keepOverride ? override : "",
+        document_logo_url: composeLogoOverridePath(f.document_logo_url),
       };
     });
   }, [docType]);
@@ -365,7 +370,7 @@ function CreateDocumentCore({ docType }) {
       ...f,
       company_id: snap.companyId || "",
       company_name: snap.owner_company_name || f.company_name,
-      document_logo_url: f.document_logo_url || snap.owner_logo_url || "",
+      document_logo_url: composeLogoOverridePath(f.document_logo_url),
     }));
   }, [brandsLoading, activeBrand, user, quoteIdParam, fromHubDocumentParam, templateIdParam, duplicateLastParam]);
 
@@ -433,7 +438,8 @@ function CreateDocumentCore({ docType }) {
           terms_conditions: quote.terms_conditions || DEFAULT_INVOICE_TERMS_BODY,
           currency: quote.currency || f.currency || user?.currency || "ZAR",
           number: generateNumber("invoice", clientName),
-          document_logo_url: (quote.owner_logo_url && String(quote.owner_logo_url).trim()) || "",
+          document_logo_url: composeLogoOverridePath(f.document_logo_url),
+          owner_logo_url: (quote.owner_logo_url && String(quote.owner_logo_url).trim()) || "",
         }));
         toast({
           title: "Quote loaded",
@@ -665,7 +671,8 @@ function CreateDocumentCore({ docType }) {
           terms_conditions: full.terms_conditions || "",
           currency: full.currency || f.currency || user?.currency || "ZAR",
           number: generateNumber("quote", clientName),
-          document_logo_url: (full.owner_logo_url && String(full.owner_logo_url).trim()) || "",
+          document_logo_url: composeLogoOverridePath(f.document_logo_url),
+          owner_logo_url: (full.owner_logo_url && String(full.owner_logo_url).trim()) || "",
         }));
         toast({
           title: "Last quote duplicated",
@@ -892,27 +899,35 @@ function CreateDocumentCore({ docType }) {
     return { subtotal, subtotal_before_discount: subtotal, afterDiscount, tax_amount: taxAmount, total };
   }, [form.line_items, form.tax_rate, form.discount]);
 
-  const profileLogoUrl = user?.logo_url || user?.company_logo_url || null;
   const selectedBrand = brands.find((row) => row.id === form.company_id) || null;
-  const effectiveOwnerLogoUrl = useMemo(() => {
-    const override = (form.document_logo_url || "").trim();
-    if (override) return override;
-    if (selectedBrand?.logo_url) return selectedBrand.logo_url;
-    return profileLogoUrl || null;
-  }, [form.document_logo_url, selectedBrand?.logo_url, profileLogoUrl]);
+  const issuerBrand = useMemo(
+    () =>
+      resolveIssuerBrand({
+        document: {
+          ...form,
+          document_logo_url: composeLogoOverridePath(form.document_logo_url),
+        },
+        company: selectedBrand,
+        profile: user,
+        selectedBrand,
+      }),
+    [form, selectedBrand, user]
+  );
 
   const previewDoc = useMemo(
     () => ({
       ...form,
+      document_logo_url: composeLogoOverridePath(form.document_logo_url),
       subtotal: computed.afterDiscount,
       tax_amount: computed.tax_amount,
       total: computed.total,
-      owner_logo_url: effectiveOwnerLogoUrl,
+      issuerBrand,
+      ...snapshotFieldsFromIssuerBrand(issuerBrand),
       company: selectedBrand
         ? { id: selectedBrand.id, name: selectedBrand.name, logo_url: selectedBrand.logo_url }
         : undefined,
     }),
-    [form, computed, effectiveOwnerLogoUrl, selectedBrand]
+    [form, computed, issuerBrand, selectedBrand]
   );
 
   const previewBankingRow = useMemo(() => {
@@ -952,11 +967,12 @@ function CreateDocumentCore({ docType }) {
     const tax_amount = computed.tax_amount;
     const total_amount = computed.total;
 
-    const owner_company_name = (form.company_name || "").trim() || user?.company_name || null;
+    const issuerSnapshot = snapshotFieldsFromIssuerBrand(issuerBrand);
+    const owner_company_name = issuerSnapshot.owner_company_name;
     const owner_company_address = (form.company_address || "").trim() || user?.company_address || null;
     const owner_email = (form.company_email || "").trim() || user?.email || null;
     const owner_currency = form.currency || user?.currency || "ZAR";
-    const owner_logo_url = effectiveOwnerLogoUrl;
+    const owner_logo_url = issuerSnapshot.owner_logo_url;
 
     const delivery_date =
       (form.due_date || "").trim() ||
@@ -1076,11 +1092,12 @@ function CreateDocumentCore({ docType }) {
         const tax_amount = computed.tax_amount;
         const total_amount = computed.total;
 
-        const owner_company_name = (form.company_name || "").trim() || user?.company_name || null;
+        const issuerSnapshot = snapshotFieldsFromIssuerBrand(issuerBrand);
+        const owner_company_name = issuerSnapshot.owner_company_name;
         const owner_company_address = (form.company_address || "").trim() || user?.company_address || null;
         const owner_email = (form.company_email || "").trim() || user?.email || null;
         const owner_currency = form.currency || user?.currency || "ZAR";
-        const owner_logo_url = effectiveOwnerLogoUrl;
+        const owner_logo_url = issuerSnapshot.owner_logo_url;
 
         const valid_until =
           (form.due_date || "").trim() ||
@@ -1305,7 +1322,7 @@ function CreateDocumentCore({ docType }) {
                       ...f,
                       company_id: snap.companyId || "",
                       company_name: snap.owner_company_name || f.company_name,
-                      document_logo_url: brand?.logo_url || "",
+                      document_logo_url: composeLogoOverridePath(f.document_logo_url),
                     }));
                   }}
                   description={
@@ -1392,7 +1409,7 @@ function CreateDocumentCore({ docType }) {
                       ...f,
                       company_id: snap.companyId || "",
                       company_name: snap.owner_company_name || f.company_name,
-                      document_logo_url: brand?.logo_url || "",
+                      document_logo_url: composeLogoOverridePath(f.document_logo_url),
                     }));
                   }}
                   description={
@@ -1439,9 +1456,9 @@ function CreateDocumentCore({ docType }) {
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background">
-                      {effectiveOwnerLogoUrl ? (
+                      {issuerBrand.logo ? (
                         <LogoImage
-                          src={effectiveOwnerLogoUrl}
+                          src={issuerBrand.logo}
                           alt=""
                           className="max-h-full max-w-full object-contain"
                         />
@@ -1482,11 +1499,11 @@ function CreateDocumentCore({ docType }) {
                       </Button>
                     </div>
                   </div>
-                  {(form.document_logo_url || "").trim() ? (
+                  {composeLogoOverridePath(form.document_logo_url) ? (
                     <p className="text-xs text-muted-foreground">Using a document-only logo for this draft.</p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Using your profile logo{profileLogoUrl ? "" : " (add one in Settings)"}.
+                      Using your Business Logo{issuerBrand.logo ? "" : " (add one in Settings)"}.
                     </p>
                   )}
                 </div>

@@ -1,3 +1,9 @@
+# Bucket setup (historical)
+
+**Do not follow the policy lists or helper SQL below.** They describe the retired uid-first-segment model. Current setup: `paidly` is **public**; logos are `logo-{uuid}.{ext}`; policies live in `supabase/schema.postgres.sql`. See [docs/SUPABASE_STORAGE.md](docs/SUPABASE_STORAGE.md).
+
+---
+
 # ✅ Bucket Created Successfully!
 
 Great! The `paidly` bucket has been created. Now let's make sure everything is set up correctly for logo uploads.

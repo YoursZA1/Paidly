@@ -6,7 +6,7 @@ import { uploadLogo } from "@/lib/logoUpload";
  * @param {File} logoFile - The logo file to upload
  * @param {Object} form - The form state containing business info
  * @param {string} userId - Current authenticated user id
- * @returns {Promise<string>} - The stored logo path (e.g. logo-<user-id>.png)
+ * @returns {Promise<string>} - The stored logo path (e.g. logo-<uuid>.png)
  */
 export async function uploadAndSaveLogo(logoFile, form, userId) {
   if (!logoFile) return form.logo_url || "";

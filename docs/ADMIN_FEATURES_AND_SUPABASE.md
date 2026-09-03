@@ -65,8 +65,8 @@ See **[SUPABASE_SETUP_AND_MAINTENANCE.md](SUPABASE_SETUP_AND_MAINTENANCE.md)** f
 
 ### 2.4 Storage
 
-- **Buckets:** `paidly`, `profile-logos`, `activities`, `bank-details` (created in schema with size/MIME limits).
-- **Policies:** User-owned (path first segment = `auth.uid()`), org-scoped (first segment = `org_id` via membership), and **admin access storage buckets** for full access when `is_admin()`. See schema and **[SUPABASE_INTEGRATION_CHECKLIST.md](SUPABASE_INTEGRATION_CHECKLIST.md)** § Storage.
+- **Buckets:** `paidly` (public), `receipts`, `bank-details`, `activities`, `profile-logos` (legacy, private).
+- **Policies:** paidly writes are `logo-%` / `document-logos/%` / `inventory/{uid}/%` plus public SELECT; org-scoped private files use first segment = `org_id`; admin full access when `is_admin()`. See **[SUPABASE_STORAGE.md](SUPABASE_STORAGE.md)** and **[SUPABASE_INTEGRATION_CHECKLIST.md](SUPABASE_INTEGRATION_CHECKLIST.md)** § Storage.
 
 ### 2.5 Realtime
 

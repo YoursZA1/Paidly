@@ -211,7 +211,7 @@ Fix any missing or incorrect env vars, then restart the app:
 | 3 | Copy Project URL and service_role key → `server/.env` |
 | 4 | Run `supabase/schema.postgres.sql` in SQL Editor |
 | 5 | Run `supabase/migrations/20240308120000_add_profiles_payfast_columns.sql` (or the SQL inside it) |
-| 6 | Create storage bucket `paidly` if missing |
+| 6 | Storage is created by the schema (`paidly` public). Do not run `CREATE_BUCKET_NOW.sql` |
 | 7 | Enable Email provider; configure Google and Apple if used |
 | 8 | Set Site URL and Redirect URLs in Auth URL configuration |
 | 9 | Deploy `payfast-itn`, set `PAYFAST_PASSPHRASE`, configure PayFast ITN URL |
@@ -222,6 +222,6 @@ Fix any missing or incorrect env vars, then restart the app:
 ## References
 
 - **Schema & RLS:** `supabase/schema.postgres.sql`, `docs/SUPABASE_SETUP_AND_MAINTENANCE.md`
-- **Storage:** `docs/SUPABASE_STORAGE.md`, `SUPABASE_BUCKETS_SETUP.md`
+- **Storage:** `docs/SUPABASE_STORAGE.md` (`SUPABASE_BUCKETS_SETUP.md` is a deprecated pointer; do not create extra buckets)
 - **Security:** `docs/SUPABASE_SECURITY.md`
 - **Realtime:** `docs/SUPABASE_REALTIME.md`

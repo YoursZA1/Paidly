@@ -98,7 +98,7 @@ SELECT id, name, public FROM storage.buckets WHERE id = 'paidly';
 - ✅ `CREATE_BUCKET_NOW.sql` - Ready-to-run SQL script
 - ✅ `FIX_BUCKET_ERROR_STEPS.md` - This guide
 - ✅ `QUICK_FIX_BUCKET_ERROR.md` - Quick reference
-- ✅ `scripts/create-storage-buckets.sql` - Alternative script
+ - (Deprecated) `scripts/create-storage-buckets.sql` - do not run; use `supabase/schema.postgres.sql` instead
 
 ## 🎉 Success!
 
