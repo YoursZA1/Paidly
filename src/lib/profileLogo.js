@@ -5,8 +5,10 @@
  */
 export function resolveProfileLogoUrl(source) {
   if (!source || typeof source !== "object") return "";
-  const raw = source.logo_url ?? source.company_logo_url ?? "";
-  return String(raw).trim();
+  if (Object.prototype.hasOwnProperty.call(source, "logo_url")) {
+    return String(source.logo_url || "").trim();
+  }
+  return String(source.company_logo_url || "").trim();
 }
 
 /** Keep logo_url and legacy company_logo_url in sync for document templates. */

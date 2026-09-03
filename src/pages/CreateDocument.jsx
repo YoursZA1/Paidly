@@ -326,7 +326,15 @@ function CreateDocumentCore({ docType }) {
   }, [docType, toast]);
 
   useEffect(() => {
-    setForm((f) => ({ ...f, number: generateNumber(docType, f.client_name || "") }));
+    setForm((f) => {
+      const override = String(f.document_logo_url || "").trim();
+      const keepOverride = override.startsWith("document-logos/");
+      return {
+        ...f,
+        number: generateNumber(docType, f.client_name || ""),
+        document_logo_url: keepOverride ? override : "",
+      };
+    });
   }, [docType]);
 
   useEffect(() => {
@@ -1297,7 +1305,7 @@ function CreateDocumentCore({ docType }) {
                       ...f,
                       company_id: snap.companyId || "",
                       company_name: snap.owner_company_name || f.company_name,
-                      document_logo_url: snap.owner_logo_url || "",
+                      document_logo_url: brand?.logo_url || "",
                     }));
                   }}
                   description={
@@ -1384,7 +1392,7 @@ function CreateDocumentCore({ docType }) {
                       ...f,
                       company_id: snap.companyId || "",
                       company_name: snap.owner_company_name || f.company_name,
-                      document_logo_url: snap.owner_logo_url || "",
+                      document_logo_url: brand?.logo_url || "",
                     }));
                   }}
                   description={

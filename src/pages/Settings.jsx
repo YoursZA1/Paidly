@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { User, BankingDetail } from "@/api/entities";
 import {
   uploadLogo,
+  deleteStoredLogo,
+  retargetLogoReferences,
   validateLogoFile,
   LOGO_CONSTRAINTS,
   logoMaxSizeLabel,
@@ -181,6 +183,7 @@ function CompanyProfileSettings() {
         business_type: "",
     }));
     const [logoFile, setLogoFile] = useState(null);
+    const pendingLogoChangeRef = useRef(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isSavingTemplate, setIsSavingTemplate] = useState(false);
@@ -205,7 +208,9 @@ function CompanyProfileSettings() {
             company_address: authUser.company_address ?? prev.company_address,
             phone: authUser.phone ?? prev.phone ?? "",
             company_website: authUser.company_website ?? prev.company_website ?? "",
-            logo_url: mergeProfileLogo(prev.logo_url, authUser),
+            logo_url: pendingLogoChangeRef.current
+              ? prev.logo_url
+              : mergeProfileLogo(prev.logo_url, authUser),
             currency: authUser.currency || prev.currency || "USD",
             timezone: authUser.timezone ?? prev.timezone,
             invoice_template: authUser.invoice_template || prev.invoice_template || DEFAULT_INVOICE_TEMPLATE,
@@ -256,7 +261,9 @@ function CompanyProfileSettings() {
                         company_address: data.company_address || "",
                         phone: data.phone || "",
                         company_website: data.company_website || "",
-                        logo_url: mergeProfileLogo(prev.logo_url, data),
+                        logo_url: pendingLogoChangeRef.current
+                          ? prev.logo_url
+                          : mergeProfileLogo(prev.logo_url, data),
                         currency: data.currency || "USD",
                         timezone: data.timezone || "",
                         invoice_template: data.invoice_template || DEFAULT_INVOICE_TEMPLATE,
@@ -339,6 +346,7 @@ function CompanyProfileSettings() {
             const previewUrl = URL.createObjectURL(file);
             setFormData(prev => ({ ...prev, logo_url: previewUrl }));
             setLogoFile(file);
+            pendingLogoChangeRef.current = true;
             
             // Show success message
             toast({
@@ -355,6 +363,7 @@ function CompanyProfileSettings() {
         }
         setFormData(prev => ({ ...prev, logo_url: "" }));
         setLogoFile(null);
+        pendingLogoChangeRef.current = true;
         toast({
             title: "Business Logo removed",
             description: "Documents will fall back to your business name. Click \"Save Changes\" to confirm.",
@@ -368,6 +377,7 @@ function CompanyProfileSettings() {
         let updatedData = { ...formData };
 
         try {
+            const previousLogo = resolveBusinessLogoUrl(authUser);
             if (logoFile) {
                 console.log("Uploading logo file:", logoFile.name);
                 // Revoke previous preview URL if it exists
@@ -400,6 +410,7 @@ function CompanyProfileSettings() {
             if (typeof updatedData.logo_url === "string" && updatedData.logo_url.startsWith("blob:")) {
                 updatedData.logo_url = resolveBusinessLogoUrl(authUser);
             }
+            const nextLogo = String(updatedData.logo_url || "").trim();
             
             // Map display_name to full_name for Supabase profile (saved per user, restored on login)
             const payload = {
@@ -407,7 +418,7 @@ function CompanyProfileSettings() {
                 company_address: updatedData.company_address,
                 phone: (updatedData.phone || "").trim(),
                 company_website: (updatedData.company_website || "").trim(),
-                logo_url: updatedData.logo_url,
+                logo_url: nextLogo || null,
                 currency: updatedData.currency || "USD",
                 timezone: updatedData.timezone || "",
                 invoice_template: updatedData.invoice_template || DEFAULT_INVOICE_TEMPLATE,
@@ -449,6 +460,7 @@ function CompanyProfileSettings() {
             setFormData((prev) => ({
                 ...prev,
                 ...payload,
+                logo_url: nextLogo,
                 document_brand_primary: payload.document_brand_primary || "",
                 document_brand_secondary: payload.document_brand_secondary || "",
                 business_bank_name: updatedData.business_bank_name,
@@ -457,8 +469,17 @@ function CompanyProfileSettings() {
                 business_branch_code: updatedData.business_branch_code,
             }));
             setLogoFile(null);
-            if (payload.logo_url) {
-                clearLogoUrlDiskCacheForSrc(payload.logo_url);
+            pendingLogoChangeRef.current = false;
+            if (previousLogo && previousLogo !== nextLogo) {
+                try {
+                    await retargetLogoReferences(previousLogo, nextLogo || null);
+                    await deleteStoredLogo(previousLogo);
+                } catch (cleanupErr) {
+                    console.warn("Logo cleanup failed:", cleanupErr);
+                }
+            }
+            if (nextLogo) {
+                clearLogoUrlDiskCacheForSrc(nextLogo);
                 AssetService.clearLogoSessionCache();
             }
             await refreshUser();

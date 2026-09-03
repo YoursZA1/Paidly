@@ -315,7 +315,9 @@ export class AuthManager {
           display_name: fullName,
           email: profile.email || this.user.email,
           avatar_url: profile.avatar_url || this.user.avatar_url,
-          logo_url: mergeProfileLogo(this.user.logo_url, profile),
+          logo_url: Object.prototype.hasOwnProperty.call(profile, "logo_url")
+            ? resolveProfileLogoUrl(profile)
+            : mergeProfileLogo(this.user.logo_url, profile),
           pos_logo_url: mergePosLogo(this.user.pos_logo_url, profile),
           company_name: profile.company_name || this.user.company_name || '',
           company_address: profile.company_address || this.user.company_address || '',

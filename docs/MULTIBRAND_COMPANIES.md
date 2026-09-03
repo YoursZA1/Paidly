@@ -64,7 +64,7 @@ RLS: org members CRUD only their org’s `companies` rows; platform admins have 
 
 ## One official logo
 
-Settings → Company Profile has **one** Business Logo (`profiles.logo_url`) used on invoices, quotes, payslips, statements, profile chrome, and POS. All files go in the **`paidly`** bucket — extra upload fields do not create extra buckets.
+Settings → Company Profile has **one** Business Logo (`profiles.logo_url`) used on invoices, quotes, payslips, statements, profile chrome, and POS. Changing the document template uses this live logo. Replacing or removing it deletes the previous file from the `paidly` bucket and updates `companies.logo_url` / `owner_logo_url` rows that still pointed at the old path.
 
 - **Brand logo** (`companies.logo_url`) is optional. Use it only when that trading name needs a different mark. Empty = Business Logo.
 - `profiles.pos_logo_url` is a leftover column and is no longer written from Settings.

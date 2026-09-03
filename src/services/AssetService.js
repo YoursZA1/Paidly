@@ -147,12 +147,27 @@ function clearLogoSessionCache() {
   SESSION_LOGO_BY_INPUT.clear();
 }
 
+/**
+ * Remove a logo object from storage. Ignores missing files.
+ * @param {string} path
+ */
+async function deleteLogo(path) {
+  const { bucket, cleaned } = resolveLogoSource(path);
+  if (!cleaned || cleaned.startsWith("blob:") || cleaned.startsWith("data:")) return;
+  if (!isValidLogoStorageObjectKey(cleaned)) return;
+  const { error } = await supabase.storage.from(bucket).remove([cleaned]);
+  if (error && !/not found|NoSuchKey|404/i.test(error.message || "")) {
+    console.warn("[AssetService] Could not delete logo", cleaned, error.message);
+  }
+}
+
 const AssetService = {
   BUCKET: LOGO_BUCKET,
   FALLBACK_LOGO,
   cleanPath,
   getLogo,
   signLogoUrl,
+  deleteLogo,
   listLogoAssets,
   markStorageAssetFailed,
   isValidLogoStorageObjectKey,
@@ -160,4 +175,12 @@ const AssetService = {
 };
 
 export default AssetService;
-export { cleanPath, getLogo, signLogoUrl, markStorageAssetFailed, isValidLogoStorageObjectKey, clearLogoSessionCache };
+export {
+  cleanPath,
+  getLogo,
+  signLogoUrl,
+  deleteLogo,
+  markStorageAssetFailed,
+  isValidLogoStorageObjectKey,
+  clearLogoSessionCache,
+};

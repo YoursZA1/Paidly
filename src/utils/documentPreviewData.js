@@ -25,8 +25,7 @@ export function mergeLiveBrandingForDocuments(userProp, liveAuthUser) {
     base.document_brand_secondary = liveAuthUser.document_brand_secondary;
   }
   const liveLogo = resolveProfileLogoUrl(liveAuthUser);
-  const baseLogo = resolveProfileLogoUrl(base);
-  if (!baseLogo && liveLogo) {
+  if (liveLogo) {
     base.logo_url = liveLogo;
     base.company_logo_url = liveLogo;
   }

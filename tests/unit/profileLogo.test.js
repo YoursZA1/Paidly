@@ -12,6 +12,11 @@ describe("profileLogo", () => {
     );
   });
 
+  it("resolveProfileLogoUrl treats an explicit empty logo_url as cleared", () => {
+    expect(resolveProfileLogoUrl({ logo_url: "", company_logo_url: "stale.png" })).toBe("");
+    expect(resolveProfileLogoUrl({ logo_url: null, company_logo_url: "stale.png" })).toBe("");
+  });
+
   it("mergeProfileLogo keeps previous when incoming is empty", () => {
     expect(mergeProfileLogo("stored.png", { logo_url: "" })).toBe("stored.png");
     expect(mergeProfileLogo("stored.png", { logo_url: null })).toBe("stored.png");

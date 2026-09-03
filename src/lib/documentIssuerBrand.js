@@ -8,9 +8,9 @@
  *
  * Render precedence:
  *   1. Document-specific compose override (company_name / document_logo_url)
- *   2. Assigned brand (invoice.company from companies)
- *   3. Document snapshot (owner_*)
- *   4. Profile / organization default (profiles.logo_url — Business Logo)
+ *   2. Assigned brand (invoice.company from companies) when that brand has its own logo
+ *   3. Live Business Logo (profiles.logo_url) — latest uploaded / updated logo
+ *   4. Document snapshot (owner_*) as fallback when the live logo is empty
  *
  * POS logos (profiles.pos_logo_url) are never read here.
  *
@@ -43,11 +43,13 @@ export function resolveIssuerLogoPath({ document, company, profile, selectedBran
   if (composeOverride) return composeOverride;
   const companyLogo = company?.logo_url && String(company.logo_url).trim();
   if (companyLogo) return companyLogo;
+  const liveLogo = resolveBusinessLogoUrl(profile);
+  if (liveLogo) return liveLogo;
   const snapshot = document?.owner_logo_url && String(document.owner_logo_url).trim();
   if (snapshot) return snapshot;
   const selected = selectedBrand?.logo_url && String(selectedBrand.logo_url).trim();
   if (selected) return selected;
-  return resolveBusinessLogoUrl(profile) || null;
+  return null;
 }
 
 /**

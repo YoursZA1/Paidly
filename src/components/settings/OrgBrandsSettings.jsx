@@ -25,7 +25,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import useOrgBrands from "@/hooks/useOrgBrands";
 import { OrgBrandService } from "@/services/OrgBrandService";
-import { uploadLogo, validateLogoFile, logoMaxSizeLabel } from "@/lib/logoUpload";
+import { uploadLogo, deleteStoredLogo, validateLogoFile, logoMaxSizeLabel } from "@/lib/logoUpload";
 import LogoImage from "@/components/shared/LogoImage";
 
 const EMPTY_DRAFT = { id: null, name: "", logo_url: "" };
@@ -90,6 +90,7 @@ export default function OrgBrandsSettings() {
     setSaving(true);
     try {
       let logo_url = draft.logo_url || null;
+      const previousBrandLogo = draft.id ? String(draft.logo_url || "").trim() : "";
       if (logoFile) {
         logo_url = await uploadLogo(logoFile, user?.id);
       }
@@ -100,6 +101,15 @@ export default function OrgBrandsSettings() {
         const created = await OrgBrandService.create({ name, logo_url });
         if (created?.id && !activeBrandId) setActiveBrandId(created.id);
         toast({ title: "Brand created" });
+      }
+      const nextBrandLogo = logo_url ? String(logo_url).trim() : "";
+      const businessLogo = String(user?.logo_url || "").trim();
+      if (
+        previousBrandLogo &&
+        previousBrandLogo !== nextBrandLogo &&
+        previousBrandLogo !== businessLogo
+      ) {
+        await deleteStoredLogo(previousBrandLogo);
       }
       setDialogOpen(false);
       await refresh();

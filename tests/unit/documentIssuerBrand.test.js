@@ -64,6 +64,16 @@ describe("documentIssuerBrand", () => {
     ).toBe("logo-a.png");
   });
 
+  it("live Business Logo beats a stale document snapshot", () => {
+    expect(
+      resolveIssuerLogoPath({
+        document: { owner_logo_url: "old-snap.png" },
+        company: null,
+        profile: { logo_url: "new-logo.png" },
+      })
+    ).toBe("new-logo.png");
+  });
+
   it("uses a compose logo override before brand and snapshot", () => {
     expect(
       resolveIssuerLogoPath({

@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import AssetService from "@/services/AssetService";
+import { clearLogoUrlDiskCacheForSrc } from "@/lib/logoUrlDiskCache";
 
 const PAIDLY_LOGO_BUCKET = "paidly";
 
@@ -173,6 +174,56 @@ export async function uploadLogo(file, companyId) {
   await verifyLogoExists(fileName);
 
   return fileName;
+}
+
+function logoPathVariants(path) {
+  const raw = String(path || "").trim();
+  if (!raw || raw.startsWith("blob:") || raw.startsWith("data:")) return [];
+  const cleaned = AssetService.cleanPath(raw);
+  return [...new Set([raw, cleaned].filter(Boolean))];
+}
+
+/**
+ * Delete a previous logo file from storage and drop its URL cache.
+ * @param {string} path
+ */
+export async function deleteStoredLogo(path) {
+  await AssetService.deleteLogo(path);
+  if (path) {
+    clearLogoUrlDiskCacheForSrc(path);
+    const cleaned = AssetService.cleanPath(path);
+    if (cleaned && cleaned !== path) clearLogoUrlDiskCacheForSrc(cleaned);
+  }
+  AssetService.clearLogoSessionCache();
+}
+
+/**
+ * Point remaining DB columns that still reference the old logo at the new path (or null).
+ * profiles.logo_url is updated by the Settings save caller.
+ * @param {string} oldPath
+ * @param {string | null} newPath
+ */
+export async function retargetLogoReferences(oldPath, newPath) {
+  const fromVariants = logoPathVariants(oldPath);
+  if (fromVariants.length === 0) return;
+  const next = newPath ? AssetService.cleanPath(newPath) || null : null;
+  const targets = [
+    { table: "companies", column: "logo_url" },
+    { table: "invoices", column: "owner_logo_url" },
+    { table: "quotes", column: "owner_logo_url" },
+    { table: "profiles", column: "pos_logo_url" },
+  ];
+  await Promise.all(
+    targets.flatMap(({ table, column }) =>
+      fromVariants.map(async (from) => {
+        if (next && from === next) return;
+        const { error } = await supabase.from(table).update({ [column]: next }).eq(column, from);
+        if (error && !/column|schema cache|does not exist/i.test(error.message || "")) {
+          console.warn(`[Logo] Could not retarget ${table}.${column}`, error.message);
+        }
+      })
+    )
+  );
 }
 
 /**
