@@ -1,15 +1,22 @@
 /**
- * POS-only staff are still org members (Auth + memberships).
- * Do not add a second till login, JWT, or role table.
+ * POS-only staff with a Paidly account stay org members (Auth + memberships).
+ * POS invites can also issue a scoped POS access-pass session without creating
+ * a Paidly account. That pass is not a second role table — permissions still
+ * come from the invite's server-side role and job_function.
  *
- * RBAC role stays `employee`. Scope is `memberships.job_function = pos`.
- * That scope is enforced in permissions, SPA routing, /api, and RLS — not by hiding nav.
+ * RBAC role stays `employee`. Scope is `memberships.job_function = pos` or a
+ * POS access-pass session with the same job_function.
  */
 
 export const POS_JOB_FUNCTION = "pos";
 export const POS_INVITE_SOURCE = "pos";
 export const POS_INVITE_NEXT = "POS";
 export const POS_SCOPE = "pos";
+
+/** HttpOnly cookie + Bearer `pos.` prefix. Not a Paidly Auth JWT. */
+export const POS_ACCESS_COOKIE = "paidly_pos_access";
+export const POS_ACCESS_BEARER_PREFIX = "pos.";
+export const POS_ACCESS_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /** Till-only grants. Close-shift is allowed so cashiers can cash up their own drawer. */
 export const POS_ONLY_PERMISSIONS = Object.freeze([

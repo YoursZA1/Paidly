@@ -52,7 +52,7 @@ import { resolveBusinessLogoUrl } from "@/lib/brandingLogos";
 import LogoImage from "@/components/shared/LogoImage";
 import { useCompanyContext } from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
-import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
+import { isPosOnlyStaff, posAccessPath } from "@shared/posStaffInvite.js";
 import PosStaffInviteSheet from "@/components/pos/PosStaffInviteSheet";
 import PosTillStaffSheet from "@/components/pos/PosTillStaffSheet";
 import { formatCurrency } from "@/utils/currencyCalculations";
@@ -88,6 +88,7 @@ import { addPosCartLine, posCartSubtotal, posProductStock, posStockLabel, setPos
 import { refundRailForSale, remainingLinesForTill } from "../../../server/src/pos/posReturnMath.js";
 import { clearHeldCart, hydrateHeldCart, readHeldCart, writeHeldCart } from "@/lib/pos/posHeldCart";
 import { pickActiveRegister, readActiveRegisterId, writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
+import { endPosAccess, getPosAccessProfile, getPosAccessToken } from "@/lib/pos/posAccessClient";
 import { resolveAssignedTill } from "../../../server/src/pos/posRegisterMath.js";
 import { WALK_IN_CUSTOMER_LABEL } from "@/lib/pos/posCustomerSearch";
 import { invalidateClientDomain, invalidateRevenueReadModels } from "@/lib/queryInvalidation";
@@ -337,7 +338,8 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     usePosConnectivity();
   const { brands, orgId } = useOrgBrands();
   const currency = profile?.currency || user?.currency || "ZAR";
-  const cashierName = profile?.full_name || user?.email || "";
+  const posProfile = getPosAccessProfile();
+  const cashierName = profile?.full_name || user?.email || posProfile?.name || posProfile?.email || "";
 
   const searchRef = useRef(null);
   const receiptPdfRef = useRef(null);
@@ -1335,10 +1337,14 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   };
 
   const handlePosLogout = async () => {
+    const hadPosPass = Boolean(getPosAccessToken());
     try {
-      await logout();
+      if (hadPosPass) await endPosAccess();
+      else await logout();
     } finally {
-      navigate(`${createPageUrl("Login")}#sign-in`, { replace: true });
+      navigate(hadPosPass || posOnlyStaff ? posAccessPath() : `${createPageUrl("Login")}#sign-in`, {
+        replace: true,
+      });
     }
   };
 

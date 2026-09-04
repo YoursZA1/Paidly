@@ -22,14 +22,48 @@ import {
 
 const CompanyContext = createContext(null);
 
-export function CompanyContextProvider({ children }) {
-  const { user, authUserId } = useAuth();
-  const userId = authUserId || user?.id || null;
-  const [ctx, setCtx] = useState(null);
-  const [loading, setLoading] = useState(Boolean(userId));
+function companyContextValue({ loading, error, ctx, hasPermission, refresh }) {
+  return {
+    loading,
+    error,
+    ctx,
+    companyId: ctx?.companyId ?? null,
+    companyRole: ctx?.companyRole ?? null,
+    companyRoleLabel: formatCompanyMemberRoleLabel(ctx?.companyRole, ctx?.jobFunction),
+    jobFunction: ctx?.jobFunction ?? null,
+    hasPermission,
+    canViewEmployee: (targetUserId) => canViewEmployee(ctx, targetUserId),
+    canManageEmployees: () => canManageEmployees(ctx),
+    canViewPayroll: () => canViewPayroll(ctx),
+    canManageCompany: () => canManageCompany(ctx),
+    canApproveLeave: () => canApproveLeave(ctx),
+    canViewCompanyReports: () => canViewCompanyReports(ctx),
+    isOrgOwner: Boolean(ctx?.isOrgOwner),
+    businessType: ctx?.businessType ?? null,
+    posEnabled: businessTypeIncludesPos(ctx?.businessType),
+    showBusinessDashboard: showBusinessOwnerDashboard(ctx),
+    canCreateDocumentType: (typeKey) => canCreateDocumentType(ctx, typeKey),
+    canApproveDocument: (docType, docOwnerUserId) =>
+      canApproveDocument(ctx, docType, docOwnerUserId),
+    dataScope: dataScopeForContext(ctx),
+    refresh,
+  };
+}
+
+export function CompanyContextProvider({ children, forcedContext = null }) {
+  const { user, authUserId } = useAuth() || {};
+  const userId = forcedContext?.userId || authUserId || user?.id || null;
+  const [ctx, setCtx] = useState(forcedContext || null);
+  const [loading, setLoading] = useState(Boolean(userId) && !forcedContext);
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async ({ invalidateCache = false } = {}) => {
+    if (forcedContext) {
+      setCtx(forcedContext);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     if (!userId) {
       setCtx(null);
       setLoading(false);
@@ -48,20 +82,21 @@ export function CompanyContextProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, forcedContext]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
+    if (forcedContext) return;
     if (!userId) {
       clearCompanyAccessContextCache();
       setCtx(null);
       setLoading(false);
       setError(null);
     }
-  }, [userId]);
+  }, [userId, forcedContext]);
 
   const hasPermission = useCallback(
     (permission) => hasCompanyPermission(ctx, permission),
@@ -69,31 +104,7 @@ export function CompanyContextProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({
-      loading,
-      error,
-      ctx,
-      companyId: ctx?.companyId ?? null,
-      companyRole: ctx?.companyRole ?? null,
-      companyRoleLabel: formatCompanyMemberRoleLabel(ctx?.companyRole, ctx?.jobFunction),
-      jobFunction: ctx?.jobFunction ?? null,
-      hasPermission,
-      canViewEmployee: (targetUserId) => canViewEmployee(ctx, targetUserId),
-      canManageEmployees: () => canManageEmployees(ctx),
-      canViewPayroll: () => canViewPayroll(ctx),
-      canManageCompany: () => canManageCompany(ctx),
-      canApproveLeave: () => canApproveLeave(ctx),
-      canViewCompanyReports: () => canViewCompanyReports(ctx),
-      isOrgOwner: Boolean(ctx?.isOrgOwner),
-      businessType: ctx?.businessType ?? null,
-      posEnabled: businessTypeIncludesPos(ctx?.businessType),
-      showBusinessDashboard: showBusinessOwnerDashboard(ctx),
-      canCreateDocumentType: (typeKey) => canCreateDocumentType(ctx, typeKey),
-      canApproveDocument: (docType, docOwnerUserId) =>
-        canApproveDocument(ctx, docType, docOwnerUserId),
-      dataScope: dataScopeForContext(ctx),
-      refresh,
-    }),
+    () => companyContextValue({ loading, error, ctx, hasPermission, refresh }),
     [loading, error, ctx, hasPermission, refresh]
   );
 

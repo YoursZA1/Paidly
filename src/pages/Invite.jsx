@@ -13,7 +13,8 @@ import {
 import { validatePublicInviteToken } from "@/services/CompanyInvitesService";
 import { formatPosTillInviteCode, normalizePosTillInviteCode } from "@shared/posTillInviteCode.js";
 import { isPosInviteDest, POS_JOB_FUNCTION, posJoinPath, posTillPath, posAccessPath } from "@shared/posStaffInvite.js";
-import { invitePublicErrorMessage } from "@shared/companyInviteMessages.js";
+import { invitePublicErrorMessage, posInvitePublicErrorMessage } from "@shared/companyInviteMessages.js";
+import { activatePosInvite } from "@/lib/pos/posAccessClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { JOB_FUNCTION_LABELS } from "@/lib/companyJobFunctions";
 import { COMPANY_ROLE_LABELS } from "@/lib/companyPermissions";
@@ -85,11 +86,21 @@ export default function InvitePage() {
       try {
         const data = await validatePublicInviteToken(token);
         if (!cancelled) {
-          storePendingInviteToken(token);
+          const isPos =
+            backupJoin ||
+            isPosInvitePath(location.pathname) ||
+            isPosInviteDest(searchParams.get("next")) ||
+            String(data?.source || "").toLowerCase() === "pos" ||
+            String(data?.job_function || "").toLowerCase() === POS_JOB_FUNCTION ||
+            data?.pos_only === true;
+          if (!isPos) storePendingInviteToken(token);
           setInvite(data);
         }
       } catch (e) {
-        if (!cancelled) setError(e?.message || String(e));
+        if (!cancelled) {
+          const posPath = backupJoin || isPosInvitePath(location.pathname);
+          setError(posPath ? posInvitePublicErrorMessage("expired") : e?.message || String(e));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -113,21 +124,17 @@ export default function InvitePage() {
   const invitedEmail = String(invite?.email || "").trim().toLowerCase();
   const signedIn = Boolean(authUserId || user?.id);
   const emailMismatch = signedIn && invitedEmail && sessionEmail && !emailsMatch(sessionEmail, invitedEmail);
-  const alreadyUsed =
-    Boolean(error) &&
-    /already been accepted|no longer active|already belong/i.test(String(error));
 
   const goToPos = (result) => {
     lockTillFromInvite(result, invite);
     clearCompanyAccessContextCache();
-    const registerId = result?.register_id || invite?.register_id;
+    const registerId = result?.register?.id || result?.register_id || invite?.register_id;
     navigate(registerId ? posTillPath(registerId) : posAccessPath(), { replace: true });
   };
 
   const continueToSignup = () => {
     const email = invite?.email ? `&email=${encodeURIComponent(invite.email)}` : "";
-    const next = posInviteCopy ? "&next=POS" : "";
-    navigate(`${createPageUrl("Signup")}?invite=1${email}${next}`);
+    navigate(`${createPageUrl("Signup")}?invite=1${email}`);
   };
 
   const submitCode = (event) => {
@@ -144,17 +151,20 @@ export default function InvitePage() {
   const handleAccept = async () => {
     if (!token || !invite) return;
     if (emailMismatch) {
-      setAcceptError(invitePublicErrorMessage("email_mismatch"));
+      setAcceptError(
+        posInviteCopy ? posInvitePublicErrorMessage("email_mismatch") : invitePublicErrorMessage("email_mismatch")
+      );
       return;
     }
     setAccepting(true);
     setAcceptError(null);
     try {
-      const result = await acceptPendingInviteToken(token);
       if (posInviteCopy) {
+        const result = await activatePosInvite(token);
         goToPos(result);
         return;
       }
+      const result = await acceptPendingInviteToken(token);
       navigate(
         resolveCompanyHomePath({
           companyId: result?.org_id || "joined",
@@ -166,11 +176,7 @@ export default function InvitePage() {
       );
     } catch (e) {
       const message = e?.message || invitePublicErrorMessage("not_found");
-      if (posInviteCopy && /already been accepted|already belong/i.test(message)) {
-        goToPos(null);
-        return;
-      }
-      setAcceptError(message);
+      setAcceptError(posInviteCopy ? posInvitePublicErrorMessage("expired") : message);
     } finally {
       setAccepting(false);
     }
@@ -178,20 +184,15 @@ export default function InvitePage() {
 
   useEffect(() => {
     if (authLoading || loading || activateOnceRef.current) return;
-    if (posInviteCopy && alreadyUsed && signedIn && !emailMismatch) {
-      activateOnceRef.current = true;
-      goToPos(null);
-      return;
-    }
-    if (!posInviteCopy || !invite || !token || !signedIn || emailMismatch) return;
+    if (posInviteCopy) return;
+    if (!invite || !token || !signedIn || emailMismatch) return;
     activateOnceRef.current = true;
     void handleAccept();
-    // handleAccept reads latest invite/token; run once per validated invite.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, loading, invite, token, signedIn, emailMismatch, posInviteCopy, alreadyUsed]);
+  }, [authLoading, loading, invite, token, signedIn, emailMismatch, posInviteCopy]);
 
   const showJoinForm = backupJoin && !invite && !loading && !token;
-  const waitingOnAuth = Boolean(invite) && authLoading;
+  const waitingOnAuth = Boolean(invite) && authLoading && !posInviteCopy;
   const roleLabel =
     COMPANY_ROLE_LABELS[String(invite?.role || "").toLowerCase()] || invite?.role || "Employee";
   const functionLabel = posInviteCopy
@@ -206,13 +207,15 @@ export default function InvitePage() {
             <Store className="size-8 text-primary-foreground" />
           </div>
           <CardTitle className="font-display text-2xl font-bold">
-            {posInviteCopy || showJoinForm ? "You're invited to Paidly POS" : "You're invited to Paidly"}
+            {posInviteCopy || showJoinForm ? "POS Access" : "You're invited to Paidly"}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             {showJoinForm
               ? "Enter the backup device code from your manager to activate this till."
               : posInviteCopy
-                ? "Opening Paidly POS on your assigned till. POS-only — not the dashboard, invoices, clients, reports, or settings."
+                ? invite?.company_name
+                  ? `You've been invited to use the POS for ${invite.company_name}.`
+                  : "You've been invited to use the POS."
                 : "Join your team on Paidly with the role assigned by your administrator."}
           </p>
         </CardHeader>
@@ -247,13 +250,13 @@ export default function InvitePage() {
           {(loading || waitingOnAuth || accepting) && (
             <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              {accepting || (invite && signedIn && !emailMismatch)
+              {accepting
                 ? "Activating POS…"
                 : "Verifying invitation…"}
             </div>
           )}
 
-          {!loading && !waitingOnAuth && error && !showJoinForm && !(alreadyUsed && posInviteCopy && signedIn) && (
+          {!loading && !waitingOnAuth && error && !showJoinForm && (
             <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
               <AlertCircle className="size-5 shrink-0" />
               <span>{error}</span>
@@ -298,7 +301,7 @@ export default function InvitePage() {
           {emailMismatch ? (
             <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
               <AlertCircle className="size-5 shrink-0" />
-              <span>{invitePublicErrorMessage("email_mismatch")}</span>
+              <span>{posInviteCopy ? posInvitePublicErrorMessage("email_mismatch") : invitePublicErrorMessage("email_mismatch")}</span>
             </div>
           ) : null}
 
@@ -309,13 +312,13 @@ export default function InvitePage() {
             </div>
           ) : null}
 
-          {!loading && !waitingOnAuth && invite && signedIn && !emailMismatch && !accepting ? (
+          {!loading && !waitingOnAuth && invite && (!posInviteCopy ? signedIn && !emailMismatch : !emailMismatch) && !accepting ? (
             <Button type="button" onClick={() => void handleAccept()} disabled={accepting} className="h-12 w-full">
-              {posInviteCopy ? "Open Paidly POS" : "Accept invitation"}
+              {posInviteCopy ? "Continue to POS" : "Accept invitation"}
             </Button>
           ) : null}
 
-          {!loading && !waitingOnAuth && invite && !signedIn && (
+          {!loading && !waitingOnAuth && invite && !signedIn && !posInviteCopy && (
             <>
               <Button type="button" onClick={continueToSignup} className="h-12 w-full">
                 {posInviteCopy ? "Open Paidly POS" : "Create account"}
@@ -335,7 +338,7 @@ export default function InvitePage() {
             </>
           )}
 
-          {!invite && !showJoinForm && !loading && !waitingOnAuth ? (
+          {!invite && !showJoinForm && !loading && !waitingOnAuth && !posInviteCopy ? (
             <Button
               type="button"
               variant="outline"

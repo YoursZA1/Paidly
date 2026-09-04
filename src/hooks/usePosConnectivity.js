@@ -8,6 +8,7 @@ import {
   posServerWriteAllowed,
   POS_CONNECTIVITY,
 } from "@/lib/pos/posConnectivity";
+import { getPosAccessToken } from "@/lib/pos/posAccessClient";
 
 function subscribeNavigatorOnline(onStoreChange) {
   if (typeof window === "undefined") return () => {};
@@ -30,7 +31,9 @@ export function usePosConnectivity() {
     () => true
   );
   const connectionStatus = useConnectionStore((s) => s.status) || CONNECTION_STATUS.CONNECTED;
-  const sessionStatus = useSessionHealthStore((s) => s.status) || SESSION_STATUS.CONNECTED;
+  const sessionHealth = useSessionHealthStore((s) => s.status) || SESSION_STATUS.CONNECTED;
+  const posPassActive = Boolean(getPosAccessToken());
+  const sessionStatus = posPassActive ? SESSION_STATUS.CONNECTED : sessionHealth;
 
   const state = derivePosConnectivity({
     navigatorOnline,

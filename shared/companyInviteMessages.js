@@ -12,6 +12,9 @@ export const INVITE_ACCEPT_ERRORS = Object.freeze({
   already_member: "You already belong to this business.",
 });
 
+export const POS_INVITE_INVALID =
+  "This POS invitation has expired or is no longer valid. Please ask your manager to send you a new invitation.";
+
 /**
  * @param {string | null | undefined} code
  * @param {string | null | undefined} [status]
@@ -31,4 +34,16 @@ export function invitePublicErrorMessage(code, status) {
   if (reason === "missing_token") return INVITE_ACCEPT_ERRORS.missing_token;
   if (reason === "already_member") return INVITE_ACCEPT_ERRORS.already_member;
   return INVITE_ACCEPT_ERRORS.not_found;
+}
+
+/**
+ * POS access-pass errors. Expired/revoked/consumed invites never open the till.
+ * @param {string | null | undefined} code
+ * @param {string | null | undefined} [status]
+ */
+export function posInvitePublicErrorMessage(code, _status) {
+  const reason = String(code || "").trim().toLowerCase();
+  if (reason === "email_mismatch") return INVITE_ACCEPT_ERRORS.email_mismatch;
+  if (reason === "missing_token") return INVITE_ACCEPT_ERRORS.missing_token;
+  return POS_INVITE_INVALID;
 }

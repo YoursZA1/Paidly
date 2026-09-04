@@ -8,7 +8,7 @@ import {
 } from "../../server/src/companyInviteAppUrl.js";
 import { interpretResendSendResult } from "../../server/src/sendInvoice.js";
 import { companyInvitePath, isPosStaffInviteRequest } from "@shared/posStaffInvite.js";
-import { invitePublicErrorMessage } from "@shared/companyInviteMessages.js";
+import { invitePublicErrorMessage, posInvitePublicErrorMessage } from "@shared/companyInviteMessages.js";
 
 describe("public invite origin", () => {
   it("skips localhost and Vercel previews in production", () => {
@@ -79,6 +79,11 @@ describe("invite public errors", () => {
     expect(invitePublicErrorMessage("revoked")).toMatch(/revoked/i);
     expect(invitePublicErrorMessage("expired")).toMatch(/expired/i);
     expect(invitePublicErrorMessage("not_pending", "accepted")).toMatch(/already been accepted/i);
+  });
+
+  it("keeps POS access-pass errors distinct from company invite copy", () => {
+    expect(posInvitePublicErrorMessage("expired")).toMatch(/manager to send you a new invitation/i);
+    expect(invitePublicErrorMessage("expired")).not.toBe(posInvitePublicErrorMessage("expired"));
   });
 });
 

@@ -28,11 +28,12 @@ function isOriginAllowed(origin) {
 export function applyApiCors(
   req,
   res,
-  { methods = "POST, OPTIONS", headers = "Content-Type, Authorization" } = {}
+  { methods = "POST, OPTIONS", headers = "Content-Type, Authorization", credentials = false } = {}
 ) {
   const origin = req.headers?.origin;
   if (origin && isOriginAllowed(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
+    if (credentials) res.setHeader("Access-Control-Allow-Credentials", "true");
   }
   res.setHeader("Access-Control-Allow-Methods", methods);
   res.setHeader("Access-Control-Allow-Headers", headers);

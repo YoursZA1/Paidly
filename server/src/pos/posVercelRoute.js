@@ -74,6 +74,9 @@ export function resolvePosRoute(req) {
   const second = parts[1] || "";
   const third = parts[2] || "";
 
+  if (head === "invite-activate") return { route: "invite-activate" };
+  if (head === "access-end") return { route: "access-end" };
+  if (head === "access") return { route: "access" };
   if (head === "oauth-status") return { route: "oauth-status" };
   if (head === "oauth-square-start") return { route: "oauth-square-start" };
   if (head === "oauth-square-callback") return { route: "oauth-square-callback" };
@@ -152,6 +155,15 @@ export function resolvePosRoute(req) {
     return { route: "webhook", token: webhookMatch[1] };
   }
 
+  if (urlPath.endsWith("/invite-activate") || /\/invite-activate$/i.test(urlPath)) {
+    return { route: "invite-activate" };
+  }
+  if (urlPath.endsWith("/access-end") || /\/access-end$/i.test(urlPath)) {
+    return { route: "access-end" };
+  }
+  if (urlPath.endsWith("/access") || /\/access$/i.test(urlPath)) {
+    return { route: "access" };
+  }
   if (urlPath.includes("/oauth/square/start") || urlPath.endsWith("/oauth-square-start")) {
     return { route: "oauth-square-start" };
   }

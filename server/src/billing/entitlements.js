@@ -47,8 +47,12 @@ const ENTITLEMENT_SELECT_RICH =
 const ENTITLEMENT_SELECT_LEAN =
   "id, status, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, updated_at, created_at";
 
-export async function resolveEntitlement(supabase, userId) {
-  const companyId = await resolveUserCompanyId(supabase, userId);
+export async function resolveEntitlementForCompany(supabase, companyId) {
+  return resolveEntitlement(supabase, null, companyId);
+}
+
+export async function resolveEntitlement(supabase, userId, knownCompanyId = null) {
+  const companyId = knownCompanyId || (userId ? await resolveUserCompanyId(supabase, userId) : null);
   const now = new Date();
 
   const run = (cols) => {
@@ -57,7 +61,9 @@ export async function resolveEntitlement(supabase, userId) {
       .select(cols)
       .order("updated_at", { ascending: false })
       .limit(10);
-    return companyId ? query.eq("company_id", companyId) : query.eq("user_id", userId);
+    if (companyId) return query.eq("company_id", companyId);
+    if (userId) return query.eq("user_id", userId);
+    return query.eq("company_id", "00000000-0000-0000-0000-000000000000");
   };
 
   let { data: rows, error } = await run(ENTITLEMENT_SELECT_RICH);

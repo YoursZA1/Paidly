@@ -12,7 +12,9 @@ import { getWebhookPublicUrl } from "./posWebhookAuth.js";
 import { attachRefundStateToSales } from "./posReturnMath.js";
 import { decryptPosSecret } from "./posSecretCrypto.js";
 import { requirePosCapability, orgHasPosCapability } from "./posBusinessType.js";
-import { requirePosPlan } from "./posEntitlement.js";
+import { requirePosPlan, requirePosPlanForOrg } from "./posEntitlement.js";
+import { resolvePosAccessGate } from "./posInviteActivate.js";
+import { POS_ACCESS_BEARER_PREFIX } from "../../../shared/posStaffInvite.js";
 import { deleteYocoWebhook } from "./yocoConnect.js";
 
 function jsonError(res, status, message, extra = {}) {
@@ -282,19 +284,39 @@ export async function handlePosConnectionDelete(req, res) {
 }
 
 export async function requireOrgMember(req, res) {
-  const { user, error: authErr } = await getUserFromRequest(req);
-  if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
+  const authHeader = String(req?.headers?.authorization || req?.headers?.Authorization || "");
+  const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
+  const bearerIsPosAccess = bearer.toLowerCase().startsWith(POS_ACCESS_BEARER_PREFIX);
 
-  const membership = await loadCompanyMembership(supabaseAdmin, user.id);
-  if (!membership) {
-    return { ok: false, response: jsonError(res, 403, "No company membership") };
+  if (!bearerIsPosAccess) {
+    const { user } = await getUserFromRequest(req);
+    if (user) {
+      const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+      if (membership) return { ok: true, user, membership };
+    }
   }
 
-  return { ok: true, user, membership };
+  const posGate = await resolvePosAccessGate(req);
+  if (posGate.ok) return posGate;
+  if (posGate.invalid) {
+    return {
+      ok: false,
+      response: jsonError(res, posGate.status || 401, posGate.error || "Unauthorized", {
+        code: posGate.code,
+      }),
+    };
+  }
+
+  if (!bearerIsPosAccess) {
+    const { error: authErr } = await getUserFromRequest(req);
+    return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
+  }
+  return { ok: false, response: jsonError(res, 401, "Unauthorized") };
 }
 
 /**
- * Org membership plus a company-role POS grant. Same Auth session — not a second login.
+ * Org membership plus a company-role POS grant.
+ * Accepts a Paidly Auth session or a scoped POS access-pass session.
  */
 export async function requirePosPermission(req, res, permission) {
   const gate = await requireOrgMember(req, res);
@@ -308,7 +330,11 @@ export async function requirePosPermission(req, res, permission) {
       }),
     };
   }
-  if (!(await requirePosPlan(req, res))) {
+  if (gate.posAccess) {
+    if (!(await requirePosPlanForOrg(res, gate.membership.orgId))) {
+      return { ok: false, response: res };
+    }
+  } else if (!(await requirePosPlan(req, res))) {
     return { ok: false, response: res };
   }
   if (!(await requirePosCapability(res, gate.membership.orgId))) {

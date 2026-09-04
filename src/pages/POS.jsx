@@ -61,10 +61,10 @@ function PosBusinessTypeLock({ posOnlyStaff = false }) {
   );
 }
 
-export default function POS({ requestedTillId = null } = {}) {
+export default function POS({ requestedTillId = null, posPass = false } = {}) {
   const { profile, authReady } = useAuth();
   const { loading, posEnabled, isOrgOwner, companyRole, jobFunction } = useCompanyContext();
-  const posOnlyStaff = isPosOnlyStaff({ isOrgOwner, companyRole, jobFunction });
+  const posOnlyStaff = posPass || isPosOnlyStaff({ isOrgOwner, companyRole, jobFunction });
   const userPlan = useMemo(
     () => profile?.subscription_plan || profile?.plan || "starter",
     [profile]

@@ -37,6 +37,11 @@ import {
   handlePosOAuthStatus,
 } from "../../server/src/pos/posOAuthRoutes.js";
 import { resolvePosRoute } from "../../server/src/pos/posVercelRoute.js";
+import {
+  handlePosInviteActivate,
+  handlePosAccessGet,
+  handlePosAccessEnd,
+} from "../../server/src/pos/posInviteActivate.js";
 
 /**
  * Vercel: one extra segment reaches this file (`/api/pos/registers`).
@@ -64,6 +69,7 @@ export default async function handler(req, res) {
   applyApiCors(req, res, {
     methods: "GET, POST, PATCH, DELETE, OPTIONS",
     headers: "Content-Type, Authorization",
+    credentials: true,
   });
   if (req.method === "OPTIONS") return res.status(200).end();
 
@@ -84,6 +90,24 @@ export default async function handler(req, res) {
   if (resolved.route === "oauth-status") {
     if (req.method === "GET") return handlePosOAuthStatus(req, res);
     res.setHeader("Allow", "GET, OPTIONS");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (resolved.route === "invite-activate") {
+    if (req.method === "POST") return handlePosInviteActivate(req, res);
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (resolved.route === "access") {
+    if (req.method === "GET") return handlePosAccessGet(req, res);
+    res.setHeader("Allow", "GET, OPTIONS");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (resolved.route === "access-end") {
+    if (req.method === "POST") return handlePosAccessEnd(req, res);
+    res.setHeader("Allow", "POST, OPTIONS");
     return res.status(405).json({ error: "Method not allowed" });
   }
 

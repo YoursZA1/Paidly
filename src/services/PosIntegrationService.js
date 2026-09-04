@@ -4,14 +4,30 @@
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequest } from "@/utils/apiRequest";
+import { posApiFetch, posAuthHeaders } from "@/lib/pos/posAccessClient";
 
 async function authHeaders({ includeJsonContentType = true } = {}) {
-  const session = await getStableSession();
-  const token = session?.access_token;
-  if (!token) throw new Error("Not authenticated");
-  const headers = { Authorization: `Bearer ${token}` };
-  if (includeJsonContentType) headers["Content-Type"] = "application/json";
+  const headers = await posAuthHeaders({ includeJsonContentType });
+  if (!headers.Authorization) throw new Error("Not authenticated");
   return headers;
+}
+
+async function posServiceRequest(url, init = {}) {
+  const headers = await authHeaders({
+    includeJsonContentType: Boolean(init.body),
+  });
+  const merged = {
+    credentials: "include",
+    ...init,
+    headers: { ...headers, ...(init.headers || {}) },
+  };
+  try {
+    const session = await getStableSession();
+    if (session?.access_token) return apiRequest(url, merged);
+  } catch {
+    /* POS access-pass has no Paidly Auth JWT */
+  }
+  return posApiFetch(url, merged);
 }
 
 function parseApiJsonError(res, raw, fallbackMessage) {
@@ -48,7 +64,7 @@ export const POS_PROVIDERS = [
 
 export async function listPosConnections() {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/connections`, { headers });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/connections`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load POS connections");
   return Array.isArray(json.connections) ? json.connections : [];
@@ -59,7 +75,7 @@ export async function listPosConnections() {
  */
 export async function createPosConnection(payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/connections`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/connections`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -77,7 +93,7 @@ export async function createPosConnection(payload) {
  */
 export async function updatePosConnection(connectionId, updates) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/connections/${encodeURIComponent(connectionId)}`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/connections/${encodeURIComponent(connectionId)}`, {
     method: "PATCH",
     headers,
     body: JSON.stringify(updates),
@@ -88,7 +104,7 @@ export async function updatePosConnection(connectionId, updates) {
 
 export async function deletePosConnection(connectionId) {
   const headers = await authHeaders({ includeJsonContentType: false });
-  const res = await apiRequest(`${apiBase()}/api/pos/connections/${encodeURIComponent(connectionId)}`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/connections/${encodeURIComponent(connectionId)}`, {
     method: "DELETE",
     headers,
   });
@@ -105,7 +121,7 @@ export async function listPosSales(opts = {}) {
   if (opts.limit) params.set("limit", String(opts.limit));
   if (opts.today) params.set("today", "1");
   const qs = params.toString() ? `?${params.toString()}` : "";
-  const res = await apiRequest(`${apiBase()}/api/pos/sales${qs}`, { headers });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/sales${qs}`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load POS sales");
   return {
@@ -116,7 +132,7 @@ export async function listPosSales(opts = {}) {
 
 export async function fetchPosSaleAudit(saleId) {
   const headers = await authHeaders({ includeJsonContentType: false });
-  const res = await apiRequest(`${apiBase()}/api/pos/sales/${encodeURIComponent(saleId)}/audit`, { headers });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/sales/${encodeURIComponent(saleId)}/audit`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load POS audit");
   return Array.isArray(json.events) ? json.events : [];
@@ -125,7 +141,7 @@ export async function fetchPosSaleAudit(saleId) {
 export async function fetchPosCatalog({ registerId } = {}) {
   const headers = await authHeaders();
   const qs = registerId ? `?register_id=${encodeURIComponent(registerId)}` : "";
-  const res = await apiRequest(`${apiBase()}/api/pos/catalog${qs}`, { headers });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/catalog${qs}`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load POS catalog");
   return Array.isArray(json.products) ? json.products : [];
@@ -133,7 +149,7 @@ export async function fetchPosCatalog({ registerId } = {}) {
 
 export async function listPosRegisters() {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/registers`, { headers });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/registers`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load registers");
   return {
@@ -147,7 +163,7 @@ export async function listPosRegisters() {
  */
 export async function createPosRegister(payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/registers`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/registers`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -162,7 +178,7 @@ export async function createPosRegister(payload) {
  */
 export async function updatePosRegister(registerId, updates) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/registers/${encodeURIComponent(registerId)}`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/registers/${encodeURIComponent(registerId)}`, {
     method: "PATCH",
     headers,
     body: JSON.stringify(updates),
@@ -173,7 +189,7 @@ export async function updatePosRegister(registerId, updates) {
 
 export async function disablePosRegister(registerId) {
   const headers = await authHeaders({ includeJsonContentType: false });
-  const res = await apiRequest(`${apiBase()}/api/pos/registers/${encodeURIComponent(registerId)}`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/registers/${encodeURIComponent(registerId)}`, {
     method: "DELETE",
     headers,
   });
@@ -191,7 +207,7 @@ export async function listPosSessions(opts = {}) {
   if (opts.status) params.set("status", String(opts.status));
   if (opts.limit) params.set("limit", String(opts.limit));
   const qs = params.toString() ? `?${params.toString()}` : "";
-  const res = await apiRequest(`${apiBase()}/api/pos/sessions${qs}`, { headers });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/sessions${qs}`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load POS sessions");
   return Array.isArray(json.sessions) ? json.sessions : [];
@@ -199,7 +215,7 @@ export async function listPosSessions(opts = {}) {
 
 export async function getPosSession(sessionId) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/sessions/${encodeURIComponent(sessionId)}`, { headers });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/sessions/${encodeURIComponent(sessionId)}`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load POS session");
   return json.session || null;
@@ -210,7 +226,7 @@ export async function getPosSession(sessionId) {
  */
 export async function openPosSession(payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/sessions`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/sessions`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -226,7 +242,7 @@ export async function openPosSession(payload) {
  */
 export async function closePosSession(sessionId, payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/sessions/${encodeURIComponent(sessionId)}/close`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/sessions/${encodeURIComponent(sessionId)}/close`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -255,7 +271,7 @@ export async function closePosSession(sessionId, payload) {
  */
 export async function checkoutPosSale(payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/checkout`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/checkout`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -275,7 +291,7 @@ export async function checkoutPosSale(payload) {
  */
 export async function returnPosSale(payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/return`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/return`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -290,7 +306,7 @@ export async function returnPosSale(payload) {
  */
 export async function convertPosSaleToInvoice(payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/invoice`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/invoice`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -308,7 +324,7 @@ export async function convertPosSaleToInvoice(payload) {
  */
 export async function emailPosReceipt(payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/receipt/email`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/receipt/email`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -333,14 +349,14 @@ export function buildGenericWebhookExample() {
 
 export async function getPosOAuthStatus() {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/oauth/status`, { headers });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/oauth/status`, { headers });
   const raw = await res.text().catch(() => "");
   return parseApiJsonError(res, raw, "Could not load POS OAuth status");
 }
 
 export async function startSquareOAuthConnect() {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/oauth/square/start`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/oauth/square/start`, {
     method: "POST",
     headers,
   });
@@ -353,7 +369,7 @@ export async function startSquareOAuthConnect() {
  */
 export async function connectYocoPos(payload) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/pos/oauth/yoco/connect`, {
+  const res = await posServiceRequest(`${apiBase()}/api/pos/oauth/yoco/connect`, {
     method: "POST",
     headers,
     body: JSON.stringify({

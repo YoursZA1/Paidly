@@ -38,6 +38,9 @@ describe("resolvePosRoute", () => {
 
   it("resolves vercel.json one-segment aliases", () => {
     expect(resolvePosRoute(req({ path: "oauth-status" }))).toEqual({ route: "oauth-status" });
+    expect(resolvePosRoute(req({ path: "invite-activate" }))).toEqual({ route: "invite-activate" });
+    expect(resolvePosRoute(req({ path: "access" }))).toEqual({ route: "access" });
+    expect(resolvePosRoute(req({ path: "access-end" }))).toEqual({ route: "access-end" });
     expect(resolvePosRoute(req({ path: "receipt-email" }))).toEqual({ route: "receipt-email" });
     expect(resolvePosRoute(req({ path: "sale-audit", query: { id: "sale-1" } }))).toEqual({
       route: "sale-audit",
