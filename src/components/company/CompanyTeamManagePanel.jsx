@@ -8,7 +8,9 @@ import {
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { listCompanyMembers } from "@/services/CompanyContextService";
 import {
+  createWorkforceEmployee,
   inviteCompanyMember,
+  listWorkforceEmployees,
   updateCompanyMember,
   updateCompanyMemberDirect,
   INVITE_ROLES,
@@ -46,6 +48,7 @@ export default function CompanyTeamManagePanel() {
   const [inviteRole, setInviteRole] = useState("employee");
   const [inviteJobFunction, setInviteJobFunction] = useState("sales");
   const [inviteRegisterId, setInviteRegisterId] = useState("");
+  const [department, setDepartment] = useState("");
   const [registers, setRegisters] = useState([]);
   const [inviting, setInviting] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
@@ -59,7 +62,17 @@ export default function CompanyTeamManagePanel() {
     if (!ctx) return;
     setLoading(true);
     try {
-      const rows = await listCompanyMembers(ctx);
+      let rows = [];
+      try {
+        rows = (await listWorkforceEmployees()).map((row) => ({
+          ...row,
+          company_role: row.company_role || row.role,
+          role_label: row.role_label || row.role,
+          user_id: row.user_id || null,
+        }));
+      } catch {
+        rows = await listCompanyMembers(ctx);
+      }
       setMembers(rows);
     } catch (e) {
       toast({
@@ -110,13 +123,50 @@ export default function CompanyTeamManagePanel() {
     }
     setInviting(true);
     try {
+      if (!posOnlyInvite) {
+        const result = await createWorkforceEmployee({
+          email,
+          fullName,
+          role: inviteRole,
+          jobFunction: showJobFunctionOnInvite ? inviteJobFunction : "general",
+          department,
+        });
+        if (result?.data?.mode === "invited" || result?.data?.invite_link) {
+          setInviteNotice({
+            inviteId: null,
+            email,
+            invitedName: fullName.trim() || null,
+            inviteLink: result.data.invite_link || "",
+            inviteCode: null,
+            emailSent: Boolean(result.data.invite_link),
+            emailError: null,
+            posOnly: false,
+            role: inviteRole,
+            jobFunction: inviteJobFunction,
+            registerName: null,
+            registerId: null,
+            expiresAt: null,
+            reused: result.data.mode === "existing_member",
+          });
+        } else {
+          toast({
+            title: "Employee added",
+            description: `${email} is provisioned for payroll and leave.`,
+          });
+        }
+        setEmail("");
+        setFullName("");
+        setDepartment("");
+        await reload();
+        return;
+      }
       const result = await inviteCompanyMember({
         email,
         fullName,
         role: inviteRole,
         jobFunction: showJobFunctionOnInvite ? inviteJobFunction : "general",
-        source: posOnlyInvite ? POS_INVITE_SOURCE : undefined,
-        registerId: posOnlyInvite ? inviteRegisterId : undefined,
+        source: POS_INVITE_SOURCE,
+        registerId: inviteRegisterId,
       });
       if (result.mode === "email_invite") {
         const selectedTill = registers.find((row) => row.id === inviteRegisterId);
@@ -224,10 +274,14 @@ export default function CompanyTeamManagePanel() {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <UserPlus className="h-4 w-4 text-muted-foreground" />
-          Invite team member
+          Add employee
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        <p className="text-sm text-muted-foreground">
+          Creates the employee record, provisions payroll and leave, and sends a portal invite.
+          POS-only staff still use a till invite.
+        </p>
         <form onSubmit={handleInvite} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="company-invite-email">Email</Label>
@@ -238,6 +292,15 @@ export default function CompanyTeamManagePanel() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="employee@company.com"
               required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="company-invite-department">Department</Label>
+            <Input
+              id="company-invite-department"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              placeholder="Optional"
             />
           </div>
           <div className="space-y-2">
@@ -320,7 +383,7 @@ export default function CompanyTeamManagePanel() {
           <div className="flex items-end sm:col-span-2 lg:col-span-5">
             <Button type="submit" disabled={inviting} className="gap-2">
               <UserPlus className="h-4 w-4" />
-              {inviting ? "Sending…" : "Send invite"}
+              {inviting ? "Saving…" : posOnlyInvite ? "Send POS invite" : "Add employee"}
             </Button>
           </div>
         </form>
@@ -328,7 +391,7 @@ export default function CompanyTeamManagePanel() {
         <div>
           <div className="mb-3 flex items-center gap-2 text-sm font-medium">
             <Users className="h-4 w-4 text-muted-foreground" />
-            Team directory
+            People
           </div>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading team…</p>
@@ -336,7 +399,7 @@ export default function CompanyTeamManagePanel() {
             <ul className="divide-y divide-border rounded-lg border border-border">
               {members.map((m) => (
                 <li
-                  key={m.user_id}
+                  key={m.id || m.user_id}
                   className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
                 >
                   <div>
@@ -344,11 +407,15 @@ export default function CompanyTeamManagePanel() {
                     {m.email ? (
                       <p className="text-sm text-muted-foreground">{m.email}</p>
                     ) : null}
-                    {m.role_label ? (
-                      <p className="text-xs text-muted-foreground mt-0.5">{m.role_label}</p>
-                    ) : null}
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {[m.employee_number, m.role_label || m.role, m.department, m.portal_status === "invited" ? "Invite pending" : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
                   </div>
-                  {m.user_id === authUserId ? (
+                  {!m.user_id ? (
+                    <span className="text-xs text-muted-foreground">Invite pending</span>
+                  ) : m.user_id === authUserId ? (
                     <span className="text-xs text-muted-foreground">You</span>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2">

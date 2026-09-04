@@ -4,7 +4,6 @@ import { getUserFromRequest } from "./supabaseAuth.js";
 import { normalizeRequestBody } from "./validateBody.js";
 import {
   loadCompanyMembership,
-  companyRoleHasPermission,
   membershipHasPermission,
   normalizeCompanyRole,
   normalizeJobFunction,
@@ -267,7 +266,7 @@ async function requireCompanyAdmin(req, res) {
     if (!membership) {
       return { ok: false, response: jsonError(res, 403, "No company membership") };
     }
-    if (!companyRoleHasPermission(membership.companyRole, PERMISSIONS.MANAGE_EMPLOYEES)) {
+    if (!membershipHasPermission(membership, PERMISSIONS.MANAGE_EMPLOYEES)) {
       return { ok: false, response: jsonError(res, 403, "Forbidden — company admin required") };
     }
     if (isPosOnlyStaff(membership)) {
@@ -412,6 +411,20 @@ export async function handleCompanyTeamInvite(req, res) {
           metadata: { mode: "existing_user", role, job_function: jobFunction },
         },
       });
+      const { data: createdMem } = await supabaseAdmin
+        .from("memberships")
+        .select("id")
+        .eq("org_id", gate.membership.companyId)
+        .eq("user_id", existingProfile.id)
+        .maybeSingle();
+      if (createdMem?.id) {
+        const { emitEmployeeCreatedForMembership } = await import("./workforce/employeeService.js");
+        await emitEmployeeCreatedForMembership(
+          gate.membership.companyId,
+          createdMem.id,
+          gate.user.id
+        ).catch((err) => console.warn("[workforce] provision after invite failed:", err?.message || err));
+      }
       return res.status(200).json({
         ok: true,
         mode: "existing_user",
@@ -1064,6 +1077,11 @@ export function registerCompanyTeamRoutes(app) {
   app.post("/api/company/invites/:id/resend", handleCompanyInviteResend);
   app.patch("/api/company/role", handleCompanyTeamRolePatch);
   app.get("/api/company/context", handleCompanyContextGet);
+  app.all("/api/company/employees", (req, res) => {
+    import("./workforce/workforceRoutes.js").then(({ handleWorkforceEmployees }) =>
+      handleWorkforceEmployees(req, res)
+    );
+  });
   // Legacy paths (bookmarks / older clients)
   app.post("/api/company/team/invite", handleCompanyTeamInvite);
   app.patch("/api/company/team/role", handleCompanyTeamRolePatch);

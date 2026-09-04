@@ -11,6 +11,7 @@ import { applyApiCors } from "../../server/src/auth/applyApiCors.js";
 import { normalizeRequestBody } from "../../server/src/validateBody.js";
 import { handlePayrollRoute, resolvePayrollRoute } from "../../server/src/payroll/payrollRoutes.js";
 import { handleLeaveRoute, resolveLeaveRoute } from "../../server/src/leave/leaveRoutes.js";
+import { handleWorkforceEmployees } from "../../server/src/workforce/workforceRoutes.js";
 
 /**
  * Vercel: /api/company/invite | /api/company/role | /api/company/context
@@ -77,6 +78,9 @@ export default async function handler(req, res) {
     const resolvedLeave = resolveLeaveRoute(req);
     if (!resolvedLeave) return res.status(404).json({ error: "Not found" });
     return handleLeaveRoute(req, res, resolvedLeave);
+  }
+  if (pathHead === "employees") {
+    return handleWorkforceEmployees(req, res);
   }
 
   const resolved = resolveCompanyRoute(req);

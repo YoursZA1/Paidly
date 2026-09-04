@@ -3,6 +3,7 @@ import {
   membershipGrantsPermission,
   POS_ONLY_PERMISSIONS,
 } from "@shared/posStaffInvite.js";
+import { jobFunctionExtraPermissions } from "@shared/workforcePermissions.js";
 
 /**
  * Company (org) permission system — permissions-based RBAC for tenant dashboards.
@@ -158,7 +159,14 @@ export function permissionsForMembership(membership) {
   if (isPosOnlyStaff(membership)) {
     return new Set(POS_ONLY_PERMISSIONS);
   }
-  return permissionsForCompanyRole(membership?.companyRole);
+  const grants = permissionsForCompanyRole(membership?.companyRole);
+  for (const extra of jobFunctionExtraPermissions(
+    membership?.jobFunction || membership?.job_function,
+    membership?.companyRole
+  )) {
+    grants.add(extra);
+  }
+  return grants;
 }
 
 export function membershipHasPermission(membership, permission) {

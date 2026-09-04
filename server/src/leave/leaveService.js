@@ -397,6 +397,24 @@ export async function decideLeaveRequest(orgId, actorId, requestId, { approve, r
     recordId: requestId,
     metadata: { reason: reason || null },
   });
+  try {
+    const { emitWorkforceEvent, WORKFORCE_EVENT_TYPES } = await import("../workforce/workforceEvents.js");
+    const { registerWorkforceSubscribers } = await import("../workforce/employeeProvisioning.js");
+    registerWorkforceSubscribers();
+    const membershipId = request.payroll_profiles?.membership_id || null;
+    await emitWorkforceEvent({
+      orgId,
+      employeeId: membershipId,
+      eventType: approve
+        ? WORKFORCE_EVENT_TYPES.EMPLOYEE_LEAVE_APPROVED
+        : WORKFORCE_EVENT_TYPES.EMPLOYEE_LEAVE_REJECTED,
+      actorId,
+      payload: { leave_request_id: requestId },
+      idempotencyKey: `leave:${requestId}:${approve ? "approved" : "rejected"}`,
+    });
+  } catch (err) {
+    console.warn("[workforce] leave event failed:", err?.message || err);
+  }
 
   const typeName = request.leave_types?.name || "Leave";
   if (request.user_id) {

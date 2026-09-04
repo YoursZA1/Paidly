@@ -1,3 +1,5 @@
+import { jobFunctionExtraPermissions, resolvePermissionAlias } from "./workforcePermissions.js";
+
 /**
  * POS-only staff with a Paidly account stay org members (Auth + memberships).
  * POS invites can also issue a scoped POS access-pass session without creating
@@ -172,5 +174,11 @@ export function isPosOnlyStaff(membership) {
  */
 export function membershipGrantsPermission(membership, permission, roleHasPermission) {
   if (isPosOnlyStaff(membership)) return posOnlyStaffHasPermission(permission);
-  return Boolean(roleHasPermission?.(membership?.companyRole, permission));
+  const resolved = resolvePermissionAlias(permission);
+  if (roleHasPermission?.(membership?.companyRole, resolved)) return true;
+  const extras = jobFunctionExtraPermissions(
+    membership?.jobFunction || membership?.job_function,
+    membership?.companyRole
+  );
+  return extras.includes(resolved);
 }

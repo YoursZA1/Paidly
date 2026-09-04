@@ -212,6 +212,24 @@ export async function payrollOverview(orgId) {
 
 export async function upsertPayrollProfile(orgId, actorId, payload) {
   const id = payload.id || null;
+  if (payload.org_id && payload.org_id !== orgId) {
+    const err = new Error("org_id cannot be supplied by the client");
+    err.status = 403;
+    throw err;
+  }
+  if (payload.membership_id) {
+    const { data: membership } = await supabaseAdmin
+      .from("memberships")
+      .select("id")
+      .eq("id", payload.membership_id)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (!membership?.id) {
+      const err = new Error("membership_id is not in your company");
+      err.status = 403;
+      throw err;
+    }
+  }
   const patch = {
     org_id: orgId,
     membership_id: payload.membership_id,

@@ -469,6 +469,24 @@ export default async function handler(req, res) {
         pendingExpiry: pending,
       });
     }
+    if (job === "workforce-events") {
+      const { registerWorkforceSubscribers } = await import(
+        "../server/src/workforce/employeeProvisioning.js"
+      );
+      const { retryFailedWorkforceEvents } = await import(
+        "../server/src/workforce/workforceEvents.js"
+      );
+      registerWorkforceSubscribers();
+      const out = await retryFailedWorkforceEvents({
+        limit: Math.max(1, Number(req.query?.limit || 25)),
+      });
+      return res.status(200).json({
+        ok: true,
+        at: new Date().toISOString(),
+        path: "workforce-events",
+        ...out,
+      });
+    }
     if (job === "subscription-pending-expiry") {
       const supabase = getSupabaseAdmin();
       const pending = await expirePendingSubscriptions(supabase);

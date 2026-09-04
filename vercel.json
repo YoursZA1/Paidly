@@ -81,6 +81,10 @@
       "destination": "/api/cron?job=admin-broadcast-email"
     },
     {
+      "source": "/api/cron/workforce-events",
+      "destination": "/api/cron?job=workforce-events"
+    },
+    {
       "source": "/api/public-invoice",
       "destination": "/api/public-share?doc=invoice&op=get"
     },

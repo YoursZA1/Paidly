@@ -1,5 +1,6 @@
 import { normalizeRequestBody } from "../validateBody.js";
 import { jsonError, requirePayrollPermission, PERMISSIONS } from "../payroll/payrollGate.js";
+import { membershipHasPermission } from "../companyRouteAccess.js";
 import {
   myLeave,
   applyForLeave,
@@ -79,10 +80,15 @@ export async function handleLeaveRoute(req, res, resolved) {
     });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
+    const requestedUserId = String(req.query?.user_id || "").trim();
+    const allowUserFilter =
+      membershipHasPermission(gate.membership, PERMISSIONS.VIEW_TEAM_LEAVE) &&
+      requestedUserId &&
+      requestedUserId === String(req.query?.user_id || "");
     return handle(res, () =>
       listLeaveRequests(gate.membership.companyId, {
         status: req.query?.status,
-        user_id: req.query?.user_id,
+        user_id: allowUserFilter ? requestedUserId : undefined,
         leave_type_id: req.query?.leave_type_id,
         department: req.query?.department,
       })

@@ -5,6 +5,7 @@ import { Users } from "lucide-react";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { listCompanyMembers } from "@/services/CompanyContextService";
+import { listWorkforceEmployees } from "@/services/CompanyTeamService";
 import CompanyTeamManagePanel from "@/components/company/CompanyTeamManagePanel";
 import CompanyInvitesPanel from "@/components/company/CompanyInvitesPanel";
 
@@ -25,7 +26,12 @@ export default function CompanyTeamMembersPanel() {
       setLoading(true);
       setError("");
       try {
-        const rows = await listCompanyMembers(ctx);
+        let rows = [];
+        try {
+          rows = await listWorkforceEmployees();
+        } catch {
+          rows = await listCompanyMembers(ctx);
+        }
         if (!cancelled) setMembers(rows);
       } catch (e) {
         if (!cancelled) setError(e?.message || String(e));
@@ -50,7 +56,7 @@ export default function CompanyTeamMembersPanel() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Users className="h-4 w-4 text-muted-foreground" />
-            Company directory
+            People
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -63,13 +69,20 @@ export default function CompanyTeamMembersPanel() {
           ) : (
             <ul className="divide-y divide-border rounded-lg border border-border">
               {members.map((m) => (
-                <li key={m.user_id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <li key={m.id || m.user_id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                   <div>
                     <p className="font-medium">{m.label}</p>
                     {m.email ? <p className="text-sm text-muted-foreground">{m.email}</p> : null}
+                    {m.employee_number || m.portal_status === "invited" ? (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {[m.employee_number, m.portal_status === "invited" ? "Invite pending" : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    ) : null}
                   </div>
                   <Badge variant="outline" className="capitalize">
-                    {m.role_label || m.company_role}
+                    {m.role_label || m.company_role || m.role}
                   </Badge>
                 </li>
               ))}

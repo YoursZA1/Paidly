@@ -61,6 +61,41 @@ async function authHeaders() {
  * Invite or attach an existing user to the company org with a role and job function.
  * @param {{ email: string, fullName?: string, role?: string, jobFunction?: string, source?: string, registerId?: string | null }} payload
  */
+export async function listWorkforceEmployees() {
+  const headers = await authHeaders();
+  const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
+  const res = await apiRequest(`${apiBase}/api/company/employees`, { method: "GET", headers });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not load employees");
+  return Array.isArray(json.data) ? json.data : [];
+}
+
+export async function createWorkforceEmployee({
+  email,
+  fullName,
+  role = COMPANY_ROLES.EMPLOYEE,
+  jobFunction = "general",
+  department,
+} = {}) {
+  const trimmed = String(email || "").trim().toLowerCase();
+  if (!trimmed) throw new Error("Email is required");
+  const headers = await authHeaders();
+  const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
+  const res = await apiRequest(`${apiBase}/api/company/employees`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      email: trimmed,
+      full_name: fullName?.trim() || null,
+      role: normalizeCompanyRole(role),
+      job_function: normalizeJobFunction(jobFunction),
+      department: department?.trim() || null,
+    }),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not create employee");
+}
+
 export async function inviteCompanyMember({
   email,
   fullName,
