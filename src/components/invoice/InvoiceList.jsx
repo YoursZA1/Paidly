@@ -1,5 +1,4 @@
-import React, { useRef, useCallback, useMemo } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import React, { useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,24 +9,18 @@ import InvoiceStatusBadge from "./InvoiceStatusBadge";
 import PartialPaymentIndicator from "../payments/PartialPaymentIndicator";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
-import { Eye, CheckCircle2, Pencil } from "lucide-react";
+import { CheckCircle2, Pencil } from "lucide-react";
 import { Invoice } from "@/api/entities";
 import { useToast } from "@/components/ui/use-toast";
-
-const ROW_HEIGHT = 64;
-const VIRTUAL_TABLE_MAX_HEIGHT = 480;
-const GRID_TEMPLATE = "minmax(0,2.8fr) minmax(110px,1fr) minmax(120px,0.95fr) minmax(120px,1fr) 160px";
+import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
+import { documentNumericClass, documentRowCellClass } from "@/lib/documentTableClasses";
+import { cn } from "@/lib/utils";
 
 const QuickActionButtons = React.memo(function QuickActionButtons({ invoice, onMarkPaid }) {
     const isPaid = ["paid", "cancelled"].includes(String(invoice?.status || "").toLowerCase());
     return (
-        <div className="flex items-center justify-end gap-1">
-            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
-                <Link to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)} aria-label="View invoice">
-                    <Eye className="h-4 w-4" />
-                </Link>
-            </Button>
-            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
+        <div className="flex items-center justify-end gap-0.5">
+            <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
                 <Link to={createPageUrl(`EditInvoice?id=${invoice.id}`)} aria-label="Edit invoice">
                     <Pencil className="h-4 w-4" />
                 </Link>
@@ -37,7 +30,7 @@ const QuickActionButtons = React.memo(function QuickActionButtons({ invoice, onM
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 rounded-lg text-emerald-600 hover:text-emerald-700"
+                    className="h-8 w-8 text-muted-foreground hover:text-status-paid"
                     onClick={() => onMarkPaid(invoice)}
                     aria-label="Mark invoice as paid"
                     title="Mark as paid"
@@ -49,39 +42,49 @@ const QuickActionButtons = React.memo(function QuickActionButtons({ invoice, onM
     );
 });
 
-const InvoiceRow = React.memo(function InvoiceRow({ invoice, virtualRow, getClientName, getTotalPaid, userCurrency, client, onActionSuccess, onPaymentFullyPaid, onOptimisticUpdate, onMarkPaid }) {
+const InvoiceRow = React.memo(function InvoiceRow({
+    invoice,
+    density,
+    getClientName,
+    getTotalPaid,
+    userCurrency,
+    client,
+    onActionSuccess,
+    onPaymentFullyPaid,
+    onOptimisticUpdate,
+    onMarkPaid,
+}) {
     const totalPaid = getTotalPaid(invoice.id);
     const clientName = getClientName(invoice.client_id);
-    const issuedDate = invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : "N/A";
+    const issuedDate = invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : "—";
+    const viewHref = createPageUrl(`ViewDocument/invoice/${invoice.id}`);
     return (
-        <TableRow
-            className="table-row group border-0 absolute inset-x-0 w-full invoice-list-row"
-            style={{
-                height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start}px)`,
-                top: 0,
-                display: "grid",
-                gridTemplateColumns: GRID_TEMPLATE,
-            }}
-        >
-            <TableCell className="invoice-col-main text-left min-w-0">
-                <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{clientName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{invoice.project_title || invoice.invoice_number}</p>
+        <TableRow className="group border-b border-border/40 hover:bg-muted/50">
+            <TableCell className={documentRowCellClass(density, "min-w-0 px-4")}>
+                <Link to={viewHref} className="block min-w-0 rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                    <p className="truncate text-sm font-medium text-foreground">{clientName}</p>
+                    <p className="truncate text-xs text-muted-foreground tabular-nums">
+                        {invoice.invoice_number || invoice.project_title || "—"}
+                    </p>
+                </Link>
+            </TableCell>
+            <TableCell className={documentRowCellClass(density, documentNumericClass("px-4 font-medium text-foreground"))}>
+                <div className="flex flex-col items-end gap-0.5">
+                    <span>{formatCurrency(invoice.total_amount, userCurrency)}</span>
+                    {totalPaid > 0 ? (
+                        <PartialPaymentIndicator invoice={invoice} totalPaid={totalPaid} currency={userCurrency} size="compact" />
+                    ) : null}
                 </div>
             </TableCell>
-            <TableCell className="amount invoice-col-amount font-semibold text-foreground text-xs sm:text-sm whitespace-nowrap">
-                {formatCurrency(invoice.total_amount, userCurrency)}
+            <TableCell className={documentRowCellClass(density, "px-4")}>
+                <InvoiceStatusBadge status={invoice.status || "draft"} compact />
             </TableCell>
-            <TableCell className="invoice-col-status text-center">
-                <InvoiceStatusBadge status={invoice.status || "draft"} />
-            </TableCell>
-            <TableCell className="invoice-col-date text-center text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
+            <TableCell className={documentRowCellClass(density, "px-4 text-muted-foreground whitespace-nowrap")}>
                 {issuedDate}
             </TableCell>
-            <TableCell className="invoice-col-actions text-right">
+            <TableCell className={documentRowCellClass(density, "px-3")}>
                 <div className="flex items-center justify-end gap-1">
-                    <div className="hidden lg:block opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                    <div className="hidden md:flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                         <QuickActionButtons invoice={invoice} onMarkPaid={onMarkPaid} />
                     </div>
                     <InvoiceActions
@@ -90,6 +93,7 @@ const InvoiceRow = React.memo(function InvoiceRow({ invoice, virtualRow, getClie
                         onActionSuccess={onActionSuccess}
                         onPaymentFullyPaid={onPaymentFullyPaid}
                         onOptimisticUpdate={onOptimisticUpdate}
+                        compactTrigger
                     />
                 </div>
             </TableCell>
@@ -101,27 +105,25 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
     const issuedDate = invoice.created_date ? format(new Date(invoice.created_date), "MMM d, yyyy") : "—";
     const amountLabel = formatCurrency(invoice.total_amount, userCurrency);
     return (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden flex items-stretch gap-0 min-w-0 shadow-sm interactive-card">
+        <div className="flex min-w-0 items-stretch overflow-hidden rounded-2xl border border-border/50 bg-card">
             <Link
                 to={createPageUrl(`ViewDocument/invoice/${invoice.id}`)}
-                className="flex-1 min-w-0 flex justify-between items-center gap-3 px-4 py-3 active:bg-muted/50 transition-colors"
+                className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 transition-colors active:bg-muted/50"
             >
-                <div className="flex flex-col gap-0.5 min-w-0">
-                    <p className="font-semibold text-foreground text-sm truncate">{clientName}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{invoice.invoice_number}</p>
-                    <p className="text-[10px] text-muted-foreground/80">{issuedDate}</p>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                    <p className="truncate text-sm font-medium text-foreground">{clientName}</p>
+                    <p className="truncate text-xs text-muted-foreground tabular-nums">{invoice.invoice_number}</p>
+                    <p className="text-[11px] text-muted-foreground/80">{issuedDate}</p>
                 </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className="font-bold text-foreground text-sm currency-nums whitespace-nowrap">{amountLabel}</span>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="whitespace-nowrap text-sm font-medium tabular-nums text-foreground">{amountLabel}</span>
                     {totalPaid > 0 ? (
                         <PartialPaymentIndicator invoice={invoice} totalPaid={totalPaid} currency={userCurrency} size="compact" />
-                    ) : (
-                        <span className="text-[10px] text-muted-foreground">No payments</span>
-                    )}
-                    <InvoiceStatusBadge status={invoice.status || "draft"} />
+                    ) : null}
+                    <InvoiceStatusBadge status={invoice.status || "draft"} compact />
                 </div>
             </Link>
-            <div className="flex items-center border-l border-border shrink-0" onClick={(e) => e.preventDefault()}>
+            <div className="flex shrink-0 items-center border-l border-border/50" onClick={(e) => e.preventDefault()}>
                 <InvoiceActions
                     invoice={invoice}
                     client={client}
@@ -134,63 +136,13 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
     );
 });
 
-const VirtualizedTableBody = React.memo(function VirtualizedTableBody({
-    invoices,
-    parentRef,
-    getClientName,
-    getTotalPaid,
-    userCurrency,
-    clients,
-    onActionSuccess,
-    onPaymentFullyPaid,
-    onOptimisticUpdate,
-    onMarkPaid,
-}) {
-    const rowVirtualizer = useVirtualizer({
-        count: invoices.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => ROW_HEIGHT,
-        overscan: 8,
-    });
-    const virtualRows = rowVirtualizer.getVirtualItems();
-    const totalSize = rowVirtualizer.getTotalSize();
-
-    return (
-        <>
-            {totalSize > 0 && (
-                <TableRow className="border-0 [&>td]:p-0 [&>td]:border-0" style={{ height: `${totalSize}px` }} aria-hidden>
-                    <TableCell colSpan={5} className="!p-0 !border-0 !h-0" style={{ height: `${totalSize}px`, lineHeight: 0, overflow: "hidden" }} />
-                </TableRow>
-            )}
-            {virtualRows.map((virtualRow) => {
-                const invoice = invoices[virtualRow.index];
-                const client = clients.find((c) => c.id === invoice.client_id) ?? null;
-                return (
-                    <InvoiceRow
-                        key={invoice.id}
-                        invoice={invoice}
-                        virtualRow={virtualRow}
-                        getClientName={getClientName}
-                        getTotalPaid={getTotalPaid}
-                        userCurrency={userCurrency}
-                        client={client}
-                        onActionSuccess={onActionSuccess}
-                        onPaymentFullyPaid={onPaymentFullyPaid}
-                        onOptimisticUpdate={onOptimisticUpdate}
-                        onMarkPaid={onMarkPaid}
-                    />
-                );
-            })}
-        </>
-    );
-});
-
-function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, onActionSuccess, onPaymentFullyPaid, onOptimisticUpdate }) {
-    const parentRef = useRef(null);
+function InvoiceList({ invoices, clients = [], isLoading, userCurrency, paymentsMap, onActionSuccess, onPaymentFullyPaid, onOptimisticUpdate, density: densityProp }) {
     const { toast } = useToast();
+    const densityState = useDocumentTableDensity();
+    const density = densityProp || densityState.density;
 
     const getClientName = useCallback((clientId) => {
-        const client = clients.find(c => c.id === clientId);
+        const client = clients.find((c) => c.id === clientId);
         return client ? client.name : "N/A";
     }, [clients]);
 
@@ -219,30 +171,44 @@ function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, 
     }, [onActionSuccess, onPaymentFullyPaid, toast]);
 
     const clientMap = useMemo(() => new Map((clients || []).map((c) => [c.id, c])), [clients]);
+    const rows = invoices || [];
+
+    const header = (
+        <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-border/50">
+            <TableRow className="border-b border-border/50 hover:bg-transparent">
+                <TableHead className="h-9 px-4 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    Client
+                </TableHead>
+                <TableHead className={cn("h-9 w-32 px-4 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground", documentNumericClass())}>
+                    Amount
+                </TableHead>
+                <TableHead className="h-9 w-28 px-4 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    Status
+                </TableHead>
+                <TableHead className="h-9 w-28 px-4 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    Date
+                </TableHead>
+                <TableHead className="h-9 w-28 px-3 text-right">
+                    <span className="sr-only">Actions</span>
+                </TableHead>
+            </TableRow>
+        </TableHeader>
+    );
 
     return (
-        <div className="overflow-hidden rounded-lg border border-border/50 bg-transparent w-full min-w-0">
-            {/* Mobile: vertical card list */}
-            <div className="block md:hidden p-3 sm:p-4">
-                {isLoading ? (
-                    Array(6).fill(0).map((_, i) => (
-                        <div
-                            key={i}
-                            className="bg-card border border-border rounded-2xl px-4 py-3 flex justify-between items-center gap-3"
-                        >
-                            <div className="flex flex-col gap-1 flex-1 min-w-0">
-                                <Skeleton className="h-4 w-24 rounded" />
-                                <Skeleton className="h-3 w-20 rounded" />
+        <div className="w-full min-w-0">
+            <div className="space-y-3 md:hidden">
+                {isLoading
+                    ? Array(6).fill(0).map((_, i) => (
+                        <div key={i} className="flex items-center justify-between rounded-2xl border border-border/50 px-4 py-3">
+                            <div className="space-y-1.5">
+                                <Skeleton className="h-4 w-28" />
+                                <Skeleton className="h-3 w-20" />
                             </div>
-                            <div className="flex flex-col items-end gap-2">
-                                <Skeleton className="h-4 w-20 rounded" />
-                                <Skeleton className="h-5 w-16 rounded-full" />
-                            </div>
+                            <Skeleton className="h-4 w-16" />
                         </div>
                     ))
-                ) : (
-                    <div className="stagger-in space-y-3">
-                    {invoices.map((invoice) => (
+                    : rows.map((invoice) => (
                         <InvoiceMobileCard
                             key={invoice.id}
                             invoice={invoice}
@@ -255,68 +221,42 @@ function InvoiceList({ invoices, clients, isLoading, userCurrency, paymentsMap, 
                             onOptimisticUpdate={onOptimisticUpdate}
                         />
                     ))}
-                    </div>
-                )}
             </div>
 
-            {/* Desktop: virtualized table view */}
             <div className="hidden md:block">
-                {isLoading ? (
-                    <Table className="table invoice-list-table table-fixed w-full">
-                        <TableHeader>
-                            <TableRow className="table-row hover:bg-transparent border-0" style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE }}>
-                                <TableHead className="text-left text-muted-foreground text-xs font-medium whitespace-nowrap">Client / Title</TableHead>
-                                <TableHead className="amount text-muted-foreground text-xs font-medium whitespace-nowrap">Amount</TableHead>
-                                <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Status</TableHead>
-                                <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Date</TableHead>
-                                <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {Array(8).fill(0).map((_, i) => (
-                                <TableRow key={i} className="table-row border-0" style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE }}>
-                                    <TableCell><Skeleton className="h-4 w-full max-w-[220px] rounded animate-pulse" /></TableCell>
-                                    <TableCell className="amount"><Skeleton className="h-4 w-full max-w-[100px] rounded animate-pulse ml-auto" /></TableCell>
-                                    <TableCell><Skeleton className="h-6 w-full max-w-[80px] rounded-full animate-pulse" /></TableCell>
-                                    <TableCell><Skeleton className="h-4 w-full max-w-[100px] rounded animate-pulse" /></TableCell>
-                                    <TableCell><div className="flex justify-center"><Skeleton className="h-8 w-8 rounded-lg animate-pulse" /></div></TableCell>
+                <Table
+                    containerClassName="overflow-x-auto"
+                    className={cn("min-w-[640px]", density === "compact" && "text-sm")}
+                >
+                    {header}
+                    <TableBody>
+                        {isLoading
+                            ? Array(8).fill(0).map((_, i) => (
+                                <TableRow key={i} className="border-b border-border/40 hover:bg-transparent">
+                                    <TableCell className={documentRowCellClass(density, "px-4")}><Skeleton className="h-4 w-40" /></TableCell>
+                                    <TableCell className={documentRowCellClass(density, documentNumericClass("px-4"))}><Skeleton className="ml-auto h-4 w-16" /></TableCell>
+                                    <TableCell className={documentRowCellClass(density, "px-4")}><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                                    <TableCell className={documentRowCellClass(density, "px-4")}><Skeleton className="h-4 w-20" /></TableCell>
+                                    <TableCell className={documentRowCellClass(density, "px-3")}><Skeleton className="ml-auto h-8 w-8 rounded-lg" /></TableCell>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                ) : invoices.length === 0 ? null : (
-                    <div
-                        ref={parentRef}
-                        className="overflow-auto"
-                        style={{ maxHeight: VIRTUAL_TABLE_MAX_HEIGHT }}
-                    >
-                        <Table className="table invoice-list-table table-fixed w-full">
-                            <TableHeader>
-                                <TableRow className="table-row hover:bg-transparent border-0 bg-background sticky top-0 z-10" style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE }}>
-                                    <TableHead className="text-left text-muted-foreground text-xs font-medium whitespace-nowrap">Client / Title</TableHead>
-                                    <TableHead className="amount text-muted-foreground text-xs font-medium whitespace-nowrap">Amount</TableHead>
-                                    <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Status</TableHead>
-                                    <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Date</TableHead>
-                                    <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody style={{ position: "relative" }}>
-                                <VirtualizedTableBody
-                                    invoices={invoices}
-                                    parentRef={parentRef}
+                            ))
+                            : rows.map((invoice) => (
+                                <InvoiceRow
+                                    key={invoice.id}
+                                    invoice={invoice}
+                                    density={density}
                                     getClientName={getClientName}
                                     getTotalPaid={getTotalPaid}
                                     userCurrency={userCurrency}
-                                    clients={clients}
+                                    client={clientMap.get(invoice.client_id) ?? null}
                                     onActionSuccess={onActionSuccess}
                                     onPaymentFullyPaid={onPaymentFullyPaid}
                                     onOptimisticUpdate={onOptimisticUpdate}
                                     onMarkPaid={handleMarkAsPaidQuick}
                                 />
-                            </TableBody>
-                        </Table>
-                    </div>
-                )}
+                            ))}
+                    </TableBody>
+                </Table>
             </div>
         </div>
     );

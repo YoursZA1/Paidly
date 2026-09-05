@@ -53,7 +53,7 @@ function isLikelyNetworkFetchError(error) {
     );
 }
 
-function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, onPaymentFullyPaid }) {
+function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, onPaymentFullyPaid, compactTrigger = false }) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -754,7 +754,10 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             variant="ghost"
             size="icon"
             data-testid="invoice-actions-trigger"
-            className="h-8 w-8 md:min-h-[44px] md:min-w-[44px] text-muted-foreground hover:text-foreground hover:bg-accent"
+            className={compactTrigger
+                ? "h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent"
+                : "h-8 w-8 md:min-h-[44px] md:min-w-[44px] text-muted-foreground hover:text-foreground hover:bg-accent"
+            }
         >
             <MoreHorizontal className="w-4 h-4" />
         </Button>

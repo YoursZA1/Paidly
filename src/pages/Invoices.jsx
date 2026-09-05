@@ -2,14 +2,15 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { Invoice, Payment, InvoiceView } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, FileText, LayoutGrid, List, Download, Upload, MoreVertical, RefreshCw } from "lucide-react";
+import { Plus, FileText, LayoutGrid, List, Download, Upload, MoreHorizontal, RefreshCw } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { parseInvoiceCsv, csvRowToInvoicePayload } from "@/utils/invoiceCsvMapping";
 import { invoiceViewsToCsv, parseInvoiceViewCsv, csvRowToInvoiceViewPayload } from "@/utils/invoiceViewCsvMapping";
@@ -32,6 +33,8 @@ import { invoiceListAdapter } from "@/services/documentListAdapters";
 import DocumentListPagination from "@/components/shared/DocumentListPagination";
 import { exportInvoicesCsvWithItems } from "@/services/DocumentExportService";
 import { invalidateInvoiceDomain } from "@/lib/queryInvalidation";
+import DocumentTableDensityToggle from "@/components/document-table/DocumentTableDensityToggle";
+import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
 
 export default function InvoicesPage() {
     const { toast } = useToast();
@@ -83,6 +86,7 @@ export default function InvoicesPage() {
         [storeUpdateInvoice, refetchInvoices]
     );
 
+    const { density, setDensity } = useDocumentTableDensity();
     const [viewMode, setViewMode] = useState('list');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(25);
@@ -302,17 +306,17 @@ export default function InvoicesPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="responsive-page-header mb-4 sm:mb-6 md:mb-8"
+                    className="responsive-page-header mb-4 sm:mb-5"
                 >
-                    <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0">
-                        <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold text-foreground font-display truncate">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                        <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground font-display truncate">
                             Invoices
                         </h1>
                         <p className="text-xs sm:text-sm text-muted-foreground">
-                            Track, manage, and download all your invoices.
+                            Track, send, and collect payment.
                         </p>
                     </div>
-                    <div className="responsive-page-header-actions gap-2.5">
+                    <div className="responsive-page-header-actions gap-2">
                         <input
                             type="file"
                             name="invoices_import_csv"
@@ -331,37 +335,36 @@ export default function InvoicesPage() {
                         />
                         {/* Primary action first on mobile */}
                         <Link to={createPageUrl("CreateInvoice")} className="order-first sm:order-none w-full md:w-auto">
-                            <Button className="responsive-btn h-10 w-full gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-[1px] hover:bg-primary/90 hover:shadow-md md:w-auto touch-manipulation">
+                            <Button className="responsive-btn h-10 w-full gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 md:w-auto touch-manipulation">
                                 <Plus className="w-4 h-4 shrink-0" />
                                 Create Invoice
                             </Button>
                         </Link>
-                        {/* View toggle: always visible */}
-                        <div className="hidden h-10 shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm sm:flex">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setViewMode('grid')}
-                                className={`h-8 w-8 shrink-0 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                                aria-label="Grid view"
-                            >
-                                <LayoutGrid className="w-4 h-4" />
-                            </Button>
+                        <div className="hidden h-10 shrink-0 items-center rounded-xl border border-border/70 bg-muted/40 p-1 sm:flex">
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewMode('list')}
-                                className={`h-8 w-8 shrink-0 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                className={`h-8 w-8 shrink-0 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                 aria-label="List view"
                             >
                                 <List className="w-4 h-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setViewMode('grid')}
+                                className={`h-8 w-8 shrink-0 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                aria-label="Grid view"
+                            >
+                                <LayoutGrid className="w-4 h-4" />
                             </Button>
                         </div>
                         <Button
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="h-10 w-10 min-h-10 min-w-10 shrink-0 rounded-xl border-border bg-background/80 shadow-sm backdrop-blur-sm transition-colors hover:bg-muted touch-manipulation"
+                            className="hidden h-10 w-10 shrink-0 rounded-xl border-border/70 sm:inline-flex"
                             onClick={handleRefresh}
                             disabled={isRefreshing}
                             aria-label="Refresh invoices"
@@ -369,30 +372,30 @@ export default function InvoicesPage() {
                         >
                             <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
                         </Button>
-                        {/* Mobile: Import/Export in dropdown; Desktop: all visible */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-10 min-w-[44px] rounded-xl border-border bg-background/80 shadow-sm backdrop-blur-sm sm:hidden touch-manipulation" aria-label="More actions">
-                                    <MoreVertical className="w-5 h-5" />
+                                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-xl border-border/70" aria-label="More invoice actions">
+                                    <MoreHorizontal className="w-4 h-4" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56 rounded-xl border-border">
                                 <DropdownMenuItem
                                     onClick={handleRefresh}
                                     disabled={isRefreshing}
-                                    className="rounded-lg"
+                                    className="rounded-lg sm:hidden"
                                 >
                                     <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
                                     Refresh
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleImportInvoices} disabled={isImporting} className="rounded-lg">
                                     <Upload className="w-4 h-4 mr-2" />
-                                    {isImporting ? "Importing…" : "Import CSV"}
+                                    {isImporting ? "Importing…" : "Import invoices CSV"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleExportInvoices} disabled={isExporting || filteredInvoices.length === 0} className="rounded-lg">
                                     <Download className="w-4 h-4 mr-2" />
-                                    {isExporting ? "Exporting…" : "Export CSV"}
+                                    {isExporting ? "Exporting…" : "Export invoices CSV"}
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={handleImportInvoiceViews} disabled={isImportingViews} className="rounded-lg">
                                     <Upload className="w-4 h-4 mr-2" />
                                     {isImportingViews ? "Importing…" : "Import views CSV"}
@@ -403,34 +406,18 @@ export default function InvoicesPage() {
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        <div className="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 p-1.5 shadow-sm sm:flex">
-                            <Button variant="outline" size="sm" onClick={handleImportInvoices} disabled={isImporting} className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none">
-                                <Upload className={`w-4 h-4 mr-2 ${isImporting ? "animate-pulse" : ""}`} />
-                                {isImporting ? "Importing…" : "Import CSV"}
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={handleExportInvoices} disabled={isExporting || filteredInvoices.length === 0} className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none">
-                                <Download className="w-4 h-4 mr-2" />
-                                {isExporting ? "Exporting…" : "Export CSV"}
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={handleImportInvoiceViews} disabled={isImportingViews} className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none" title="Import invoice view activity (InvoiceView_export.csv)">
-                                <Upload className={`w-4 h-4 mr-2 ${isImportingViews ? "animate-pulse" : ""}`} />
-                                {isImportingViews ? "Importing…" : "Import views CSV"}
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={handleExportInvoiceViews} disabled={invoiceViews.length === 0} className="h-10 rounded-lg border-border bg-background px-3.5 font-medium shadow-none" title="Export invoice view activity">
-                                <Download className="w-4 h-4 mr-2" />
-                                Export views CSV
-                            </Button>
-                        </div>
                     </div>
                 </motion.div>
 
-                <Card className="rounded-xl overflow-hidden w-full min-w-0 mobile-card-wrap">
-                    <CardHeader className="p-3 sm:p-4 md:p-6">
-                        <div className="space-y-4">
-                            <CardTitle className="text-base font-semibold text-foreground">Invoice List</CardTitle>
+                <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm w-full min-w-0 mobile-card-wrap">
+                    <CardHeader className="space-y-0 border-b border-border/50 p-3 sm:p-4">
+                        <div className="space-y-3">
                             <InvoiceFilters 
                                 onFilterChange={setFilters} 
                                 clients={clients}
+                                endSlot={viewMode === "list" ? (
+                                    <DocumentTableDensityToggle density={density} onDensityChange={setDensity} />
+                                ) : null}
                             />
                             {hasNextPage && (
                                 <p className="text-xs text-muted-foreground">
@@ -439,14 +426,17 @@ export default function InvoicesPage() {
                             )}
                         </div>
                     </CardHeader>
-                    <CardContent className="p-3 sm:p-4 md:p-6 overflow-hidden">
+                    <CardContent className="overflow-hidden p-3 md:p-0">
                         {isLoading ? (
                              viewMode === 'list' ? (
-                                <InvoiceList isLoading={true} />
+                                <InvoiceList isLoading={true} density={density} />
                              ) : (
-                                <InvoiceGrid isLoading={true} />
+                                <div className="p-4">
+                                    <InvoiceGrid isLoading={true} />
+                                </div>
                              )
                         ) : filteredInvoices.length === 0 ? (
+                            <div className="p-6 md:p-10">
                             <EmptyState
                                 icon={<FileText className="h-7 w-7 text-muted-foreground" />}
                                 title="No invoices yet"
@@ -460,6 +450,7 @@ export default function InvoicesPage() {
                                     </Link>
                                 }
                             />
+                            </div>
                         ) : (
                             <>
                                 {viewMode === 'list' ? (
@@ -468,11 +459,13 @@ export default function InvoicesPage() {
                                         clients={clients} 
                                         userCurrency={userCurrency}
                                         paymentsMap={paymentsMap}
+                                        density={density}
                                         onActionSuccess={handleActionSuccess}
                                         onPaymentFullyPaid={runPaidConfetti}
                                         onOptimisticUpdate={handleOptimisticUpdate}
                                     />
                                 ) : (
+                                    <div className="p-4">
                                     <InvoiceGrid 
                                         invoices={paginatedInvoices} 
                                         clients={clients} 
@@ -482,13 +475,14 @@ export default function InvoicesPage() {
                                         onPaymentFullyPaid={runPaidConfetti}
                                         onOptimisticUpdate={handleOptimisticUpdate}
                                     />
+                                    </div>
                                 )}
                                 
                                 {/* Pagination Controls */}
                                 {(hasNextPage || isFetchingNextPage) && (
                                     <div
                                         ref={invoiceLoadMoreRef}
-                                        className="mt-6 flex min-h-[52px] flex-col items-center justify-center gap-2 border-t border-border pt-4"
+                                        className="mt-2 flex min-h-[52px] flex-col items-center justify-center gap-2 border-t border-border/50 px-4 pt-4"
                                         aria-live="polite"
                                     >
                                         {isFetchingNextPage ? (
@@ -501,6 +495,7 @@ export default function InvoicesPage() {
                                     </div>
                                 )}
 
+                                <div className="px-3 pb-3 pt-1 md:px-4 md:pb-4">
                                 <DocumentListPagination
                                     totalPages={totalPages}
                                     currentPage={currentPage}
@@ -514,6 +509,7 @@ export default function InvoicesPage() {
                                     totalItems={filteredInvoices.length}
                                     itemLabel="invoices"
                                 />
+                                </div>
                             </>
                         )}
                     </CardContent>

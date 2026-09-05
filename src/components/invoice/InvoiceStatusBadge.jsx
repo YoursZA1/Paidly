@@ -1,5 +1,6 @@
 import React from "react";
 import PropTypes from "prop-types";
+import { cn } from "@/lib/utils";
 
 /**
  * InvoiceStatusBadge — clean status cell, matches quote pill (one element, no icon)
@@ -17,12 +18,12 @@ const statusConfig = {
   cancelled: { label: "Cancelled" },
 };
 
-function InvoiceStatusBadge({ status }) {
+function InvoiceStatusBadge({ status, compact = false }) {
   const config = statusConfig[status] || statusConfig.draft;
   const pillStatus = status || "draft";
 
   return (
-    <div className={`status-pill ${pillStatus}`}>
+    <div className={cn("status-pill", pillStatus, compact && "status-pill-compact")}>
       {config.label}
     </div>
   );
@@ -30,6 +31,7 @@ function InvoiceStatusBadge({ status }) {
 
 InvoiceStatusBadge.propTypes = {
   status: PropTypes.string,
+  compact: PropTypes.bool,
 };
 
 export default React.memo(InvoiceStatusBadge);

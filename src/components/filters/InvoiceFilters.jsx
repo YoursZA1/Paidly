@@ -41,7 +41,7 @@ const amountRanges = [
     { value: '50000+', label: 'Over 50,000' }
 ];
 
-export default function InvoiceFilters({ onFilterChange, clients = [] }) {
+export default function InvoiceFilters({ onFilterChange, clients = [], endSlot = null }) {
     const [showFilters, setShowFilters] = useState(false);
     const { filters, updateFilter, clearFilters } = usePersistedListFilters(
         "invoices",
@@ -68,7 +68,7 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
             <div className="flex flex-col sm:flex-row gap-3">
                 {/* Search */}
                 <div className="relative flex-1 w-full min-w-0">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                     <Input
                         value={filters.search}
                         onChange={(e) => updateFilter('search', e.target.value)}
@@ -106,12 +106,17 @@ export default function InvoiceFilters({ onFilterChange, clients = [] }) {
                             <ChevronDown className={cn("w-4 h-4 shrink-0 transition-transform", showFilters && "rotate-180")} />
                         </Button>
                         {activeFilterCount > 0 && (
-                            <Button variant="ghost" onClick={clearFilters} className="gap-2 h-10 text-slate-600 shrink-0 rounded-xl">
+                            <Button variant="ghost" onClick={clearFilters} className="gap-2 h-10 text-muted-foreground shrink-0 rounded-xl">
                                 <X className="w-4 h-4" />
                                 Clear
                             </Button>
                         )}
                     </div>
+                    {endSlot ? (
+                        <div className="hidden items-center md:flex">
+                            {endSlot}
+                        </div>
+                    ) : null}
                 </div>
             </div>
 
