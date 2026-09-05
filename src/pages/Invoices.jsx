@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { Invoice, Payment, InvoiceView } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import DocumentTableDensityToggle from "@/components/document-table/DocumentTableDensityToggle";
+import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
+import DocListLockShell from "@/components/document-table/DocListLockShell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,8 +35,6 @@ import { invoiceListAdapter } from "@/services/documentListAdapters";
 import DocumentListPagination from "@/components/shared/DocumentListPagination";
 import { exportInvoicesCsvWithItems } from "@/services/DocumentExportService";
 import { invalidateInvoiceDomain } from "@/lib/queryInvalidation";
-import DocumentTableDensityToggle from "@/components/document-table/DocumentTableDensityToggle";
-import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
 
 export default function InvoicesPage() {
     const { toast } = useToast();
@@ -300,13 +300,13 @@ export default function InvoicesPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background w-full min-w-0 mobile-page">
-            <div className="responsive-page-shell py-4 sm:py-6 md:py-8">
+        <DocListLockShell
+            header={
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="responsive-page-header mb-4 sm:mb-5"
+                    transition={{ duration: 0.35 }}
+                    className="responsive-page-header"
                 >
                     <div className="flex flex-col gap-0.5 min-w-0">
                         <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground font-display truncate">
@@ -408,113 +408,104 @@ export default function InvoicesPage() {
                         </DropdownMenu>
                     </div>
                 </motion.div>
-
-                <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm w-full min-w-0 mobile-card-wrap">
-                    <CardHeader className="space-y-0 border-b border-border/50 p-3 sm:p-4">
-                        <div className="space-y-3">
-                            <InvoiceFilters 
-                                onFilterChange={setFilters} 
-                                clients={clients}
-                                endSlot={viewMode === "list" ? (
-                                    <DocumentTableDensityToggle density={density} onDensityChange={setDensity} />
-                                ) : null}
-                            />
-                            {hasNextPage && (
-                                <p className="text-xs text-muted-foreground">
-                                    Filters apply to invoices loaded so far. Scroll the list to load older invoices, then filter or export as needed.
-                                </p>
+            }
+            toolbar={
+                <div className="space-y-3">
+                    <InvoiceFilters
+                        onFilterChange={setFilters}
+                        clients={clients}
+                        endSlot={viewMode === "list" ? (
+                            <DocumentTableDensityToggle density={density} onDensityChange={setDensity} />
+                        ) : null}
+                    />
+                    {hasNextPage && (
+                        <p className="text-xs text-muted-foreground">
+                            Filters apply to invoices loaded so far. Scroll the list to load older invoices, then filter or export as needed.
+                        </p>
+                    )}
+                </div>
+            }
+            footer={filteredInvoices.length > 0 ? (
+                <div className="px-3 py-2 md:px-4">
+                    {(hasNextPage || isFetchingNextPage) && (
+                        <div
+                            ref={invoiceLoadMoreRef}
+                            className="mb-2 flex min-h-[40px] flex-col items-center justify-center gap-1"
+                            aria-live="polite"
+                        >
+                            {isFetchingNextPage ? (
+                                <span className="text-sm text-muted-foreground">Loading more invoices…</span>
+                            ) : (
+                                <span className="text-xs text-muted-foreground">
+                                    More invoices available — scroll the list to load older rows
+                                </span>
                             )}
                         </div>
-                    </CardHeader>
-                    <CardContent className="overflow-hidden p-3 md:p-0">
-                        {isLoading ? (
-                             viewMode === 'list' ? (
-                                <InvoiceList isLoading={true} density={density} />
-                             ) : (
-                                <div className="p-4">
-                                    <InvoiceGrid isLoading={true} />
-                                </div>
-                             )
-                        ) : filteredInvoices.length === 0 ? (
-                            <div className="p-6 md:p-10">
-                            <EmptyState
-                                icon={<FileText className="h-7 w-7 text-muted-foreground" />}
-                                title="No invoices yet"
-                                description="Create and send invoices in ZAR or any currency. Get paid faster."
-                                action={
-                                    <Link to={createPageUrl("CreateInvoice")}>
-                                        <Button className="w-full sm:w-auto rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
-                                            <Plus className="-ml-1 mr-2 h-5 w-5" />
-                                            Create your first invoice
-                                        </Button>
-                                    </Link>
-                                }
-                            />
-                            </div>
-                        ) : (
-                            <>
-                                {viewMode === 'list' ? (
-                                    <InvoiceList 
-                                        invoices={paginatedInvoices} 
-                                        clients={clients} 
-                                        userCurrency={userCurrency}
-                                        paymentsMap={paymentsMap}
-                                        density={density}
-                                        onActionSuccess={handleActionSuccess}
-                                        onPaymentFullyPaid={runPaidConfetti}
-                                        onOptimisticUpdate={handleOptimisticUpdate}
-                                    />
-                                ) : (
-                                    <div className="p-4">
-                                    <InvoiceGrid 
-                                        invoices={paginatedInvoices} 
-                                        clients={clients} 
-                                        userCurrency={userCurrency}
-                                        paymentsMap={paymentsMap}
-                                        onActionSuccess={handleActionSuccess}
-                                        onPaymentFullyPaid={runPaidConfetti}
-                                        onOptimisticUpdate={handleOptimisticUpdate}
-                                    />
-                                    </div>
-                                )}
-                                
-                                {/* Pagination Controls */}
-                                {(hasNextPage || isFetchingNextPage) && (
-                                    <div
-                                        ref={invoiceLoadMoreRef}
-                                        className="mt-2 flex min-h-[52px] flex-col items-center justify-center gap-2 border-t border-border/50 px-4 pt-4"
-                                        aria-live="polite"
-                                    >
-                                        {isFetchingNextPage ? (
-                                            <span className="text-sm text-muted-foreground">Loading more invoices…</span>
-                                        ) : (
-                                            <span className="text-xs text-muted-foreground">
-                                                More invoices available — scroll down to load older rows
-                                            </span>
-                                        )}
-                                    </div>
-                                )}
-
-                                <div className="px-3 pb-3 pt-1 md:px-4 md:pb-4">
-                                <DocumentListPagination
-                                    totalPages={totalPages}
-                                    currentPage={currentPage}
-                                    visiblePages={visiblePages}
-                                    onPageChange={setCurrentPage}
-                                    itemsPerPage={itemsPerPage}
-                                    onItemsPerPageChange={(next) => {
-                                        setItemsPerPage(next);
-                                        setCurrentPage(1);
-                                    }}
-                                    totalItems={filteredInvoices.length}
-                                    itemLabel="invoices"
-                                />
-                                </div>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
-        </div>
+                    )}
+                    <DocumentListPagination
+                        totalPages={totalPages}
+                        currentPage={currentPage}
+                        visiblePages={visiblePages}
+                        onPageChange={setCurrentPage}
+                        itemsPerPage={itemsPerPage}
+                        onItemsPerPageChange={(next) => {
+                            setItemsPerPage(next);
+                            setCurrentPage(1);
+                        }}
+                        totalItems={filteredInvoices.length}
+                        itemLabel="invoices"
+                    />
+                </div>
+            ) : null}
+        >
+            {isLoading ? (
+                viewMode === "list" ? (
+                    <InvoiceList isLoading={true} density={density} />
+                ) : (
+                    <div className="p-4">
+                        <InvoiceGrid isLoading={true} />
+                    </div>
+                )
+            ) : filteredInvoices.length === 0 ? (
+                <div className="p-6 md:p-10">
+                    <EmptyState
+                        icon={<FileText className="h-7 w-7 text-muted-foreground" />}
+                        title="No invoices yet"
+                        description="Create and send invoices in ZAR or any currency. Get paid faster."
+                        action={
+                            <Link to={createPageUrl("CreateInvoice")}>
+                                <Button className="w-full sm:w-auto rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
+                                    <Plus className="-ml-1 mr-2 h-5 w-5" />
+                                    Create your first invoice
+                                </Button>
+                            </Link>
+                        }
+                    />
+                </div>
+            ) : viewMode === "list" ? (
+                <InvoiceList
+                    invoices={paginatedInvoices}
+                    clients={clients}
+                    userCurrency={userCurrency}
+                    paymentsMap={paymentsMap}
+                    density={density}
+                    onActionSuccess={handleActionSuccess}
+                    onPaymentFullyPaid={runPaidConfetti}
+                    onOptimisticUpdate={handleOptimisticUpdate}
+                />
+            ) : (
+                <div className="p-4">
+                    <InvoiceGrid
+                        invoices={paginatedInvoices}
+                        clients={clients}
+                        userCurrency={userCurrency}
+                        paymentsMap={paymentsMap}
+                        onActionSuccess={handleActionSuccess}
+                        onPaymentFullyPaid={runPaidConfetti}
+                        onOptimisticUpdate={handleOptimisticUpdate}
+                    />
+                </div>
+            )}
+        </DocListLockShell>
     );
 }

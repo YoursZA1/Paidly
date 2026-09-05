@@ -174,7 +174,7 @@ function InvoiceList({ invoices, clients = [], isLoading, userCurrency, payments
     const rows = invoices || [];
 
     const header = (
-        <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-border/50">
+        <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50">
             <TableRow className="border-b border-border/50 hover:bg-transparent">
                 <TableHead className="h-9 px-4 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                     Client
@@ -225,7 +225,7 @@ function InvoiceList({ invoices, clients = [], isLoading, userCurrency, payments
 
             <div className="hidden md:block">
                 <Table
-                    containerClassName="overflow-x-auto"
+                    containerClassName="overflow-visible"
                     className={cn("min-w-[640px]", density === "compact" && "text-sm")}
                 >
                     {header}

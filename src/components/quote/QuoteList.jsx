@@ -12,9 +12,9 @@ import QuoteActions from "./QuoteActions";
 import QuoteStatusBadge from "./QuoteStatusBadge";
 import QuoteStatusTracker from "./QuoteStatusTracker";
 import { Eye, Pencil, ArrowRightSquare } from "lucide-react";
+import DocumentTableDensityToggle from "@/components/document-table/DocumentTableDensityToggle";
+import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
 
-const ROW_HEIGHT = 64;
-const VIRTUAL_TABLE_MAX_HEIGHT = 480;
 const GRID_TEMPLATE = "minmax(0,2.8fr) minmax(110px,1fr) minmax(120px,0.95fr) minmax(120px,1fr) 160px";
 
 const QuoteQuickActions = React.memo(function QuoteQuickActions({ quote }) {
@@ -62,7 +62,7 @@ const QuoteRow = React.memo(function QuoteRow({ quote, clientName, userCurrency,
             <TableCell className="text-center text-muted-foreground text-xs sm:text-sm whitespace-nowrap">{validUntil}</TableCell>
             <TableCell className="text-center" onClick={stopActions}>
                 <div className="flex items-center justify-end gap-1">
-                    <div className="hidden lg:block opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                    <div className="doc-table-row-actions hidden md:flex">
                         <QuoteQuickActions quote={quote} />
                     </div>
                     <QuoteActions quote={quote} client={client} onActionSuccess={onActionSuccess} />
@@ -72,11 +72,11 @@ const QuoteRow = React.memo(function QuoteRow({ quote, clientName, userCurrency,
     );
 });
 
-const VirtualizedQuoteTableBody = React.memo(function VirtualizedQuoteTableBody({ quotes, parentRef, getClientName, userCurrency, clients, onActionSuccess, onRowClick }) {
+const VirtualizedQuoteTableBody = React.memo(function VirtualizedQuoteTableBody({ quotes, parentRef, rowHeight, getClientName, userCurrency, clients, onActionSuccess, onRowClick }) {
     const rowVirtualizer = useVirtualizer({
         count: quotes.length,
         getScrollElement: () => parentRef.current,
-        estimateSize: () => ROW_HEIGHT,
+        estimateSize: () => rowHeight,
         overscan: 8,
     });
     const virtualRows = rowVirtualizer.getVirtualItems();
@@ -154,20 +154,27 @@ function QuoteList({ quotes, clients, isLoading, userCurrency, onActionSuccess }
         setDetailsQuote(null);
     }, [detailsQuote, navigate]);
     const clientMap = useMemo(() => new Map((clients || []).map((c) => [c.id, c])), [clients]);
+    const { density, setDensity, rowHeight } = useDocumentTableDensity();
     const headerRow = (
-        <TableRow className="quote-table-row hover:bg-transparent border-0 bg-background sticky top-0 z-10" style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE }}>
+        <TableRow className="quote-table-row hover:bg-transparent border-0 bg-card/95 backdrop-blur-sm sticky top-0 z-10" style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE }}>
             <TableHead className="text-left text-muted-foreground text-xs font-medium whitespace-nowrap">Client / Title</TableHead>
             <TableHead className="amount text-muted-foreground text-xs font-medium whitespace-nowrap">Amount</TableHead>
             <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Status</TableHead>
             <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Date</TableHead>
-            <TableHead className="text-center text-muted-foreground text-xs font-medium whitespace-nowrap">Actions</TableHead>
+            <TableHead className="text-right text-muted-foreground text-xs font-medium whitespace-nowrap">
+                <span className="sr-only">Actions</span>
+            </TableHead>
         </TableRow>
     );
 
     return (
-        <div className="overflow-hidden rounded-lg border border-border/50 bg-transparent w-full min-w-0">
+        <div className="flex h-full min-h-0 w-full flex-col">
+        <div className="hidden shrink-0 justify-end px-3 pt-2 md:flex">
+            <DocumentTableDensityToggle density={density} onDensityChange={setDensity} />
+        </div>
+        <div className="min-h-0 w-full flex-1">
             {/* Mobile: vertical card list */}
-            <div className="block md:hidden p-3 sm:p-4 space-y-3">
+            <div className="block space-y-3 p-3 md:hidden sm:p-4">
                 {isLoading ? (
                     Array(6).fill(0).map((_, i) => (
                         <div
@@ -201,9 +208,9 @@ function QuoteList({ quotes, clients, isLoading, userCurrency, onActionSuccess }
             </div>
 
             {/* Desktop/tablet: virtualized table */}
-            <div className="hidden md:block">
+            <div className="hidden h-full min-h-0 md:block">
                 {isLoading ? (
-                    <Table className="table quote-list-table table-fixed w-full">
+                    <Table className="table quote-list-table table-fixed w-full" data-density={density}>
                         <TableHeader>
                             {headerRow}
                         </TableHeader>
@@ -220,7 +227,7 @@ function QuoteList({ quotes, clients, isLoading, userCurrency, onActionSuccess }
                         </TableBody>
                     </Table>
                 ) : quotes.length === 0 ? (
-                    <Table className="table quote-list-table table-fixed w-full">
+                    <Table className="table quote-list-table table-fixed w-full" data-density={density}>
                         <TableHeader>
                             {headerRow}
                         </TableHeader>
@@ -233,10 +240,9 @@ function QuoteList({ quotes, clients, isLoading, userCurrency, onActionSuccess }
                 ) : (
                     <div
                         ref={parentRef}
-                        className="overflow-auto"
-                        style={{ maxHeight: VIRTUAL_TABLE_MAX_HEIGHT }}
+                        className="h-full min-h-0 overflow-auto"
                     >
-                        <Table className="table quote-list-table table-fixed w-full">
+                        <Table containerClassName="overflow-visible" className="table quote-list-table table-fixed w-full" data-density={density}>
                             <TableHeader>
                                 {headerRow}
                             </TableHeader>
@@ -244,6 +250,7 @@ function QuoteList({ quotes, clients, isLoading, userCurrency, onActionSuccess }
                                 <VirtualizedQuoteTableBody
                                     quotes={quotes}
                                     parentRef={parentRef}
+                                    rowHeight={rowHeight}
                                     getClientName={getClientName}
                                     userCurrency={userCurrency}
                                     clients={clients}
@@ -281,6 +288,7 @@ function QuoteList({ quotes, clients, isLoading, userCurrency, onActionSuccess }
                     )}
                 </DialogContent>
             </Dialog>
+        </div>
         </div>
     );
 }
