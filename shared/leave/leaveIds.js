@@ -36,6 +36,29 @@ export function parseLeaveListFilters(query = {}) {
 }
 
 /**
+ * Scope leave_requests to one person.
+ * Prefer payroll_profile_id when the lookup succeeded (covers pre-backfill rows).
+ * Fall back to employee_id (memberships.id) when the profile is missing so
+ * requests that already store the canonical UUID are not dropped.
+ *
+ * @param {{
+ *   employeeId?: string | null,
+ *   profileId?: string | null,
+ *   userId?: string | null,
+ * }} ids
+ * @returns {{ column: "payroll_profile_id" | "employee_id" | "user_id", value: string } | null}
+ */
+export function leaveRequestEmployeeScope({ employeeId, profileId, userId } = {}) {
+  const profile = parseUuid(profileId);
+  if (profile) return { column: "payroll_profile_id", value: profile };
+  const employee = parseUuid(employeeId);
+  if (employee) return { column: "employee_id", value: employee };
+  const user = parseUuid(userId);
+  if (user) return { column: "user_id", value: user };
+  return null;
+}
+
+/**
  * Map a PostgREST/Postgres UUID parse failure to a client-safe 400.
  * @param {unknown} error
  */

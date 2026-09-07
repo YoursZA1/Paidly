@@ -6,7 +6,7 @@ import {
   parseUuid,
   requireUuid,
 } from "../../shared/ids/uuid.js";
-import { mapLeaveDbError, parseLeaveListFilters } from "../../shared/leave/leaveIds.js";
+import { leaveRequestEmployeeScope, mapLeaveDbError, parseLeaveListFilters } from "../../shared/leave/leaveIds.js";
 import {
   canonicalEmployeeId,
   employeeOptionValue,
@@ -112,6 +112,29 @@ describe("leave list filters", () => {
       leave_type_id: typeId,
       department: undefined,
     });
+  });
+
+  it("falls back to employee_id when the payroll profile lookup misses", () => {
+    expect(
+      leaveRequestEmployeeScope({
+        employeeId: EMPLOYEE_UUID,
+        profileId: null,
+      })
+    ).toEqual({ column: "employee_id", value: EMPLOYEE_UUID });
+    expect(
+      leaveRequestEmployeeScope({
+        employeeId: EMPLOYEE_UUID,
+        profileId: PROFILE_UUID,
+      })
+    ).toEqual({ column: "payroll_profile_id", value: PROFILE_UUID });
+    expect(
+      leaveRequestEmployeeScope({
+        employeeId: null,
+        profileId: null,
+        userId: EMPLOYEE_UUID,
+      })
+    ).toEqual({ column: "user_id", value: EMPLOYEE_UUID });
+    expect(leaveRequestEmployeeScope({ employeeId: DISPLAY, profileId: null })).toBeNull();
   });
 
   it("maps Postgres UUID syntax errors to a safe 400", () => {

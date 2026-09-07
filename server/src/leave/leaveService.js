@@ -3,7 +3,7 @@ import { insertPayrollProfileRow } from "../payroll/payrollService.js";
 import { johannesburgYmd, leaveYearForDate, formatIsoDate } from "../../../shared/payroll/dates.js";
 import { countWorkingDays, computeLeaveBalance, yearToDateAccrual } from "../../../shared/leave/leaveMath.js";
 import { validateLeaveApplication } from "../../../shared/leave/validateLeave.js";
-import { mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
+import { leaveRequestEmployeeScope, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
 import { parseUuid, requireUuid } from "../../../shared/ids/uuid.js";
 import { canonicalEmployeeId } from "../../../shared/workforce/employeeIdentity.js";
 import { sendHtmlEmail } from "../sendInvoice.js";
@@ -470,17 +470,20 @@ export async function listLeaveRequests(orgId, filters = {}) {
     .eq("org_id", orgId)
     .order("submitted_at", { ascending: false });
   if (filters.status) q = q.eq("status", filters.status);
+  const employeeId = parseUuid(filters.employee_id);
   const profileId = await payrollProfileIdForEmployeeFilter(orgId, filters);
   const userId = parseUuid(filters.user_id);
   const leaveTypeId = parseUuid(filters.leave_type_id);
-  if (parseUuid(filters.employee_id) && !profileId) {
-    return [];
-  }
-  if (profileId) q = q.eq("payroll_profile_id", profileId);
-  else if (userId) q = q.eq("user_id", userId);
+  const scope = leaveRequestEmployeeScope({ employeeId, profileId, userId });
+  if (scope) q = q.eq(scope.column, scope.value);
   if (leaveTypeId) q = q.eq("leave_type_id", leaveTypeId);
   const { data, error } = await q.limit(500);
-  if (error) throw mapLeaveDbError(error);
+  if (error) {
+    if (scope?.column === "employee_id" && /employee_id/i.test(error.message || "")) {
+      return [];
+    }
+    throw mapLeaveDbError(error);
+  }
   const rows = data || [];
   const dept = String(filters.department || "").trim().toLowerCase();
   if (!dept) return rows;
