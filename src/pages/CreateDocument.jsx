@@ -19,7 +19,7 @@ import DocumentPreview from "@/components/DocumentPreview";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { createPageUrl } from "@/utils";
+import { createPageUrl, createViewDocumentUrl } from "@/utils";
 import { documentsReturnPath } from "@/document-engine/documentCreateNavigation";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
@@ -30,7 +30,8 @@ import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
 import { uploadDocumentLogo, logoMaxSizeLabel } from "@/lib/logoUpload";
 import LogoImage from "@/components/shared/LogoImage";
 import { lineItemHasContent } from "@/utils/lineItemContent";
-import { normalizeDocumentType, DOCUMENT_TYPES, hubDocumentToComposePrefill, isDocumentsHubExcludedType, hubWriteForbiddenMessage, typeLabel } from "@/document-engine";
+import { normalizeDocumentType, DOCUMENT_TYPES, hubDocumentToComposePrefill, isDocumentsHubExcludedType, hubWriteForbiddenMessage, typeLabel, aggregateFromItems, toCommercialItemRow } from "@/document-engine";
+import { commercialLineItemToComposeRow } from "@shared/commercial/commercialLineItem.js";
 import { DocumentService } from "@/services/DocumentService";
 import { useAutoDraft } from "@/hooks/useAutoDraft";
 import useOrgBrands from "@/hooks/useOrgBrands";
@@ -41,6 +42,11 @@ import {
   snapshotFieldsFromIssuerBrand,
   snapshotForNewDocument,
 } from "@/lib/documentIssuerBrand";
+import {
+  convertQuoteToInvoice,
+  findInvoiceBySourceQuoteId,
+  invoiceUrlFromConversion,
+} from "@/services/QuoteConversionService";
 
 const CURRENCIES = ["ZAR", "USD", "EUR", "GBP", "AUD", "CAD"];
 
@@ -110,58 +116,9 @@ function writeQuoteBankingPreference(quoteId, bankingDetailId) {
   }
 }
 
-function getInitials(name) {
-  if (!name) return "CL";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length > 1) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
-}
-
-function generateNumber(docType, clientName) {
-  const prefix = docType === "quote" ? "QUO" : "INV";
-  const initials = getInitials(clientName);
-  const now = new Date();
-  const datePart = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, "0")}${now.getDate().toString().padStart(2, "0")}`;
-  const timePart = `${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}`;
-  return `${prefix}-${datePart}-${initials}-${timePart}`;
-}
-
-function buildPaidLineItems(lineItems, discount) {
+function buildPaidLineItems(lineItems) {
   const rows = Array.isArray(lineItems) ? lineItems : [];
-  const mapped = rows
-    .filter(lineItemHasContent)
-    .map((row) => {
-      const qty = Number(row.quantity) || 1;
-      const unit = Number(row.unit_price) || 0;
-      const rawTotal = row.total;
-      const hasExplicitTotal =
-        rawTotal != null && rawTotal !== "" && !Number.isNaN(Number(rawTotal));
-      const total = hasExplicitTotal
-        ? Number(rawTotal)
-        : Math.round(qty * unit * 100) / 100;
-      const desc = (row.description || row.service_name || row.name || "").trim() || "Item";
-      return {
-        service_name: desc.split("\n")[0].slice(0, 200),
-        description: desc.includes("\n") ? desc.split("\n").slice(1).join("\n").trim() : "",
-        quantity: qty,
-        unit_price: unit,
-        total_price: total,
-      };
-    });
-
-  const d = Number(discount) || 0;
-  if (d > 0) {
-    mapped.push({
-      service_name: "Discount",
-      description: "",
-      quantity: 1,
-      unit_price: -d,
-      total_price: -d,
-    });
-  }
-  return mapped;
+  return rows.filter(lineItemHasContent).map((row, index) => toCommercialItemRow(row, index));
 }
 
 export default function CreateDocument() {
@@ -217,12 +174,17 @@ function CreateDocumentCore({ docType }) {
     due_date: "",
     line_items: [{ description: "", quantity: 1, unit_price: 0, total: 0 }],
     tax_rate: 0,
+    vat_mode: "VAT_EXCLUSIVE",
+    discount_type: "fixed",
+    discount_value: 0,
     discount: 0,
     currency: user?.currency || "ZAR",
     notes: "",
     company_name: "",
     company_email: "",
     company_address: "",
+    company_phone: "",
+    company_vat: "",
     banking_detail_id: "",
     terms_conditions: initialTerms,
     /** Document-only upload (`document-logos/...`); empty = resolver uses brand / Business Logo */
@@ -259,6 +221,8 @@ function CreateDocumentCore({ docType }) {
       company_name: user.company_name || f.company_name,
       company_email: user.email || f.company_email,
       company_address: user.company_address || f.company_address,
+      company_phone: user.phone || f.company_phone,
+      company_vat: user.vat_number || user.business?.vat_number || f.company_vat,
     }));
   }, [user]);
 
@@ -336,7 +300,6 @@ function CreateDocumentCore({ docType }) {
     setForm((f) => {
       return {
         ...f,
-        number: generateNumber(docType, f.client_name || ""),
         document_logo_url: composeLogoOverridePath(f.document_logo_url),
       };
     });
@@ -396,6 +359,16 @@ function CreateDocumentCore({ docType }) {
           setLoadedQuote(null);
           return;
         }
+        const existingInvoice = await findInvoiceBySourceQuoteId(quote.id);
+        if (existingInvoice?.id) {
+          toast({
+            title: "Quote already converted",
+            description: `Opening ${existingInvoice.invoice_number || "the existing invoice"}.`,
+            variant: "default",
+          });
+          navigate(createViewDocumentUrl("invoice", existingInvoice.id), { replace: true });
+          return;
+        }
         setLoadedQuote(quote);
         let qc = null;
         if (quote.client_id) {
@@ -409,15 +382,7 @@ function CreateDocumentCore({ docType }) {
         const dueDate = quote.valid_until
           ? new Date(quote.valid_until).toISOString().split("T")[0]
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-        const line_items = items.map((item) => {
-          const qty = Number(item.quantity ?? 1);
-          const rate = Number(item.unit_price ?? item.rate ?? 0);
-          const total = Number(item.total_price ?? item.total ?? qty * rate);
-          const desc =
-            [item.service_name || item.name, item.description].filter(Boolean).join("\n") || "Item";
-          return { description: desc, quantity: qty, unit_price: rate, total };
-        });
-        const clientName = qc?.name || "";
+        const line_items = items.map((item) => commercialLineItemToComposeRow(item));
         setForm((f) => ({
           ...f,
           client_id: quote.client_id || "",
@@ -428,7 +393,10 @@ function CreateDocumentCore({ docType }) {
           due_date: dueDate,
           line_items: line_items.length > 0 ? line_items : f.line_items,
           tax_rate: Number(quote.tax_rate ?? 0),
-          discount: 0,
+          vat_mode: quote.vat_mode || "VAT_EXCLUSIVE",
+          discount_type: quote.discount_type || "fixed",
+          discount_value: Number(quote.discount_value ?? quote.discount_amount ?? quote.discount ?? 0) || 0,
+          discount: Number(quote.discount_value ?? quote.discount_amount ?? quote.discount ?? 0) || 0,
           banking_detail_id:
             (quote.banking_detail_id && String(quote.banking_detail_id).trim()) ||
             readQuoteBankingPreference(quote.id) ||
@@ -437,7 +405,6 @@ function CreateDocumentCore({ docType }) {
           notes: quote.notes || "",
           terms_conditions: quote.terms_conditions || DEFAULT_INVOICE_TERMS_BODY,
           currency: quote.currency || f.currency || user?.currency || "ZAR",
-          number: generateNumber("invoice", clientName),
           document_logo_url: composeLogoOverridePath(f.document_logo_url),
           owner_logo_url: (quote.owner_logo_url && String(quote.owner_logo_url).trim()) || "",
         }));
@@ -461,7 +428,7 @@ function CreateDocumentCore({ docType }) {
     return () => {
       cancelled = true;
     };
-  }, [docType, quoteIdParam, toast, user?.currency]);
+  }, [docType, quoteIdParam, toast, user?.currency, navigate]);
 
   useEffect(() => {
     if (!fromHubDocumentParam || quoteIdParam || (docType !== "invoice" && docType !== "quote")) {
@@ -516,7 +483,6 @@ function CreateDocumentCore({ docType }) {
           tax_rate: prefill.tax_rate,
           notes: prefill.notes || f.notes,
           currency: prefill.currency || f.currency || user?.currency || "ZAR",
-          number: generateNumber(docType, clientName),
         }));
         toast({
           title: `${typeLabel(hubDoc.type)} loaded`,
@@ -551,7 +517,6 @@ function CreateDocumentCore({ docType }) {
         client_name: c.name,
         client_email: c.email || "",
         client_address: [c.address, c.city, c.country].filter(Boolean).join("\n"),
-        number: generateNumber(docType, c.name || ""),
       };
     });
   }, [clientIdParam, clients, docType]);
@@ -574,14 +539,7 @@ function CreateDocumentCore({ docType }) {
           return;
         }
         const rawItems = Array.isArray(template.items) ? template.items : [];
-        const line_items = rawItems.map((item) => {
-          const qty = Number(item.quantity ?? 1);
-          const rate = Number(item.unit_price ?? item.rate ?? item.price ?? 0);
-          const total = Number(item.total_price ?? item.total ?? qty * rate);
-          const desc =
-            [item.service_name || item.name, item.description].filter(Boolean).join("\n") || "Item";
-          return { description: desc, quantity: qty, unit_price: rate, total };
-        });
+        const line_items = rawItems.map((item) => commercialLineItemToComposeRow(item));
         setForm((f) => ({
           ...f,
           line_items: line_items.length > 0 ? line_items : f.line_items,
@@ -642,14 +600,7 @@ function CreateDocumentCore({ docType }) {
         const dueDate = full.valid_until
           ? new Date(full.valid_until).toISOString().split("T")[0]
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-        const line_items = items.map((item) => {
-          const qty = Number(item.quantity ?? 1);
-          const rate = Number(item.unit_price ?? item.rate ?? 0);
-          const total = Number(item.total_price ?? item.total ?? qty * rate);
-          const desc =
-            [item.service_name || item.name, item.description].filter(Boolean).join("\n") || "Item";
-          return { description: desc, quantity: qty, unit_price: rate, total };
-        });
+        const line_items = items.map((item) => commercialLineItemToComposeRow(item));
         const clientName = qc?.name || "";
         setForm((f) => ({
           ...f,
@@ -661,7 +612,10 @@ function CreateDocumentCore({ docType }) {
           due_date: dueDate,
           line_items: line_items.length > 0 ? line_items : f.line_items,
           tax_rate: Number(full.tax_rate ?? 0),
-          discount: 0,
+          vat_mode: full.vat_mode || "VAT_EXCLUSIVE",
+          discount_type: full.discount_type || "fixed",
+          discount_value: Number(full.discount_value ?? full.discount_amount ?? 0) || 0,
+          discount: Number(full.discount_value ?? full.discount_amount ?? 0) || 0,
           banking_detail_id:
             (full.banking_detail_id && String(full.banking_detail_id).trim()) ||
             readQuoteBankingPreference(full.id) ||
@@ -670,7 +624,6 @@ function CreateDocumentCore({ docType }) {
           notes: full.notes || "",
           terms_conditions: full.terms_conditions || "",
           currency: full.currency || f.currency || user?.currency || "ZAR",
-          number: generateNumber("quote", clientName),
           document_logo_url: composeLogoOverridePath(f.document_logo_url),
           owner_logo_url: (full.owner_logo_url && String(full.owner_logo_url).trim()) || "",
         }));
@@ -772,7 +725,6 @@ function CreateDocumentCore({ docType }) {
         client_name: created.name || name,
         client_email: created.email || (clientDraft.email || "").trim(),
         client_address: created.address || (clientDraft.address || "").trim(),
-        number: generateNumber(docType, created.name || name),
       }));
       setClientHighlight(true);
       window.setTimeout(() => setClientHighlight(false), 1400);
@@ -822,6 +774,11 @@ function CreateDocumentCore({ docType }) {
         quantity: 1,
         unit_price: rate,
         total: Math.round(rate * 100) / 100,
+        service_id: created?.id || null,
+        catalog_item_id: created?.id || null,
+        item_type: "service",
+        sku: created?.sku || "",
+        unit_type: created?.default_unit || created?.unit || "",
       };
       setForm((f) => {
         const rows = Array.isArray(f.line_items) ? f.line_items : [];
@@ -892,12 +849,24 @@ function CreateDocumentCore({ docType }) {
   );
 
   const computed = useMemo(() => {
-    const subtotal = (form.line_items || []).reduce((sum, item) => sum + (Number(item.total) || 0), 0);
-    const afterDiscount = Math.max(0, subtotal - (Number(form.discount) || 0));
-    const taxAmount = afterDiscount * ((Number(form.tax_rate) || 0) / 100);
-    const total = afterDiscount + taxAmount;
-    return { subtotal, subtotal_before_discount: subtotal, afterDiscount, tax_amount: taxAmount, total };
-  }, [form.line_items, form.tax_rate, form.discount]);
+    const totals = aggregateFromItems(
+      form.line_items,
+      form.tax_rate,
+      form.discount_value ?? form.discount,
+      form.vat_mode,
+      form.discount_type
+    );
+    return {
+      subtotal: totals.subtotal,
+      subtotal_before_discount: totals.subtotal,
+      afterDiscount: Math.max(0, totals.taxable_amount),
+      tax_amount: totals.tax_amount,
+      total: totals.total_amount,
+      discount_amount: totals.discount_amount,
+      discount_type: totals.discount_type,
+      discount_value: totals.discount_value,
+    };
+  }, [form.line_items, form.tax_rate, form.discount, form.discount_value, form.discount_type, form.vat_mode]);
 
   const selectedBrand = brands.find((row) => row.id === form.company_id) || null;
   const issuerBrand = useMemo(
@@ -918,7 +887,12 @@ function CreateDocumentCore({ docType }) {
     () => ({
       ...form,
       document_logo_url: composeLogoOverridePath(form.document_logo_url),
-      subtotal: computed.afterDiscount,
+      __liveTotals: true,
+      subtotal: computed.subtotal,
+      discount: computed.discount_amount,
+      discount_amount: computed.discount_amount,
+      discount_type: form.discount_type,
+      discount_value: form.discount_value ?? form.discount,
       tax_amount: computed.tax_amount,
       total: computed.total,
       issuerBrand,
@@ -954,23 +928,23 @@ function CreateDocumentCore({ docType }) {
 
   const persistInvoice = async (sendNow) => {
     const clientId = await resolveClientId();
-    const clientRow = clients.find((c) => c.id === clientId) || {
-      name: form.client_name,
-    };
 
-    const number =
-      (form.number || "").trim() ||
-      generateNumber("invoice", clientRow.name || form.client_name);
+    const customNumber = (form.number || "").trim();
 
-    const subtotal = computed.afterDiscount;
+    const subtotal = computed.subtotal;
     const tax_rate = Number(form.tax_rate) || 0;
     const tax_amount = computed.tax_amount;
     const total_amount = computed.total;
+    const discount_type = form.discount_type || "fixed";
+    const discount_value = Number(form.discount_value ?? form.discount) || 0;
+    const discount_amount = computed.discount_amount;
 
     const issuerSnapshot = snapshotFieldsFromIssuerBrand(issuerBrand);
     const owner_company_name = issuerSnapshot.owner_company_name;
-    const owner_company_address = (form.company_address || "").trim() || user?.company_address || null;
-    const owner_email = (form.company_email || "").trim() || user?.email || null;
+    const owner_company_address = (form.company_address || "").trim() || issuerSnapshot.owner_company_address || user?.company_address || null;
+    const owner_email = (form.company_email || "").trim() || issuerSnapshot.owner_email || user?.email || null;
+    const owner_phone = (form.company_phone || "").trim() || issuerSnapshot.owner_phone || user?.phone || null;
+    const owner_vat_number = (form.company_vat || "").trim() || issuerSnapshot.owner_vat_number || null;
     const owner_currency = form.currency || user?.currency || "ZAR";
     const owner_logo_url = issuerSnapshot.owner_logo_url;
 
@@ -978,11 +952,11 @@ function CreateDocumentCore({ docType }) {
       (form.due_date || "").trim() ||
       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-    const items = buildPaidLineItems(form.line_items, form.discount);
+    const items = buildPaidLineItems(form.line_items);
 
     const invoiceToCreate = {
       client_id: clientId,
-      invoice_number: number,
+      ...(customNumber ? { invoice_number: customNumber } : {}),
       status: "draft",
       project_title: form.client_name ? `Invoice for ${form.client_name}` : "Invoice",
       project_description: "",
@@ -991,7 +965,11 @@ function CreateDocumentCore({ docType }) {
       delivery_address: (form.client_address || "").trim() || "",
       subtotal,
       tax_rate,
+      vat_mode: form.vat_mode || "VAT_EXCLUSIVE",
       tax_amount,
+      discount_type,
+      discount_value,
+      discount_amount,
       total_amount,
       currency: form.currency || "ZAR",
       notes: form.notes || "",
@@ -999,12 +977,67 @@ function CreateDocumentCore({ docType }) {
       owner_company_name,
       owner_company_address,
       owner_email,
+      owner_phone,
+      owner_vat_number,
       owner_currency,
       owner_logo_url,
       banking_detail_id: (form.banking_detail_id || "").trim() || null,
       company_id: form.company_id || null,
       items,
     };
+
+    if (loadedQuote?.id) {
+      const converted = await convertQuoteToInvoice(loadedQuote, {
+        client_id: clientId,
+        company_id: form.company_id || null,
+        project_title: invoiceToCreate.project_title,
+        invoice_date: form.issue_date,
+        delivery_date,
+        subtotal,
+        tax_rate,
+        vat_mode: form.vat_mode || "VAT_EXCLUSIVE",
+        tax_amount,
+        total_amount,
+        currency: invoiceToCreate.currency,
+        notes: invoiceToCreate.notes,
+        terms_conditions: invoiceToCreate.terms_conditions,
+        banking_detail_id: invoiceToCreate.banking_detail_id,
+        owner_company_name,
+        owner_company_address,
+        owner_email,
+        owner_phone,
+        owner_vat_number,
+        owner_currency,
+        owner_logo_url,
+        discount_type,
+        discount_value,
+        discount_amount,
+        items,
+      });
+      const viewUrl = invoiceUrlFromConversion(converted);
+      if (loadedHubDocumentId) {
+        DocumentService.noteSpecialisedConversion(loadedHubDocumentId, { targetType: "invoice" }).catch(
+          () => {}
+        );
+      }
+      toast({
+        title: converted.already_converted ? "Quote already converted" : "Invoice created from quote",
+        description: converted.invoice_number
+          ? `${converted.already_converted ? "Opening" : "Saved"} ${converted.invoice_number}.`
+          : "Opening the invoice.",
+        variant: converted.already_converted ? "default" : "success",
+      });
+      if (sendNow && viewUrl) {
+        navigate(`${viewUrl}${viewUrl.includes("?") ? "&" : "?"}autosend=1`);
+        return;
+      }
+      if (viewUrl) {
+        navigate(viewUrl);
+        return;
+      }
+      navigate(createPageUrl("Invoices"));
+      return;
+    }
 
     const [invoicesCheck, itemsCheck] = await Promise.all([
       verifyTableExists(supabase, "invoices"),
@@ -1024,7 +1057,7 @@ function CreateDocumentCore({ docType }) {
 
     const queuedCreate = queueCreateInvoice(invoiceToCreate, {
       source: "create-document",
-      label: `Invoice ${number}`,
+      label: customNumber ? `Invoice ${customNumber}` : "Invoice draft",
     });
     if (loadedHubDocumentId) {
       DocumentService.noteSpecialisedConversion(loadedHubDocumentId, { targetType: "invoice" }).catch(
@@ -1058,14 +1091,16 @@ function CreateDocumentCore({ docType }) {
 
     toast({
       title: "Invoice queued",
-      description: `Draft ${number} was queued for background sync.`,
+      description: customNumber
+        ? `Draft ${customNumber} was queued for background sync.`
+        : "Draft was queued for background sync. The invoice number is assigned on save.",
       variant: "default",
     });
     setTimeout(() => navigate(createPageUrl("Invoices")), 800);
   };
 
   const handleSave = async () => {
-    const items = buildPaidLineItems(form.line_items, form.discount);
+    const items = buildPaidLineItems(form.line_items);
     if (items.length === 0) {
       toast({
         title: "Add line items",
@@ -1079,23 +1114,22 @@ function CreateDocumentCore({ docType }) {
     try {
       if (docType === "quote") {
         const clientId = await resolveClientId();
-        const clientRow = clients.find((c) => c.id === clientId) || {
-          name: form.client_name,
-        };
+        const customNumber = (form.number || "").trim();
 
-        const number =
-          (form.number || "").trim() ||
-          generateNumber(docType, clientRow.name || form.client_name);
-
-        const subtotal = computed.afterDiscount;
+        const subtotal = computed.subtotal;
         const tax_rate = Number(form.tax_rate) || 0;
         const tax_amount = computed.tax_amount;
         const total_amount = computed.total;
+        const discount_type = form.discount_type || "fixed";
+        const discount_value = Number(form.discount_value ?? form.discount) || 0;
+        const discount_amount = computed.discount_amount;
 
         const issuerSnapshot = snapshotFieldsFromIssuerBrand(issuerBrand);
         const owner_company_name = issuerSnapshot.owner_company_name;
-        const owner_company_address = (form.company_address || "").trim() || user?.company_address || null;
-        const owner_email = (form.company_email || "").trim() || user?.email || null;
+        const owner_company_address = (form.company_address || "").trim() || issuerSnapshot.owner_company_address || user?.company_address || null;
+        const owner_email = (form.company_email || "").trim() || issuerSnapshot.owner_email || user?.email || null;
+        const owner_phone = (form.company_phone || "").trim() || issuerSnapshot.owner_phone || user?.phone || null;
+        const owner_vat_number = (form.company_vat || "").trim() || issuerSnapshot.owner_vat_number || null;
         const owner_currency = form.currency || user?.currency || "ZAR";
         const owner_logo_url = issuerSnapshot.owner_logo_url;
 
@@ -1105,14 +1139,18 @@ function CreateDocumentCore({ docType }) {
 
         const quoteToCreate = {
           client_id: clientId,
-          quote_number: number,
+          ...(customNumber ? { quote_number: customNumber } : {}),
           status: "draft",
           project_title: form.client_name ? `Quote for ${form.client_name}` : "Quote",
           project_description: "",
           valid_until,
           subtotal,
           tax_rate,
+          vat_mode: form.vat_mode || "VAT_EXCLUSIVE",
           tax_amount,
+          discount_type,
+          discount_value,
+          discount_amount,
           total_amount,
           currency: form.currency || "ZAR",
           notes: form.notes || "",
@@ -1120,9 +1158,12 @@ function CreateDocumentCore({ docType }) {
           owner_company_name,
           owner_company_address,
           owner_email,
+          owner_phone,
+          owner_vat_number,
           owner_currency,
           owner_logo_url,
           banking_detail_id: (form.banking_detail_id || "").trim() || null,
+          company_id: form.company_id || null,
           ...snapshotDocumentBrandForPersist(user),
           items,
         };
@@ -1137,7 +1178,9 @@ function CreateDocumentCore({ docType }) {
         }
         toast({
           title: "Quote created",
-          description: `Saved as ${number}.`,
+          description: createdQuote?.quote_number
+            ? `Saved as ${createdQuote.quote_number}.`
+            : "Quote saved. Number assigned on save.",
           variant: "success",
         });
         setTimeout(() => navigate(createPageUrl("Quotes")), 800);
@@ -1161,7 +1204,7 @@ function CreateDocumentCore({ docType }) {
 
   const handleSendInvoiceNow = async () => {
     if (docType !== "invoice") return;
-    const items = buildPaidLineItems(form.line_items, form.discount);
+    const items = buildPaidLineItems(form.line_items);
     if (items.length === 0) {
       toast({
         title: "Add line items",
@@ -1215,7 +1258,7 @@ function CreateDocumentCore({ docType }) {
   }, [draftRestoreNotice, toast]);
 
   const queuePdfDownload = useCallback(() => {
-    const items = buildPaidLineItems(form.line_items, form.discount);
+    const items = buildPaidLineItems(form.line_items);
     if (items.length === 0) {
       toast({
         title: "Nothing to export",
@@ -1303,7 +1346,7 @@ function CreateDocumentCore({ docType }) {
               New {docType === "quote" ? "Quote" : "Invoice"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              #{form.number}
+              #{form.number || "Assigned on save"}
               {selectedBrand?.name
                 ? ` · ${selectedBrand.name}`
                 : user?.company_name
@@ -1325,11 +1368,7 @@ function CreateDocumentCore({ docType }) {
                       document_logo_url: composeLogoOverridePath(f.document_logo_url),
                     }));
                   }}
-                  description={
-                    docType === "invoice"
-                      ? "Saved on this invoice. Switching the header brand later will not change it."
-                      : "Quotes store the brand name and logo on the document."
-                  }
+                  description="Saved on this document as company / brand. Switching the header brand later will not change it."
                 />
               </div>
             ) : null}
@@ -1412,11 +1451,7 @@ function CreateDocumentCore({ docType }) {
                       document_logo_url: composeLogoOverridePath(f.document_logo_url),
                     }));
                   }}
-                  description={
-                    docType === "invoice"
-                      ? "Saved on this invoice as company / brand. Switching the header brand will not change it after you save."
-                      : "Quotes store the brand name and logo on the document. They are not linked on a separate brand id."
-                  }
+                  description="Saved on this invoice or quote as company / brand. Switching the header brand will not change it after you save."
                 />
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1433,6 +1468,24 @@ function CreateDocumentCore({ docType }) {
                       value={form.company_email}
                       onChange={(e) => update("company_email", e.target.value)}
                       placeholder={user?.email || "billing@company.com"}
+                    />
+                  </div>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input
+                      value={form.company_phone}
+                      onChange={(e) => update("company_phone", e.target.value)}
+                      placeholder={user?.phone || "+27 …"}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>VAT number</Label>
+                    <Input
+                      value={form.company_vat}
+                      onChange={(e) => update("company_vat", e.target.value)}
+                      placeholder={user?.vat_number || user?.business?.vat_number || "VAT / tax number"}
                     />
                   </div>
                 </div>
@@ -1598,6 +1651,10 @@ function CreateDocumentCore({ docType }) {
                   items={form.line_items}
                   onChange={(items) => update("line_items", items)}
                   currencyCode={form.currency}
+                  taxRate={form.tax_rate}
+                  discount={form.discount_value ?? form.discount}
+                  discountType={form.discount_type}
+                  vatMode={form.vat_mode}
                   onCreateService={() => setShowAddServiceDialog(true)}
                   highlightedRowIndex={lineItemHighlightIndex}
                 />
@@ -1613,7 +1670,11 @@ function CreateDocumentCore({ docType }) {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Document number</Label>
-                  <Input value={form.number} onChange={(e) => update("number", e.target.value)} />
+                  <Input
+                    value={form.number}
+                    placeholder="Assigned on save"
+                    onChange={(e) => update("number", e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>{docType === "quote" ? "Issue date" : "Invoice date"}</Label>
@@ -1694,18 +1755,65 @@ function CreateDocumentCore({ docType }) {
                   <span className="font-medium">{formatCurrency(computed.subtotal, currencyCode)}</span>
                 </div>
                 <div className="space-y-2">
-                  <Label>Discount ({currencyCode})</Label>
+                  <Label>Discount type</Label>
+                  <Select
+                    value={form.discount_type || "fixed"}
+                    onValueChange={(value) => {
+                      setForm((f) => ({
+                        ...f,
+                        discount_type: value,
+                        discount: f.discount_value ?? f.discount,
+                      }));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">Fixed amount ({currencyCode})</SelectItem>
+                      <SelectItem value="percentage">Percentage (%)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    {form.discount_type === "percentage" ? "Discount (%)" : `Discount (${currencyCode})`}
+                  </Label>
                   <Input
                     type="number"
                     min={0}
-                    step="0.01"
-                    value={form.discount}
-                    onChange={(e) => update("discount", parseFloat(e.target.value) || 0)}
+                    step={form.discount_type === "percentage" ? "0.1" : "0.01"}
+                    value={form.discount_value ?? form.discount}
+                    onChange={(e) => {
+                      const next = parseFloat(e.target.value) || 0;
+                      setForm((f) => ({ ...f, discount: next, discount_value: next }));
+                    }}
                   />
                 </div>
+                {computed.discount_amount > 0 ? (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Discount</span>
+                    <span>-{formatCurrency(computed.discount_amount, currencyCode)}</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">After discount</span>
+                  <span className="text-muted-foreground">Taxable amount</span>
                   <span>{formatCurrency(computed.afterDiscount, currencyCode)}</span>
+                </div>
+                <div className="space-y-2">
+                  <Label>VAT pricing</Label>
+                  <Select
+                    value={form.vat_mode || "VAT_EXCLUSIVE"}
+                    onValueChange={(value) => update("vat_mode", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VAT_EXCLUSIVE">Exclusive — VAT added on net</SelectItem>
+                      <SelectItem value="VAT_INCLUSIVE">Inclusive — VAT extracted from price</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Tax rate (%)</Label>

@@ -26,6 +26,8 @@ import { normalizeCatalogItemForMap, getCatalogItemRate } from "@/utils/catalogL
 import { SavedCatalogCommand, CatalogCombobox } from "@/components/catalog/DocumentCatalogPicker";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { aggregateFromItems } from "@/document-engine/documentTotals";
+import { lineTaxFromCustomerPrice } from "@shared/commercial/calculateCommercialDocument.js";
 
 function NotesLegalFields({ invoiceData, bankingDetails, onFieldChange, onRequestAddBanking, omitPaymentDetails = false }) {
     return (
@@ -316,47 +318,26 @@ export default function ProjectDetails({
         }
     };
 
-    const updateTotals = (items) => {
-        const subtotal = items.reduce((sum, item) => sum + (item.total_price || 0), 0);
-        
-        // Calculate discount (quotes do not use invoice-style discounts in this editor)
-        let discountAmount = 0;
-        const discountType = documentKind === "quote" ? "fixed" : invoiceData.discount_type || "fixed";
-        const discountValue = documentKind === "quote" ? 0 : invoiceData.discount_value || 0;
-        
-        if (discountValue > 0) {
-            if (discountType === 'percentage') {
-                discountAmount = subtotal * (discountValue / 100);
-            } else {
-                discountAmount = discountValue;
-            }
-        }
-        
-        // Subtotal after discount
-        const subtotalAfterDiscount = subtotal - discountAmount;
-        
-        // Calculate per-item tax amounts
-        const itemTaxes = items.reduce((sum, item) => {
-            const itemTax = item.item_tax_amount || 0;
-            return sum + itemTax;
-        }, 0);
-        
-        // Calculate global tax (applied to subtotal after discount)
-        const globalTaxRate = invoiceData.tax_rate || 0;
-        const globalTaxAmount = subtotalAfterDiscount * (globalTaxRate / 100);
-        
-        // Total tax is the sum of item-specific and global taxes
-        const totalTaxAmount = itemTaxes + globalTaxAmount;
-        const totalAmount = subtotalAfterDiscount + totalTaxAmount;
-
+    const updateTotals = (items, extra = {}) => {
+        const discountType = extra.discount_type ?? invoiceData.discount_type ?? "fixed";
+        const discountValue = Number(
+          extra.discount_value ?? invoiceData.discount_value ?? invoiceData.discount_amount ?? 0
+        ) || 0;
+        const taxRate = extra.tax_rate ?? invoiceData.tax_rate;
+        const vatMode = extra.vat_mode ?? invoiceData.vat_mode;
+        const totals = aggregateFromItems(items, taxRate, discountValue, vatMode, discountType);
         setInvoiceData(prev => ({
             ...prev,
-            items: items,
-            subtotal,
-            discount_amount: discountAmount,
-            tax_amount: totalTaxAmount,
-            item_taxes: itemTaxes,
-            total_amount: totalAmount
+            ...extra,
+            items,
+            subtotal: totals.subtotal,
+            discount_type: totals.discount_type,
+            discount_value: totals.discount_value,
+            discount_amount: totals.discount_amount,
+            tax_amount: totals.tax_amount,
+            item_taxes: 0,
+            total_amount: totals.total_amount,
+            vat_mode: totals.vat_mode,
         }));
     };
 
@@ -392,6 +373,10 @@ export default function ProjectDetails({
             ...updatedItems[index],
             [field]: value
         };
+        if (field === "sku" || field === "part_number") {
+            updatedItems[index].sku = value;
+            updatedItems[index].part_number = value;
+        }
 
         // Recalculate prices for quantity or unit_price changes
         if (field === 'quantity' || field === 'unit_price') {
@@ -404,7 +389,11 @@ export default function ProjectDetails({
         if (field === 'item_tax_rate' || field === 'quantity' || field === 'unit_price') {
             const itemTaxRate = parseFloat(updatedItems[index].item_tax_rate || 0) || 0;
             const totalPrice = updatedItems[index].total_price || 0;
-            updatedItems[index].item_tax_amount = totalPrice * (itemTaxRate / 100);
+            updatedItems[index].item_tax_amount = lineTaxFromCustomerPrice(
+                totalPrice,
+                itemTaxRate,
+                invoiceData.vat_mode
+            );
         }
         
         updateTotals(updatedItems);
@@ -440,8 +429,12 @@ export default function ProjectDetails({
                 total_price: totalPrice,
                 item_type: normalized.item_type || currentItem.item_type,
                 catalog_item_id: normalized.id,
+                service_id: normalized.id,
+                sku: normalized.sku || currentItem.sku || "",
+                unit_type: normalized.default_unit || normalized.unit || currentItem.unit_type || "",
+                tax_rate: itemTaxRate,
                 item_tax_rate: itemTaxRate,
-                item_tax_amount: totalPrice * (itemTaxRate / 100),
+                item_tax_amount: lineTaxFromCustomerPrice(totalPrice, itemTaxRate, invoiceData.vat_mode),
             };
         }
 
@@ -546,7 +539,11 @@ export default function ProjectDetails({
 
         nextItem.total_price = (Number(nextItem.quantity) || 0) * (Number(nextItem.unit_price) || 0);
         nextItem.item_tax_rate = nextItem.item_tax_rate || 0;
-        nextItem.item_tax_amount = nextItem.total_price * (nextItem.item_tax_rate / 100);
+        nextItem.item_tax_amount = lineTaxFromCustomerPrice(
+            nextItem.total_price,
+            nextItem.item_tax_rate,
+            invoiceData.vat_mode
+        );
 
         const nextIndex = (invoiceData.items || []).length;
         const updatedItems = [...(invoiceData.items || []), nextItem];
@@ -628,21 +625,14 @@ export default function ProjectDetails({
 
     const handleTaxRateChange = (value) => {
         const taxRate = parseFloat(value) || 0;
-        updateTotals(invoiceData.items || []);
-
-        setInvoiceData(prev => ({
-            ...prev,
-            tax_rate: taxRate
-        }));
+        updateTotals(invoiceData.items || [], { tax_rate: taxRate });
     };
 
     const handleDiscountChange = (type, value) => {
-        setInvoiceData(prev => ({
-            ...prev,
+        updateTotals(invoiceData.items || [], {
             discount_type: type,
-            discount_value: parseFloat(value) || 0
-        }));
-        updateTotals(invoiceData.items || []);
+            discount_value: parseFloat(value) || 0,
+        });
     };
 
     const items = invoiceData.items || [];
@@ -703,16 +693,23 @@ export default function ProjectDetails({
                 unit_type: preset ? preset.defaultUnitType : normalized.item_type === "product" ? "piece" : "unit",
                 part_number: "",
                 sku: normalized.sku || "",
+                catalog_item_id: normalized.id,
+                service_id: normalized.id,
                 details: "",
                 group_id: null,
-                item_tax_rate: 0,
+                tax_rate: normalized.default_tax_rate ?? normalized.tax_rate ?? 0,
+                item_tax_rate: normalized.default_tax_rate ?? normalized.tax_rate ?? 0,
                 item_tax_amount: 0,
             };
         }
 
         nextItem.total_price = (Number(nextItem.quantity) || 0) * (Number(nextItem.unit_price) || 0);
         nextItem.item_tax_rate = nextItem.item_tax_rate || 0;
-        nextItem.item_tax_amount = nextItem.total_price * (Number(nextItem.item_tax_rate) / 100);
+        nextItem.item_tax_amount = lineTaxFromCustomerPrice(
+            nextItem.total_price,
+            nextItem.item_tax_rate,
+            invoiceData.vat_mode
+        );
 
         const nextIndex = (invoiceData.items || []).length;
         const updatedItems = [...(invoiceData.items || []), nextItem];
@@ -1502,8 +1499,8 @@ export default function ProjectDetails({
                                                 <div className={cn("space-y-2", isEditorLayout && "md:col-span-6")}>
                                                     <Label className="text-sm font-semibold text-slate-700">SKU / Product Code</Label>
                                                     <Input
-                                                        value={item.part_number || ''}
-                                                        onChange={(e) => handleItemChange(index, 'part_number', e.target.value)}
+                                                        value={item.sku || item.part_number || ''}
+                                                        onChange={(e) => handleItemChange(index, 'sku', e.target.value)}
                                                         placeholder="e.g., SKU-001 or PROD-ABC"
                                                         className="h-10 rounded-lg"
                                                     />
@@ -2439,7 +2436,7 @@ export default function ProjectDetails({
                                     </div>
 
                                     {/* Discount */}
-                                    {(invoiceData.discount_value || 0) > 0 && (
+                                    {(Number(invoiceData.discount_amount) || Number(invoiceData.discount_value) || 0) > 0 && (
                                         <div
                                             className={cn(
                                                 "flex justify-between items-center rounded-lg px-2 py-2 -mx-2",

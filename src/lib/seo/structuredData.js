@@ -10,6 +10,7 @@
  * - Offers match the visible Pricing section (ZAR amounts from shared plans)
  */
 import { PLANS, PUBLIC_SELF_SERVE_MONTHLY_SLUGS } from "@shared/plans.js";
+import { MARKETING_PLANS } from "@shared/planMarketing.js";
 import { PAIDLY_SITE_ORIGIN, absoluteUrl } from "@/lib/seo/siteOrigin.js";
 
 export const ORG_ID = `${PAIDLY_SITE_ORIGIN}/#organization`;
@@ -51,23 +52,36 @@ export function buildHomeStructuredDataGraph() {
 
   // WebApplication + offers that mirror the Pricing section. No AggregateRating —
   // fabricating reviews violates Google's quality guidelines / spam policies.
-  const offers = PUBLIC_SELF_SERVE_MONTHLY_SLUGS.map((slug) => {
-    const plan = PLANS[slug];
-    return {
-      "@type": "Offer",
-      name: plan.name,
-      price: String(plan.price),
-      priceCurrency: "ZAR",
-      priceSpecification: {
-        "@type": "UnitPriceSpecification",
+  const pricingUrl = `${absoluteUrl("/")}#pricing`;
+  const offers = [
+    ...PUBLIC_SELF_SERVE_MONTHLY_SLUGS.map((slug) => {
+      const plan = PLANS[slug];
+      const copy = MARKETING_PLANS[plan.family];
+      return {
+        "@type": "Offer",
+        name: copy?.name || plan.name,
+        description: copy?.description,
         price: String(plan.price),
         priceCurrency: "ZAR",
-        billingDuration: "P1M",
-      },
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: String(plan.price),
+          priceCurrency: "ZAR",
+          billingDuration: "P1M",
+        },
+        availability: "https://schema.org/InStock",
+        url: pricingUrl,
+      };
+    }),
+    {
+      "@type": "Offer",
+      name: MARKETING_PLANS.enterprise.name,
+      description: MARKETING_PLANS.enterprise.description,
+      priceCurrency: "ZAR",
       availability: "https://schema.org/InStock",
-      url: `${absoluteUrl("/")}#pricing`,
-    };
-  });
+      url: pricingUrl,
+    },
+  ];
 
   const webApp = {
     "@type": ["SoftwareApplication", "WebApplication"],

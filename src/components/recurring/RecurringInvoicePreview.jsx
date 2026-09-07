@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { format } from "date-fns";
 import PropTypes from "prop-types";
 import RecurringSaveActions from "./RecurringSaveActions";
+import { aggregateFromItems } from "@/document-engine/documentTotals";
 
 export default function RecurringInvoicePreview({
     invoiceData,
@@ -19,10 +20,14 @@ export default function RecurringInvoicePreview({
     const bankingDetail = bankingDetails?.find((b) => b.id === invoiceData.banking_detail_id);
 
     const calculateTotals = () => {
-        const subtotal = invoiceData.line_items?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
-        const tax = subtotal * (invoiceData.tax_rate / 100);
-        const total = subtotal + tax;
-        return { subtotal, tax, total };
+        const totals = aggregateFromItems(
+            invoiceData.line_items || invoiceData.items || [],
+            invoiceData.tax_rate,
+            invoiceData.discount_value ?? invoiceData.discount_amount ?? invoiceData.discount,
+            invoiceData.vat_mode,
+            invoiceData.discount_type
+        );
+        return { subtotal: totals.subtotal, tax: totals.tax_amount, total: totals.total_amount };
     };
 
     const { subtotal, tax, total } = calculateTotals();

@@ -1,7 +1,17 @@
 /**
  * Tax Service
- * Handles tax/VAT configuration, presets, and calculations
+ * Presets and reporting. VAT arithmetic is owned by the commercial engine.
  */
+
+import {
+  asMoneyNumber,
+  allocateVatOnPayment,
+  calculateGrossFromNet,
+  calculateNetFromGross,
+  calculateTaxOnExclusive,
+  roundMoney,
+} from "@shared/commercial/calculateCommercialDocument.js";
+import { storedTaxableAmount } from "@shared/commercial/normalizeCommercialDocument.js";
 
 export class TaxService {
   // Default tax presets by region
@@ -69,9 +79,7 @@ export class TaxService {
    * @returns {number} Tax amount
    */
   static calculateTax(amount = 0, taxRate = 0) {
-    const base = parseFloat(amount) || 0;
-    const rate = parseFloat(taxRate) || 0;
-    return base * (rate / 100);
+    return calculateTaxOnExclusive(amount, taxRate);
   }
 
   /**
@@ -81,9 +89,7 @@ export class TaxService {
    * @returns {number} Amount with tax included
    */
   static calculateAmountWithTax(amount = 0, taxRate = 0) {
-    const base = parseFloat(amount) || 0;
-    const tax = this.calculateTax(base, taxRate);
-    return base + tax;
+    return calculateGrossFromNet(amount, taxRate).gross;
   }
 
   /**
@@ -93,20 +99,8 @@ export class TaxService {
    * @returns {object} Net amount and tax amount
    */
   static calculateNetFromGross(grossAmount = 0, taxRate = 0) {
-    const gross = parseFloat(grossAmount) || 0;
-    const rate = parseFloat(taxRate) || 0;
-    
-    if (rate === 0) {
-      return { net: gross, tax: 0 };
-    }
-
-    const net = gross / (1 + (rate / 100));
-    const tax = gross - net;
-
-    return {
-      net: parseFloat(net.toFixed(2)),
-      tax: parseFloat(tax.toFixed(2))
-    };
+    const split = calculateNetFromGross(grossAmount, taxRate);
+    return { net: split.net, tax: split.tax };
   }
 
   /**
@@ -152,15 +146,15 @@ export class TaxService {
     };
 
     invoices.forEach((invoice) => {
-      const subtotal = invoice.subtotal || 0;
-      const taxAmount = invoice.tax_amount || 0;
-      const taxRate = invoice.tax_rate || 0;
+      const taxAmount = asMoneyNumber(invoice.tax_amount);
+      const taxRate = asMoneyNumber(invoice.tax_rate);
+      const taxable = storedTaxableAmount(invoice);
+      const total = asMoneyNumber(invoice.total_amount ?? invoice.total) || roundMoney(taxable + taxAmount);
 
-      summary.totalBeforeTax += subtotal;
+      summary.totalBeforeTax += taxable;
       summary.totalTax += taxAmount;
-      summary.totalAfterTax += (subtotal + taxAmount);
+      summary.totalAfterTax += total;
 
-      // Group by tax rate
       const rateKey = `${taxRate}%`;
       if (!summary.byTaxRate[rateKey]) {
         summary.byTaxRate[rateKey] = {
@@ -172,9 +166,9 @@ export class TaxService {
         };
       }
       summary.byTaxRate[rateKey].count += 1;
-      summary.byTaxRate[rateKey].subtotal += subtotal;
+      summary.byTaxRate[rateKey].subtotal += taxable;
       summary.byTaxRate[rateKey].taxAmount += taxAmount;
-      summary.byTaxRate[rateKey].total += (subtotal + taxAmount);
+      summary.byTaxRate[rateKey].total += total;
     });
 
     return {
@@ -224,8 +218,9 @@ export class TaxService {
    * SARS VAT note (high level): on the payments basis, output VAT is accounted for
    * when payment is received (including partial payments), not when the invoice is issued.
    *
-   * This helper allocates VAT per payment using the invoice's VAT rate and assumes
-   * invoice totals are VAT-inclusive (`total_amount` includes VAT).
+   * Allocates VAT per payment from stored tax/total (works for exclusive and
+   * inclusive documents). Inclusive extract is used only when vat_mode is
+   * VAT_INCLUSIVE and tax_amount is missing.
    *
    * @param {object} params
    * @param {Array} params.invoices - Invoices (must include id, total_amount, tax_rate and/or tax_amount/subtotal)
@@ -298,20 +293,9 @@ export class TaxService {
       paidSoFarByInvoice.set(invoiceId, alreadyAllocated + allocGross);
 
       const rate = resolveVatRate(inv);
-      if (rate <= 0) {
-        // Still track gross/net for completeness, but VAT is zero.
-        grossPayments += allocGross;
-        netPayments += allocGross;
-        if (!byInvoice[invoiceId]) {
-          byInvoice[invoiceId] = { invoiceId, vatRate: 0, grossPayments: 0, netPayments: 0, vatDue: 0 };
-        }
-        byInvoice[invoiceId].grossPayments += allocGross;
-        byInvoice[invoiceId].netPayments += allocGross;
-        continue;
-      }
-
-      const net = allocGross / (1 + rate / 100);
-      const vat = allocGross - net;
+      const allocated = allocateVatOnPayment(inv, allocGross);
+      const net = allocated.net;
+      const vat = allocated.tax;
 
       grossPayments += allocGross;
       netPayments += net;

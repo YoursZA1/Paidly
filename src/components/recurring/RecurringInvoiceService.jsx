@@ -1,5 +1,6 @@
 import { RecurringInvoice, Invoice, Client } from '@/api/entities';
 import { add, formatISO, startOfToday, isAfter, isBefore, isEqual } from 'date-fns';
+import { aggregateFromItems } from '@/document-engine/documentTotals';
 
 class RecurringInvoiceService {
     /**
@@ -48,9 +49,16 @@ class RecurringInvoiceService {
         const { client_id, invoice_template } = profile;
         const client = await Client.get(client_id);
 
-        const subtotal = invoice_template.items.reduce((sum, item) => sum + (item.total_price || 0), 0);
-        const taxAmount = subtotal * ((invoice_template.tax_rate || 0) / 100);
-        const totalAmount = subtotal + taxAmount;
+        const totals = aggregateFromItems(
+            invoice_template.items,
+            invoice_template.tax_rate,
+            invoice_template.discount_value ?? invoice_template.discount_amount,
+            invoice_template.vat_mode,
+            invoice_template.discount_type
+        );
+        const subtotal = totals.subtotal;
+        const taxAmount = totals.tax_amount;
+        const totalAmount = totals.total_amount;
         
         const now = new Date();
         const datePart = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
@@ -64,6 +72,10 @@ class RecurringInvoiceService {
             subtotal,
             tax_amount: taxAmount,
             total_amount: totalAmount,
+            vat_mode: totals.vat_mode,
+            discount_type: totals.discount_type,
+            discount_value: totals.discount_value,
+            discount_amount: totals.discount_amount,
             delivery_date: formatISO(add(now, { days: 30 }), { representation: 'date' }), // Due in 30 days
             status: 'draft',
             recurring_invoice_id: profile.id,

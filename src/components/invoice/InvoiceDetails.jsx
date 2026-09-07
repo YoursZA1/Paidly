@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import ServiceForm from "@/components/services/ServiceForm";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
+import { aggregateFromItems } from "@/document-engine/documentTotals";
 
 /** Get rate from catalog item (same order as Quote / services table: default_rate, rate, price) */
 function getCatalogRate(catalogItem) {
@@ -54,28 +55,32 @@ export default function InvoiceDetails({
   const [quickPrice, setQuickPrice] = useState("");
   const quickNameRef = useRef(null);
 
-  // Auto-calculate subtotal, tax, and total from line items (same as Quote)
+  // Auto-calculate subtotal, tax, and total from the commercial engine.
   useEffect(() => {
-    const subtotal = (invoiceData.items || []).reduce(
-      (sum, item) => sum + (Number(item.total) || Number(item.total_price) || 0),
-      0
+    const totals = aggregateFromItems(
+      invoiceData.items || [],
+      invoiceData.tax_rate,
+      invoiceData.discount_value ?? invoiceData.discount_amount,
+      invoiceData.vat_mode,
+      invoiceData.discount_type
     );
-    const taxRate = Number(invoiceData.tax_rate) || 0;
-    const taxAmount = subtotal * (taxRate / 100);
-    const totalAmount = subtotal + taxAmount;
     if (
-      subtotal !== invoiceData.subtotal ||
-      taxAmount !== invoiceData.tax_amount ||
-      totalAmount !== invoiceData.total_amount
+      totals.subtotal !== invoiceData.subtotal ||
+      totals.tax_amount !== invoiceData.tax_amount ||
+      totals.total_amount !== invoiceData.total_amount
     ) {
       setInvoiceData(prev => ({
         ...prev,
-        subtotal,
-        tax_amount: taxAmount,
-        total_amount: totalAmount
+        subtotal: totals.subtotal,
+        tax_amount: totals.tax_amount,
+        total_amount: totals.total_amount,
+        discount_type: totals.discount_type,
+        discount_value: totals.discount_value,
+        discount_amount: totals.discount_amount,
+        vat_mode: totals.vat_mode,
       }));
     }
-  }, [invoiceData.items, invoiceData.tax_rate, invoiceData.subtotal, invoiceData.tax_amount, invoiceData.total_amount, setInvoiceData]);
+  }, [invoiceData.items, invoiceData.tax_rate, invoiceData.discount_amount, invoiceData.discount_value, invoiceData.discount_type, invoiceData.vat_mode, invoiceData.subtotal, invoiceData.tax_amount, invoiceData.total_amount, setInvoiceData]);
 
   const handleServiceSelect = (index, catalogItem) => {
     const items = [...(invoiceData.items || [])];
@@ -106,7 +111,14 @@ export default function InvoiceDetails({
         rate,
         total,
         unit_price: rate,
-        total_price: total
+        total_price: total,
+        service_id: catalogItem.id || currentItem?.service_id || null,
+        catalog_item_id: catalogItem.id || currentItem?.catalog_item_id || null,
+        sku: catalogItem.sku || currentItem?.sku || "",
+        item_type: catalogItem.item_type || currentItem?.item_type || "service",
+        unit_type: catalogItem.default_unit || catalogItem.unit || currentItem?.unit_type || "",
+        tax_rate: catalogItem.default_tax_rate ?? catalogItem.tax_rate ?? currentItem?.tax_rate,
+        item_tax_rate: catalogItem.default_tax_rate ?? catalogItem.tax_rate ?? currentItem?.item_tax_rate,
       };
     }
 

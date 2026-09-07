@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canEditInvoice, canRecordPayment, isPosOriginInvoice } from "@/logic/invoiceLogic";
+import { canEditInvoice, canRecordPayment, getInvoiceRemainingBalance, isPosOriginInvoice } from "@/logic/invoiceLogic";
 
 describe("POS origin invoices", () => {
   const posInvoice = { status: "paid", pos_sale_event_id: "sale-1" };
@@ -13,5 +13,15 @@ describe("POS origin invoices", () => {
   it("still allows recording payment on an unpaid document invoice", () => {
     expect(canRecordPayment({ status: "sent" })).toBe(true);
     expect(canEditInvoice({ status: "draft" })).toBe(true);
+  });
+
+  it("locks edit for canonical and legacy paid/void statuses", () => {
+    expect(canEditInvoice({ status: "partially_paid" })).toBe(false);
+    expect(canEditInvoice({ status: "partial_paid" })).toBe(false);
+    expect(canEditInvoice({ status: "void" })).toBe(false);
+    expect(canEditInvoice({ status: "cancelled" })).toBe(false);
+    expect(canRecordPayment({ status: "void" })).toBe(false);
+    expect(canRecordPayment({ status: "cancelled" })).toBe(false);
+    expect(canRecordPayment({ status: "partially_paid" })).toBe(true);
   });
 });

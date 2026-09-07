@@ -727,9 +727,9 @@ export const DocumentService = {
     // Only financial types (invoice, quote, PO, …) carry line items + monetary totals. Prose docs
     // (contracts, briefs, reports, …) persist their content in `body` + attachments instead.
     const financial = isFinancialType(type);
-    const { rows, subtotal, tax_amount, total_amount } = financial
-      ? aggregateFromItems(payload?.items, tax_rate, discount_amount)
-      : { rows: [], subtotal: 0, tax_amount: 0, total_amount: 0 };
+    const { rows, subtotal, tax_amount, total_amount, discount_amount: computedDiscount } = financial
+      ? aggregateFromItems(payload?.items, tax_rate, discount_amount, payload?.vat_mode, payload?.discount_type)
+      : { rows: [], subtotal: 0, tax_amount: 0, total_amount: 0, discount_amount: 0 };
 
     const insertRow = {
       org_id: orgId,
@@ -747,7 +747,7 @@ export const DocumentService = {
       subtotal,
       tax_rate,
       tax_amount,
-      discount_amount,
+      discount_amount: financial ? computedDiscount : discount_amount,
       total_amount,
       currency,
       base_currency: baseCurrency,
@@ -851,12 +851,18 @@ export const DocumentService = {
     }
 
     const tax_rate = patch.tax_rate != null ? Number(patch.tax_rate) : Number(existing.tax_rate ?? 0);
+    const discount_type = patch.discount_type ?? existing.discount_type;
+    const discount_value =
+      patch.discount_value != null
+        ? Number(patch.discount_value)
+        : Number(existing.discount_value ?? existing.discount_amount ?? 0);
     const discount_amount =
       patch.discount_amount != null ? Number(patch.discount_amount) : Number(existing.discount_amount ?? 0);
+    const discountInput = patch.discount_value != null || patch.discount_type != null ? discount_value : discount_amount;
 
     const itemsForAgg = Array.isArray(patch.items)
       ? patch.items
-      : patch.tax_rate != null || patch.discount_amount != null
+      : patch.tax_rate != null || patch.discount_amount != null || patch.discount_value != null || patch.discount_type != null
         ? (existing.document_items || []).map((row) => ({
             description: row.description,
             quantity: row.quantity,
@@ -867,14 +873,15 @@ export const DocumentService = {
           }))
         : null;
 
+    const vat_mode = patch.vat_mode ?? existing.vat_mode;
     const rowsToPersist = Array.isArray(patch.items)
-      ? aggregateFromItems(patch.items, tax_rate, discount_amount).rows
+      ? aggregateFromItems(patch.items, tax_rate, discountInput, vat_mode, discount_type).rows
       : null;
 
     const financial = isFinancialType(existing.type);
-    const { subtotal, tax_amount, total_amount } =
+    const { subtotal, tax_amount, total_amount, discount_amount: computedDiscount } =
       itemsForAgg != null
-        ? aggregateFromItems(itemsForAgg, tax_rate, discount_amount)
+        ? aggregateFromItems(itemsForAgg, tax_rate, discountInput, vat_mode, discount_type)
         : financial
           ? {
               subtotal: Number(existing.subtotal),
@@ -895,7 +902,7 @@ export const DocumentService = {
       subtotal,
       tax_rate,
       tax_amount,
-      discount_amount,
+      discount_amount: itemsForAgg != null ? computedDiscount : discount_amount,
       total_amount,
       currency: existing.currency,
       base_currency: existing.base_currency || DEFAULT_BASE_CURRENCY,

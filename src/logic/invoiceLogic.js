@@ -4,12 +4,11 @@
  * Uses utils/invoiceStatus for derived status and auto-updates.
  */
 import { getDerivedStatus, getAutoStatusUpdate, isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
-
-/** Statuses that lock the invoice from editing (financial record integrity). */
-const EDIT_LOCKED_STATUSES = Object.freeze(['paid', 'partial_paid', 'cancelled']);
-
-/** Statuses that prevent recording new payments (already fully paid or cancelled). */
-const RECORD_PAYMENT_LOCKED_STATUSES = Object.freeze(['paid', 'cancelled']);
+import {
+  isInvoiceEditLocked,
+  isInvoicePaymentLocked,
+} from '@shared/commercial/documentStatuses.js';
+import { resolveCommercialDocumentTotals } from '@shared/commercial/normalizeCommercialDocument.js';
 
 /**
  * Whether this invoice is a tax copy of a settled POS sale (not a receivable).
@@ -22,28 +21,26 @@ export function isPosOriginInvoice(invoice) {
 
 /**
  * Whether the invoice can be edited (amounts, items, client, etc.).
- * Paid, partial_paid, cancelled, and POS tax-invoice copies are locked.
+ * Paid, partially paid, void, and POS tax-invoice copies are locked.
  * @param {{ status?: string, pos_sale_event_id?: string }} invoice
  * @returns {boolean}
  */
 export function canEditInvoice(invoice) {
   if (!invoice) return false;
   if (isPosOriginInvoice(invoice)) return false;
-  const status = (invoice.status || 'draft').toLowerCase();
-  return !EDIT_LOCKED_STATUSES.includes(status);
+  return !isInvoiceEditLocked(invoice.status);
 }
 
 /**
  * Whether the user can record a payment against this invoice.
- * Cannot record when status is paid or cancelled, or when the invoice is a POS tax copy.
+ * Cannot record when status is paid or void, or when the invoice is a POS tax copy.
  * @param {{ status?: string, pos_sale_event_id?: string }} invoice
  * @returns {boolean}
  */
 export function canRecordPayment(invoice) {
   if (!invoice) return false;
   if (isPosOriginInvoice(invoice)) return false;
-  const status = (invoice.status || 'draft').toLowerCase();
-  return !RECORD_PAYMENT_LOCKED_STATUSES.includes(status);
+  return !isInvoicePaymentLocked(invoice.status);
 }
 
 /**
@@ -51,7 +48,7 @@ export function canRecordPayment(invoice) {
  * Pass payments when you have them so status reflects total paid.
  * @param {Object} invoice - Invoice object (may include payments)
  * @param {Object} [options] - { markViewed: boolean, now: Date }
- * @returns {string} - One of draft, sent, viewed, overdue, partial_paid, paid, cancelled
+ * @returns {string} - One of draft, sent, viewed, overdue, partially_paid, paid, void
  */
 export function getInvoiceDisplayStatus(invoice, options = {}) {
   return getDerivedStatus(invoice, options);
@@ -87,9 +84,7 @@ export function isInvoiceStatusTransitionAllowed(currentStatus, nextStatus) {
  * @returns {{ valid: boolean, error?: string, remainingBalance: number }}
  */
 export function validatePaymentAmount(invoice, payments = [], amount, tolerance = 0.01) {
-  const total = Number(invoice?.total_amount) || 0;
-  const totalPaid = (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const remainingBalance = Math.max(0, total - totalPaid);
+  const { remaining: remainingBalance } = getInvoiceRemainingBalance(invoice, payments);
 
   if (amount == null || Number(amount) <= 0) {
     return { valid: false, error: 'Amount must be greater than 0.', remainingBalance };
@@ -114,10 +109,15 @@ export function validatePaymentAmount(invoice, payments = [], amount, tolerance 
  * @returns {{ remaining: number, totalPaid: number, total: number }}
  */
 export function getInvoiceRemainingBalance(invoice, payments = []) {
-  const total = Number(invoice?.total_amount) || 0;
-  const totalPaid = (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const remaining = Math.max(0, total - totalPaid);
-  return { total, totalPaid, remaining };
+  const totals = resolveCommercialDocumentTotals(invoice, {
+    preferStored: true,
+    payments,
+  });
+  return {
+    total: totals.grandTotal,
+    totalPaid: totals.paidAmount,
+    remaining: totals.balanceDue,
+  };
 }
 
 // Re-export for consumers that want to use the low-level utils from one place

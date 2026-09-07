@@ -300,5 +300,3 @@ function AuthenticatedShiftLanding({ user, registerId, orgId, busy, error, onEnt
     />
   );
 }
-
-void endPosAccess;

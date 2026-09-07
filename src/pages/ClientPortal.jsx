@@ -27,6 +27,12 @@ import PaymentModal from '../components/clientportal/PaymentModal';
 import ContactUpdateModal from '../components/clientportal/ContactUpdateModal';
 import ClientMessages from '../components/clientportal/ClientMessages';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  isInvoiceFullyPaid,
+  isInvoicePaidLike,
+  normalizeInvoiceStatus,
+  normalizeQuoteStatus,
+} from '@shared/commercial/documentStatuses.js';
 
 const statusStyles = {
     draft: "bg-status-draft/15 text-slate-600 border border-status-draft/25",
@@ -34,6 +40,9 @@ const statusStyles = {
     viewed: "bg-status-sent/10 text-status-sent border border-status-sent/20",
     paid: "bg-status-paid/12 text-status-paid border border-status-paid/25",
     partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+    partially_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+    void: "bg-status-declined/12 text-status-declined border border-status-declined/25",
+    converted: "bg-status-accepted/12 text-status-accepted border border-status-accepted/25",
     overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
     cancelled: "bg-status-declined/12 text-status-declined border border-status-declined/25",
     accepted: "bg-status-accepted/12 text-status-accepted border border-status-accepted/25",
@@ -131,11 +140,11 @@ function ClientPortalShell() {
     const calculateOutstanding = (invoice) => {
         if (!invoice.payments || invoice.payments.length === 0) return invoice.total_amount;
         const totalPaid = calculateTotalPaid(invoice);
-        if (invoice.status === 'partial_paid') {
-            return invoice.total_amount - totalPaid;
-        }
-        if (invoice.status === 'paid') {
+        if (isInvoiceFullyPaid(invoice.status)) {
             return 0;
+        }
+        if (isInvoicePaidLike(invoice.status)) {
+            return invoice.total_amount - totalPaid;
         }
         return invoice.total_amount - totalPaid;
     };
@@ -326,7 +335,7 @@ function ClientPortalShell() {
                                                         <h3 className="font-bold text-lg text-slate-900">
                                                             Invoice #{invoice.invoice_number}
                                                         </h3>
-                                                        <Badge className={statusStyles[invoice.status]}>
+                                                        <Badge className={statusStyles[normalizeInvoiceStatus(invoice.status)] || statusStyles.draft}>
                                                             {invoice.status?.replace('_', ' ')}
                                                         </Badge>
                                                     </div>
@@ -402,7 +411,7 @@ function ClientPortalShell() {
                                                         <h3 className="font-bold text-lg text-slate-900">
                                                             Quote #{quote.quote_number}
                                                         </h3>
-                                                        <Badge className={statusStyles[quote.status]}>
+                                                        <Badge className={statusStyles[normalizeQuoteStatus(quote.status)] || statusStyles.draft}>
                                                             {quote.status?.replace('_', ' ')}
                                                         </Badge>
                                                     </div>

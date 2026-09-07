@@ -45,6 +45,12 @@ import {
   Store,
 } from "lucide-react";
 import { TaxService } from "@/services/TaxService";
+import {
+  isInvoicePaidLike,
+  isInvoiceExcludedFromAging,
+  invoiceStatusLabel,
+  normalizeInvoiceStatus,
+} from "@shared/commercial/documentStatuses.js";
 import { motion } from "framer-motion";
 import ViewInvoice from "@/pages/ViewInvoice";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -343,9 +349,9 @@ function DashboardMain() {
     totalUsersLastMonth: 0,
     totalInvoicesLastMonth: 0,
     revenueLastMonth: 0,
-    individualUsers: 0,
-    smeUsers: 0,
-    corporateUsers: 0,
+    starterUsers: 0,
+    businessUsers: 0,
+    growthUsers: 0,
     enterpriseUsers: 0,
     activePlans: 0,
     cancelledPlans: 0
@@ -678,7 +684,7 @@ function DashboardMain() {
         .filter(inv => {
           if (!inv.created_date) return false;
           const createdDate = new Date(inv.created_date);
-          return createdDate >= monthStart && createdDate <= monthEnd && (inv.status === 'paid' || inv.status === 'partial_paid');
+          return createdDate >= monthStart && createdDate <= monthEnd && isInvoicePaidLike(inv.status);
         })
         .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
 
@@ -750,7 +756,7 @@ function DashboardMain() {
       }).length;
       
       const totalRevenue = allInvoices
-        .filter(inv => inv.status === 'paid' || inv.status === 'partial_paid')
+        .filter(inv => isInvoicePaidLike(inv.status))
         .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
 
       // Calculate previous period stats (last month)
@@ -773,7 +779,7 @@ function DashboardMain() {
         .filter(inv => {
           if (!inv.created_date) return false;
           const createdDate = new Date(inv.created_date);
-          return createdDate >= lastMonthStart && createdDate <= lastMonthEnd && (inv.status === 'paid' || inv.status === 'partial_paid');
+          return createdDate >= lastMonthStart && createdDate <= lastMonthEnd && isInvoicePaidLike(inv.status);
         })
         .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
 
@@ -798,10 +804,10 @@ function DashboardMain() {
       const cancellations = allUsers.filter(u => u.status === 'cancelled' || u.status === 'suspended').length;
       const trialsConverted = allUsers.filter(u => u.plan === 'paid' && u.previously_trial === true).length;
 
-      // Plan breakdown (current catalog families; previous Individual/SME/Corporate map in)
-      const individualUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "starter").length;
-      const smeUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "business").length;
-      const corporateUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "growth").length;
+      // Plan breakdown by current catalog family (legacy slugs map in via normalizePaidPackageKey)
+      const starterUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "starter").length;
+      const businessUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "business").length;
+      const growthUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "growth").length;
       const enterpriseUsers = allUsers.filter((u) => normalizePaidPackageKey(u.plan) === "enterprise").length;
       
       // Active vs cancelled subscriptions
@@ -820,9 +826,9 @@ function DashboardMain() {
         totalUsersLastMonth: lastMonthUsers,
         totalInvoicesLastMonth: lastMonthInvoices,
         revenueLastMonth: lastMonthRevenue,
-        individualUsers,
-        smeUsers,
-        corporateUsers,
+        starterUsers,
+        businessUsers,
+        growthUsers,
         enterpriseUsers,
         activePlans,
         cancelledPlans
@@ -842,9 +848,15 @@ function DashboardMain() {
       const highVolumeThresholds = {
         free: 10,
         trial: 10,
-        individual: 12,
-        basic: 12,
-        starter: 15
+        basic: 15,
+        individual: 15,
+        starter: 15,
+        sme: 40,
+        professional: 40,
+        business: 40,
+        corporate: 80,
+        growth: 80,
+        enterprise: 120,
       };
       const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const invoicesByUser = allInvoices.reduce((acc, inv) => {
@@ -1052,7 +1064,7 @@ function DashboardMain() {
       buckets.set(formatDate(date, 'MMM d'), 0);
     }
 
-    const paidOrPartial = (inv) => inv.status === 'paid' || inv.status === 'partial_paid';
+    const paidOrPartial = (inv) => isInvoicePaidLike(inv.status);
     resolvedInvoices.filter(paidOrPartial).forEach(inv => {
       const createdAt = new Date(inv.created_date || inv.created_at || 0);
       if (createdAt < start || createdAt > now) return;
@@ -1075,7 +1087,7 @@ function DashboardMain() {
     const lastMonthEnd = endOfMonth(subMonths(now, 1));
 
     const outstanding = OutstandingBalanceService.calculateTotalOutstanding(resolvedInvoices);
-    const paidInvoices = resolvedInvoices.filter(inv => inv.status === 'paid' || inv.status === 'partial_paid');
+    const paidInvoices = resolvedInvoices.filter(inv => isInvoicePaidLike(inv.status));
     const taxSummary = TaxService.getTaxSummaryFromInvoices(paidInvoices);
     const rev = paidInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const exp = expenses.reduce((s, e) => s + (e.amount || 0), 0);
@@ -1084,13 +1096,13 @@ function DashboardMain() {
     const revThisMonth = resolvedInvoices
       .filter(inv => {
         const d = new Date(inv.created_date || inv.created_at || 0);
-        return d >= thisMonthStart && (inv.status === 'paid' || inv.status === 'partial_paid');
+        return d >= thisMonthStart && isInvoicePaidLike(inv.status);
       })
       .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const revLastMonth = resolvedInvoices
       .filter(inv => {
         const d = new Date(inv.created_date || inv.created_at || 0);
-        return d >= lastMonthStart && d <= lastMonthEnd && (inv.status === 'paid' || inv.status === 'partial_paid');
+        return d >= lastMonthStart && d <= lastMonthEnd && isInvoicePaidLike(inv.status);
       })
       .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const expLastMonth = expenses
@@ -1137,7 +1149,7 @@ function DashboardMain() {
   const recentTransactions = useMemo(
     () =>
       resolvedInvoices
-        .filter((inv) => inv.status === 'paid' || inv.status === 'partial_paid')
+        .filter((inv) => isInvoicePaidLike(inv.status))
         .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
         .slice(0, TRANSACTIONS_SOURCE_EACH),
     [resolvedInvoices]
@@ -1204,17 +1216,17 @@ function DashboardMain() {
                   <span className="text-muted-foreground">Today: <span className="font-semibold text-foreground">{formatCurrency(invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
-                    return created.toDateString() === now.toDateString() && (inv.status === 'paid' || inv.status === 'partial_paid');
+                    return created.toDateString() === now.toDateString() && isInvoicePaidLike(inv.status);
                   }).reduce((sum, inv) => sum + (inv.total_amount || 0), 0), 'ZAR')}</span></span>
                   <span className="text-muted-foreground">MTD: <span className="font-semibold text-foreground">{formatCurrency(invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
-                    return created >= startOfMonth(now) && created <= now && (inv.status === 'paid' || inv.status === 'partial_paid');
+                    return created >= startOfMonth(now) && created <= now && isInvoicePaidLike(inv.status);
                   }).reduce((sum, inv) => sum + (inv.total_amount || 0), 'ZAR'))}</span></span>
                   <span className="text-muted-foreground">YTD: <span className="font-semibold text-foreground">{formatCurrency(invoices.filter(inv => {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
-                    return created.getFullYear() === now.getFullYear() && (inv.status === 'paid' || inv.status === 'partial_paid');
+                    return created.getFullYear() === now.getFullYear() && isInvoicePaidLike(inv.status);
                   }).reduce((sum, inv) => sum + (inv.total_amount || 0), 0), 'ZAR')}</span></span>
                 </div>
               </CardContent>
@@ -1242,7 +1254,7 @@ function DashboardMain() {
                     const created = new Date(inv.created_date || inv.created_at || 0);
                     const now = new Date();
                     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                    return created >= yesterday && created <= now && (inv.status === 'paid' || inv.status === 'partial_paid');
+                    return created >= yesterday && created <= now && isInvoicePaidLike(inv.status);
                   }).length
                 }</p>
               </CardContent>
@@ -1295,15 +1307,15 @@ function DashboardMain() {
                   <>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Starter</span>
-                      <span className="text-sm font-semibold text-foreground">{adminStats.individualUsers}</span>
+                      <span className="text-sm font-semibold text-foreground">{adminStats.starterUsers}</span>
                     </div>
                     <div className="flex items-center justify-between bg-primary/10 border border-primary/30 rounded-md px-3 py-2">
                       <span className="text-sm font-semibold text-primary">Business</span>
-                      <span className="text-sm font-semibold text-foreground">{adminStats.smeUsers}</span>
+                      <span className="text-sm font-semibold text-foreground">{adminStats.businessUsers}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Growth</span>
-                      <span className="text-sm font-semibold text-foreground">{adminStats.corporateUsers}</span>
+                      <span className="text-sm font-semibold text-foreground">{adminStats.growthUsers}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Enterprise</span>
@@ -1616,7 +1628,7 @@ function DashboardMain() {
   // USER DASHBOARD
   // Unified revenue: from paid/partial invoices (or from payments for collected amount)
   const totalRevenue = invoices.reduce((sum, inv) => {
-    if (inv.status === 'paid' || inv.status === 'partial_paid') {
+    if (isInvoicePaidLike(inv.status)) {
       return sum + (inv.total_amount || 0);
     }
     return sum;
@@ -1624,7 +1636,7 @@ function DashboardMain() {
 
   const goalYear = calendarYear;
   const revenueForGoalYear = invoices.reduce((sum, inv) => {
-    if (inv.status !== 'paid' && inv.status !== 'partial_paid') return sum;
+    if (!isInvoicePaidLike(inv.status)) return sum;
     const raw = inv.invoice_date || inv.created_date || inv.created_at;
     if (!raw) return sum;
     const y = new Date(raw).getFullYear();
@@ -1634,7 +1646,7 @@ function DashboardMain() {
 
   const lastYear = calendarYear - 1;
   const lastYearRevenue = invoices.reduce((sum, inv) => {
-    if (inv.status !== 'paid' && inv.status !== 'partial_paid') return sum;
+    if (!isInvoicePaidLike(inv.status)) return sum;
     const created = inv.created_date || inv.created_at;
     if (!created || new Date(created).getFullYear() !== lastYear) return sum;
     return sum + (inv.total_amount || 0);
@@ -1661,26 +1673,24 @@ function DashboardMain() {
     draft: "bg-status-draft/15 text-slate-600 dark:text-slate-300 border border-status-draft/30",
     overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
     partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+    partially_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
     cancelled: "bg-status-declined/12 text-status-declined border border-status-declined/25",
+    void: "bg-status-declined/12 text-status-declined border border-status-declined/25",
   };
 
-  const getStatusLabel = (status) => {
-    if (status === 'sending') return 'Sending…';
-    if (status === 'preparing') return 'Preparing…';
-    return (status || 'draft').replace('_', ' ');
-  };
+  const getStatusLabel = (status) => invoiceStatusLabel(status);
 
   const today = startOfDay(new Date());
   const endOfThisWeek = new Date(today);
   endOfThisWeek.setDate(endOfThisWeek.getDate() + 7);
   const overdueCount = invoices.filter(inv => {
-    if (inv.status === 'paid' || inv.status === 'partial_paid' || inv.status === 'draft' || inv.status === 'cancelled') return false;
+    if (isInvoiceExcludedFromAging(inv.status)) return false;
     if (inv.status === 'overdue') return true;
     const due = inv.due_date ? startOfDay(new Date(inv.due_date)) : null;
     return due && due < today;
   }).length;
   const dueThisWeekCount = invoices.filter(inv => {
-    if (inv.status === 'paid' || inv.status === 'partial_paid' || inv.status === 'draft' || inv.status === 'cancelled') return false;
+    if (isInvoiceExcludedFromAging(inv.status)) return false;
     const due = inv.due_date ? startOfDay(new Date(inv.due_date)) : null;
     return due && due >= today && due <= endOfThisWeek;
   }).length;
@@ -2177,7 +2187,7 @@ function DashboardMain() {
                       <tbody className="divide-y divide-border">
                         {sortedRecentInvoices.map((invoice) => {
                           const client = clients.find((c) => c.id === invoice.client_id);
-                          const statusClass = statusColors[invoice.status] || "bg-muted text-muted-foreground";
+                          const statusClass = statusColors[normalizeInvoiceStatus(invoice.status)] || statusColors[invoice.status] || "bg-muted text-muted-foreground";
                           return (
                             <tr
                               key={invoice.id}

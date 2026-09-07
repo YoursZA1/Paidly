@@ -27,11 +27,21 @@ describe("structuredData (Google SD policies)", () => {
     expect(raw).not.toMatch(/"@type":"Review"/);
   });
 
-  it("offers match shared plan prices in ZAR", () => {
+  it("offers match public catalog names and ZAR prices", () => {
     const app = buildHomeStructuredDataGraph()["@graph"].find((n) => n["@id"] === APP_ID);
-    const prices = app.offers.map((o) => o.price).sort();
-    expect(prices).toEqual(["150", "350", "50"]);
+    expect(app.offers.map((o) => o.name)).toEqual(["Starter", "Business", "Growth", "Enterprise"]);
+    const priced = app.offers.filter((o) => o.price != null);
+    expect(priced.map((o) => o.price).sort()).toEqual(["150", "350", "50"]);
     expect(app.offers.every((o) => o.priceCurrency === "ZAR")).toBe(true);
+    const enterprise = app.offers.find((o) => o.name === "Enterprise");
+    expect(enterprise.price).toBeUndefined();
+    expect(enterprise.description).toMatch(/custom/i);
+    expect(app.offers.map((o) => o.description)).toEqual([
+      "Freelancers & individuals (annual — 2 months free)",
+      "SMEs (annual — 2 months free)",
+      "Growing businesses (annual — 2 months free)",
+      "Large organisations — custom pricing",
+    ]);
   });
 
   it("builds HowTo steps from visible quick-start copy", () => {

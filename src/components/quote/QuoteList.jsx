@@ -12,12 +12,14 @@ import QuoteActions from "./QuoteActions";
 import QuoteStatusBadge from "./QuoteStatusBadge";
 import QuoteStatusTracker from "./QuoteStatusTracker";
 import { Eye, Pencil, ArrowRightSquare } from "lucide-react";
+import { canConvertQuote } from "@/services/QuoteConversionService";
 import DocumentTableDensityToggle from "@/components/document-table/DocumentTableDensityToggle";
 import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
 
 const GRID_TEMPLATE = "minmax(0,2.8fr) minmax(110px,1fr) minmax(120px,0.95fr) minmax(120px,1fr) 160px";
 
 const QuoteQuickActions = React.memo(function QuoteQuickActions({ quote }) {
+    const converted = String(quote.status || "").toLowerCase() === "converted" || Boolean(quote.converted_at);
     return (
         <div className="flex items-center justify-end gap-1">
             <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
@@ -25,16 +27,20 @@ const QuoteQuickActions = React.memo(function QuoteQuickActions({ quote }) {
                     <Eye className="h-4 w-4" />
                 </Link>
             </Button>
+            {!converted && (
             <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
                 <Link to={createPageUrl(`EditQuote?id=${quote.id}`)} aria-label="Edit quote">
                     <Pencil className="h-4 w-4" />
                 </Link>
             </Button>
+            )}
+            {canConvertQuote(quote) && (
             <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
-                <Link to={createPageUrl(`CreateInvoice?quoteId=${quote.id}`)} aria-label="Convert to invoice">
+                <Link to={createPageUrl(`CreateInvoice?quoteId=${quote.id}`)} aria-label="Review quote as invoice">
                     <ArrowRightSquare className="h-4 w-4" />
                 </Link>
             </Button>
+            )}
         </div>
     );
 });

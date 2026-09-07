@@ -7,30 +7,32 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Download, Send, Loader2, Edit, ArrowRightSquare } from "lucide-react";
 import DocumentPreview from "@/components/DocumentPreview";
+import DocumentLineItemsViewTable from "@/components/document-table/DocumentLineItemsViewTable";
 import StatusBadge from "@/components/StatusBadge";
 import SendEmailDialog from "@/components/SendEmailDialog";
-import { createPageUrl } from "@/utils";
+import { createPageUrl, createViewDocumentUrl } from "@/utils";
+import CommercialSourceLink from "@/components/documents/CommercialSourceLink";
+import {
+  canConvertQuote,
+  convertQuoteToInvoice,
+  findInvoiceBySourceQuoteId,
+  findQuoteByIdForInvoice,
+  invoiceUrlFromConversion,
+  isQuoteImmutable,
+} from "@/services/QuoteConversionService";
 import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from "@/utils/fetchWithTimeout";
 import { startLoadingFailSafe } from "@/hooks/useLoadingFailSafe";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
-import { parseRouteDocumentTypeStrict, DOCUMENT_TYPES } from "@/document-engine";
-
-const INVOICE_STATUSES = [
-  "draft",
-  "sending",
-  "preparing",
-  "sent",
-  "viewed",
-  "pending",
-  "paid",
-  "partial_paid",
-  "overdue",
-  "cancelled",
-];
-
-const QUOTE_STATUSES = ["draft", "sent", "viewed", "accepted", "rejected", "expired"];
+import { parseRouteDocumentTypeStrict, DOCUMENT_TYPES, allowedNextStatuses } from "@/document-engine";
+import {
+  normalizeInvoiceStatus,
+  normalizeQuoteStatus,
+  invoiceStatusLabel,
+  quoteStatusLabel,
+  QUOTE_STATUS,
+} from "@shared/commercial/documentStatuses.js";
 
 export default function ViewDocument() {
   const { docType: docTypeParam, id } = useParams();
@@ -99,7 +101,22 @@ export default function ViewDocument() {
         }
       }
 
-      setRecord(withItems);
+      let related = {};
+      if (docType === "invoice" && withItems.source_quote_id) {
+        const sourceQuote = await findQuoteByIdForInvoice(withItems.source_quote_id);
+        if (sourceQuote) {
+          related.source_quote = sourceQuote;
+          related.source_quote_number = sourceQuote.quote_number;
+        }
+      }
+      if (docType === "quote") {
+        const convertedInvoice = await findInvoiceBySourceQuoteId(withItems.id);
+        if (convertedInvoice) {
+          related.converted_invoice = convertedInvoice;
+        }
+      }
+
+      setRecord({ ...withItems, ...related });
       setClient(clientData);
       setProfile(userProfile);
       setBankingDetail(bankingRow);
@@ -133,19 +150,30 @@ export default function ViewDocument() {
       }
       setRecord((prev) => (prev ? { ...prev, status } : prev));
       if (docType === "quote" && status === "accepted") {
-        const draftUrl = `${createPageUrl("CreateDocument/invoice")}?quoteId=${encodeURIComponent(record.id)}`;
         toast({
           title: "Quote accepted",
-          description: "Create an invoice draft prefilled from this quote.",
+          description: "Convert it to an invoice when you are ready.",
           variant: "success",
-          duration: 14000,
+          duration: 8000,
           action: (
             <ToastAction
-              altText="Open invoice draft"
+              altText="Convert to invoice"
               className="border-white/40 bg-white/20 text-white hover:bg-white/30"
-              onClick={() => navigate(draftUrl)}
+              onClick={async () => {
+                try {
+                  const result = await convertQuoteToInvoice(record);
+                  const url = invoiceUrlFromConversion(result);
+                  if (url) navigate(url);
+                } catch (error) {
+                  toast({
+                    title: "Could not convert quote",
+                    description: error?.message || "Please try again.",
+                    variant: "destructive",
+                  });
+                }
+              }}
             >
-              Create draft
+              Convert
             </ToastAction>
           ),
         });
@@ -196,14 +224,18 @@ export default function ViewDocument() {
   };
 
   const listHref = docType === "quote" ? createPageUrl("Quotes") : createPageUrl("Invoices");
+  const currentStatus = useMemo(() => {
+    if (docType === "quote") return normalizeQuoteStatus(record?.status);
+    return normalizeInvoiceStatus(record?.status);
+  }, [docType, record?.status]);
   const statusOptions = useMemo(() => {
     if (!docType) return [];
-    const base = docType === "quote" ? [...QUOTE_STATUSES] : [...INVOICE_STATUSES];
-    const s = record?.status;
-    if (s && !base.includes(s)) base.push(s);
-    return base;
-  }, [docType, record?.status]);
-  const currentStatus = record?.status || "draft";
+    const next = allowedNextStatuses(docType, currentStatus).filter((status) => {
+      if (docType === "quote" && status === QUOTE_STATUS.converted) return false;
+      return true;
+    });
+    return [currentStatus, ...next.filter((status) => status !== currentStatus)];
+  }, [docType, currentStatus]);
 
   if (docType === DOCUMENT_TYPES.payslip && id) {
     return <Navigate to={`${createPageUrl("ViewPayslip")}?id=${encodeURIComponent(id)}`} replace />;
@@ -278,41 +310,72 @@ export default function ViewDocument() {
               <StatusBadge status={record.status} variant={docType === "quote" ? "quote" : "invoice"} />
             </div>
             <p className="text-sm text-muted-foreground mt-0.5 truncate">{displayName}</p>
+            <CommercialSourceLink quote={docType === "quote" ? record : null} invoice={docType === "invoice" ? record : null} />
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {docType === "quote" && record?.id && (
             <>
-              {(record.status === "sent" || record.status === "accepted") && (
+              {record.converted_invoice?.id ? (
                 <Button
                   className="gap-2 bg-primary"
-                  onClick={() =>
-                    navigate(`${createPageUrl("CreateDocument/invoice")}?quoteId=${encodeURIComponent(record.id)}`)
-                  }
+                  onClick={() => navigate(createViewDocumentUrl("invoice", record.converted_invoice.id))}
+                >
+                  <ArrowRightSquare className="w-4 h-4" />
+                  <span className="hidden sm:inline">View invoice</span>
+                  <span className="sm:hidden">Invoice</span>
+                </Button>
+              ) : canConvertQuote(record) ? (
+                <Button
+                  className="gap-2 bg-primary"
+                  onClick={async () => {
+                    try {
+                      const result = await convertQuoteToInvoice(record);
+                      const url = invoiceUrlFromConversion(result);
+                      toast({
+                        title: result.already_converted ? "Quote already converted" : "Invoice created",
+                        description: result.invoice_number || "Opening the invoice.",
+                        variant: "success",
+                      });
+                      if (url) navigate(url);
+                    } catch (error) {
+                      toast({
+                        title: "Could not convert quote",
+                        description: error?.message || "Please try again.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                 >
                   <ArrowRightSquare className="w-4 h-4" />
                   <span className="hidden sm:inline">Convert to invoice</span>
                   <span className="sm:hidden">To invoice</span>
                 </Button>
+              ) : null}
+              {!isQuoteImmutable(record) && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => navigate(`${createPageUrl("EditQuote")}?id=${encodeURIComponent(record.id)}`)}
+                >
+                  <Edit className="w-4 h-4" />
+                  <span className="hidden sm:inline">Edit</span>
+                </Button>
               )}
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => navigate(`${createPageUrl("EditQuote")}?id=${encodeURIComponent(record.id)}`)}
-              >
-                <Edit className="w-4 h-4" />
-                <span className="hidden sm:inline">Edit</span>
-              </Button>
             </>
           )}
-          <Select value={currentStatus} onValueChange={updateStatus}>
+          <Select
+            value={currentStatus}
+            onValueChange={updateStatus}
+            disabled={docType === "quote" && isQuoteImmutable(record)}
+          >
             <SelectTrigger className="w-[160px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {statusOptions.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s.replace(/_/g, " ")}
+                  {docType === "quote" ? quoteStatusLabel(s) : invoiceStatusLabel(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -326,6 +389,23 @@ export default function ViewDocument() {
             <span className="hidden sm:inline">Download PDF</span>
           </Button>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border/50 bg-card p-4 sm:p-5">
+        <DocumentLineItemsViewTable
+          items={record.items}
+          currencyCode={record.currency || previewDoc.currency || profile?.currency}
+          taxRate={record.tax_rate ?? previewDoc.tax_rate}
+          discount={record.discount_value ?? record.discount_amount ?? previewDoc.discount}
+          discountType={record.discount_type}
+          vatMode={record.vat_mode}
+          storedTotals={{
+            subtotal: Number(record.subtotal) || 0,
+            discountAmt: Number(record.discount_amount) || 0,
+            taxAmount: Number(record.tax_amount) || 0,
+            total: Number(record.total_amount) || 0,
+          }}
+        />
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">

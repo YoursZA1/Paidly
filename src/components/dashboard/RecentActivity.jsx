@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { stableDirectoryRowKey, stableEntityRowKey } from '@/utils/stableListKey';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { createPageUrl } from '@/utils';
+import { isInvoicePaidLike, normalizeInvoiceStatus, INVOICE_STATUS } from '@shared/commercial/documentStatuses.js';
 
 const FEED_MAX = 8;
 
@@ -110,12 +111,9 @@ export default function RecentActivity({
   });
 
   const invoiceItems = (invoices || [])
-    .filter((inv) => {
-      const st = normStatus(inv?.status);
-      return st === 'paid' || st === 'partial_paid';
-    })
+    .filter((inv) => isInvoicePaidLike(inv?.status))
     .map((inv) => {
-      const st = normStatus(inv?.status);
+      const st = normalizeInvoiceStatus(inv?.status);
       const at = documentActivityTime(inv) || new Date(0);
       const amt = Number(inv?.total_amount ?? inv?.total ?? 0);
       const cur = String(inv?.currency || 'ZAR').trim() || 'ZAR';
@@ -127,11 +125,11 @@ export default function RecentActivity({
         at,
         sortAt: at.getTime(),
         inv,
-        title: st === 'partial_paid' ? 'Invoice partially paid' : 'Invoice paid',
+        title: st === INVOICE_STATUS.partially_paid ? 'Invoice partially paid' : 'Invoice paid',
         subtext,
         icon: FileText,
         iconClass:
-          st === 'partial_paid'
+          st === INVOICE_STATUS.partially_paid
             ? 'bg-amber-500/12 text-amber-700 dark:text-amber-400'
             : 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
       };
@@ -187,10 +185,7 @@ export default function RecentActivity({
       };
     });
 
-  const hasPaidInvoice = (invoices || []).some((inv) => {
-    const st = normStatus(inv?.status);
-    return st === 'paid' || st === 'partial_paid';
-  });
+  const hasPaidInvoice = (invoices || []).some((inv) => isInvoicePaidLike(inv?.status));
   const hasAcceptedQuote = (quotes || []).some((q) => normStatus(q?.status) === 'accepted');
   const hasIssuedPayslip = (payslips || []).some((p) => {
     const st = normStatus(p?.status);

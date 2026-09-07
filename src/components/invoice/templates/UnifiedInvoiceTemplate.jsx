@@ -158,6 +158,8 @@ function accountInfoRowsFromUser(user) {
   if (phone) rows.push({ key: "phone", label: "Phone", value: phone });
   const addr = typeof user.company_address === "string" ? user.company_address.trim() : "";
   if (addr) rows.push({ key: "address", label: "Address", value: addr, multiline: true });
+  const vat = typeof user.vat_number === "string" ? user.vat_number.trim() : "";
+  if (vat) rows.push({ key: "vat", label: "VAT", value: vat });
   return rows;
 }
 
@@ -423,6 +425,7 @@ function DetailedFooter({ user, cfg, pageLabel }) {
             <p className="font-semibold" style={{ color: cfg.accent }}>{user.company_name}</p>
           ) : null}
           {user?.company_address ? <p className="whitespace-pre-line">{user.company_address}</p> : null}
+          {user?.vat_number ? <p>VAT {user.vat_number}</p> : null}
           {user?.website ? <p className="mt-0.5">{user.website}</p> : null}
         </div>
         <div className="text-right shrink-0 space-y-0.5">
@@ -457,9 +460,15 @@ export default function UnifiedInvoiceTemplate({
     profile: user,
   });
   const issuerName = issuerBrand.name;
-  const brandedUser = user
-    ? { ...user, company_name: issuerName || user.company_name }
-    : { company_name: issuerName || "Company" };
+  const brandedUser = {
+    ...(user || {}),
+    company_name: issuerName || user?.company_name || "Company",
+    company_address: issuerBrand.address || user?.company_address,
+    email: issuerBrand.email || user?.email,
+    phone: issuerBrand.phone || user?.phone,
+    website: issuerBrand.website || user?.company_website || user?.website,
+    vat_number: issuerBrand.vatNumber || user?.vat_number || user?.business?.vat_number,
+  };
   const accent = cfg.accent;
   const heavy = Boolean(cfg.heavy);
   const issueDate = safeFormatDate(invoice.created_date);

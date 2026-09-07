@@ -8,9 +8,9 @@ import { getPlan, getPlanOrder } from '@/data/planLimits';
 
 // Plan tier mappings
 export const PLAN_CATEGORIES = {
-  Starter: ["free", "starter", "basic", "individual"],
-  Business: ["professional", "business", "sme"],
-  Growth: ["growth", "corporate"],
+  Starter: ["free", "starter", "basic", "individual", "starter_monthly", "starter_annual"],
+  Business: ["professional", "business", "sme", "business_monthly", "business_annual"],
+  Growth: ["growth", "corporate", "growth_monthly", "growth_annual"],
   Enterprise: ["enterprise", "enterprise_custom"],
 };
 

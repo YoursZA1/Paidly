@@ -328,12 +328,14 @@ body {
   color: #6ee7b7;
   border-color: color-mix(in srgb, var(--status-paid) 38%, #1e293b);
 }
-.status-pill.partial_paid {
+.status-pill.partial_paid,
+.status-pill.partially_paid {
   background: color-mix(in srgb, var(--status-pending) 14%, white);
   color: #b45309;
   border-color: color-mix(in srgb, var(--status-pending) 30%, white);
 }
-.dark .status-pill.partial_paid {
+.dark .status-pill.partial_paid,
+.dark .status-pill.partially_paid {
   background: color-mix(in srgb, var(--status-pending) 20%, #0f172a);
   color: #fcd34d;
   border-color: color-mix(in srgb, var(--status-pending) 35%, #334155);
@@ -351,7 +353,8 @@ body {
 .status-pill.rejected,
 .status-pill.declined,
 .status-pill.expired,
-.status-pill.cancelled {
+.status-pill.cancelled,
+.status-pill.void {
   background: color-mix(in srgb, var(--status-declined) 16%, white);
   color: #4b5563;
   border-color: color-mix(in srgb, var(--status-declined) 32%, white);
@@ -359,10 +362,21 @@ body {
 .dark .status-pill.rejected,
 .dark .status-pill.declined,
 .dark .status-pill.expired,
-.dark .status-pill.cancelled {
+.dark .status-pill.cancelled,
+.dark .status-pill.void {
   background: color-mix(in srgb, var(--status-declined) 24%, #0f172a);
   color: #d1d5db;
   border-color: color-mix(in srgb, var(--status-declined) 40%, #334155);
+}
+.status-pill.converted {
+  background: color-mix(in srgb, var(--status-paid) 14%, white);
+  color: var(--status-paid);
+  border-color: color-mix(in srgb, var(--status-paid) 28%, white);
+}
+.dark .status-pill.converted {
+  background: color-mix(in srgb, var(--status-paid) 22%, #0f172a);
+  color: #6ee7b7;
+  border-color: color-mix(in srgb, var(--status-paid) 38%, #1e293b);
 }
 
 /* Invoice list rows: fixed height and vertical alignment (works with both Grid & Table) */

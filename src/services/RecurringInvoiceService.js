@@ -231,14 +231,13 @@ export const RecurringInvoiceService = {
 
     const invoiceData = {
       client_id: recurringInvoice.client_id,
-      invoice_number: `${recurringInvoice.invoice_prefix}-${format(now, 'yyyyMMdd')}`,
       created_date: now.toISOString(),
       due_date: dueDate.toISOString(),
       status: 'draft',
       items: recurringInvoice.items || [],
       notes: recurringInvoice.notes || '',
-      total_amount: recurringInvoice.total_amount || 0,
       tax_rate: recurringInvoice.tax_rate || 0,
+      discount_amount: recurringInvoice.discount_amount || 0,
       recurring_invoice_id: recurringInvoice.id
     };
 

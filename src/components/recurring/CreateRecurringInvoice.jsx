@@ -19,6 +19,7 @@ import { RecurringInvoiceService } from '../../services/RecurringInvoiceService'
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { AlertCircle, Plus, Trash2, Zap } from 'lucide-react';
 import { format } from 'date-fns';
+import { calculateGrossFromNet } from "@shared/commercial/calculateCommercialDocument.js";
 import PropTypes from 'prop-types';
 
 const CreateRecurringInvoice = ({ isOpen, onClose, onSuccess, clientId: initialClientId }) => {
@@ -213,8 +214,9 @@ const CreateRecurringInvoice = ({ isOpen, onClose, onSuccess, clientId: initialC
   };
 
   const nextGenDate = formData.start_date ? format(new Date(formData.start_date), 'MMM dd, yyyy') : 'N/A';
-  const calculatedTax = (formData.total_amount * (formData.tax_rate || 0)) / 100;
-  const finalAmount = formData.total_amount + calculatedTax;
+  const recurringSplit = calculateGrossFromNet(formData.total_amount, formData.tax_rate || 0);
+  const calculatedTax = recurringSplit.tax;
+  const finalAmount = recurringSplit.gross;
 
   const templates = RecurringInvoiceService.getAllTemplates();
 

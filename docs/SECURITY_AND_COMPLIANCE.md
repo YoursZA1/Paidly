@@ -47,7 +47,7 @@ This document describes how the application **enforces access restrictions** and
   Only users with role `admin` may access admin UI and admin API endpoints. Admins can manage platform-wide data (e.g. user list, sync) via the backend, which uses the service role key server-side only.
 
 - **Secrets**  
-  The **service role key** is never used in the frontend or in any `VITE_*` env variable. Only the **anon key** is used in the browser. See [SUPABASE_SECURITY.md](SUPABASE_SECURITY.md). Full allowlist of env vars and anti-patterns: **[SECRETS_AND_ENV.md](SECRETS_AND_ENV.md)**. Run **`npm run scan-secrets`** in CI or before release.
+  The **service role key** is never used in the frontend or in any `VITE_*` env variable. Only the **anon key** is used in the browser. See [SUPABASE_SECURITY.md](SUPABASE_SECURITY.md). Full allowlist of env vars and anti-patterns: **[ENV_AND_CREDENTIALS.md](ENV_AND_CREDENTIALS.md)**. Run **`npm run scan-secrets`** in CI or before release.
 
 - **Deployment & monitoring**  
   HTTPS, security headers, structured auth/API security logs, and DB exposure guidance: **[DEPLOYMENT_SECURITY.md](DEPLOYMENT_SECURITY.md)**.

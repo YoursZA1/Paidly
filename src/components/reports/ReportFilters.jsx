@@ -7,6 +7,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Filter, X } from 'lucide-react';
 import { format } from 'date-fns';
+import { INVOICE_STATUS_LIST, invoiceStatusLabel } from '@shared/commercial/documentStatuses.js';
 
 export default function ReportFilters({ 
     timeRange, 
@@ -27,7 +28,7 @@ export default function ReportFilters({
 }) {
     const hasCustomFilters = customDateRange?.from || customDateRange?.to || selectedClient || invoiceStatus || expenseCategory || selectedVendor;
 
-    const invoiceStatuses = ['draft', 'sent', 'viewed', 'partial_paid', 'paid', 'overdue', 'cancelled'];
+    const invoiceStatuses = INVOICE_STATUS_LIST;
     const expenseCategories = ['office', 'travel', 'utilities', 'supplies', 'salary', 'marketing', 'software', 'other'];
 
     return (
@@ -149,7 +150,7 @@ export default function ReportFilters({
                                     <SelectItem value="all">All Statuses</SelectItem>
                                     {invoiceStatuses.map(status => (
                                         <SelectItem key={status} value={status}>
-                                            {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+                                            {invoiceStatusLabel(status)}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>

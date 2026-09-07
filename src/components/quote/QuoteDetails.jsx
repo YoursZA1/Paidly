@@ -18,6 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { normalizeCatalogItemForMap, getCatalogItemRate } from "@/utils/catalogLineItemMap";
 import { SavedCatalogCommand, CatalogCombobox } from "@/components/catalog/DocumentCatalogPicker";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
+import { aggregateFromItems } from "@/document-engine/documentTotals";
+import { lineTaxFromCustomerPrice } from "@shared/commercial/calculateCommercialDocument.js";
 
 export default function QuoteDetails({ 
     quoteData, 
@@ -99,17 +101,23 @@ export default function QuoteDetails({
     };
 
     const updateTotals = (items) => {
-        const subtotal = items.reduce((sum, item) => sum + (item.total_price || 0), 0);
-        const taxRate = quoteData.tax_rate || 0;
-        const taxAmount = subtotal * (taxRate / 100);
-        const totalAmount = subtotal + taxAmount;
-
+        const totals = aggregateFromItems(
+            items,
+            quoteData.tax_rate,
+            quoteData.discount_value ?? quoteData.discount_amount,
+            quoteData.vat_mode,
+            quoteData.discount_type
+        );
         setQuoteData(prev => ({
             ...prev,
             items: items,
-            subtotal,
-            tax_amount: taxAmount,
-            total_amount: totalAmount
+            subtotal: totals.subtotal,
+            tax_amount: totals.tax_amount,
+            total_amount: totals.total_amount,
+            discount_type: totals.discount_type,
+            discount_value: totals.discount_value,
+            discount_amount: totals.discount_amount,
+            vat_mode: totals.vat_mode,
         }));
     };
 
@@ -183,8 +191,12 @@ export default function QuoteDetails({
                 total_price: totalPrice,
                 item_type: normalized.item_type || currentItem.item_type,
                 catalog_item_id: normalized.id,
+                service_id: normalized.id,
+                sku: normalized.sku || currentItem.sku || "",
+                unit_type: normalized.default_unit || normalized.unit || currentItem.unit_type || "",
+                tax_rate: itemTaxRate,
                 item_tax_rate: itemTaxRate,
-                item_tax_amount: totalPrice * (itemTaxRate / 100),
+                item_tax_amount: lineTaxFromCustomerPrice(totalPrice, itemTaxRate, quoteData.vat_mode),
             };
         }
 
@@ -328,15 +340,23 @@ export default function QuoteDetails({
 
     const handleTaxRateChange = (value) => {
         const taxRate = parseFloat(value) || 0;
-        const subtotal = quoteData.subtotal || 0;
-        const taxAmount = subtotal * (taxRate / 100);
-        const totalAmount = subtotal + taxAmount;
-
+        const totals = aggregateFromItems(
+            quoteData.items || [],
+            taxRate,
+            quoteData.discount_value ?? quoteData.discount_amount,
+            quoteData.vat_mode,
+            quoteData.discount_type
+        );
         setQuoteData(prev => ({
             ...prev,
             tax_rate: taxRate,
-            tax_amount: taxAmount,
-            total_amount: totalAmount
+            subtotal: totals.subtotal,
+            tax_amount: totals.tax_amount,
+            total_amount: totals.total_amount,
+            discount_type: totals.discount_type,
+            discount_value: totals.discount_value,
+            discount_amount: totals.discount_amount,
+            vat_mode: totals.vat_mode,
         }));
     };
 
@@ -369,14 +389,24 @@ export default function QuoteDetails({
                 quantity,
                 unit_price: rate,
                 total_price: quantity * rate,
-                item_tax_rate: 0,
+                item_type: normalized.item_type || "service",
+                unit_type: normalized.default_unit || normalized.unit || "",
+                sku: normalized.sku || "",
+                catalog_item_id: normalized.id,
+                service_id: normalized.id,
+                tax_rate: normalized.default_tax_rate ?? normalized.tax_rate ?? 0,
+                item_tax_rate: normalized.default_tax_rate ?? normalized.tax_rate ?? 0,
                 item_tax_amount: 0,
             };
         }
 
         nextItem.total_price = (Number(nextItem.quantity) || 0) * (Number(nextItem.unit_price) || 0);
         nextItem.item_tax_rate = nextItem.item_tax_rate || 0;
-        nextItem.item_tax_amount = nextItem.total_price * (Number(nextItem.item_tax_rate) / 100);
+        nextItem.item_tax_amount = lineTaxFromCustomerPrice(
+            nextItem.total_price,
+            nextItem.item_tax_rate,
+            quoteData.vat_mode
+        );
 
         const updatedItems = [...(quoteData.items || []), nextItem];
         updateTotals(updatedItems);

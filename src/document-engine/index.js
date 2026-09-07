@@ -19,7 +19,31 @@ export {
     assertTransition,
     allowedNextStatuses,
 } from "./documentStateMachine";
-export { aggregateFromItems, normalizeLineTotals } from "./documentTotals";
+export {
+    aggregateFromItems,
+    normalizeLineTotals,
+    toCommercialItemRow,
+    commercialItemsForPersist,
+    isLegacyDiscountLine,
+    roundMoney,
+} from "./documentTotals";
+export {
+    allocateDocumentNumber,
+    resolveDocumentNumberAllocation,
+    documentNumberConflictMessage,
+    isUniqueViolation,
+    isDocumentNumberUniqueViolation,
+    isSourceQuoteUniqueViolation,
+} from "./allocateDocumentNumber";
+export {
+    convertQuoteToInvoice,
+    canConvertQuoteStatus,
+    assertQuoteConvertible,
+    findInvoiceBySourceQuoteId,
+    mapQuoteItemsForInvoice,
+    quoteConvertComposeUrl,
+    CONVERTIBLE_QUOTE_STATUSES,
+} from "./convertQuoteToInvoice";
 export { formatDocumentEventType, summarizeDocumentEventPayload } from "./documentEventLabels";
 export { documentStatusBadgeVariant, documentTypeBadgeVariant } from "./documentUi";
 export { DOCUMENT_EVENT_TYPES, resolveLifecycleEventType } from "./documentEventTypes";

@@ -1,4 +1,5 @@
 import { Invoice, Client } from '@/api/entities';
+import { isInvoicePaidLike } from '@shared/commercial/documentStatuses.js';
 
 /**
  * Client segmentation derived from invoice history (VIP / regular / at-risk / new).
@@ -15,7 +16,7 @@ export default class ClientFollowUpService {
             for (const client of clients) {
                 const clientInvoices = invoices.filter(
                     inv => inv.client_id === client.id &&
-                    (inv.status === 'paid' || inv.status === 'partial_paid')
+                    isInvoicePaidLike(inv.status)
                 );
 
                 const totalSpent = clientInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);

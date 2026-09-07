@@ -1,7 +1,9 @@
 import React from 'react';
 import { CheckCircle2, Circle, Clock, XCircle, Send } from 'lucide-react';
+import { normalizeQuoteStatus, quoteStatusLabel, QUOTE_STATUS } from '@shared/commercial/documentStatuses.js';
 
-export default function QuoteStatusTracker({ status }) {
+export default function QuoteStatusTracker({ status: rawStatus }) {
+    const status = normalizeQuoteStatus(rawStatus);
     const steps = [
         { id: 'draft', label: 'Draft', icon: Circle },
         { id: 'sent', label: 'Sent', icon: Send },
@@ -11,7 +13,7 @@ export default function QuoteStatusTracker({ status }) {
     const getCurrentStepIndex = () => {
         if (status === 'draft') return 0;
         if (status === 'sent' || status === 'viewed') return 1;
-        if (['accepted', 'rejected', 'expired'].includes(status)) return 2;
+        if ([QUOTE_STATUS.accepted, QUOTE_STATUS.declined, QUOTE_STATUS.expired, QUOTE_STATUS.converted].includes(status)) return 2;
         return 0;
     };
 
@@ -43,7 +45,12 @@ export default function QuoteStatusTracker({ status }) {
                         colorClass = "text-status-paid";
                         bgClass = "bg-status-paid/15";
                         textClass = "text-status-paid font-medium";
-                    } else if (status === 'rejected') {
+                    } else if (status === 'converted') {
+                        StatusIcon = CheckCircle2;
+                        colorClass = "text-status-paid";
+                        bgClass = "bg-status-paid/15";
+                        textClass = "text-status-paid font-medium";
+                    } else if (status === QUOTE_STATUS.declined) {
                         StatusIcon = XCircle;
                         colorClass = "text-status-declined";
                         bgClass = "bg-status-declined/15";
@@ -68,8 +75,8 @@ export default function QuoteStatusTracker({ status }) {
                                 <StatusIcon className={`h-4 w-4 ${colorClass}`} />
                             </div>
                             <span className={`text-[11px] leading-none whitespace-nowrap ${textClass}`}>
-                                {index === 2 && ['accepted', 'rejected', 'expired'].includes(status) 
-                                    ? status.charAt(0).toUpperCase() + status.slice(1) 
+                                {index === 2 && [QUOTE_STATUS.accepted, QUOTE_STATUS.declined, QUOTE_STATUS.expired, QUOTE_STATUS.converted].includes(status)
+                                    ? quoteStatusLabel(status)
                                     : step.label}
                             </span>
                         </div>

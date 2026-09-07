@@ -15,9 +15,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
 import { documentNumericClass, documentRowCellClass } from "@/lib/documentTableClasses";
 import { cn } from "@/lib/utils";
+import { isInvoiceFullyPaid, isInvoiceVoidLike } from "@shared/commercial/documentStatuses.js";
 
 const QuickActionButtons = React.memo(function QuickActionButtons({ invoice, onMarkPaid }) {
-    const isPaid = ["paid", "cancelled"].includes(String(invoice?.status || "").toLowerCase());
+    const isPaid = isInvoiceFullyPaid(invoice?.status) || isInvoiceVoidLike(invoice?.status);
     return (
         <div className="flex items-center justify-end gap-0.5">
             <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
@@ -66,6 +67,9 @@ const InvoiceRow = React.memo(function InvoiceRow({
                     <p className="truncate text-xs text-muted-foreground tabular-nums">
                         {invoice.invoice_number || invoice.project_title || "—"}
                     </p>
+                    {invoice.source_quote_id ? (
+                        <p className="truncate text-[11px] text-muted-foreground/80">Created from quote</p>
+                    ) : null}
                 </Link>
             </TableCell>
             <TableCell className={documentRowCellClass(density, documentNumericClass("px-4 font-medium text-foreground"))}>
@@ -113,6 +117,9 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
                 <div className="flex min-w-0 flex-col gap-0.5">
                     <p className="truncate text-sm font-medium text-foreground">{clientName}</p>
                     <p className="truncate text-xs text-muted-foreground tabular-nums">{invoice.invoice_number}</p>
+                    {invoice.source_quote_id ? (
+                        <p className="truncate text-[11px] text-muted-foreground/80">Created from quote</p>
+                    ) : null}
                     <p className="text-[11px] text-muted-foreground/80">{issuedDate}</p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">

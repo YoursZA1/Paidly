@@ -13,11 +13,13 @@ Paidly distinguishes **organization / account** (the tenant using Paidly), **com
   - `logo_url` (text)
   - `created_at`, `updated_at`
 
-- **invoices**
+- **invoices** and **quotes**
   - `company_id` (uuid, nullable, FK → companies, `ON DELETE SET NULL`)
-  - When set, `invoice.company` (name + optional brand logo) is passed into `documentIssuerBrand.js`. When the brand has no logo, the live Business Logo is used. `owner_*` is written at create time and is a fallback, not the default render winner.
+  - Server-side `resolve_org_company_id` rejects a `company_id` that is not a `companies` row for that `org_id`. The browser value is never trusted alone.
+  - When set, `record.company` is attached and passed into `documentIssuerBrand.js` / `resolveCommercialIssuer`.
+  - `owner_*` (name, logo, address, email, phone, VAT, currency) is snapshotted at create/edit.
 
-Quotes and payslips have **no** `company_id` column. Quotes still write `owner_*` at create and resolve through the same helper. Payslips stay organization-profile scoped and do not use `documentIssuerBrand.js`.
+Payslips stay organization-profile scoped and do not use `documentIssuerBrand.js`. POS till chrome uses register/profile branding and must not be fed into this resolver.
 
 ## Migration
 
@@ -31,12 +33,12 @@ Migration file: `supabase/migrations/20250318000000_multibrand_companies.sql`.
 
 - **Header brand switcher** — sets the active brand for **new** invoices/quotes. Stored per organization in `localStorage` (`paidly.activeDocumentBrand.<orgId>`). Switching does **not** change existing documents.
 - **Settings → Brands** — list, create, edit name/logo, delete. Logo upload uses the existing logo storage path. All org members can view and select; creating/editing requires `MANAGE_COMPANY_SETTINGS`.
-- **Create invoice / quote** — Company / brand select defaults from the active brand. The value is written once onto the new document; later header switches do not rewrite an open form after the first default, and never rewrite saved rows.
-- **Edit invoice** — uses the invoice’s existing `company_id` unless the user changes the select.
+- **Create invoice / quote** — Company / brand select defaults from the active brand. The value is written once onto the new document (`company_id` on both invoices and quotes); later header switches do not rewrite an open form after the first default, and never rewrite saved rows.
+- **Edit invoice / quote** — uses the document’s existing `company_id` unless the user changes the select.
 
-## Loading invoice with company
+## Loading invoice or quote with company
 
-When you fetch an invoice with `Invoice.get(id)`:
+When you fetch an invoice or quote with `Invoice.get(id)` / `Quote.get(id)`:
 
 - If `invoice.company_id` is set, the API loads the related row from `companies` and sets **`invoice.company`** with `{ id, name, logo_url }` (also filtered by `org_id` when present).
 - If `company_id` is null, `invoice.company` is undefined.
@@ -73,10 +75,12 @@ Optional per-brand mark: `companies.logo_url`. Empty means “use the live Busin
 ### Logo resolution (`resolveIssuerLogoPath`)
 
 1. Compose override — `document.document_logo_url` (this document only)
-2. Assigned brand logo — `company.logo_url` when the invoice has `company_id` and that brand uploaded its own mark
-3. **Live Business Logo** — `profiles.logo_url` (latest uploaded / updated official logo)
-4. Document snapshot — `document.owner_logo_url` only when the live logo is empty
-5. Selected header brand logo — compose-time default only (`selectedBrand`), never applied over a saved document’s assigned brand
+2. Assigned brand logo — `company.logo_url` when the invoice/quote has `company_id`
+3. Document snapshot — `document.owner_logo_url`
+4. Selected header brand logo — compose-time default only (`selectedBrand`)
+5. Organization profile logo — last resort when no document/company mark exists
+
+POS till logos are not part of this list.
 
 ### Name resolution (`resolveIssuerName`)
 
@@ -115,8 +119,8 @@ RLS: org members CRUD only their org’s `companies` rows; platform admins have 
 ## Creating and assigning companies
 
 1. Settings → Brands, or insert rows into `companies` (per org): `id`, `org_id`, `name`, `logo_url`.
-2. When creating or updating an invoice, set `company_id` to the chosen company’s `id` (or leave null to use the live Business Brand, with `owner_*` as fallback).
-3. EntityManager invoice insert/update whitelists include `company_id`.
+2. When creating or updating an invoice or quote, set `company_id` to the chosen company’s `id` (or leave null to use the org profile, with `owner_*` as fallback). The server rejects a `company_id` that is not in the user’s org.
+3. EntityManager invoice and quote insert/update whitelists include `company_id`. Quote → invoice copies `company_id` and issuer snapshots.
 
 ## One official logo
 

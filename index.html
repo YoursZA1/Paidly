@@ -79,24 +79,53 @@
           "offers": [
             {
               "@type": "Offer",
-              "name": "Individual",
-              "price": "25",
-              "priceCurrency": "ZAR",
-              "availability": "https://schema.org/InStock",
-              "url": "https://www.paidly.co.za/#pricing"
-            },
-            {
-              "@type": "Offer",
-              "name": "SME",
+              "name": "Starter",
+              "description": "Freelancers & individuals (annual — 2 months free)",
               "price": "50",
               "priceCurrency": "ZAR",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "50",
+                "priceCurrency": "ZAR",
+                "billingDuration": "P1M"
+              },
               "availability": "https://schema.org/InStock",
               "url": "https://www.paidly.co.za/#pricing"
             },
             {
               "@type": "Offer",
-              "name": "Corporate",
-              "price": "110",
+              "name": "Business",
+              "description": "SMEs (annual — 2 months free)",
+              "price": "150",
+              "priceCurrency": "ZAR",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "150",
+                "priceCurrency": "ZAR",
+                "billingDuration": "P1M"
+              },
+              "availability": "https://schema.org/InStock",
+              "url": "https://www.paidly.co.za/#pricing"
+            },
+            {
+              "@type": "Offer",
+              "name": "Growth",
+              "description": "Growing businesses (annual — 2 months free)",
+              "price": "350",
+              "priceCurrency": "ZAR",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "350",
+                "priceCurrency": "ZAR",
+                "billingDuration": "P1M"
+              },
+              "availability": "https://schema.org/InStock",
+              "url": "https://www.paidly.co.za/#pricing"
+            },
+            {
+              "@type": "Offer",
+              "name": "Enterprise",
+              "description": "Large organisations — custom pricing",
               "priceCurrency": "ZAR",
               "availability": "https://schema.org/InStock",
               "url": "https://www.paidly.co.za/#pricing"

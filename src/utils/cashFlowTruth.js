@@ -25,12 +25,23 @@ import {
 } from "date-fns";
 import { isPosOriginInvoice } from "@/logic/invoiceLogic";
 import { collectPosIncomeEvents } from "@/utils/posSalesTruth";
+import {
+  INVOICE_STATUS,
+  normalizeInvoiceStatus,
+  isInvoiceVoidLike,
+  isInvoiceOpenReceivable,
+} from "@shared/commercial/documentStatuses.js";
 
 const SETTLED_PAYMENT_STATUS = new Set(["", "completed", "complete", "paid", "success", "successful"]);
 const EXCLUDED_PAYMENT_STATUS = new Set(["pending", "processing", "failed", "cancelled", "canceled", "refunded", "void"]);
-const PAID_INVOICE_STATUS = new Set(["paid", "partial_paid"]);
-const OPEN_INVOICE_STATUS = new Set(["sent", "viewed", "overdue", "partial_paid"]);
-const CLOSED_INVOICE_STATUS = new Set(["draft", "cancelled", "canceled", "void", "written_off"]);
+const PAID_INVOICE_STATUS = new Set([INVOICE_STATUS.paid, INVOICE_STATUS.partially_paid]);
+const OPEN_INVOICE_STATUS = new Set([
+  INVOICE_STATUS.sent,
+  INVOICE_STATUS.viewed,
+  INVOICE_STATUS.overdue,
+  INVOICE_STATUS.partially_paid,
+]);
+const CLOSED_INVOICE_STATUS = new Set([INVOICE_STATUS.draft, INVOICE_STATUS.void]);
 
 export function toDayKey(value) {
   if (value == null || value === "") return null;
@@ -84,16 +95,17 @@ export function isCashExpense(expense) {
 }
 
 export function invoiceStatusKey(invoice) {
-  return String(invoice?.status || "").trim().toLowerCase();
+  return normalizeInvoiceStatus(invoice?.status);
 }
 
 export function isOpenInvoice(invoice) {
-  const status = invoiceStatusKey(invoice);
-  if (!invoice || CLOSED_INVOICE_STATUS.has(status)) return false;
+  if (!invoice) return false;
   if (isPosOriginInvoice(invoice)) return false;
-  if (status === "paid") return false;
-  if (OPEN_INVOICE_STATUS.has(status)) return true;
-  return status !== "paid";
+  const status = invoiceStatusKey(invoice);
+  if (CLOSED_INVOICE_STATUS.has(status) || isInvoiceVoidLike(status)) return false;
+  if (status === INVOICE_STATUS.paid) return false;
+  if (OPEN_INVOICE_STATUS.has(status) || isInvoiceOpenReceivable(status)) return true;
+  return status !== INVOICE_STATUS.paid;
 }
 
 function settledPayments(payments = []) {

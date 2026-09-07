@@ -3,7 +3,7 @@
 ## Summary
 
 - **Login** uses Supabase (email/password + OAuth), with protected routes and redirect-after-login. **Email/password** sign-in is proxied through **`POST /api/auth/sign-in`** so the API can **rate-limit by IP** before credentials reach Supabase.
-- **Secrets policy:** [SECRETS_AND_ENV.md](SECRETS_AND_ENV.md) — which keys may appear in the frontend bundle vs server-only; run **`npm run scan-secrets`**.
+- **Secrets policy:** [ENV_AND_CREDENTIALS.md](ENV_AND_CREDENTIALS.md) — which keys may appear in the frontend bundle vs server-only; run **`npm run scan-secrets`**.
 - **Forgot / Reset password** use Supabase’s reset flow; we do not reveal whether an email exists.
 - **Sessions** are managed by Supabase (tokens, refresh); profile is synced from `profiles` and cached in memory/localStorage for the app.
 

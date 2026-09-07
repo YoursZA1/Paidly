@@ -179,10 +179,10 @@ These are the **real** architecture—not the sidebar.
 | Concept | Meaning | Persistence |
 |---------|---------|-------------|
 | **Organization / account** | The Paidly tenant using the product | `organizations`; `CompanyContext.companyId` is this **org id** (product copy often says `company_id` for the tenant). `business_type` (`service` \| `retail` \| `mixed`, NULL = service) is how that tenant sells — POS is optional. |
-| **Company / brand** | A trading identity that belongs to that organization, used for **document** branding (invoices/quotes). POS till catalog still keys off `companies.id`; POS chrome does **not** use this logo. | `public.companies` (`org_id`, `name`, `logo_url`); invoices set **`invoices.company_id` → `companies.id`**; POS registers and optional private catalog rows use the same id (`pos_registers.company_id`, `services.company_id`) |
+| **Company / brand** | A trading identity that belongs to that organization, used for **document** branding (invoices/quotes). POS till catalog still keys off `companies.id`; POS chrome does **not** use this logo. | `public.companies` (`org_id`, `name`, `logo_url`); invoices and quotes set **`company_id` → `companies.id`** after server-side org validation; POS registers and optional private catalog rows use the same id (`pos_registers.company_id`, `services.company_id`) |
 | **Team / membership** | People who have access to the organization | `memberships` + org roles |
 
-Do not create a second tenant system. `CompanyContext` remains org RBAC. Active brand is a **UI default for new documents** (per-org localStorage); changing it must not rewrite existing invoices **and must not change which products a POS till can sell**. Quotes have no `company_id` column (name/logo snapshot only). Payslips stay organization-profile scoped. **One official Business Logo** is `profiles.logo_url` (documents, profile, and POS). Changing invoice template uses that live logo, not a stale `owner_logo_url` snapshot. Replacing or removing the logo deletes the previous storage object and retargets rows that still pointed at it. `companies.logo_url` is an optional per-brand override — leave it empty to use the Business Logo. All logo files use the **`paidly`** storage bucket. See `docs/MULTIBRAND_COMPANIES.md`.
+Do not create a second tenant system. `CompanyContext` remains org RBAC. Active brand is a **UI default for new documents** (per-org localStorage); changing it must not rewrite existing invoices or quotes **and must not change which products a POS till can sell**. Invoices and quotes share one issuer model (`company_id` + `owner_*` snapshot: name, logo, address, contact, VAT, bank, brand colours). `company_id` is validated server-side against `companies.org_id`. Payslips stay organization-profile scoped. Commercial document logos come from document/company branding (`companies.logo_url` / `owner_logo_url`), not POS till chrome. POS still uses `profiles.logo_url` for till identity. All logo files use the **`paidly`** storage bucket. See `docs/MULTIBRAND_COMPANIES.md`.
 
 **Strategy:** **Stabilise, don’t expand.** Harden session edge cases, org bootstrap, and role gates (`RequireAuth`) so every other system trusts Identity cheaply.
 
@@ -218,6 +218,14 @@ Do not create a second tenant system. `CompanyContext` remains org RBAC. Active 
 
 **Persistence:** commercial documents remain on specialised Supabase tables. Shared UI and helpers live in `src/document-engine/`. Ownership policy: `src/document-engine/documentSystemOfRecord.js`.
 
+**Commercial engine contract (invoices / quotes):**
+
+- **Numbering:** new invoices and quotes call `next_document_number` (`INV-N` / `QUO-N`, counter starts 1001). Preview placeholders are not persisted. Custom and CSV numbers are allowed and unique per `(org_id, number)`. POS tax copies stay `INV-POS-{receipt}`. Payslips and SaaS `SUB-*` are unchanged.
+- **Totals:** one VAT authority — `calculateCommercialDocument` in `shared/commercial/calculateCommercialDocument.js`. `VAT_EXCLUSIVE`: unit prices are net, VAT is added. `VAT_INCLUSIVE`: unit prices are gross, VAT is extracted via `calculateNetFromGross`. `aggregateFromItems` and `TaxService` redirect there. Historical documents default `vat_mode = VAT_EXCLUSIVE` and keep stored totals unless explicitly recalculated. Cash-basis VAT uses stored `tax_amount / total_amount` and does not treat exclusive invoices as inclusive. Document discount is first-class header fields (`discount_type` = `fixed` | `percentage`, `discount_value` = user input, `discount_amount` = engine-capped currency). Identity is `subtotal - discount = taxable + VAT = total`. New writes must not add a synthetic negative `"Discount"` line. Historical Discount lines still render; stored totals are not rewritten.
+- **Line items:** persist `description`, `quantity`, `unit_price`, `discount`, `discount_type`, `tax_rate`, `sku`, `item_type`, `catalog_item_id`, `service_id`, and `unit_type` on `invoice_items` / `quote_items`. `item_type` is `service | product | labor | material | expense`. Industry presets (`automotive`, `construction`, `retail`, `professional_services`, `manufacturing`) stay editor-only and are never written.
+- **Quote → invoice:** writes `invoices.source_quote_id` and `quotes.status = converted` (plus `converted_at`). Accept does not auto-create. At most one invoice per quote. Convert from `sent` / `accepted` (or `viewed`). Compose (`?quoteId=`) is review-before-save.
+- **Status machines:** invoices use `draft, sent, viewed, partially_paid, paid, overdue, void`. Quotes use `draft, sent, viewed, accepted, declined, expired, converted`. Writes are canonical-only with controlled transitions (`shared/commercial/documentStatuses.js`). Historical aliases (`partial_paid`, `cancelled`, `rejected`, `sending`, `pending`) are rewritten on read and by migration — they are not new write values. Hub `documents` keep their own flow vocabulary.
+
 ### 2b. Workforce Core (people operations)
 
 **Job:** One employee identity for HR, payroll, leave, and portal access — without a second identity system.
@@ -251,7 +259,7 @@ organizations → memberships (employee_id)
   - Leave requests, expense claims, contracts, and other catalog types persist in `public.documents`.
   - **HR leave (balances, accrual, approval ledger)** is canonical on `leave_requests` / `leave_balances` / `leave_transactions`. New applications go through `/api/leave`. Existing hub `leave_request` documents remain visible; they are not the leave ledger.
   - Hub **Convert to invoice / quote** (job cards, reports, proposals, scopes) opens specialised compose (`CreateDocument/invoice|quote?fromHubDocument=`) and writes to `invoices` / `quotes`. It does not insert commercial types into `documents`.
-  - Quote → invoice remains on the Quotes page (`CreateInvoice?quoteId=` / `CreateDocument/invoice?quoteId=`).
+  - Quote → invoice is a specialised-table conversion (`invoices.source_quote_id` → `quotes.id`, `quotes.converted_at`). It uses `convert_quote_to_invoice`, not `documents.source_quote_id`. Duplicate convert returns the existing invoice. Compose (`CreateInvoice?quoteId=` / `CreateDocument/invoice?quoteId=`) is review-before-save only.
   - Leftover `documents` rows with `type=invoice|quote|payslip` (if any exist from earlier experiments) are **hidden from the hub list**. Opening a direct URL shows a cleanup screen: go to the specialised list, or archive/remove the leftover hub row. Rows are not migrated and not auto-deleted.
 - **Not a goal:**
   - Migrating invoices, quotes, or payslips into `documents`.
@@ -790,13 +798,15 @@ A single **chronological timeline** on the client record, for example:
 
 ### 3. Conversion flow: Quote → accepted → auto invoice draft
 
-When a quote moves to **accepted** (or explicit user action “Convert to invoice”):
+When a quote is converted (accepted, or explicit “Convert to invoice”):
 
-1. **Create** an **invoice draft** (link `quote_id` or metadata for traceability).
-2. **Prefill** client, line items, currency, terms/branding from the quote.
-3. **Route** the user to **Edit invoice** to review, adjust tax/dates, then send.
+1. **Create** a **new invoice draft** with a newly allocated invoice number.
+2. **Copy** customer, issuer/company snapshot, line items, tax, discount, notes, and terms from the quote.
+3. **Link** `invoices.source_quote_id` → `quotes.id`, mark the quote `converted`, and set `quotes.converted_at`.
+4. **Keep** the original quote immutable as historical evidence.
+5. **Return** the existing invoice if the quote was already converted (no silent second invoice).
 
-This closes the **commercial loop** in-product. Persistence is `quotes` → `invoices`, not the Documents Hub.
+UI: quote shows **Converted → INV-XXXX**; invoice shows **Created from Quote → QUO-XXXX**. Persistence is `quotes` → `invoices`, not the Documents Hub.
 
 Hub job cards, project reports, and scopes **Convert to Invoice / Quote** the same way: specialised compose, specialised tables.
 

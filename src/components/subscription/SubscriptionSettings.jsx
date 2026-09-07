@@ -11,6 +11,11 @@ import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
 import { describeSubscriptionState, normalizePaidPackageKey } from "@/lib/subscriptionPlan";
 import { describeDashboardSubscriptionBanner } from "../../../shared/subscriptionDashboardCopy.js";
+import {
+  MARKETING_PLANS,
+  marketingAnnualSavingsLabel,
+  marketingSelfServeFamilies,
+} from "@shared/planMarketing.js";
 
 const CONTACT_SALES_EMAIL = (
   import.meta.env.VITE_CONTACT_SALES_EMAIL ||
@@ -18,62 +23,20 @@ const CONTACT_SALES_EMAIL = (
   "support@paidly.co.za"
 ).trim();
 
-const TIERS = [
-    {
-        id: "starter_monthly",
-        name: "Starter",
-        price: "R 50",
-        normalPrice: "R 50",
-        savingsLabel: "Annual: R 500 (2 months free)",
-        description: "Freelancers & individuals.",
-        features: [
-            "Unlimited quotes & invoices",
-            "Client management",
-            "Basic reporting",
-            "Email invoices",
-            "1 user",
-            "Basic support",
-        ],
-        buttonText: "Choose Plan",
-        recommended: false,
-    },
-    {
-        id: "business_monthly",
-        name: "Business",
-        price: "R 150",
-        normalPrice: "R 150",
-        savingsLabel: "Annual: R 1,500 (2 months free)",
-        description: "SMEs that need inventory, payroll docs, and team seats.",
-        features: [
-            "Everything in Starter",
-            "Up to 5 users",
-            "Inventory, expenses & purchase orders",
-            "Point of sale till",
-            "Payslips & VAT reports",
-            "Recurring invoices",
-            "Priority support",
-        ],
-        buttonText: "Choose Plan",
-        recommended: true,
-    },
-    {
-        id: "growth_monthly",
-        name: "Growth",
-        price: "R 350",
-        normalPrice: "R 350",
-        savingsLabel: "Annual: R 3,500 (2 months free)",
-        description: "Growing businesses — unlimited team and integrations.",
-        features: [
-            "Everything in Business",
-            "Unlimited team members",
-            "Departments & approval workflows",
-            "Advanced reports & API access",
-            "Integrations & multi-company",
-        ],
-        buttonText: "Choose Plan",
-        recommended: false,
-    },
-];
+const TIERS = marketingSelfServeFamilies().map((family) => {
+  const copy = MARKETING_PLANS[family];
+  return {
+    id: `${family}_monthly`,
+    family,
+    name: copy.name,
+    price: `R ${copy.monthlyPriceZar}`,
+    savingsLabel: marketingAnnualSavingsLabel(copy),
+    description: `${copy.description}.`,
+    features: [...copy.features],
+    buttonText: "Choose Plan",
+    recommended: copy.highlighted,
+  };
+});
 
 export default function SubscriptionSettings() {
     const navigate = useNavigate();
@@ -126,7 +89,7 @@ export default function SubscriptionSettings() {
     };
 
     const handleTierAction = (tier) => {
-        if (tier.id !== currentPlanId) {
+        if (tier.family !== currentPlanId) {
             navigate(createPageUrl("BillingAndInvoices"));
         }
     };
@@ -215,7 +178,7 @@ export default function SubscriptionSettings() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {TIERS.map((tier) => {
-                        const isCurrent = tier.id === currentPlanId;
+                        const isCurrent = tier.family === currentPlanId;
                         return (
                             <div
                                 key={tier.id}
@@ -230,7 +193,7 @@ export default function SubscriptionSettings() {
                                 {tier.recommended && (
                                     <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-white text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-widest flex items-center gap-1">
                                         <Star className="w-3 h-3" />
-                                        Recommended
+                                        Most popular
                                     </span>
                                 )}
                                 {isCurrent && !tier.recommended && (
@@ -245,11 +208,11 @@ export default function SubscriptionSettings() {
                                         {tier.price}
                                         <span className="text-sm font-normal text-slate-400 ml-1">/ month</span>
                                     </p>
-                                    {tier.normalPrice && tier.savingsLabel && (
+                                    {tier.savingsLabel ? (
                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                            Normally {tier.normalPrice}/mo — {tier.savingsLabel}
+                                            {tier.savingsLabel}
                                         </p>
-                                    )}
+                                    ) : null}
                                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">{tier.description}</p>
                                 </div>
 
@@ -297,16 +260,23 @@ export default function SubscriptionSettings() {
                 <div className="absolute top-0 right-0 p-10 opacity-10">
                     <Globe className="w-40 h-40 text-white" />
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Need a custom solution?</h3>
-                <p className="text-slate-400 mb-8 max-w-md mx-auto">
-                    Enterprise plans offer custom contracts, SSO, and dedicated support. Contact sales for a personalized quote.
+                <h3 className="text-2xl font-bold text-white mb-2">
+                    {MARKETING_PLANS.enterprise.name} — Custom
+                </h3>
+                <p className="text-slate-400 mb-4 max-w-md mx-auto">
+                    {MARKETING_PLANS.enterprise.description}
                 </p>
+                <ul className="mb-8 mx-auto max-w-md space-y-2 text-sm text-slate-400">
+                    {MARKETING_PLANS.enterprise.features.map((feature) => (
+                        <li key={feature}>{feature}</li>
+                    ))}
+                </ul>
                 <Button
                     onClick={handleContactSales}
                     className="px-10 py-4 bg-orange-500 hover:bg-orange-400 text-white font-bold rounded-2xl transition-all"
                 >
                     <Rocket className="w-4 h-4 mr-2" />
-                    Speak to our Sales Team
+                    {MARKETING_PLANS.enterprise.ctaSignup}
                 </Button>
             </div>
         </div>

@@ -394,9 +394,11 @@ export default function DocumentDetailPage() {
     return aggregateFromItems(
       toPersistItems(lines),
       Number(taxRate) || 0,
-      Number(discount) || 0
+      Number(discount) || 0,
+      doc.vat_mode,
+      doc.discount_type
     );
-  }, [doc, lines, taxRate, discount]);
+  }, [doc, lines, taxRate, discount, doc?.vat_mode, doc?.discount_type]);
 
   const conversionOptions = useMemo(
     () => (doc ? getConversionOptions(doc.type) : []),

@@ -214,6 +214,15 @@ export default function InvoicesPage() {
                 } catch (err) {
                     console.warn("Import invoice row failed:", payload?.invoice_number, err);
                     skipped++;
+                    if (/already used|23505|duplicate/i.test(String(err?.message || ""))) {
+                      toast({
+                        title: "Invoice number already used",
+                        description: payload?.invoice_number
+                          ? `${payload.invoice_number} was skipped.`
+                          : "A duplicate invoice number was skipped.",
+                        variant: "destructive",
+                      });
+                    }
                 }
             }
             await refetchInvoices();

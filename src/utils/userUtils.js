@@ -18,7 +18,8 @@ export const USER_ROLES = {
 export const PLAN_TYPES = {
   FREE: 'free',
   STARTER: 'starter',
-  PROFESSIONAL: 'professional',
+  BUSINESS: 'business',
+  GROWTH: 'growth',
   ENTERPRISE: 'enterprise'
 };
 
@@ -33,17 +34,25 @@ export const PLAN_LIMITS = {
   },
   starter: {
     name: 'Starter',
-    clients: 50,
-    users: 3,
-    documents: 500,
+    clients: -1,
+    users: 1,
+    documents: -1,
     storage: 10,
     color: 'blue'
   },
-  professional: {
-    name: 'Professional',
-    clients: 500,
-    users: 10,
-    documents: 5000,
+  business: {
+    name: 'Business',
+    clients: -1,
+    users: 5,
+    documents: -1,
+    storage: 50,
+    color: 'orange'
+  },
+  growth: {
+    name: 'Growth',
+    clients: -1,
+    users: -1,
+    documents: -1,
     storage: 100,
     color: 'purple'
   },
@@ -85,7 +94,12 @@ export const getStatusLabel = (status) => {
  * Get plan display name
  */
 export const getPlanLabel = (plan) => {
-  return PLAN_LIMITS[plan]?.name || 'Unknown Plan';
+  const key = String(plan || "").toLowerCase();
+  if (PLAN_LIMITS[key]) return PLAN_LIMITS[key].name;
+  if (["individual", "basic", "trial"].includes(key)) return "Starter";
+  if (["professional", "sme", "pro"].includes(key)) return "Business";
+  if (key === "corporate") return "Growth";
+  return "Unknown Plan";
 };
 
 /**
@@ -95,7 +109,8 @@ export const getPlanColor = (plan) => {
   const colors = {
     free: 'bg-slate-100 text-slate-800',
     starter: 'bg-primary/15 text-primary',
-    professional: 'bg-purple-100 text-purple-800',
+    business: 'bg-orange-100 text-orange-800',
+    growth: 'bg-purple-100 text-purple-800',
     enterprise: 'bg-yellow-100 text-yellow-800'
   };
   return colors[plan] || 'bg-gray-100 text-gray-800';

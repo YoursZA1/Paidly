@@ -127,13 +127,14 @@ const DOCUMENT_TEMPLATES = [
 
 function businessFieldsFromProfile(b) {
     if (!b || typeof b !== "object") {
-        return { bank_name: "", account_name: "", account_number: "", branch_code: "" };
+        return { bank_name: "", account_name: "", account_number: "", branch_code: "", vat_number: "" };
     }
     return {
         bank_name: b.bank_name || "",
         account_name: b.account_name || "",
         account_number: b.account_number || "",
         branch_code: b.branch_code || "",
+        vat_number: b.vat_number || "",
     };
 }
 
@@ -144,6 +145,7 @@ function compactBusinessForProfile(fd, existing) {
         account_name: (fd.business_account_name || "").trim(),
         account_number: (fd.business_account_number || "").trim(),
         branch_code: (fd.business_branch_code || "").trim(),
+        vat_number: (fd.vat_number || "").trim(),
     };
     for (const [key, val] of Object.entries(o)) {
         if (val) prev[key] = val;
@@ -180,6 +182,7 @@ function CompanyProfileSettings() {
         business_account_name: "",
         business_account_number: "",
         business_branch_code: "",
+        vat_number: "",
         business_type: "",
     }));
     const [logoFile, setLogoFile] = useState(null);
@@ -221,6 +224,7 @@ function CompanyProfileSettings() {
             business_account_name: b.account_name,
             business_account_number: b.account_number,
             business_branch_code: b.branch_code,
+            vat_number: b.vat_number || prev.vat_number,
         }));
     }, [
         authUser?.id,
@@ -274,6 +278,7 @@ function CompanyProfileSettings() {
                         business_account_name: b.account_name,
                         business_account_number: b.account_number,
                         business_branch_code: b.branch_code,
+                        vat_number: b.vat_number,
                     }));
                 }
                 if (companyId) {
@@ -731,6 +736,19 @@ function CompanyProfileSettings() {
                             className="h-11 rounded-lg"
                             inputMode="tel"
                             autoComplete="tel"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="company_vat" className="text-sm font-medium text-foreground flex items-center gap-2">
+                            VAT number
+                            <HelpTooltip content="Shown on invoices and quotes. Stored on your company profile and snapshotted onto each document." />
+                        </Label>
+                        <Input
+                            id="company_vat"
+                            value={formData.vat_number}
+                            onChange={(e) => handleInputChange("vat_number", e.target.value)}
+                            placeholder="e.g., 4123456789"
+                            className="h-11 rounded-lg"
                         />
                     </div>
                     <div className="space-y-1.5">

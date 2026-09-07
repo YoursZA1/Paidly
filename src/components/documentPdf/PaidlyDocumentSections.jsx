@@ -65,6 +65,7 @@ export function IssuerBlock({ resolved, primary }) {
     company_email,
     company_website,
     company_address,
+    vat_number,
     logo_url,
   } = resolved;
   return (
@@ -92,6 +93,19 @@ export function IssuerBlock({ resolved, primary }) {
           <div style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.35 }}>
             <span style={{ fontWeight: 600, color: "#374151" }}>Tel </span>
             {company_phone}
+          </div>
+        ) : null}
+        {vat_number ? (
+          <div
+            style={{
+              fontSize: "12px",
+              color: "#6b7280",
+              lineHeight: 1.35,
+              marginTop: company_phone ? "4px" : 0,
+            }}
+          >
+            <span style={{ fontWeight: 600, color: "#374151" }}>VAT </span>
+            {vat_number}
           </div>
         ) : null}
         {company_email ? (

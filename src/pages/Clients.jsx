@@ -22,12 +22,20 @@ import { useClientsQuery } from "@/hooks/useClientsQuery";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, parseISO, isValid } from "date-fns";
+import {
+  isInvoiceOpenReceivable,
+  normalizeInvoiceStatus,
+  INVOICE_STATUS,
+} from "@shared/commercial/documentStatuses.js";
 
 const statusStyles = {
   draft: "bg-status-draft/15 text-slate-600 dark:text-slate-300 border border-status-draft/25 dark:border-status-draft/35",
   sent: "bg-status-sent/12 text-status-sent border border-status-sent/25",
   viewed: "bg-status-sent/10 text-status-sent border border-status-sent/20",
   partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+  partially_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+  void: "bg-status-declined/12 text-status-declined border border-status-declined/25",
+  cancelled: "bg-status-declined/12 text-status-declined border border-status-declined/25",
   paid: "bg-status-paid/12 text-status-paid border border-status-paid/25",
   overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
 };
@@ -45,11 +53,9 @@ function safeFormatDate(dateStr) {
 /** Compute outstanding for a list of invoices (same logic as ClientDetail). */
 function totalOutstandingForInvoices(invoices) {
   return invoices
-    .filter((inv) =>
-      ["sent", "viewed", "partial_paid", "overdue"].includes(inv.status)
-    )
+    .filter((inv) => isInvoiceOpenReceivable(inv.status))
     .reduce((sum, inv) => {
-      if (inv.status === "partial_paid" && inv.payments?.length > 0) {
+      if (normalizeInvoiceStatus(inv.status) === INVOICE_STATUS.partially_paid && inv.payments?.length > 0) {
         const totalPaid = inv.payments.reduce((s, p) => s + (p.amount || 0), 0);
         return sum + (inv.total_amount || 0) - totalPaid;
       }
@@ -806,7 +812,7 @@ export default function Clients() {
                               <td className="py-3 text-right">
                                 <span
                                   className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium uppercase ${
-                                    statusStyles[inv.status] || statusStyles.draft
+                                    statusStyles[normalizeInvoiceStatus(inv.status)] || statusStyles.draft
                                   }`}
                                 >
                                   {inv.status?.replace("_", " ") || "Draft"}

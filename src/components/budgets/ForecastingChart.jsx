@@ -4,6 +4,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import { startOfMonth, endOfMonth, subMonths, addMonths, format, parseISO, isWithinInterval } from 'date-fns';
 import { formatCurrency } from '@/components/CurrencySelector';
 import { TrendingUp } from 'lucide-react';
+import { isInvoicePaidLike } from '@shared/commercial/documentStatuses.js';
 
 export default function ForecastingChart({ expenses, invoices }) {
     
@@ -22,7 +23,7 @@ export default function ForecastingChart({ expenses, invoices }) {
                 .filter(inv => {
                     const d = parseISO(inv.created_date);
                     return isWithinInterval(d, { start, end }) && 
-                           (inv.status === 'paid' || inv.status === 'partial_paid');
+                           isInvoicePaidLike(inv.status);
                 })
                 .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
 

@@ -1,24 +1,25 @@
 import { DOCUMENT_TYPES } from "./documentTypes";
 import { getTypeDef } from "./documentCatalog";
+import {
+  INVOICE_STATUS,
+  QUOTE_STATUS,
+  INVOICE_TRANSITIONS,
+  QUOTE_TRANSITIONS,
+  normalizeInvoiceStatus,
+  normalizeQuoteStatus,
+  canTransitionInvoiceStatus,
+  canTransitionQuoteStatus,
+} from "@shared/commercial/documentStatuses.js";
 
 /** @typedef {'invoice' | 'quote' | 'payslip'} LegacyDocumentType */
 
 export const INVOICE_STATUSES = Object.freeze({
-  draft: "draft",
-  sent: "sent",
-  paid: "paid",
-  overdue: "overdue",
-  cancelled: "cancelled",
+  ...INVOICE_STATUS,
+  /** @deprecated Use `void`. Kept so existing hub callers keep compiling. */
+  cancelled: INVOICE_STATUS.void,
 });
 
-export const QUOTE_STATUSES = Object.freeze({
-  draft: "draft",
-  sent: "sent",
-  accepted: "accepted",
-  declined: "declined",
-  expired: "expired",
-  converted: "converted",
-});
+export const QUOTE_STATUSES = QUOTE_STATUS;
 
 export const PAYSLIP_STATUSES = Object.freeze({
   draft: "draft",
@@ -30,16 +31,8 @@ const LEGACY_TYPES = new Set(Object.values(DOCUMENT_TYPES));
 
 /** @type {Record<LegacyDocumentType, Record<string, string[]>>} */
 const LEGACY_ALLOWED_EDGES = Object.freeze({
-  [DOCUMENT_TYPES.invoice]: {
-    [INVOICE_STATUSES.draft]: [INVOICE_STATUSES.sent, INVOICE_STATUSES.cancelled],
-    [INVOICE_STATUSES.sent]: [INVOICE_STATUSES.paid, INVOICE_STATUSES.overdue, INVOICE_STATUSES.cancelled],
-    [INVOICE_STATUSES.overdue]: [INVOICE_STATUSES.paid, INVOICE_STATUSES.cancelled],
-  },
-  [DOCUMENT_TYPES.quote]: {
-    [QUOTE_STATUSES.draft]: [QUOTE_STATUSES.sent, QUOTE_STATUSES.declined],
-    [QUOTE_STATUSES.sent]: [QUOTE_STATUSES.accepted, QUOTE_STATUSES.declined, QUOTE_STATUSES.expired],
-    [QUOTE_STATUSES.accepted]: [QUOTE_STATUSES.converted],
-  },
+  [DOCUMENT_TYPES.invoice]: INVOICE_TRANSITIONS,
+  [DOCUMENT_TYPES.quote]: QUOTE_TRANSITIONS,
   [DOCUMENT_TYPES.payslip]: {
     [PAYSLIP_STATUSES.draft]: [PAYSLIP_STATUSES.sent],
     [PAYSLIP_STATUSES.sent]: [PAYSLIP_STATUSES.paid],
@@ -103,6 +96,12 @@ function edgesForType(type) {
   return FLOW_ALLOWED_EDGES[flow] || FLOW_ALLOWED_EDGES.financial;
 }
 
+function normalizeLegacyStatus(type, status) {
+  if (type === DOCUMENT_TYPES.invoice) return normalizeInvoiceStatus(status);
+  if (type === DOCUMENT_TYPES.quote) return normalizeQuoteStatus(status);
+  return status;
+}
+
 /**
  * @param {string} type
  * @param {string} from
@@ -110,6 +109,12 @@ function edgesForType(type) {
  * @returns {boolean}
  */
 export function canTransitionStatus(type, from, to) {
+  if (type === DOCUMENT_TYPES.invoice) {
+    return canTransitionInvoiceStatus(from, to);
+  }
+  if (type === DOCUMENT_TYPES.quote) {
+    return canTransitionQuoteStatus(from, to);
+  }
   if (from === to) return true;
   const edges = edgesForType(type);
   if (!edges) return false;
@@ -137,5 +142,6 @@ export function assertTransition(type, from, to) {
 export function allowedNextStatuses(type, current) {
   const edges = edgesForType(type);
   if (!edges) return [];
-  return edges[current] ? [...edges[current]] : [];
+  const key = normalizeLegacyStatus(type, current);
+  return edges[key] ? [...edges[key]] : [];
 }

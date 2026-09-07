@@ -48,16 +48,18 @@ const FEATURE_ALIASES = {
 };
 
 export const FEATURE_TIERS = {
-  invoices: ['Starter', 'Business', 'Growth'],
-  quotes: ['Starter', 'Business', 'Growth'],
-  clients: ['Starter', 'Business', 'Growth'],
-  inventory: ['Business', 'Growth'],
-  pos: ['Business', 'Growth'],
-  recurring: ['Business', 'Growth'],
-  payroll: ['Business', 'Growth'],
-  advancedReports: ['Growth'],
-  apiAccess: ['Growth'],
-  multi_company: ['Growth'],
+  invoices: ["Starter", "Business", "Growth", "Enterprise"],
+  quotes: ["Starter", "Business", "Growth", "Enterprise"],
+  clients: ["Starter", "Business", "Growth", "Enterprise"],
+  inventory: ["Business", "Growth", "Enterprise"],
+  pos: ["Business", "Growth", "Enterprise"],
+  recurring: ["Business", "Growth", "Enterprise"],
+  payroll: ["Business", "Growth", "Enterprise"],
+  advancedReports: ["Growth", "Enterprise"],
+  apiAccess: ["Growth", "Enterprise"],
+  multi_company: ["Growth", "Enterprise"],
+  ssoIntegration: ["Enterprise"],
+  customBranding: ["Enterprise"],
 };
 
 const FAMILY_LABEL = {
@@ -87,7 +89,12 @@ export const getRequiredPlan = (feature) => {
   ) {
     return 'Business';
   }
-  return 'Growth';
+  if (
+    ["sso", "dedicated_support", "custom_contract", "white_label"].includes(key)
+  ) {
+    return "Enterprise";
+  }
+  return "Growth";
 };
 
 export const hasFeatureAccess = (userPlan, feature) => {

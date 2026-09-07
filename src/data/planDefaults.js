@@ -1,3 +1,6 @@
+import { FAMILY_LIMITS } from "@shared/planFeatures.js";
+import { MARKETING_PLANS } from "@shared/planMarketing.js";
+
 export const FEATURE_CATALOG = [
   { key: "invoices", label: "Invoices", description: "Create and manage invoices" },
   { key: "quotes", label: "Quotes", description: "Create and manage quotes" },
@@ -26,7 +29,8 @@ export const FEATURE_CATALOG = [
   { key: "prioritySupport", label: "Priority Support", description: "Priority support channels" }
 ];
 
-export const PLAN_ORDER = ["free", "starter", "professional", "enterprise"];
+/** Public catalog order. `free` stays in DEFAULT_PLANS as a local-admin fallback only. */
+export const PLAN_ORDER = ["starter", "business", "growth", "enterprise"];
 
 export const createDefaultFeatures = (overrides = {}) => {
   const features = FEATURE_CATALOG.reduce((acc, feature) => {
@@ -37,6 +41,37 @@ export const createDefaultFeatures = (overrides = {}) => {
   return { ...features, ...overrides };
 };
 
+function seatFields(family) {
+  const seats = FAMILY_LIMITS[family]?.seats;
+  const unlimited = seats == null;
+  return {
+    userLimit: unlimited ? null : seats,
+    users: unlimited ? "Unlimited" : seats,
+  };
+}
+
+function catalogPlan(family, extras) {
+  const copy = MARKETING_PLANS[family];
+  return {
+    name: copy.name,
+    ...seatFields(family),
+    invoices_limit: "Unlimited",
+    quotes_limit: "Unlimited",
+    storage: extras.storage,
+    color: extras.color,
+    description: copy.description,
+    nextTierName: extras.nextTierName,
+    priceMonthly: copy.contactSales ? 0 : copy.monthlyPriceZar,
+    priceYearly: copy.contactSales ? 0 : copy.annualPriceZar,
+    recommended: Boolean(copy.highlighted),
+    status: "active",
+    features: createDefaultFeatures(),
+    version: 1,
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
 export const DEFAULT_PLANS = {
   free: {
     name: "Free",
@@ -46,7 +81,7 @@ export const DEFAULT_PLANS = {
     quotes_limit: 5,
     storage: "1GB",
     color: "bg-gray-100",
-    description: "Just you",
+    description: "Trial fallback",
     nextTierName: "Starter",
     priceMonthly: 0,
     priceYearly: 0,
@@ -55,63 +90,26 @@ export const DEFAULT_PLANS = {
     features: createDefaultFeatures(),
     version: 1,
     createdAt: "",
-    updatedAt: ""
+    updatedAt: "",
   },
-  starter: {
-    name: "Starter",
-    userLimit: 3,
-    users: 3,
-    invoices_limit: 50,
-    quotes_limit: 25,
+  starter: catalogPlan("starter", {
     storage: "10GB",
     color: "bg-primary/15",
-    description: "You + 2 team members",
-    nextTierName: "Professional",
-    priceMonthly: 29,
-    priceYearly: 290,
-    recommended: true,
-    status: "active",
-    features: createDefaultFeatures(),
-    version: 1,
-    createdAt: "",
-    updatedAt: ""
-  },
-  professional: {
-    name: "Professional",
-    userLimit: 10,
-    users: 10,
-    invoices_limit: 500,
-    quotes_limit: 250,
-    storage: "100GB",
+    nextTierName: "Business",
+  }),
+  business: catalogPlan("business", {
+    storage: "50GB",
     color: "bg-primary/10",
-    description: "You + 9 team members",
-    nextTierName: "Enterprise",
-    priceMonthly: 99,
-    priceYearly: 990,
-    recommended: false,
-    status: "active",
-    features: createDefaultFeatures(),
-    version: 1,
-    createdAt: "",
-    updatedAt: ""
-  },
-  enterprise: {
-    name: "Enterprise",
-    userLimit: null,
-    users: "Unlimited",
-    invoices_limit: "Unlimited",
-    quotes_limit: "Unlimited",
-    storage: "Unlimited",
+    nextTierName: "Growth",
+  }),
+  growth: catalogPlan("growth", {
+    storage: "100GB",
     color: "bg-purple-100",
-    description: "Unlimited team members",
+    nextTierName: "Enterprise",
+  }),
+  enterprise: catalogPlan("enterprise", {
+    storage: "Unlimited",
+    color: "bg-amber-100",
     nextTierName: null,
-    priceMonthly: 299,
-    priceYearly: 2990,
-    recommended: false,
-    status: "active",
-    features: createDefaultFeatures(),
-    version: 1,
-    createdAt: "",
-    updatedAt: ""
-  }
+  }),
 };

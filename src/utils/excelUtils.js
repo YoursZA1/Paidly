@@ -1,6 +1,8 @@
 // Excel utility functions for data import/export
 // xlsx is lazy-loaded via dynamic import() to avoid pulling it into the main bundle (smaller initial load, no circular chunk).
 
+import { isCanonicalInvoiceStatus, normalizeInvoiceStatus } from "@shared/commercial/documentStatuses.js";
+
 // Generate UUID
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -166,7 +168,7 @@ export const generatePaidlyTemplate = async () => {
       'full_name': 'Regular User',
       'role': 'user',
       'status': 'active',
-      'plan': 'professional',
+      'plan': 'business',
       'created_at': new Date().toISOString(),
       'last_login': new Date().toISOString()
     }
@@ -319,7 +321,7 @@ export const generatePaidlyTemplate = async () => {
   const usersValidations = [
     { sqref: 'D3:D1000', type: 'list', formula1: '"admin,user"', showDropDown: false },
     { sqref: 'E3:E1000', type: 'list', formula1: '"active,suspended"', showDropDown: false },
-    { sqref: 'F3:F1000', type: 'list', formula1: '"free,starter,professional,enterprise"', showDropDown: false },
+    { sqref: 'F3:F1000', type: 'list', formula1: '"free,starter,business,growth,enterprise"', showDropDown: false },
     { sqref: 'G3:G1000', type: 'date', operator: 'greaterThan', formula1: '1900-01-01' },
     { sqref: 'H3:H1000', type: 'date', operator: 'greaterThan', formula1: '1900-01-01' }
   ];
@@ -501,12 +503,11 @@ export const validateInvoiceData = (data, usersData = [], clientsData = []) => {
       errors.push(`Row ${rowNum}: client_id "${row.client_id}" does not exist in Clients sheet`);
     }
 
-    // Validate status (strict enum)
-    const validStatuses = ['draft', 'sent', 'paid', 'overdue', 'cancelled'];
+    // Validate status (canonical + historical aliases)
     if (!row.status || row.status.toString().trim() === '') {
       errors.push(`Row ${rowNum}: Missing status`);
-    } else if (!validStatuses.includes(row.status.toString().toLowerCase())) {
-      errors.push(`Row ${rowNum}: Invalid status "${row.status}" (must be: draft, sent, paid, overdue, or cancelled)`);
+    } else if (!isCanonicalInvoiceStatus(normalizeInvoiceStatus(row.status))) {
+      errors.push(`Row ${rowNum}: Invalid status "${row.status}" (must be: draft, sent, viewed, partially_paid, paid, overdue, or void)`);
     }
 
     // Validate numeric fields

@@ -2,6 +2,11 @@ import { supabase } from "@/lib/supabaseClient";
 import { invoicesToCsv } from "@/utils/invoiceCsvMapping";
 import { quotesToCsv } from "@/utils/quoteCsvMapping";
 import { fetchInvoiceItemsByInvoiceIds } from "@/services/InvoiceListService";
+import { isPersistenceDiscountLine } from "@shared/commercial/normalizeCommercialDocument.js";
+import {
+  commercialLineItemSelectList,
+  fromStoredCommercialLineItem,
+} from "@shared/commercial/commercialLineItem.js";
 
 function downloadCsv(csvContent, filename) {
   const blob = new Blob([csvContent], { type: "text/csv" });
@@ -19,20 +24,15 @@ async function fetchQuoteItemsByQuoteIds(quoteIds) {
   if (!Array.isArray(quoteIds) || quoteIds.length === 0) return new Map();
   const { data, error } = await supabase
     .from("quote_items")
-    .select("id, quote_id, service_name, description, quantity, unit_price, total_price")
+    .select(commercialLineItemSelectList("quote_id"))
     .in("quote_id", quoteIds);
   if (error) throw error;
 
   const itemsByQuoteId = new Map();
   for (const row of data ?? []) {
+    if (isPersistenceDiscountLine(row)) continue;
     if (!itemsByQuoteId.has(row.quote_id)) itemsByQuoteId.set(row.quote_id, []);
-    itemsByQuoteId.get(row.quote_id).push({
-      service_name: row.service_name,
-      description: row.description || "",
-      quantity: Number(row.quantity ?? 1),
-      unit_price: Number(row.unit_price ?? 0),
-      total_price: Number(row.total_price ?? 0),
-    });
+    itemsByQuoteId.get(row.quote_id).push(fromStoredCommercialLineItem(row));
   }
 
   return itemsByQuoteId;

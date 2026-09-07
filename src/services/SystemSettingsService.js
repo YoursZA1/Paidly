@@ -188,20 +188,23 @@ const DEFAULT_SETTINGS = {
     limits: {
       maxInvoicesPerMonth: {
         free: 10,
-        starter: 50,
-        professional: 200,
-        enterprise: -1 // unlimited
+        starter: -1,
+        business: -1,
+        growth: -1,
+        enterprise: -1
       },
       maxClientsPerAccount: {
         free: 5,
-        starter: 50,
-        professional: 200,
+        starter: -1,
+        business: -1,
+        growth: -1,
         enterprise: -1
       },
       maxUsersPerAccount: {
         free: 1,
-        starter: 3,
-        professional: 10,
+        starter: 1,
+        business: 5,
+        growth: -1,
         enterprise: -1
       }
     }

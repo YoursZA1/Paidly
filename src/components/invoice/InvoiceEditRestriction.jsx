@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Lock, Eye, AlertCircle, CheckCircle, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import { normalizeInvoiceStatus, invoiceStatusLabel } from '@shared/commercial/documentStatuses.js';
 
 /**
  * InvoiceEditRestriction Component
@@ -71,8 +72,20 @@ export default function InvoiceEditRestriction({ invoice, reason = 'paid' }) {
       ]
     }
   };
+  restrictions.partially_paid = restrictions.partial_paid;
+  restrictions.void = {
+    ...restrictions.cancelled,
+    title: 'Invoice is Void',
+    description: 'This invoice has been voided and is locked to preserve the audit trail.',
+    reasons: [
+      'Invoice has been voided',
+      'Voided records should remain immutable',
+      'Audit trail must be preserved',
+      'Changes could create accounting discrepancies',
+    ],
+  };
 
-  const config = restrictions[reason] || restrictions.paid;
+  const config = restrictions[normalizeInvoiceStatus(reason)] || restrictions[reason] || restrictions.paid;
   const Icon = config.icon;
 
   return (
@@ -135,7 +148,7 @@ export default function InvoiceEditRestriction({ invoice, reason = 'paid' }) {
                     <div>
                       <p className="text-gray-600">Status</p>
                       <p className="font-semibold text-gray-900 capitalize">
-                        {invoice.status?.replace('_', ' ')}
+                        {invoiceStatusLabel(invoice.status)}
                       </p>
                     </div>
                     <div>

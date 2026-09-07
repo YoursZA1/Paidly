@@ -28,6 +28,7 @@ import { sendDraftInvoice, sendInvoicePdfEmailToClient, recordDocumentSend, prep
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
 import { isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
+import { INVOICE_STATUS, isInvoicePaidLike, isInvoiceVoidLike } from '@shared/commercial/documentStatuses.js';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -35,12 +36,12 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from 
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 
 const statusOptions = [
-    { value: 'sent', label: 'Mark as Sent', icon: Mail },
-    { value: 'viewed', label: 'Mark as Viewed', icon: Eye },
-    { value: 'partial_paid', label: 'Mark as Partially Paid', icon: DollarSign },
-    { value: 'paid', label: 'Mark as Paid', icon: CheckCircle },
-    { value: 'overdue', label: 'Mark as Overdue', icon: AlertTriangle },
-    { value: 'cancelled', label: 'Mark as Cancelled', icon: XCircle },
+    { value: INVOICE_STATUS.sent, label: 'Mark as Sent', icon: Mail },
+    { value: INVOICE_STATUS.viewed, label: 'Mark as Viewed', icon: Eye },
+    { value: INVOICE_STATUS.partially_paid, label: 'Mark as Partially Paid', icon: DollarSign },
+    { value: INVOICE_STATUS.paid, label: 'Mark as Paid', icon: CheckCircle },
+    { value: INVOICE_STATUS.overdue, label: 'Mark as Overdue', icon: AlertTriangle },
+    { value: INVOICE_STATUS.void, label: 'Mark as Void', icon: XCircle },
 ];
 
 function isLikelyNetworkFetchError(error) {
@@ -446,7 +447,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     };
 
     const isMobile = useIsMobile();
-    const isPaid = invoice.status === 'paid' || invoice.status === 'partial_paid' || invoice.status === 'cancelled';
+    const isPaid = isInvoicePaidLike(invoice.status) || isInvoiceVoidLike(invoice.status);
     const isDraft = invoice.status === 'draft';
     const showManageEdit = !isPaid;
     const showManageRecordPayment = !isPaid;

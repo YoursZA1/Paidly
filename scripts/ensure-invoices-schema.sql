@@ -56,12 +56,29 @@ create table if not exists public.invoices (
 create table if not exists public.invoice_items (
   id uuid primary key default uuid_generate_v4(),
   invoice_id uuid not null references public.invoices(id) on delete cascade,
+  service_id uuid,
+  catalog_item_id uuid,
   service_name text,
   description text,
   quantity numeric(12,2) not null default 1,
   unit_price numeric(12,2) not null default 0,
-  total_price numeric(12,2) not null default 0
+  total_price numeric(12,2) not null default 0,
+  discount numeric(12,2),
+  discount_type text,
+  tax_rate numeric(6,2),
+  sku text,
+  item_type text,
+  unit_type text
 );
+
+alter table public.invoice_items add column if not exists service_id uuid;
+alter table public.invoice_items add column if not exists catalog_item_id uuid;
+alter table public.invoice_items add column if not exists discount numeric(12,2);
+alter table public.invoice_items add column if not exists discount_type text;
+alter table public.invoice_items add column if not exists tax_rate numeric(6,2);
+alter table public.invoice_items add column if not exists sku text;
+alter table public.invoice_items add column if not exists item_type text;
+alter table public.invoice_items add column if not exists unit_type text;
 
 -- Create payments table if it does not exist
 create table if not exists public.payments (

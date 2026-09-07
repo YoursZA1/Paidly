@@ -137,7 +137,8 @@ export const getPlanBadgeColor = (plan) => {
   const colors = {
     free: 'bg-slate-100 text-slate-800',
     starter: 'bg-primary/15 text-primary',
-    professional: 'bg-purple-100 text-purple-800',
+    business: 'bg-orange-100 text-orange-800',
+    growth: 'bg-purple-100 text-purple-800',
     enterprise: 'bg-yellow-100 text-yellow-800'
   };
   return colors[plan] || 'bg-gray-100 text-gray-800';

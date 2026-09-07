@@ -25,7 +25,7 @@ export function queueCreateInvoice(invoiceData, meta = {}) {
     {
       ...meta,
       maxRetries: 5,
-      conflictKey: `invoice:create:${invoiceData?.invoice_number || tempId}`,
+      conflictKey: `invoice:create:${invoiceData?.client_operation_id || meta.operationId || tempId}`,
       optimisticTempId: tempId,
       operationId: meta.operationId ?? makeOperationId(),
     }

@@ -31,19 +31,19 @@ export class SubscriptionService {
 
     const categories = {
       Starter: {
-        plans: ["free", "starter", "basic", "individual"],
+        plans: ["free", "starter", "basic", "individual", "starter_monthly", "starter_annual"],
         users: [],
         count: 0,
         percentage: 0,
       },
       Business: {
-        plans: ["professional", "business", "sme"],
+        plans: ["professional", "business", "sme", "business_monthly", "business_annual"],
         users: [],
         count: 0,
         percentage: 0,
       },
       Growth: {
-        plans: ["growth", "corporate"],
+        plans: ["growth", "corporate", "growth_monthly", "growth_annual"],
         users: [],
         count: 0,
         percentage: 0,

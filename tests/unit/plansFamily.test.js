@@ -47,6 +47,8 @@ describe("plan slug / family aliases", () => {
     expect(hasFeature("business_monthly", "inventory")).toBe(true);
     expect(hasFeature("business_monthly", "pos")).toBe(true);
     expect(hasFeature("growth_monthly", "multi_company")).toBe(true);
+    expect(hasFeature("growth_monthly", "white_label")).toBe(false);
+    expect(hasFeature("enterprise_custom", "white_label")).toBe(true);
     expect(hasFeature("sme", "inventory")).toBe(true);
     expect(hasFeature("sme", "pos")).toBe(true);
     expect(familyHasFeature("starter", "not_a_real_feature")).toBe(false);

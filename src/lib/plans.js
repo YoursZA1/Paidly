@@ -29,3 +29,13 @@ export {
   ASSIGNABLE_PROFILE_PLAN_SLUGS,
   coerceAssignableProfilePlan,
 } from "../../shared/plans.js";
+
+export {
+  MARKETING_PLANS,
+  MARKETING_PLAN_ORDER,
+  MARKETING_TRIAL_FOOTER,
+  formatMarketingZar,
+  marketingAnnualSavingsLabel,
+  marketingPlanSelectLabel,
+  marketingSelfServeFamilies,
+} from "../../shared/planMarketing.js";

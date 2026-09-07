@@ -22,6 +22,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 import { createTrackableQuoteLink, sendQuotePdfEmailToClient } from '@/services/InvoiceSendService';
+import { canConvertQuote, convertQuoteToInvoice, invoiceUrlFromConversion, isQuoteImmutable } from '@/services/QuoteConversionService';
+import { QUOTE_STATUS, allowedNextQuoteStatuses, canTransitionQuoteStatus } from '@shared/commercial/documentStatuses.js';
 
 function QuoteActions({ quote, onActionSuccess }) {
     const { toast } = useToast();
@@ -104,23 +106,23 @@ function QuoteActions({ quote, onActionSuccess }) {
 
     const handleStatusChange = async (newStatus) => {
         if (quote.status === newStatus) return;
+        if (!canTransitionQuoteStatus(quote.status, newStatus)) return;
         try {
             await Quote.update(quote.id, { status: newStatus });
             onActionSuccess();
             if (newStatus === 'accepted') {
-                const draftUrl = `${createPageUrl('CreateDocument/invoice')}?quoteId=${encodeURIComponent(quote.id)}`;
                 toast({
                     title: 'Quote accepted',
-                    description: 'Create an invoice draft prefilled from this quote.',
+                    description: 'Convert it to an invoice when you are ready.',
                     variant: 'success',
-                    duration: 12000,
+                    duration: 8000,
                     action: (
                         <ToastAction
-                            altText="Create invoice draft"
+                            altText="Convert to invoice"
                             className="border-primary/40 bg-primary/15 text-primary hover:bg-primary/25"
-                            onClick={() => navigate(draftUrl)}
+                            onClick={() => handleConvertToInvoice()}
                         >
-                            Create draft
+                            Convert
                         </ToastAction>
                     ),
                 });
@@ -154,8 +156,27 @@ function QuoteActions({ quote, onActionSuccess }) {
         }
     };
 
-    const handleConvertToInvoice = () => {
-        navigate(createPageUrl(`CreateInvoice?quoteId=${quote.id}`));
+    const handleConvertToInvoice = async () => {
+        setIsProcessing(true);
+        try {
+            const result = await convertQuoteToInvoice(quote);
+            const url = invoiceUrlFromConversion(result);
+            toast({
+                title: result.already_converted ? 'Quote already converted' : 'Invoice created',
+                description: result.invoice_number || 'Opening the invoice.',
+                variant: 'success',
+            });
+            onActionSuccess?.();
+            if (url) navigate(url);
+        } catch (error) {
+            toast({
+                title: 'Could not convert quote',
+                description: error?.message || 'Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     return (
@@ -175,34 +196,46 @@ function QuoteActions({ quote, onActionSuccess }) {
                             View Quote
                         </Link>
                     </DropdownMenuItem>
+                    {!isQuoteImmutable(quote) && (
                     <DropdownMenuItem asChild>
                         <Link to={createPageUrl(`EditQuote?id=${quote.id}`)}>
                             <Edit className="w-4 h-4 mr-2" />
                             Edit Quote
                         </Link>
                     </DropdownMenuItem>
-                     <DropdownMenuItem onClick={handleConvertToInvoice} data-testid="quote-convert-to-invoice">
+                    )}
+                    {(isQuoteImmutable(quote) || canConvertQuote(quote)) && (
+                     <DropdownMenuItem onClick={handleConvertToInvoice} data-testid="quote-convert-to-invoice" disabled={isProcessing}>
                         <ArrowRightSquare className="w-4 h-4 mr-2" />
-                        Convert to Invoice
+                        {isQuoteImmutable(quote) ? 'Open Invoice' : 'Convert to Invoice'}
                     </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
+                    {!isQuoteImmutable(quote) && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
                             <CheckCircle className="w-4 h-4 mr-2" />
                             <span>Mark as...</span>
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
-                            <DropdownMenuItem onClick={() => handleStatusChange('sent')}>
+                            {allowedNextQuoteStatuses(quote.status).includes(QUOTE_STATUS.sent) && (
+                            <DropdownMenuItem onClick={() => handleStatusChange(QUOTE_STATUS.sent)}>
                                 <Mail className="w-4 h-4 mr-2"/>Sent
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange('accepted')}>
+                            )}
+                            {allowedNextQuoteStatuses(quote.status).includes(QUOTE_STATUS.accepted) && (
+                            <DropdownMenuItem onClick={() => handleStatusChange(QUOTE_STATUS.accepted)}>
                                 <CheckCircle className="w-4 h-4 mr-2"/>Accepted
                             </DropdownMenuItem>
-                             <DropdownMenuItem onClick={() => handleStatusChange('rejected')}>
-                                <XCircle className="w-4 h-4 mr-2"/>Rejected
+                            )}
+                            {allowedNextQuoteStatuses(quote.status).includes(QUOTE_STATUS.declined) && (
+                             <DropdownMenuItem onClick={() => handleStatusChange(QUOTE_STATUS.declined)}>
+                                <XCircle className="w-4 h-4 mr-2"/>Declined
                             </DropdownMenuItem>
+                            )}
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
+                    )}
                      <DropdownMenuItem onClick={handleEmailClient}>
                         <Mail className="w-4 h-4 mr-2" />
                         Email Quote
@@ -216,10 +249,12 @@ function QuoteActions({ quote, onActionSuccess }) {
                         Download PDF
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
+                    {!isQuoteImmutable(quote) && (
                     <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
                         <Trash2 className="w-4 h-4 mr-2" />
                         Delete Quote
                     </DropdownMenuItem>
+                    )}
                 </DropdownMenuContent>
             </DropdownMenu>
 

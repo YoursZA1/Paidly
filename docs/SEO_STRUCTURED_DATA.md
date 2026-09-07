@@ -12,7 +12,7 @@ https://developers.google.com/search/docs/appearance/structured-data/sd-policies
 | Visible content only | Markup mirrors Hero / Pricing / How-to copy |
 | No misleading reviews | **No** `AggregateRating` / fake `Review` (SocialProof is persona copy) |
 | Relevance | Home = Organization + WebSite + WebApplication; `/HowTo` = HowTo |
-| Completeness | Offers match Individual / SME / Corporate ZAR prices from `@shared/plans.js` |
+| Completeness | Offers match Starter R50 / Business R150 / Growth R350 / Enterprise custom from `@shared/plans.js` |
 
 Google does **not** guarantee rich results even when markup is valid.
 

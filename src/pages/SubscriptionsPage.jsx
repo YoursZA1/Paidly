@@ -28,17 +28,28 @@ import SubscriptionFormDialog, {
 import { pickPreferredSubscriptionRow, normalizePaidPackageKey } from '@/lib/subscriptionPlan';
 import { isLegacyPlanSlug } from '@/lib/plans.js';
 import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
+import { MARKETING_PLAN_ORDER, MARKETING_PLANS, formatMarketingZar } from '@shared/planMarketing.js';
 import TablePagination from '@/components/ui/TablePagination';
 
 const LIST_LIMIT = 500;
 const SUBS_PAGE_SIZE = 15;
 
-const CATALOG_TIERS = [
-  { family: 'starter', label: 'Starter', price: 'R50/mo', color: 'border-blue-500/25' },
-  { family: 'business', label: 'Business', price: 'R150/mo', color: 'border-primary/30' },
-  { family: 'growth', label: 'Growth', price: 'R350/mo', color: 'border-purple-500/25' },
-  { family: 'enterprise', label: 'Enterprise', price: 'Custom', color: 'border-amber-500/25' },
-];
+const CATALOG_TIER_COLORS = {
+  starter: 'border-blue-500/25',
+  business: 'border-primary/30',
+  growth: 'border-purple-500/25',
+  enterprise: 'border-amber-500/25',
+};
+
+const CATALOG_TIERS = MARKETING_PLAN_ORDER.map((family) => {
+  const copy = MARKETING_PLANS[family];
+  return {
+    family,
+    label: copy.name,
+    price: copy.contactSales ? 'Custom' : `${formatMarketingZar(copy.monthlyPriceZar)}/mo`,
+    color: CATALOG_TIER_COLORS[family],
+  };
+});
 
 function pickLatestSubscriptionForUser(subs, userId) {
   const uid = String(userId);

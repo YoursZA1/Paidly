@@ -16,6 +16,7 @@ import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 import { servicesToCsv, parseServiceCsv, csvRowToServicePayload } from "@/utils/serviceCsvMapping";
 import { catalogRowsToCsvSource } from "@/utils/catalogCsvUtils";
 import { formatCurrency } from "@/utils/currencyCalculations";
+import AssetService from "@/services/AssetService";
 
 import ManageProductsView from "../components/inventory/ManageProductsView";
 import ProductFormDialog from "../components/inventory/ProductFormDialog";

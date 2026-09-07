@@ -14,9 +14,9 @@ export function documentStatusBadgeVariant(status) {
     return "default";
   }
   // In-flight
-  if (s === "sent" || s === "viewed" || s === "pending") return "secondary";
+  if (s === "sent" || s === "viewed" || s === "pending" || s === "partially_paid" || s === "partial_paid") return "secondary";
   // Negative / lapsed
-  if (s === "declined" || s === "cancelled" || s === "expired" || s === "overdue") return "destructive";
+  if (s === "declined" || s === "cancelled" || s === "void" || s === "expired" || s === "overdue") return "destructive";
   // draft / archived / unknown
   return "outline";
 }

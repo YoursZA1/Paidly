@@ -4,6 +4,8 @@
  *
  * New catalog: starter_* | business_* | growth_* | enterprise_custom
  * Legacy (grandfathered): individual | sme | corporate
+ *
+ * Public names, feature bullets, and CTAs: `shared/planMarketing.js`.
  */
 
 import {

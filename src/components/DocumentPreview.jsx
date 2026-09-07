@@ -3,6 +3,7 @@ import { format, isValid, parseISO } from "date-fns";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
 import { mergeLiveBrandingForDocuments } from "@/utils/documentPreviewData";
+import { resolveCommercialDocumentTotals } from "@shared/commercial/normalizeCommercialDocument.js";
 import { resolveIssuerBrand } from "@/lib/documentIssuerBrand";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
@@ -100,6 +101,7 @@ function normalizeLineItems(doc) {
 const STATUS_STYLES_BASE = {
   paid: { color: "#10b981", border: "#10b981" },
   partial_paid: { color: "#f59e0b", border: "#f59e0b" },
+  partially_paid: { color: "#f59e0b", border: "#f59e0b" },
   sent: { color: "#3b82f6", border: "#3b82f6" },
   viewed: { color: "#3b82f6", border: "#3b82f6" },
   accepted: { color: "#10b981", border: "#10b981" },
@@ -110,6 +112,8 @@ const STATUS_STYLES_BASE = {
   expired: { color: "#6b7280", border: "#6b7280" },
   draft: { color: "#9ca3af", border: "#9ca3af" },
   cancelled: { color: "#6b7280", border: "#6b7280" },
+  void: { color: "#6b7280", border: "#6b7280" },
+  converted: { color: "#10b981", border: "#10b981" },
 };
 
 function statusLabel(status) {
@@ -272,12 +276,13 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       profile: effectiveUser,
     });
     const company_name = issuerBrand.name || doc.company_name || "Your Company";
-    const company_email = doc.company_email || effectiveUser?.email || "";
-    const company_phone = String(doc.company_phone || effectiveUser?.phone || "").trim();
+    const company_email = issuerBrand.email || doc.company_email || effectiveUser?.email || "";
+    const company_phone = String(issuerBrand.phone || doc.company_phone || effectiveUser?.phone || "").trim();
     const company_website = String(
-      doc.company_website || effectiveUser?.company_website || effectiveUser?.website || ""
+      issuerBrand.website || doc.company_website || effectiveUser?.company_website || effectiveUser?.website || ""
     ).trim();
-    const company_address = doc.company_address || effectiveUser?.company_address || "";
+    const company_address = issuerBrand.address || doc.company_address || effectiveUser?.company_address || "";
+    const vat_number = issuerBrand.vatNumber || doc.vat_number || effectiveUser?.vat_number || effectiveUser?.business?.vat_number || "";
     const logo_url = issuerBrand.logo;
 
     const number = doc.number || doc.invoice_number || doc.quote_number || "—";
@@ -288,13 +293,27 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       doc.due_date || (docType === "quote" ? doc.valid_until : null) || doc.delivery_date || doc.valid_until;
 
     const lineRows = normalizeLineItems(doc);
-    const lineSubtotal = lineRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
-    const discount = Math.max(0, Number(doc.discount) || 0);
+    const totals = resolveCommercialDocumentTotals(
+      {
+        ...doc,
+        items: Array.isArray(doc.items)
+          ? doc.items
+          : Array.isArray(doc.line_items)
+            ? doc.line_items
+            : [],
+        discount_amount: doc.discount_amount ?? doc.discount,
+        discount_type: doc.discount_type,
+        discount_value: doc.discount_value,
+      },
+      {
+        recalculate: doc.__liveTotals === true,
+        preferStored: doc.__liveTotals !== true,
+      }
+    );
+    const discount = Math.max(0, totals.documentDiscount);
     const tax_rate = Number(doc.tax_rate) || 0;
-    const tax_amount = Number(doc.tax_amount ?? 0);
-    const total =
-      Number(doc.total ?? doc.total_amount) ||
-      Math.round((lineSubtotal - discount + tax_amount) * 100) / 100;
+    const tax_amount = totals.taxTotal;
+    const total = totals.grandTotal;
 
     const amountPaidRaw = doc.amount_paid ?? doc.paid_amount;
     const amount_paid =
@@ -323,6 +342,7 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       company_phone,
       company_website,
       company_address,
+      vat_number,
       number,
       status,
       issue_date,
@@ -330,7 +350,7 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       dueLabel: docType === "quote" ? "Valid until" : "Due date",
       safeFormatDate,
       lineRows,
-      lineSubtotal,
+      lineSubtotal: totals.subtotal,
       discount,
       tax_rate,
       tax_amount,

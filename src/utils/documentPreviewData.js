@@ -57,9 +57,10 @@ export function profileForQuotePreview(quoteData, user) {
     document_brand_secondary: qs ?? user?.document_brand_secondary ?? null,
     logo_url: issuerBrand.logo,
     company_name: issuerBrand.name || "",
-    company_address: quoteData?.owner_company_address || user?.company_address || "",
-    email: quoteData?.owner_email || user?.email || "",
-    phone: user?.phone || "",
+    company_address: issuerBrand.address || quoteData?.owner_company_address || user?.company_address || "",
+    email: issuerBrand.email || quoteData?.owner_email || user?.email || "",
+    phone: issuerBrand.phone || user?.phone || "",
+    vat_number: issuerBrand.vatNumber || quoteData?.owner_vat_number || user?.vat_number || user?.business?.vat_number || "",
     company_website: user?.company_website || user?.website || "",
     currency: quoteData?.currency || user?.currency || "ZAR",
   };
@@ -71,7 +72,7 @@ export function profileForQuotePreview(quoteData, user) {
 export function recordToStyledPreviewDoc(record, client, docType, profile) {
   if (!record) return null;
   const items = Array.isArray(record.items) ? record.items : [];
-  let discount = 0;
+  let discount = Number(record.discount_amount) || 0;
   const line_items = [];
 
   for (const it of items) {
@@ -79,7 +80,9 @@ export function recordToStyledPreviewDoc(record, client, docType, profile) {
     const totalPrice = Number(it.total_price ?? it.total ?? 0);
     const isDiscount = /^discount$/i.test(name) && totalPrice < 0;
     if (isDiscount) {
-      discount += Math.abs(totalPrice);
+      if (!(Number(record.discount_amount) > 0)) {
+        discount += Math.abs(totalPrice);
+      }
       continue;
     }
     const desc = [it.service_name || it.name, it.description].filter(Boolean).join("\n");
@@ -127,7 +130,12 @@ export function recordToStyledPreviewDoc(record, client, docType, profile) {
     line_items:
       line_items.length > 0 ? line_items : [{ description: "", quantity: 1, unit_price: 0, total: 0 }],
     tax_rate: Number(record.tax_rate) || 0,
+    vat_mode: record.vat_mode,
     discount,
+    discount_amount: discount,
+    discount_type: record.discount_type || "fixed",
+    discount_value: Number(record.discount_value ?? discount) || 0,
+    items,
     currency: record.currency || profile?.currency || "ZAR",
     notes: record.notes || "",
     terms_conditions: isQuote
@@ -135,10 +143,11 @@ export function recordToStyledPreviewDoc(record, client, docType, profile) {
       : effectiveInvoiceTermsForDisplay(record.terms_conditions),
     issuerBrand,
     company_name: issuerBrand.name || "",
-    company_email: record.owner_email || profile?.email || "",
-    company_phone: profile?.phone || "",
-    company_website: profile?.company_website || profile?.website || "",
-    company_address: record.owner_company_address || profile?.company_address || "",
+    company_email: issuerBrand.email || record.owner_email || profile?.email || "",
+    company_phone: issuerBrand.phone || record.owner_phone || profile?.phone || "",
+    company_website: issuerBrand.website || profile?.company_website || profile?.website || "",
+    company_address: issuerBrand.address || record.owner_company_address || profile?.company_address || "",
+    vat_number: issuerBrand.vatNumber || record.owner_vat_number || profile?.vat_number || profile?.business?.vat_number || "",
     owner_logo_url: issuerBrand.logo,
     subtotal: Number(record.subtotal) || 0,
     tax_amount: Number(record.tax_amount) || 0,

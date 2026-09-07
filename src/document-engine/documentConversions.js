@@ -8,12 +8,14 @@
  * (`CreateDocument/invoice|quote?fromHubDocument=`) and write to `invoices` / `quotes`.
  * They must never insert `documents.type=invoice|quote`.
  *
- * Quote→invoice on specialised tables stays on Quotes / Create Invoice (`?quoteId=`).
+ * Quote→invoice on specialised tables uses convert_quote_to_invoice (invoices.source_quote_id).
+ * It must never write documents.source_quote_id or insert public.documents.
  */
 import { DOCUMENT_TYPES } from "./documentTypes";
 import { typeLabel } from "./documentCatalog";
 import { getDedicatedCreatePath } from "./documentCreateFlow";
 import { isDocumentsHubExcludedType } from "./documentSystemOfRecord";
+import { commercialLineItemToComposeRow } from "@shared/commercial/commercialLineItem.js";
 
 /** @typedef {{ targetType: string, label: string, relation?: string, persistence?: "hub"|"commercial" }} ConversionOption */
 
@@ -69,14 +71,7 @@ export function specialisedComposeUrl(targetType, hubDocumentId) {
  */
 export function hubDocumentToComposePrefill(doc) {
   const items = Array.isArray(doc?.document_items) ? doc.document_items : [];
-  let line_items = items.map((item) => {
-    const qty = Number(item?.quantity ?? 1);
-    const rate = Number(item?.unit_price ?? item?.rate ?? 0);
-    const total = Number(item?.total_price ?? item?.total ?? qty * rate);
-    const desc =
-      [item?.service_name || item?.name, item?.description].filter(Boolean).join("\n") || "Item";
-    return { description: desc, quantity: qty, unit_price: rate, total };
-  });
+  let line_items = items.map((item) => commercialLineItemToComposeRow(item));
 
   const meta = typeof doc?.metadata === "object" && doc.metadata ? doc.metadata : {};
   const noteParts = [];

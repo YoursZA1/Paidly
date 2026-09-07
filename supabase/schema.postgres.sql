@@ -252,11 +252,19 @@ create table if not exists public.quotes (
 create table if not exists public.quote_items (
   id uuid primary key default uuid_generate_v4(),
   quote_id uuid not null references public.quotes(id) on delete cascade,
+  service_id uuid references public.services(id) on delete set null,
+  catalog_item_id uuid references public.services(id) on delete set null,
   service_name text,
   description text,
   quantity numeric(12,2) not null default 1,
   unit_price numeric(12,2) not null default 0,
-  total_price numeric(12,2) not null default 0
+  total_price numeric(12,2) not null default 0,
+  discount numeric(12,2),
+  discount_type text,
+  tax_rate numeric(6,2),
+  sku text,
+  item_type text,
+  unit_type text
 );
 
 create table if not exists public.invoices (
@@ -301,11 +309,19 @@ create table if not exists public.invoices (
 create table if not exists public.invoice_items (
   id uuid primary key default uuid_generate_v4(),
   invoice_id uuid not null references public.invoices(id) on delete cascade,
+  service_id uuid references public.services(id) on delete set null,
+  catalog_item_id uuid references public.services(id) on delete set null,
   service_name text,
   description text,
   quantity numeric(12,2) not null default 1,
   unit_price numeric(12,2) not null default 0,
-  total_price numeric(12,2) not null default 0
+  total_price numeric(12,2) not null default 0,
+  discount numeric(12,2),
+  discount_type text,
+  tax_rate numeric(6,2),
+  sku text,
+  item_type text,
+  unit_type text
 );
 
 create table if not exists public.payments (
@@ -1634,7 +1650,7 @@ begin
         msg := 'Invoice #' || coalesce(new.invoice_number, '') || ' was viewed by the client.';
       elsif new.status = 'paid' then
         msg := 'Invoice #' || coalesce(new.invoice_number, '') || ' has been fully paid.';
-      elsif new.status = 'partial_paid' then
+      elsif new.status in ('partially_paid', 'partial_paid') then
         msg := 'A payment was received for Invoice #' || coalesce(new.invoice_number, '') || ' (partial).';
       end if;
     end if;

@@ -2,6 +2,10 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useLocation, useNavigate } from "react-router-dom";
 import { Quote, Client, User } from "@/api/entities";
 import { snapshotDocumentBrandForPersist } from "@/utils/documentBrandColors";
+import BrandSelect from "@/components/brands/BrandSelect";
+import useOrgBrands from "@/hooks/useOrgBrands";
+import { snapshotForNewDocument } from "@/lib/documentIssuerBrand";
+import { useAuth } from "@/contexts/AuthContext";
 import { useServicesCatalogQuery } from "@/hooks/useServicesCatalogQuery";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Send, Save, Loader2, FileInput, ExternalLink } from "lucide-react";
@@ -13,10 +17,12 @@ import QuoteStatusBadge from "../components/quote/QuoteStatusBadge";
 import { useToast } from "@/components/ui/use-toast";
 import { documentSendSuccessDescription } from "@/components/shared/DocumentSendSuccessToast";
 import { sendQuoteToClient } from "@/services/InvoiceSendService";
+import { canConvertQuote, convertQuoteToInvoice, invoiceUrlFromConversion } from "@/services/QuoteConversionService";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { Separator } from "@/components/ui/separator";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { cn } from "@/lib/utils";
+import { isQuoteTerminal } from "@shared/commercial/documentStatuses.js";
 
 function issueDateFromQuote(q) {
     if (q.invoice_date) return q.invoice_date;
@@ -43,9 +49,6 @@ function sanitizeQuotePayload(data) {
     };
 }
 
-/** Quotes that cannot be edited in this flow (use read-only view). */
-const TERMINAL_STATUSES = new Set(["rejected", "declined"]);
-
 export default function EditQuote() {
     const [quoteData, setQuoteData] = useState(null);
     const [originalStatus, setOriginalStatus] = useState(null);
@@ -57,6 +60,8 @@ export default function EditQuote() {
     const location = useLocation();
     const navigate = useNavigate();
     const { toast } = useToast();
+    const { user } = useAuth();
+    const { brands } = useOrgBrands();
     const quoteId = new URLSearchParams(location.search).get("id");
     const mountedRef = useRef(true);
 
@@ -88,7 +93,7 @@ export default function EditQuote() {
             if (!quote) throw new Error("Quote not found");
 
             const status = String(quote.status || "").toLowerCase();
-            if (TERMINAL_STATUSES.has(status)) {
+            if (isQuoteTerminal(status)) {
                 toast({
                     title: "This quote is closed",
                     description: "Open the read-only view to review or convert from the quotes list.",
@@ -247,8 +252,28 @@ export default function EditQuote() {
         }
     };
 
-    const goConvertToInvoice = () => {
-        navigate(`${createPageUrl("CreateDocument/invoice")}?quoteId=${encodeURIComponent(quoteId)}`);
+    const goConvertToInvoice = async () => {
+        if (!quoteData || !formIsComplete) return;
+        setIsSaving(true);
+        try {
+            await persistQuote({ ...quoteData, status: quoteData.status || originalStatus || "draft" });
+            const result = await convertQuoteToInvoice(quoteId);
+            const url = invoiceUrlFromConversion(result);
+            toast({
+                title: result.already_converted ? "Quote already converted" : "Invoice created",
+                description: result.invoice_number || "Opening the invoice.",
+                variant: "success",
+            });
+            if (url) navigate(url);
+        } catch (error) {
+            toast({
+                title: "Could not convert quote",
+                description: error?.message || "Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const statusLabel = String(quoteData?.status || "draft").toLowerCase();
@@ -317,6 +342,27 @@ export default function EditQuote() {
                                 <span className="text-muted-foreground font-normal"> #{quoteData.quote_number}</span>
                             </h1>
                             <QuoteStatusBadge status={quoteData.status || "draft"} />
+                        </div>
+                        <div className="mt-3 max-w-sm">
+                            <BrandSelect
+                                brands={brands}
+                                value={quoteData.company_id}
+                                onChange={(brandId) => {
+                                    const brand = brands.find((row) => row.id === brandId) || null;
+                                    const snap = snapshotForNewDocument({ brand, profile: user });
+                                    setQuoteData((prev) => ({
+                                        ...prev,
+                                        company_id: snap.companyId || null,
+                                        owner_company_name: snap.owner_company_name,
+                                        owner_logo_url: snap.owner_logo_url,
+                                        owner_company_address: snap.owner_company_address,
+                                        owner_email: snap.owner_email,
+                                        owner_phone: snap.owner_phone,
+                                        owner_vat_number: snap.owner_vat_number,
+                                    }));
+                                }}
+                                description="Changing this updates this quote only. The header brand is a default for new documents."
+                            />
                         </div>
                         <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                             {client?.name ? (
@@ -430,7 +476,7 @@ export default function EditQuote() {
                                     type="button"
                                     variant="default"
                                     className={cn("w-full justify-center gap-2", !formIsComplete && "opacity-60")}
-                                    disabled={!formIsComplete}
+                                    disabled={!formIsComplete || isSaving || !canConvertQuote(quoteData)}
                                     onClick={goConvertToInvoice}
                                 >
                                     <FileInput className="h-4 w-4 shrink-0" aria-hidden />

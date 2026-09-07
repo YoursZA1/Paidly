@@ -6,6 +6,14 @@
  * - Global invoice tax rate
  */
 
+import { aggregateFromItems } from "@/document-engine/documentTotals";
+import {
+  calculateGrossFromNet,
+  calculateTaxOnExclusive,
+  calculateCommercialDocument,
+  normalizeVatMode,
+} from "@shared/commercial/calculateCommercialDocument.js";
+
 export class LineItemCalculator {
   /**
    * Calculate line item total with quantity and unit price
@@ -24,9 +32,7 @@ export class LineItemCalculator {
    * @returns {number} Tax amount for the line item
    */
   static calculateLineTax(lineTotal = 0, taxRate = 0) {
-    const total = parseFloat(lineTotal) || 0;
-    const rate = parseFloat(taxRate) || 0;
-    return total * (rate / 100);
+    return calculateTaxOnExclusive(lineTotal, taxRate);
   }
 
   /**
@@ -36,9 +42,7 @@ export class LineItemCalculator {
    * @returns {number} Total including tax
    */
   static calculateLineTotalWithTax(lineTotal = 0, taxRate = 0) {
-    const total = parseFloat(lineTotal) || 0;
-    const tax = this.calculateLineTax(total, taxRate);
-    return total + tax;
+    return calculateGrossFromNet(lineTotal, taxRate).gross;
   }
 
   /**
@@ -47,35 +51,16 @@ export class LineItemCalculator {
    * @param {number} globalTaxRate - Global invoice tax rate
    * @returns {object} Object with subtotal, item_taxes, global_tax, and total
    */
-  static calculateInvoiceTotals(items = [], globalTaxRate = 0) {
-    // Calculate subtotal from line items
-    const subtotal = items.reduce((sum, item) => {
-      const lineTotal = this.calculateLineTotal(item.quantity, item.unit_price);
-      return sum + lineTotal;
-    }, 0);
-
-    // Calculate per-item taxes
-    const itemTaxes = items.reduce((sum, item) => {
-      const lineTotal = this.calculateLineTotal(item.quantity, item.unit_price);
-      const itemTax = this.calculateLineTax(lineTotal, item.item_tax_rate || 0);
-      return sum + itemTax;
-    }, 0);
-
-    // Calculate global tax (applied to subtotal)
-    const globalTax = this.calculateLineTax(subtotal, globalTaxRate);
-
-    // Total tax is sum of item-specific and global taxes
-    const totalTax = itemTaxes + globalTax;
-
-    // Final total
-    const total = subtotal + totalTax;
-
+  static calculateInvoiceTotals(items = [], globalTaxRate = 0, discountAmount = 0, vatMode, discountType) {
+    const totals = aggregateFromItems(items, globalTaxRate, discountAmount, vatMode, discountType);
     return {
-      subtotal: parseFloat(subtotal.toFixed(2)),
-      item_taxes: parseFloat(itemTaxes.toFixed(2)),
-      global_tax: parseFloat(globalTax.toFixed(2)),
-      total_tax: parseFloat(totalTax.toFixed(2)),
-      total: parseFloat(total.toFixed(2))
+      subtotal: totals.subtotal,
+      item_taxes: 0,
+      global_tax: totals.tax_amount,
+      total_tax: totals.tax_amount,
+      discount_amount: totals.discount_amount,
+      total: totals.total_amount,
+      vat_mode: totals.vat_mode,
     };
   }
 
@@ -165,43 +150,27 @@ export class LineItemCalculator {
    * @param {number} discountValue - Discount value
    * @returns {object} Complete invoice totals including discount
    */
-  static calculateInvoiceTotalsWithDiscount(items = [], globalTaxRate = 0, discountType = 'fixed', discountValue = 0) {
-    // Calculate subtotal from line items
-    const subtotal = items.reduce((sum, item) => {
-      const lineTotal = this.calculateLineTotal(item.quantity, item.unit_price);
-      return sum + lineTotal;
-    }, 0);
-
-    // Calculate discount
-    const discountAmount = this.calculateDiscount(subtotal, discountType, discountValue);
-
-    // Subtotal after discount
-    const subtotalAfterDiscount = subtotal - discountAmount;
-
-    // Calculate per-item taxes
-    const itemTaxes = items.reduce((sum, item) => {
-      const lineTotal = this.calculateLineTotal(item.quantity, item.unit_price);
-      const itemTax = this.calculateLineTax(lineTotal, item.item_tax_rate || 0);
-      return sum + itemTax;
-    }, 0);
-
-    // Calculate global tax (applied to subtotal after discount)
-    const globalTax = this.calculateLineTax(subtotalAfterDiscount, globalTaxRate);
-
-    // Total tax is sum of item-specific and global taxes
-    const totalTax = itemTaxes + globalTax;
-
-    // Final total
-    const total = subtotalAfterDiscount + totalTax;
-
+  static calculateInvoiceTotalsWithDiscount(items = [], globalTaxRate = 0, discountType = 'fixed', discountValue = 0, vatMode) {
+    const result = calculateCommercialDocument({
+      lines: (items || []).map((item) => ({
+        quantity: item.quantity,
+        unitPrice: item.unit_price ?? item.unitPrice,
+        taxRate: item.item_tax_rate || globalTaxRate,
+      })),
+      documentDiscount: discountValue,
+      documentDiscountType: discountType,
+      documentTaxRate: globalTaxRate,
+      vatMode: normalizeVatMode(vatMode),
+    });
     return {
-      subtotal: parseFloat(subtotal.toFixed(2)),
-      discount_amount: parseFloat(discountAmount.toFixed(2)),
-      subtotal_after_discount: parseFloat(subtotalAfterDiscount.toFixed(2)),
-      item_taxes: parseFloat(itemTaxes.toFixed(2)),
-      global_tax: parseFloat(globalTax.toFixed(2)),
-      total_tax: parseFloat(totalTax.toFixed(2)),
-      total: parseFloat(total.toFixed(2))
+      subtotal: result.subtotal,
+      discount_amount: result.documentDiscount,
+      subtotal_after_discount: result.taxableAmount,
+      item_taxes: 0,
+      global_tax: result.taxTotal,
+      total_tax: result.taxTotal,
+      total: result.grandTotal,
+      vat_mode: result.vatMode,
     };
   }
 

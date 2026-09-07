@@ -27,7 +27,7 @@ class PaymentReminderService {
 
             // Fetch active invoices
             const [invoices, clients] = await Promise.all([
-                Invoice.filter({ status: ['sent', 'partial_paid', 'overdue'] }),
+                Invoice.filter({ status: ['sent', 'viewed', 'partially_paid', 'partial_paid', 'overdue'] }),
                 Client.list()
             ]);
 

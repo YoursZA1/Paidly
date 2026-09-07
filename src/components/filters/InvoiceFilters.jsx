@@ -10,6 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Filter, X, CalendarIcon, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  INVOICE_FILTER_OPTIONS,
+  invoiceStatusesMatch,
+  normalizeInvoiceStatus,
+} from "@shared/commercial/documentStatuses.js";
 
 const DEFAULT_FILTERS = {
     search: '',
@@ -23,13 +28,7 @@ const DEFAULT_FILTERS = {
 
 const statusOptions = [
     { value: 'all', label: 'All Statuses' },
-    { value: 'draft', label: 'Draft' },
-    { value: 'sent', label: 'Sent' },
-    { value: 'viewed', label: 'Viewed' },
-    { value: 'partial_paid', label: 'Partial Paid' },
-    { value: 'paid', label: 'Paid' },
-    { value: 'overdue', label: 'Overdue' },
-    { value: 'cancelled', label: 'Cancelled' }
+    ...INVOICE_FILTER_OPTIONS,
 ];
 
 const amountRanges = [
@@ -126,7 +125,10 @@ export default function InvoiceFilters({ onFilterChange, clients = [], endSlot =
                     {/* Status Filter */}
                     <div className="space-y-1">
                         <Label htmlFor="invoice-filter-status" className="text-xs font-medium text-slate-600">Status</Label>
-                        <Select value={filters.status} onValueChange={(v) => updateFilter('status', v)}>
+                        <Select
+                            value={filters.status === 'all' ? 'all' : normalizeInvoiceStatus(filters.status)}
+                            onValueChange={(v) => updateFilter('status', v)}
+                        >
                             <SelectTrigger id="invoice-filter-status" className="h-9">
                                 <SelectValue />
                             </SelectTrigger>
@@ -225,7 +227,7 @@ export function applyInvoiceFilters(invoices, filters, clientMap = new Map()) {
         }
 
         // Status filter
-        if (filters.status !== 'all' && invoice.status !== filters.status) {
+        if (filters.status !== 'all' && !invoiceStatusesMatch(invoice.status, filters.status)) {
             return false;
         }
 

@@ -1,8 +1,10 @@
-/**
- * Quote CSV mapping for Quote_export.csv compatibility.
+/** Quote CSV mapping for Quote_export.csv compatibility.
  * Matches table columns and user activity (created_by, created_at, updated_at)
  * for capture, storage, and import/export. Items stored as JSON in CSV.
  */
+
+import { isPersistenceDiscountLine } from "@shared/commercial/normalizeCommercialDocument.js";
+import { toPersistableCommercialLineItem } from "@shared/commercial/commercialLineItem.js";
 
 /** CSV column headers matching Quote_export.csv */
 export const QUOTE_CSV_HEADERS = [
@@ -67,13 +69,9 @@ export function quoteToCsvRow(quote) {
   const updatedDate = toIsoStr(quote.updated_at || quote.updated_date);
   const itemsJson = Array.isArray(quote.items)
     ? JSON.stringify(
-        quote.items.map((i) => ({
-          service_name: i.service_name || i.name || "",
-          description: i.description || "",
-          quantity: Number(i.quantity ?? i.qty ?? 1),
-          unit_price: Number(i.unit_price ?? i.rate ?? i.price ?? 0),
-          total_price: Number(i.total_price ?? i.total ?? 0),
-        }))
+        quote.items
+          .filter((i) => !isPersistenceDiscountLine(i))
+          .map((i) => toPersistableCommercialLineItem(i))
       )
     : "[]";
   return [
@@ -123,13 +121,9 @@ export function csvRowToQuotePayload(headers, values) {
     client_id: (row.client_id || "").trim() || undefined,
     project_title: (row.project_title || "").trim() || undefined,
     project_description: (row.project_description || "").trim() || undefined,
-    items: items.map((i) => ({
-      service_name: i.service_name || i.name || "",
-      description: i.description || "",
-      quantity: Number(i.quantity ?? i.qty ?? 1),
-      unit_price: Number(i.unit_price ?? i.rate ?? i.price ?? 0),
-      total_price: Number(i.total_price ?? i.total ?? 0),
-    })),
+    items: items
+      .filter((i) => !isPersistenceDiscountLine(i))
+      .map((i) => toPersistableCommercialLineItem(i)),
     subtotal: num(row.subtotal) ?? 0,
     tax_rate: num(row.tax_rate) ?? 0,
     tax_amount: num(row.tax_amount) ?? 0,

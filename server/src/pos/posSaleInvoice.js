@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
+import { pickCommercialLineItemWriteColumns } from "../../../shared/commercial/commercialLineItem.js";
 import { isValidUuid } from "../inputValidation.js";
 import { salePublicView } from "./posNativeCheckout.js";
 import { buildInvoiceFromPosSale } from "./posSaleInvoiceMath.js";
@@ -171,12 +172,7 @@ export async function handlePosConvertToInvoice(req, res, gate) {
 
   const itemRows = built.items.map((item) => ({
     invoice_id: inserted.id,
-    ...(item.service_id ? { service_id: item.service_id } : {}),
-    service_name: item.service_name,
-    description: item.description,
-    quantity: item.quantity,
-    unit_price: item.unit_price,
-    total_price: item.total_price,
+    ...pickCommercialLineItemWriteColumns(item),
   }));
 
   const { error: itemsError } = await supabaseAdmin.from("invoice_items").insert(itemRows);

@@ -40,6 +40,7 @@ import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { tryAcceptStoredInviteToken, peekPendingInviteToken } from "@/services/TenantRoleService";
 import { isPosInviteDest, posTillPath } from "@shared/posStaffInvite.js";
 import { writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
+import { marketingPlanSelectLabel, MARKETING_PLAN_ORDER } from "@shared/planMarketing.js";
 
 const USERS_STORAGE_KEY = "breakapi_users";
 const SIGNUP_ONBOARDING_DRAFT_KEY = "paidly_signup_onboarding_draft";
@@ -49,12 +50,11 @@ const ENABLE_LOCAL_SIGNUP_MIRROR =
   String(import.meta.env.VITE_ENABLE_LOCAL_SIGNUP_MIRROR || "")
     .trim()
     .toLowerCase() === "true";
-const PLAN_OPTIONS = [
-  { value: "starter", label: "Starter — R50/mo" },
-  { value: "business", label: "Business — R150/mo" },
-  { value: "growth", label: "Growth — R350/mo" },
-  { value: "enterprise", label: "Enterprise — Custom" },
-];
+
+const PLAN_OPTIONS = MARKETING_PLAN_ORDER.map((family) => ({
+  value: family,
+  label: marketingPlanSelectLabel(family),
+}));
 
 function normalizeSignupPlan(raw) {
   const v = String(raw || "").trim().toLowerCase();

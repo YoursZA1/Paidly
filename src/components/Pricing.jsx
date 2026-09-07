@@ -3,46 +3,12 @@ import { motion } from "framer-motion";
 import { Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createSignupUrl } from "@/utils";
-
-const FALLBACK_FEATURES = {
-  starter: [
-    "Unlimited quotes & invoices",
-    "Client management",
-    "Basic reporting",
-    "Email invoices",
-    "1 user",
-    "Basic support",
-  ],
-  business: [
-    "Everything in Starter",
-    "Up to 5 users",
-    "Inventory, expenses & purchase orders",
-    "Payslips & VAT reports",
-    "Recurring invoices",
-    "Priority support",
-  ],
-  growth: [
-    "Everything in Business",
-    "Unlimited team members",
-    "Departments & approvals",
-    "Advanced reports & API",
-    "Integrations & multi-company",
-  ],
-  enterprise: [
-    "Everything in Growth",
-    "Custom contract & SSO",
-    "Dedicated support",
-    "White label (optional)",
-  ],
-};
-
-const FAMILY_ORDER = ["starter", "business", "growth", "enterprise"];
-
-function formatZar(amount) {
-  const n = Number(amount);
-  if (!Number.isFinite(n)) return "—";
-  return `R${n % 1 === 0 ? n.toFixed(0) : n.toFixed(2)}`;
-}
+import {
+  MARKETING_PLAN_ORDER,
+  MARKETING_PLANS,
+  MARKETING_TRIAL_FOOTER,
+  formatMarketingZar,
+} from "@shared/planMarketing.js";
 
 export default function Pricing() {
   const [cycle, setCycle] = useState("monthly");
@@ -73,7 +39,7 @@ export default function Pricing() {
     const byFamily = new Map();
     for (const p of plans) {
       const fam = String(p.plan_family || "").toLowerCase();
-      if (!FAMILY_ORDER.includes(fam)) continue;
+      if (!(fam in MARKETING_PLANS)) continue;
       if (!byFamily.has(fam)) byFamily.set(fam, {});
       const entry = byFamily.get(fam);
       const cyc = String(p.billing_cycle || "monthly").toLowerCase();
@@ -84,54 +50,31 @@ export default function Pricing() {
       entry.description = p.description;
     }
 
-    // Fallback static if API empty
+    // Fallback static if API empty — copy and amounts from the public catalog.
     if (byFamily.size === 0) {
-      return [
-        {
-          family: "starter",
-          name: "Starter",
-          priceLabel: cycle === "annual" ? "R500" : "R50",
-          period: cycle === "annual" ? "/yr" : "/mo",
-          description: "Freelancers & individuals",
-          features: FALLBACK_FEATURES.starter,
-          highlighted: false,
-          contactSales: false,
-        },
-        {
-          family: "business",
-          name: "Business",
-          priceLabel: cycle === "annual" ? "R1,500" : "R150",
-          period: cycle === "annual" ? "/yr" : "/mo",
-          description: "SMEs",
-          features: FALLBACK_FEATURES.business,
-          highlighted: true,
-          badge: "Most popular",
-          contactSales: false,
-        },
-        {
-          family: "growth",
-          name: "Growth",
-          priceLabel: cycle === "annual" ? "R3,500" : "R350",
-          period: cycle === "annual" ? "/yr" : "/mo",
-          description: "Growing businesses",
-          features: FALLBACK_FEATURES.growth,
-          highlighted: false,
-          contactSales: false,
-        },
-        {
-          family: "enterprise",
-          name: "Enterprise",
-          priceLabel: "Custom",
-          period: "",
-          description: "Large organisations",
-          features: FALLBACK_FEATURES.enterprise,
-          highlighted: false,
-          contactSales: true,
-        },
-      ];
+      return MARKETING_PLAN_ORDER.map((fam) => {
+        const copy = MARKETING_PLANS[fam];
+        return {
+          family: fam,
+          name: copy.name,
+          priceLabel: copy.contactSales
+            ? "Custom"
+            : formatMarketingZar(cycle === "annual" ? copy.annualPriceZar : copy.monthlyPriceZar, {
+                grouped: cycle === "annual",
+              }),
+          period: copy.contactSales ? "" : cycle === "annual" ? "/yr" : "/mo",
+          description: copy.description,
+          features: copy.features,
+          highlighted: copy.highlighted,
+          badge: copy.badge,
+          contactSales: copy.contactSales,
+          cta: copy.ctaSignup,
+        };
+      });
     }
 
-    return FAMILY_ORDER.filter((f) => byFamily.has(f)).map((fam) => {
+    return MARKETING_PLAN_ORDER.filter((f) => byFamily.has(f)).map((fam) => {
+      const copy = MARKETING_PLANS[fam];
       const entry = byFamily.get(fam);
       const row =
         fam === "enterprise"
@@ -139,7 +82,7 @@ export default function Pricing() {
           : cycle === "annual"
             ? entry.annual || entry.monthly
             : entry.monthly || entry.annual;
-      const contactSales = Boolean(entry.contact_sales || row?.contact_sales);
+      const contactSales = Boolean(copy.contactSales || entry.contact_sales || row?.contact_sales);
       const monthlyAmt = Number(entry.monthly?.amount);
       const annualAmt = Number(entry.annual?.amount);
       const savings =
@@ -150,16 +93,15 @@ export default function Pricing() {
 
       return {
         family: fam,
-        name: entry.name || fam,
-        priceLabel: contactSales
-          ? "Custom"
-          : formatZar(row?.amount),
+        name: copy.name || entry.name || fam,
+        priceLabel: contactSales ? "Custom" : formatMarketingZar(row?.amount, { grouped: cycle === "annual" }),
         period: contactSales ? "" : cycle === "annual" ? "/yr" : "/mo",
-        description: entry.description || "",
-        features: FALLBACK_FEATURES[fam] || [],
-        highlighted: fam === "business",
-        badge: fam === "business" ? "Most popular" : savings ? "2 months free" : null,
+        description: copy.description || entry.description || "",
+        features: copy.features || [],
+        highlighted: copy.highlighted,
+        badge: copy.badge || (savings ? "2 months free" : null),
         contactSales,
+        cta: copy.ctaSignup,
       };
     });
   }, [plans, cycle]);
@@ -196,7 +138,7 @@ export default function Pricing() {
             transition={{ duration: 0.55, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
             className="mt-4 text-zinc-400"
           >
-            Starter, Business, Growth — or Enterprise for custom needs. Annual billing includes two months free.
+            Starter, Business, and Growth — or Enterprise for custom needs. Annual billing includes two months free.
           </motion.p>
 
           <div className="mt-8 inline-flex rounded-full border border-white/[0.1] bg-white/[0.03] p-1">
@@ -286,7 +228,7 @@ export default function Pricing() {
                     : "border border-white/[0.12] bg-transparent text-white hover:border-white/[0.22] hover:bg-white/[0.06]"
                 }`}
               >
-                {plan.contactSales ? "Contact sales" : "Get started free"}
+                {plan.cta || (plan.contactSales ? "Contact sales" : "Get started free")}
               </Link>
             </motion.div>
           ))}
@@ -299,7 +241,7 @@ export default function Pricing() {
           transition={{ duration: 0.5, delay: 0.3 }}
           className="mt-10 text-center text-sm text-zinc-500"
         >
-          All self-serve plans include a free trial. No credit card required to start.
+          {MARKETING_TRIAL_FOOTER}
         </motion.p>
       </div>
     </section>

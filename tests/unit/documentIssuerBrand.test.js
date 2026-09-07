@@ -67,14 +67,14 @@ describe("documentIssuerBrand", () => {
     ).toBe("logo-a.png");
   });
 
-  it("live Business Logo beats a stale document snapshot", () => {
+  it("document snapshot logo beats a later profile logo (not POS chrome)", () => {
     expect(
       resolveIssuerLogoPath({
         document: { owner_logo_url: "old-snap.png" },
         company: null,
         profile: { logo_url: "new-logo.png" },
       })
-    ).toBe("new-logo.png");
+    ).toBe("old-snap.png");
   });
 
   it("uses a compose logo override before brand and snapshot", () => {
@@ -120,11 +120,11 @@ describe("documentIssuerBrand", () => {
       profile: { company_name: "Org Default", logo_url: "logo-a.png" },
     };
     const issuerBrand = resolveIssuerBrand(args);
-    expect(issuerBrand.logo).toBe("logo-a.png");
+    expect(issuerBrand.logo).toBe("old-snap.png");
     expect(issuerBrand.name).toBe("On this invoice");
-    expect(snapshotFieldsFromIssuerBrand(issuerBrand)).toEqual({
+    expect(snapshotFieldsFromIssuerBrand(issuerBrand)).toMatchObject({
       owner_company_name: "On this invoice",
-      owner_logo_url: "logo-a.png",
+      owner_logo_url: "old-snap.png",
       company_id: null,
     });
   });

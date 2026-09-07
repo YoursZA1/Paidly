@@ -24,6 +24,13 @@ import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { buildClientTimelineEvents } from "@/services/ClientTimelineService";
 import ClientTimeline from "../components/clients/ClientTimeline";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  isInvoiceOpenReceivable,
+  invoiceStatusesMatch,
+  normalizeInvoiceStatus,
+  INVOICE_STATUS,
+  INVOICE_FILTER_OPTIONS,
+} from "@shared/commercial/documentStatuses.js";
 
 const INVOICES_PER_PAGE = 5;
 
@@ -32,6 +39,9 @@ const statusStyles = {
     sent: "bg-status-sent/12 text-status-sent border border-status-sent/25",
     viewed: "bg-status-sent/10 text-status-sent border border-status-sent/20",
     partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+    partially_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
+    void: "bg-status-declined/12 text-status-declined border border-status-declined/25",
+    cancelled: "bg-status-declined/12 text-status-declined border border-status-declined/25",
     paid: "bg-status-paid/12 text-status-paid border border-status-paid/25",
     overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
 };
@@ -170,7 +180,7 @@ export default function ClientDetail() {
     // Filter invoices by status
     const filteredInvoices = statusFilter === 'all' 
         ? invoices 
-        : invoices.filter(inv => inv.status === statusFilter);
+        : invoices.filter(inv => invoiceStatusesMatch(inv.status, statusFilter));
     
     const totalPages = Math.ceil(filteredInvoices.length / INVOICES_PER_PAGE);
     const paginatedInvoices = filteredInvoices.slice(
@@ -181,8 +191,8 @@ export default function ClientDetail() {
     const totalInvoiced = invoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const totalPaid = invoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     // Use partial paid amount as current balance for partial_paid invoices
-    const totalOutstanding = invoices.filter(inv => ['sent', 'viewed', 'partial_paid', 'overdue'].includes(inv.status)).reduce((sum, inv) => {
-        if (inv.status === 'partial_paid' && inv.payments && inv.payments.length > 0) {
+    const totalOutstanding = invoices.filter(inv => isInvoiceOpenReceivable(inv.status)).reduce((sum, inv) => {
+        if (normalizeInvoiceStatus(inv.status) === INVOICE_STATUS.partially_paid && inv.payments && inv.payments.length > 0) {
             const totalPaid = inv.payments.reduce((s, p) => s + (p.amount || 0), 0);
             return sum + (inv.total_amount - totalPaid);
         }
@@ -442,12 +452,9 @@ export default function ClientDetail() {
                                         className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                                     >
                                         <option value="all">All Invoices</option>
-                                        <option value="draft">Draft</option>
-                                        <option value="sent">Sent</option>
-                                        <option value="viewed">Viewed</option>
-                                        <option value="partial_paid">Partially Paid</option>
-                                        <option value="paid">Paid</option>
-                                        <option value="overdue">Overdue</option>
+                                        {INVOICE_FILTER_OPTIONS.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
                                     </select>
                                     
                                     <Link to={createPageUrl("CreateInvoice") + `?client_id=${clientId}`}>
@@ -496,7 +503,7 @@ export default function ClientDetail() {
                                                             <span className="font-semibold text-slate-900">
                                                                 #{invoice.invoice_number}
                                                             </span>
-                                                            <Badge className={statusStyles[invoice.status] || statusStyles.draft}>
+                                                            <Badge className={statusStyles[normalizeInvoiceStatus(invoice.status)] || statusStyles.draft}>
                                                                 {invoice.status?.replace('_', ' ')}
                                                             </Badge>
                                                         </div>

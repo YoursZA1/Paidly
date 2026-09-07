@@ -1,3 +1,7 @@
+import { normalizeInvoiceStatus, isCanonicalInvoiceStatus, INVOICE_STATUS } from "@shared/commercial/documentStatuses.js";
+import { isPersistenceDiscountLine } from "@shared/commercial/normalizeCommercialDocument.js";
+import { toPersistableCommercialLineItem } from "@shared/commercial/commercialLineItem.js";
+
 /**
  * Invoice CSV mapping for Invoice_export.csv compatibility.
  * Matches table columns and user activity (created_by, created_at, updated_at)
@@ -98,13 +102,9 @@ export function invoiceToCsvRow(invoice, payments = []) {
   const updatedDate = toIsoStr(invoice.updated_at || invoice.updated_date);
   const itemsJson = Array.isArray(invoice.items)
     ? JSON.stringify(
-        invoice.items.map((i) => ({
-          service_name: i.service_name || i.name || "",
-          description: i.description || "",
-          quantity: Number(i.quantity ?? i.qty ?? 1),
-          unit_price: Number(i.unit_price ?? i.rate ?? i.price ?? 0),
-          total_price: Number(i.total_price ?? i.total ?? 0),
-        }))
+        invoice.items
+          .filter((i) => !isPersistenceDiscountLine(i))
+          .map((i) => toPersistableCommercialLineItem(i))
       )
     : "[]";
   return [
@@ -155,7 +155,10 @@ export function csvRowToInvoicePayload(headers, values) {
     const v = values[i];
     row[h.trim()] = v !== undefined && v !== null ? String(v).trim() : "";
   });
-  const status = (row.status || "draft").trim() || "draft";
+  const rawStatus = (row.status || "draft").trim() || "draft";
+  const status = isCanonicalInvoiceStatus(normalizeInvoiceStatus(rawStatus))
+    ? normalizeInvoiceStatus(rawStatus)
+    : INVOICE_STATUS.draft;
   let items = [];
   try {
     if (row.items) items = JSON.parse(row.items);
@@ -178,16 +181,13 @@ export function csvRowToInvoicePayload(headers, values) {
     project_title: (row.project_title || "").trim() || undefined,
     project_description: (row.project_description || "").trim() || undefined,
     delivery_address: (row.delivery_address || "").trim() || undefined,
-    items: items.map((i) => ({
-      service_name: i.service_name || i.name || "",
-      description: i.description || "",
-      quantity: Number(i.quantity ?? i.qty ?? 1),
-      unit_price: Number(i.unit_price ?? i.rate ?? i.price ?? 0),
-      total_price: Number(i.total_price ?? i.total ?? 0),
-    })),
+    items: items
+      .filter((i) => !isPersistenceDiscountLine(i))
+      .map((i) => toPersistableCommercialLineItem(i)),
     subtotal: num(row.subtotal) ?? 0,
     tax_rate: num(row.tax_rate) ?? 0,
     tax_amount: num(row.tax_amount) ?? 0,
+    discount_amount: num(row.discount_amount) ?? 0,
     total_amount: num(row.total_amount) ?? 0,
     upfront_payment: num(row.upfront_payment),
     milestone_payment: num(row.milestone_payment),

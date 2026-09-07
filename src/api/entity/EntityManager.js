@@ -24,10 +24,32 @@ import {
   DEFAULT_LIST_LIMIT,
   getOrderColumn,
   getOrderAscending,
-  attachInvoiceCompany,
+  attachDocumentCompany,
+  sanitizeCommercialCompanyId,
   getSupabaseTableForEntityName,
 } from "@/api/entity/entityShared.js";
 import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthStore";
+import {
+  commercialItemsForPersist,
+  isLegacyDiscountLine,
+  toCommercialItemRow,
+} from "@/document-engine/documentTotals";
+import {
+  fromStoredCommercialLineItem,
+  pickCommercialLineItemWriteColumns,
+} from "@shared/commercial/commercialLineItem.js";
+import {
+  allocateDocumentNumber,
+  documentNumberConflictMessage,
+  isDocumentNumberUniqueViolation,
+  isSourceQuoteUniqueViolation,
+} from "@/document-engine/allocateDocumentNumber";
+import {
+  sanitizeInvoiceStatusWrite,
+  sanitizeQuoteStatusWrite,
+  normalizeQuoteStatus,
+  QUOTE_STATUS,
+} from "@shared/commercial/documentStatuses.js";
 
 /**
  * Maps app-shape line items to `invoice_items` / `quote_items` rows for a given parent.
@@ -36,14 +58,54 @@ import { SESSION_STATUS, useSessionHealthStore } from "@/stores/sessionHealthSto
  */
 function buildChildItemRows(parentIdField, parentId, items) {
   if (!Array.isArray(items)) return [];
-  return items.map((item) => ({
-    [parentIdField]: parentId,
-    service_name: item.service_name || item.name,
-    description: item.description || '',
-    quantity: Number(item.quantity || item.qty || 1),
-    unit_price: Number(item.unit_price || item.rate || item.price || 0),
-    total_price: Number(item.total_price || item.total || 0),
-  }));
+  return items
+    .filter((item) => item && !isLegacyDiscountLine(item))
+    .map((item, index) => ({
+      [parentIdField]: parentId,
+      ...pickCommercialLineItemWriteColumns(toCommercialItemRow(item, index)),
+    }));
+}
+
+function applyCommercialHeaderTotals(target, items) {
+  if (!target || !Array.isArray(items)) return;
+  const { totals } = commercialItemsForPersist(
+    items,
+    target.tax_rate,
+    target.discount_value ?? target.discount_amount,
+    target.vat_mode,
+    target.discount_type
+  );
+  target.subtotal = totals.subtotal;
+  target.tax_amount = totals.tax_amount;
+  target.total_amount = totals.total_amount;
+  target.discount_type = totals.discount_type;
+  target.discount_value = totals.discount_value;
+  target.discount_amount = totals.discount_amount;
+  target.vat_mode = totals.vat_mode;
+}
+
+function mapCommercialItemRecord(row) {
+  return fromStoredCommercialLineItem(row);
+}
+
+async function loadCommercialChildItems(itemsTable, parentIdField, parentId, label) {
+  const itemColumns = getSelectColumns(itemsTable);
+  let { data, error } = await runPostgrestWithResilience(
+    async () => supabase.from(itemsTable).select(itemColumns).eq(parentIdField, parentId),
+    { kind: "read", silent: true, label }
+  );
+  if (error && isPostgrestSelectSchemaDriftError(error)) {
+    const retry = await runPostgrestWithResilience(
+      async () => supabase.from(itemsTable).select("*").eq(parentIdField, parentId),
+      { kind: "read", silent: true, label: `${label}.wildcard` }
+    );
+    data = retry.data;
+    error = retry.error;
+  }
+  if (!error && Array.isArray(data)) {
+    return data.map((row) => mapCommercialItemRecord(row));
+  }
+  return [];
 }
 
 /** Maps app-shape line items to `purchase_order_items` rows for a given PO. */
@@ -481,25 +543,14 @@ export class EntityManager {
                 if (supabaseTable === 'invoices' || supabaseTable === 'quotes') {
                   const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
                   const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
-                  const itemColumns = getSelectColumns(itemsTable);
-                  const { data: itemsData, error: itemsError } = await runPostgrestWithResilience(
-                    async () =>
-                      supabase.from(itemsTable).select(itemColumns).eq(parentIdField, idStr),
-                    { kind: "read", silent: true, label: `getItems.${this.entityName}` }
+                  record.items = await loadCommercialChildItems(
+                    itemsTable,
+                    parentIdField,
+                    idStr,
+                    `getItems.${this.entityName}`
                   );
-                  if (!itemsError && Array.isArray(itemsData)) {
-                    record.items = itemsData.map(row => ({
-                      service_name: row.service_name,
-                      description: row.description || '',
-                      quantity: Number(row.quantity ?? 1),
-                      unit_price: Number(row.unit_price ?? 0),
-                      total_price: Number(row.total_price ?? 0)
-                    }));
-                  } else {
-                    record.items = [];
-                  }
                 }
-                if (supabaseTable === 'invoices') await attachInvoiceCompany(record);
+                if (supabaseTable === 'invoices' || supabaseTable === 'quotes') await attachDocumentCompany(record);
                 this.data[idStr] = record;
                 this.saveToStorage();
                 return record;
@@ -521,22 +572,12 @@ export class EntityManager {
         const itemsTable = this.entityName === 'Invoice' ? 'invoice_items' : 'quote_items';
         const parentIdField = this.entityName === 'Invoice' ? 'invoice_id' : 'quote_id';
         try {
-          const itemColumns = getSelectColumns(itemsTable);
-          const { data: itemsData, error: itemsError } = await runPostgrestWithResilience(
-            async () => supabase.from(itemsTable).select(itemColumns).eq(parentIdField, idStr),
-            { kind: "read", silent: true, label: `lineItems.${this.entityName}` }
+          record.items = await loadCommercialChildItems(
+            itemsTable,
+            parentIdField,
+            idStr,
+            `lineItems.${this.entityName}`
           );
-          if (!itemsError && Array.isArray(itemsData)) {
-            record.items = itemsData.map(row => ({
-              service_name: row.service_name,
-              description: row.description || '',
-              quantity: Number(row.quantity ?? 1),
-              unit_price: Number(row.unit_price ?? 0),
-              total_price: Number(row.total_price ?? 0)
-            }));
-          } else {
-            record.items = [];
-          }
           this.data[idStr] = record;
           this.saveToStorage();
         } catch (e) {
@@ -545,7 +586,7 @@ export class EntityManager {
         }
       }
     }
-    if (this.entityName === 'Invoice') await attachInvoiceCompany(record);
+    if (this.entityName === 'Invoice' || this.entityName === 'Quote') await attachDocumentCompany(record);
     return record;
   }
 
@@ -759,6 +800,7 @@ export class EntityManager {
       if (supabaseTable === 'invoices' || supabaseTable === 'quotes') {
         supabaseData.created_by = userId;
         supabaseData.user_id = userId;
+        supabaseData.company_id = await sanitizeCommercialCompanyId(orgId, supabaseData.company_id);
         // These tables have items in separate tables
         delete supabaseData.items;
       }
@@ -902,12 +944,13 @@ export class EntityManager {
 
       const INVOICE_INSERT_COLUMNS = [
         'org_id', 'client_id', 'company_id', 'invoice_number', 'status', 'project_title', 'project_description',
-        'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount',
+        'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'discount_type', 'discount_value', 'discount_amount', 'total_amount', 'vat_mode',
         'currency', 'notes', 'terms_conditions', 'created_by', 'user_id', 'created_at', 'updated_at',
         'banking_detail_id', 'upfront_payment', 'milestone_payment', 'final_payment', 'milestone_date', 'final_date',
         'pdf_url', 'recurring_invoice_id', 'public_share_token', 'sent_to_email',
-        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
+        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_phone', 'owner_vat_number', 'owner_currency',
         'document_brand_primary', 'document_brand_secondary', 'client_operation_id',
+        'source_quote_id', 'pos_sale_event_id',
       ];
       if (supabaseTable === 'invoices') {
         Object.keys(supabaseData).forEach(key => {
@@ -954,6 +997,17 @@ export class EntityManager {
           }
         } else {
           delete supabaseData.client_operation_id;
+        }
+        if (Array.isArray(data.items) && !data.keep_stored_totals) {
+          applyCommercialHeaderTotals(supabaseData, data.items);
+        }
+        supabaseData.status = sanitizeInvoiceStatusWrite(supabaseData.status, null);
+        if (!String(supabaseData.invoice_number || "").trim()) {
+          delete supabaseData.invoice_number;
+          supabaseData.invoice_number = await allocateDocumentNumber({
+            orgId,
+            docType: "invoice",
+          });
         }
       }
       const RECURRING_INVOICE_INSERT_COLUMNS = [
@@ -1060,18 +1114,28 @@ export class EntityManager {
 
       const QUOTE_INSERT_COLUMNS = [
         'org_id', 'client_id', 'quote_number', 'status', 'project_title', 'project_description',
-        'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
+        'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'discount_type', 'discount_value', 'discount_amount', 'total_amount', 'vat_mode', 'currency',
         'notes', 'terms_conditions', 'created_by', 'user_id', 'created_at', 'updated_at',
-        'banking_detail_id',
+        'banking_detail_id', 'company_id',
         'document_brand_primary', 'document_brand_secondary',
-        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
+        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_phone', 'owner_vat_number', 'owner_currency',
       ];
       if (supabaseTable === 'quotes') {
         Object.keys(supabaseData).forEach(key => {
           if (!QUOTE_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
         });
+        delete supabaseData.converted_at;
         if (supabaseData.quote_number != null) {
           supabaseData.quote_number = String(supabaseData.quote_number).trim();
+        }
+        if (Array.isArray(data.items)) applyCommercialHeaderTotals(supabaseData, data.items);
+        supabaseData.status = sanitizeQuoteStatusWrite(supabaseData.status, null);
+        if (!String(supabaseData.quote_number || "").trim()) {
+          delete supabaseData.quote_number;
+          supabaseData.quote_number = await allocateDocumentNumber({
+            orgId,
+            docType: "quote",
+          });
         }
       }
 
@@ -1134,14 +1198,42 @@ export class EntityManager {
 
       let createdRecord;
       if (supabaseTable) {
-        const { data: inserted, error } = await supabase
-          .from(supabaseTable)
-          .insert(supabaseData)
-          .select()
-          .single();
+        const insertOnce = () =>
+          supabase.from(supabaseTable).insert(supabaseData).select().single();
+
+        let { data: inserted, error } = await insertOnce();
+
+        if (
+          error &&
+          isSourceQuoteUniqueViolation(error) &&
+          supabaseTable === "invoices" &&
+          supabaseData.source_quote_id
+        ) {
+          const { data: existingByQuote } = await supabase
+            .from("invoices")
+            .select(getSelectColumns("invoices"))
+            .eq("source_quote_id", supabaseData.source_quote_id)
+            .maybeSingle();
+          if (existingByQuote?.id) {
+            return this.mapFromSupabase(existingByQuote);
+          }
+        }
+
+        if (error && isDocumentNumberUniqueViolation(error) && (supabaseTable === "invoices" || supabaseTable === "quotes")) {
+          const numberField = supabaseTable === "invoices" ? "invoice_number" : "quote_number";
+          const docType = supabaseTable === "invoices" ? "invoice" : "quote";
+          const wasCustom = Boolean(String(data[numberField] || "").trim());
+          if (!wasCustom) {
+            supabaseData[numberField] = await allocateDocumentNumber({ orgId, docType });
+            ({ data: inserted, error } = await insertOnce());
+          }
+        }
 
         if (error) {
-          const msg = getSupabaseErrorMessage(error, `Create ${this.entityName} failed`);
+          const conflictType = supabaseTable === "quotes" ? "quote" : supabaseTable === "invoices" ? "invoice" : this.entityName;
+          const msg = isDocumentNumberUniqueViolation(error)
+            ? documentNumberConflictMessage(conflictType)
+            : getSupabaseErrorMessage(error, `Create ${this.entityName} failed`);
           console.error(`Failed to create ${this.entityName} in Supabase:`, msg);
           alertSupabaseWriteFailure(error, `Create ${this.entityName} failed`);
           throw new Error(`Failed to create ${this.entityName}: ${msg}`);
@@ -1198,11 +1290,16 @@ export class EntityManager {
             // Invoices are created idempotently via the sync queue (client_operation_id). Throwing
             // here lets the job retry and the idempotency guard above re-attach items to the existing
             // parent — preventing both duplicate invoices and invoices stranded with zero line items.
-            // Quotes have no idempotency key, so throwing could duplicate the parent on retry; keep
-            // them log-only to preserve existing behavior.
-            if (supabaseTable === 'invoices') {
-              throw new Error(`Failed to save invoice line items: ${msg}`);
+            // Quotes have no idempotency key: delete the just-created parent so a retry cannot look
+            // like a successful empty-item save.
+            if (supabaseTable === 'quotes') {
+              await supabase.from('quotes').delete().eq('id', record.id);
+              delete this.data[record.id];
+              this.saveToStorage();
+              this.notifySubscribers();
+              throw new Error(`Failed to save quote line items: ${msg}`);
             }
+            throw new Error(`Failed to save invoice line items: ${msg}`);
           }
         }
       }
@@ -1324,35 +1421,54 @@ export class EntityManager {
       }
       const INVOICE_UPDATE_COLUMNS = [
         'client_id', 'company_id', 'invoice_number', 'status', 'project_title', 'project_description',
-        'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount',
+        'invoice_date', 'delivery_date', 'delivery_address', 'subtotal', 'tax_rate', 'tax_amount', 'discount_type', 'discount_value', 'discount_amount', 'total_amount', 'vat_mode',
         'currency', 'notes', 'terms_conditions', 'updated_at',
         'banking_detail_id', 'upfront_payment', 'milestone_payment', 'final_payment', 'milestone_date', 'final_date',
         'pdf_url', 'recurring_invoice_id', 'public_share_token', 'sent_to_email',
-        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
+        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_phone', 'owner_vat_number', 'owner_currency',
         'document_brand_primary', 'document_brand_secondary',
       ];
       if (supabaseTable === 'invoices') {
         Object.keys(updateData).forEach(key => {
           if (!INVOICE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
+        if (Object.prototype.hasOwnProperty.call(updateData, "company_id")) {
+          updateData.company_id = await sanitizeCommercialCompanyId(orgId, updateData.company_id);
+        }
+        if (Object.prototype.hasOwnProperty.call(updateData, "status")) {
+          const existing = this.data[idStr];
+          updateData.status = sanitizeInvoiceStatusWrite(updateData.status, existing?.status);
+        }
         if (updateData.invoice_number != null) {
           updateData.invoice_number = String(updateData.invoice_number).trim();
         }
+        if (Array.isArray(data.items)) applyCommercialHeaderTotals(updateData, data.items);
       }
       const QUOTE_UPDATE_COLUMNS = [
-        'client_id', 'quote_number', 'status', 'project_title', 'project_description',
-        'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'total_amount', 'currency',
+        'client_id', 'company_id', 'quote_number', 'status', 'project_title', 'project_description',
+        'valid_until', 'subtotal', 'tax_rate', 'tax_amount', 'discount_type', 'discount_value', 'discount_amount', 'total_amount', 'vat_mode', 'currency',
         'notes', 'terms_conditions', 'updated_at', 'banking_detail_id',
         'document_brand_primary', 'document_brand_secondary',
-        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_currency',
+        'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_phone', 'owner_vat_number', 'owner_currency',
       ];
       if (supabaseTable === 'quotes') {
         Object.keys(updateData).forEach(key => {
           if (!QUOTE_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
+        if (Object.prototype.hasOwnProperty.call(updateData, "company_id")) {
+          updateData.company_id = await sanitizeCommercialCompanyId(orgId, updateData.company_id);
+        }
+        delete updateData.converted_at;
+        if (normalizeQuoteStatus(updateData.status) === QUOTE_STATUS.converted) {
+          delete updateData.status;
+        } else if (Object.prototype.hasOwnProperty.call(updateData, "status")) {
+          const existing = this.data[idStr];
+          updateData.status = sanitizeQuoteStatusWrite(updateData.status, existing?.status);
+        }
         if (updateData.quote_number != null) {
           updateData.quote_number = String(updateData.quote_number).trim();
         }
+        if (Array.isArray(data.items)) applyCommercialHeaderTotals(updateData, data.items);
       }
       const RECURRING_INVOICE_UPDATE_COLUMNS = [
         'profile_name', 'client_id', 'invoice_template', 'frequency',

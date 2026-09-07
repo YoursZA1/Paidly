@@ -25,9 +25,15 @@ describe("buildInvoiceFromPosSale", () => {
     expect(built.invoice.pos_sale_event_id).toBe(sale.id);
     expect(built.invoice.invoice_number).toBe("INV-POS-POS-20260828-AB12");
     expect(built.invoice.total_amount).toBe(90);
-    expect(built.invoice.subtotal).toBe(90);
-    expect(built.items.some((row) => row.service_name === "Discount" && row.total_price === -10)).toBe(true);
+    expect(built.invoice.subtotal).toBe(100);
+    expect(built.invoice.discount_amount).toBe(10);
+    expect(built.invoice.discount_type).toBe("fixed");
+    expect(built.invoice.discount_value).toBe(10);
+    expect(built.items.some((row) => row.service_name === "Discount")).toBe(false);
     expect(built.items[0].service_id).toBe("prod-1");
+    expect(built.items[0].catalog_item_id).toBe("prod-1");
+    expect(built.items[0].sku).toBe("COF");
+    expect(built.items[0].item_type).toBe("product");
     expect(built.invoice.notes).toMatch(/not a new payment request/i);
   });
 

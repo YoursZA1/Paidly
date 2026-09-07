@@ -58,7 +58,6 @@ const GROWTH_FEATURES = Object.freeze([
   "api_access",
   "integrations",
   "multi_company",
-  "white_label",
 ]);
 
 const ENTERPRISE_FEATURES = Object.freeze([
@@ -66,6 +65,7 @@ const ENTERPRISE_FEATURES = Object.freeze([
   "sso",
   "dedicated_support",
   "custom_contract",
+  "white_label",
 ]);
 
 /** @type {Readonly<Record<PlanFamily, readonly string[]>>} */

@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { FileText, Clock } from 'lucide-react';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { format, parseISO, isValid } from 'date-fns';
+import { isInvoiceOpenReceivable } from '@shared/commercial/documentStatuses.js';
 
 const PaymentCard = ({ label, amount, dueDate, iconBg }) => (
     <div className="bg-card rounded-2xl p-4 border border-border shadow-elevation hover:shadow-elevation-md transition-all min-w-0">
@@ -23,7 +24,7 @@ const PaymentCard = ({ label, amount, dueDate, iconBg }) => (
 export default function UpcomingPayments({ invoices = [], clients = [], currency = 'ZAR' }) {
     // Filter unpaid invoices (sent, partial_paid, overdue)
     const unpaidInvoices = invoices
-        .filter(inv => ['sent', 'partial_paid', 'overdue'].includes(inv.status))
+        .filter(inv => isInvoiceOpenReceivable(inv.status))
         .sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date))
         .slice(0, 2);
 

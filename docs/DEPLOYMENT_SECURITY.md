@@ -29,7 +29,7 @@ In production, set **`CLIENT_ORIGIN`** to your real app URL (e.g. `https://app.e
 
 ## Secrets
 
-- Follow **[SECRETS_AND_ENV.md](SECRETS_AND_ENV.md)** and run **`npm run scan-secrets`** in CI.
+- Follow **[ENV_AND_CREDENTIALS.md](ENV_AND_CREDENTIALS.md)** and run **`npm run scan-secrets`** in CI.
 - Store production values in the **host’s secret store** (Vercel env, Railway, AWS Secrets Manager, etc.), not in the repo.
 
 ---

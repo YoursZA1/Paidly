@@ -200,4 +200,4 @@ Authenticate with `Authorization: Bearer <secret>` or `X-Paidly-Webhook-Secret: 
 
 - `docs/Paidly-Application-Blueprint.md` — Revenue System / POS boundary
 - `docs/API_DEPLOYMENT_MODEL.md` — Vercel vs Express for `/api`
-- `docs/SECRETS_AND_ENV.md` — secret handling policy
+- `docs/ENV_AND_CREDENTIALS.md` — secret handling policy

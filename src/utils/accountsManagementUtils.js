@@ -31,7 +31,8 @@ export const BILLING_CYCLES = {
 export const PLAN_TYPES = {
   FREE: 'free',
   STARTER: 'starter',
-  PROFESSIONAL: 'professional',
+  BUSINESS: 'business',
+  GROWTH: 'growth',
   ENTERPRISE: 'enterprise'
 };
 
@@ -205,14 +206,20 @@ export const getUsageTextColor = (percent) => {
  * Format plan type label
  */
 export const getPlanTypeLabel = (planType) => {
+  const key = String(planType || "").toLowerCase();
   const labels = {
     free: 'Free',
     starter: 'Starter',
-    professional: 'Professional',
+    individual: 'Starter',
+    business: 'Business',
+    professional: 'Business',
+    sme: 'Business',
+    growth: 'Growth',
+    corporate: 'Growth',
     enterprise: 'Enterprise',
     custom: 'Custom'
   };
-  return labels[planType] || 'Unknown';
+  return labels[key] || 'Unknown';
 };
 
 /**
@@ -222,7 +229,8 @@ export const getPlanColor = (plan) => {
   const colors = {
     free: 'bg-slate-100 text-slate-800',
     starter: 'bg-primary/15 text-primary',
-    professional: 'bg-purple-100 text-purple-800',
+    business: 'bg-orange-100 text-orange-800',
+    growth: 'bg-purple-100 text-purple-800',
     enterprise: 'bg-yellow-100 text-yellow-800',
     custom: 'bg-pink-100 text-pink-800'
   };
@@ -330,8 +338,9 @@ export const getChartDataByPlan = (accounts) => {
   return Object.entries(planCounts).map(([plan, count]) => ({
     name: getPlanTypeLabel(plan),
     value: count,
-    fill: plan === 'enterprise' ? '#fbbf24' : 
-          plan === 'professional' ? '#a78bfa' : 
+    fill: plan === 'enterprise' ? '#fbbf24' :
+          plan === 'growth' ? '#a78bfa' :
+          plan === 'business' ? '#fb923c' :
           plan === 'starter' ? '#60a5fa' : '#e2e8f0'
   }));
 };

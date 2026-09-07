@@ -17,6 +17,7 @@ import {
     moneyAmount,
     toDayKey,
 } from '@/utils/cashFlowTruth';
+import { invoiceStatusesMatch, isInvoicePaidLike } from '@shared/commercial/documentStatuses.js';
 import { listAllPosSalesEvents } from '@/utils/cashFlowData';
 
 function eventDate(value) {
@@ -101,7 +102,7 @@ export default function ReportPDF() {
                 const invoice = event.invoiceId ? invoiceById.get(event.invoiceId) : null;
                 if (clientId && invoice && invoice.client_id !== clientId) continue;
                 if (clientId && !invoice) continue;
-                if (statusParam && invoice && invoice.status !== statusParam) continue;
+                if (statusParam && invoice && !invoiceStatusesMatch(invoice.status, statusParam)) continue;
                 if (!inDayRange(event.date, start, end)) continue;
                 const date = eventDate(event.date);
                 if (!date) continue;
@@ -123,11 +124,11 @@ export default function ReportPDF() {
                 });
             }
 
-            const isPaidStatusFilter = !statusParam || statusParam === 'paid' || statusParam === 'partial_paid';
+            const isPaidStatusFilter = !statusParam || isInvoicePaidLike(statusParam);
             if (statusParam && !isPaidStatusFilter) {
                 for (const inv of invoices) {
                     if (clientId && inv.client_id !== clientId) continue;
-                    if (inv.status !== statusParam) continue;
+                    if (!invoiceStatusesMatch(inv.status, statusParam)) continue;
                     const occurred = inv.created_date || inv.invoice_date || inv.created_at;
                     if (!inDayRange(occurred, start, end)) continue;
                     const date = eventDate(occurred);

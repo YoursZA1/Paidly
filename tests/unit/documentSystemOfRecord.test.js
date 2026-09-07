@@ -10,7 +10,7 @@ import {
   postgrestExcludeCommercialHubTypes,
   tableForDocumentType,
 } from "@/document-engine/documentSystemOfRecord";
-import { getConversionOptions, DOCUMENT_CONVERSIONS, specialisedComposeUrl, hubDocumentToComposePrefill } from "@/document-engine/documentConversions";
+import { getConversionOptions, DOCUMENT_CONVERSIONS, specialisedComposeUrl, hubDocumentToComposePrefill, usesLegacyQuoteToInvoice } from "@/document-engine/documentConversions";
 import { HUB_DOCUMENT_TYPE_DEFS, isHubPersistedType } from "@/document-engine/documentCatalog";
 import { getSupabaseTableForEntityName } from "@/api/entity/entityShared";
 
@@ -51,6 +51,13 @@ describe("document system of record", () => {
     expect(isHubPersistedType("expense_claim")).toBe(true);
     expect(HUB_DOCUMENT_TYPE_DEFS.some((t) => t.key === "invoice")).toBe(false);
     expect(HUB_DOCUMENT_TYPE_DEFS.some((t) => t.key === "leave_request")).toBe(true);
+  });
+
+  it("keeps quote-to-invoice conversion off the Documents Hub", () => {
+    expect(usesLegacyQuoteToInvoice("quote", "invoice")).toBe(true);
+    expect(tableForDocumentType("invoice")).toBe("invoices");
+    expect(tableForDocumentType("quote")).toBe("quotes");
+    expect(() => assertHubWritableType("invoice")).toThrow(/invoices/i);
   });
 
   it("does not persist commercial types through hub conversions", () => {

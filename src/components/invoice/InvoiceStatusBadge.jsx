@@ -1,30 +1,17 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { cn } from "@/lib/utils";
-
-/**
- * InvoiceStatusBadge — clean status cell, matches quote pill (one element, no icon)
- */
-const statusConfig = {
-  draft: { label: "Draft" },
-  sending: { label: "Sending…" },
-  preparing: { label: "Preparing…" },
-  sent: { label: "Sent" },
-  viewed: { label: "Viewed" },
-  pending: { label: "Pending" },
-  paid: { label: "Paid" },
-  partial_paid: { label: "Partially Paid" },
-  overdue: { label: "Overdue" },
-  cancelled: { label: "Cancelled" },
-};
+import {
+  normalizeInvoiceStatus,
+  invoiceStatusLabel,
+} from "@shared/commercial/documentStatuses.js";
 
 function InvoiceStatusBadge({ status, compact = false }) {
-  const config = statusConfig[status] || statusConfig.draft;
-  const pillStatus = status || "draft";
+  const pillStatus = normalizeInvoiceStatus(status);
 
   return (
     <div className={cn("status-pill", pillStatus, compact && "status-pill-compact")}>
-      {config.label}
+      {invoiceStatusLabel(status)}
     </div>
   );
 }

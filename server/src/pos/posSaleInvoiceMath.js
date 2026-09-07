@@ -1,3 +1,4 @@
+import { toPersistableCommercialLineItem } from "../../../shared/commercial/commercialLineItem.js";
 import { roundMoney } from "./posCheckoutMath.js";
 
 function saleSnapshot(row) {
@@ -52,14 +53,21 @@ export function buildInvoiceFromPosSale(sale, opts = {}) {
     const total = roundMoney(item.line_total != null ? item.line_total : qty * unit);
     productSubtotal = roundMoney(productSubtotal + total);
     const sku = item.sku ? String(item.sku) : "";
-    lineItems.push({
-      service_id: item.product_id || null,
-      service_name: String(item.name || item.service_name || "Item"),
-      description: sku ? `SKU ${sku}` : "",
-      quantity: qty,
-      unit_price: unit,
-      total_price: total,
-    });
+    lineItems.push(
+      toPersistableCommercialLineItem({
+        service_id: item.product_id || item.service_id || null,
+        catalog_item_id: item.catalog_item_id || item.product_id || null,
+        service_name: String(item.name || item.service_name || "Item"),
+        description: sku ? `SKU ${sku}` : "",
+        quantity: qty,
+        unit_price: unit,
+        total_price: total,
+        sku,
+        item_type: "product",
+        unit_type: item.unit_type || item.unit || null,
+        tax_rate: item.tax_rate ?? item.item_tax_rate ?? null,
+      })
+    );
   }
 
   if (lineItems.length === 0) {
@@ -67,20 +75,9 @@ export function buildInvoiceFromPosSale(sale, opts = {}) {
   }
 
   const discount = roundMoney(snap.discount_amount != null ? snap.discount_amount : 0);
-  if (discount > 0) {
-    lineItems.push({
-      service_id: null,
-      service_name: "Discount",
-      description: "Till discount",
-      quantity: 1,
-      unit_price: roundMoney(-discount),
-      total_price: roundMoney(-discount),
-    });
-  }
-
   const taxAmount = roundMoney(snap.tax_amount != null ? snap.tax_amount : sale.tax_amount || 0);
   const taxRate = roundMoney(snap.tax_rate != null ? snap.tax_rate : sale.tax_rate || 0);
-  const subtotal = roundMoney(productSubtotal - discount);
+  const subtotal = roundMoney(productSubtotal);
   const total = roundMoney(sale.total_amount);
   const receipt = String(sale.receipt_number || sale.external_id || sale.id);
   const invoiceDate = invoiceDateFromSale(sale);
@@ -101,7 +98,11 @@ export function buildInvoiceFromPosSale(sale, opts = {}) {
       subtotal,
       tax_rate: taxRate,
       tax_amount: taxAmount,
+      discount_type: "fixed",
+      discount_value: discount,
+      discount_amount: discount,
       total_amount: total,
+      vat_mode: "VAT_EXCLUSIVE",
       currency: sale.currency || "ZAR",
       notes: `Tax invoice for settled POS sale ${receipt}. Already paid at the till — not a new payment request.`,
       terms_conditions:

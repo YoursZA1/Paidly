@@ -1,5 +1,9 @@
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { getBackendBaseUrl } from "@/api/backendClient";
+import {
+  isPersistenceDiscountLine,
+  resolveCommercialDocumentTotals,
+} from "@shared/commercial/normalizeCommercialDocument.js";
 
 /** Shared Anvil/browser invoice layout (`public/invoice-anvil/invoice.css`). */
 export function getInvoiceAnvilCssUrl() {
@@ -55,7 +59,8 @@ function buildDocumentHtmlFromData(doc, docType) {
   const notes = doc?.notes || "";
   const terms = doc?.terms_conditions || "";
   const rows = Array.isArray(doc?.line_items) ? doc.line_items : Array.isArray(doc?.items) ? doc.items : [];
-  const normalizedRows = rows.map((row) => {
+  const productRows = rows.filter((row) => !isPersistenceDiscountLine(row));
+  const normalizedRows = productRows.map((row) => {
     const qty = Number(row?.quantity ?? row?.qty ?? 1) || 1;
     const unit = Number(row?.unit_price ?? row?.rate ?? row?.price ?? 0) || 0;
     const total = Number(row?.total ?? row?.total_price ?? qty * unit) || 0;
@@ -63,12 +68,20 @@ function buildDocumentHtmlFromData(doc, docType) {
     return { qty, unit, total, description };
   });
 
-  const subtotal =
-    Number(doc?.subtotal) ||
-    normalizedRows.reduce((sum, row) => sum + (Number.isFinite(row.total) ? row.total : 0), 0);
-  const discount = Math.max(0, Number(doc?.discount ?? doc?.discount_amount ?? 0) || 0);
-  const taxAmount = Number(doc?.tax_amount ?? 0) || 0;
-  const total = Number(doc?.total ?? doc?.total_amount ?? subtotal - discount + taxAmount) || 0;
+  const totals = resolveCommercialDocumentTotals(
+    {
+      ...doc,
+      items: rows,
+      discount_amount: doc?.discount_amount ?? doc?.discount,
+      discount_type: doc?.discount_type,
+      discount_value: doc?.discount_value,
+    },
+    { preferStored: doc?.__liveTotals !== true, recalculate: doc?.__liveTotals === true }
+  );
+  const subtotal = totals.subtotal;
+  const discount = Math.max(0, totals.documentDiscount);
+  const taxAmount = totals.taxTotal;
+  const total = totals.grandTotal;
 
   const lineRowsHtml = normalizedRows
     .map(

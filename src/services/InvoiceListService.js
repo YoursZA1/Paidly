@@ -2,6 +2,11 @@ import { Invoice, InvoiceView, Payment } from "@/api/entities";
 import { supabase } from "@/lib/supabaseClient";
 import { runDedupedAsync } from "@/lib/inflightRequestDedupe";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
+import { isPersistenceDiscountLine } from "@shared/commercial/normalizeCommercialDocument.js";
+import {
+  commercialLineItemSelectList,
+  fromStoredCommercialLineItem,
+} from "@shared/commercial/commercialLineItem.js";
 
 /** Page size for infinite invoice lists (hooks + UI consume via service). */
 export const INVOICE_LIST_PAGE_SIZE = 40;
@@ -74,20 +79,15 @@ export async function fetchInvoiceItemsByInvoiceIds(invoiceIds) {
   if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) return new Map();
   const { data, error } = await supabase
     .from("invoice_items")
-    .select("id, invoice_id, service_name, description, quantity, unit_price, total_price")
+    .select(commercialLineItemSelectList("invoice_id"))
     .in("invoice_id", invoiceIds);
   if (error) throw error;
 
   const itemsByInvoiceId = new Map();
   for (const row of data ?? []) {
+    if (isPersistenceDiscountLine(row)) continue;
     if (!itemsByInvoiceId.has(row.invoice_id)) itemsByInvoiceId.set(row.invoice_id, []);
-    itemsByInvoiceId.get(row.invoice_id).push({
-      service_name: row.service_name,
-      description: row.description || "",
-      quantity: Number(row.quantity ?? 1),
-      unit_price: Number(row.unit_price ?? 0),
-      total_price: Number(row.total_price ?? 0),
-    });
+    itemsByInvoiceId.get(row.invoice_id).push(fromStoredCommercialLineItem(row));
   }
   return itemsByInvoiceId;
 }

@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { formatCurrency } from "../CurrencySelector";
 import InvoiceActions from "./InvoiceActions";
+import { invoiceStatusLabel, normalizeInvoiceStatus } from "@shared/commercial/documentStatuses.js";
 
 const statusStyles = {
     draft: "bg-status-draft/15 text-slate-600 dark:text-slate-300 border-status-draft/30",
@@ -15,15 +16,14 @@ const statusStyles = {
     sent: "bg-status-sent/12 text-status-sent border-status-sent/25",
     viewed: "bg-status-sent/10 text-status-sent border-status-sent/20",
     partial_paid: "bg-status-pending/12 text-status-pending border-status-pending/25",
+    partially_paid: "bg-status-pending/12 text-status-pending border-status-pending/25",
+    void: "bg-status-declined/12 text-status-declined border-status-declined/25",
+    cancelled: "bg-status-declined/12 text-status-declined border-status-declined/25",
     paid: "bg-status-paid/12 text-status-paid border-status-paid/25",
     overdue: "bg-status-overdue/12 text-status-overdue border-status-overdue/25",
 };
 
-const getStatusLabel = (status) => {
-    if (status === 'sending') return 'Sending…';
-    if (status === 'preparing') return 'Preparing…';
-    return (status || 'draft').replace('_', ' ');
-};
+const getStatusLabel = (status) => invoiceStatusLabel(status);
 
 export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency, paymentsMap, onActionSuccess, onPaymentFullyPaid, onOptimisticUpdate }) {
     const getClientName = (clientId) => {
@@ -67,7 +67,7 @@ export default function InvoiceGrid({ invoices, clients, isLoading, userCurrency
                                     >
                                         {invoice.invoice_number}
                                     </Link>
-                                    <Badge variant="secondary" className={`${statusStyles[invoice.status || 'draft'] || statusStyles.draft} border text-[10px] px-1.5 py-0 h-5`}>
+                                    <Badge variant="secondary" className={`${statusStyles[normalizeInvoiceStatus(invoice.status)] || statusStyles.draft} border text-[10px] px-1.5 py-0 h-5`}>
                                         {getStatusLabel(invoice.status)}
                                     </Badge>
                                 </div>

@@ -1,23 +1,16 @@
 import React from "react";
 import PropTypes from "prop-types";
-
-const statusConfig = {
-  draft: { label: "Draft" },
-  sent: { label: "Sent" },
-  viewed: { label: "Viewed" },
-  accepted: { label: "Accepted" },
-  rejected: { label: "Rejected" },
-  declined: { label: "Declined" },
-  expired: { label: "Expired" },
-};
+import {
+  normalizeQuoteStatus,
+  quoteStatusLabel,
+} from "@shared/commercial/documentStatuses.js";
 
 function QuoteStatusBadge({ status }) {
-  const config = statusConfig[status] || statusConfig.draft;
-  const pillStatus = status || "draft";
+  const pillStatus = normalizeQuoteStatus(status);
 
   return (
     <div className={`status-pill ${pillStatus}`}>
-      {config.label}
+      {quoteStatusLabel(status)}
     </div>
   );
 }

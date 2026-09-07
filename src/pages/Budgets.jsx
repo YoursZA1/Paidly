@@ -11,6 +11,7 @@ import { startOfMonth, endOfMonth, parseISO, isWithinInterval } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import BudgetForm from '@/components/budgets/BudgetForm';
 import ForecastingChart from '@/components/budgets/ForecastingChart';
+import { isInvoicePaidLike } from '@shared/commercial/documentStatuses.js';
 
 export default function BudgetsPage() {
     const [budgets, setBudgets] = useState([]);
@@ -63,7 +64,7 @@ export default function BudgetsPage() {
                 .filter(inv => {
                     const date = parseISO(inv.created_date);
                     return isWithinInterval(date, { start, end }) && 
-                           (inv.status === 'paid' || inv.status === 'partial_paid');
+                           isInvoicePaidLike(inv.status);
                 })
                 .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
         }

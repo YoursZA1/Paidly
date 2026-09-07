@@ -1,3 +1,5 @@
+import { calculateGrossFromNet, calculateTaxOnExclusive } from "@shared/commercial/calculateCommercialDocument.js";
+
 /**
  * Catalog Sync Service
  * Handles syncing catalog items to invoice line items
@@ -241,11 +243,12 @@ export const mapCatalogToLineItem = (catalogItem, quantity = 1, options = {}) =>
     // Calculate totals
     const qty = Math.max(quantity, catalogItem.min_quantity || 1);
     const totalPrice = qty * rate;
-    const itemTaxAmount = totalPrice * (itemTaxRate / 100);
+    const itemTaxAmount = calculateTaxOnExclusive(totalPrice, itemTaxRate);
     
     // Build line item
     const lineItem = {
         // Required fields
+        service_id: catalogItem.id || null,
         service_name: catalogItem.name,
         description: catalogItem.description || '',
         quantity: qty,
@@ -253,6 +256,7 @@ export const mapCatalogToLineItem = (catalogItem, quantity = 1, options = {}) =>
         unit_type: unit,
         item_type: catalogItem.item_type || 'service',
         total_price: totalPrice,
+        tax_rate: itemTaxRate,
         item_tax_rate: itemTaxRate,
         item_tax_amount: itemTaxAmount,
         
@@ -580,16 +584,14 @@ export const validateRateAdjustment = (catalogItem, originalRate, newRate, user 
  */
 export const calculateLineItemTotals = (quantity, unitPrice, taxRate = 0) => {
     const subtotal = quantity * unitPrice;
-    const taxAmount = subtotal * (taxRate / 100);
-    const total = subtotal + taxAmount;
-    
+    const split = calculateGrossFromNet(subtotal, taxRate);
     return {
         quantity,
         unitPrice,
-        subtotal: parseFloat(subtotal.toFixed(2)),
+        subtotal: split.net,
         taxRate,
-        taxAmount: parseFloat(taxAmount.toFixed(2)),
-        total: parseFloat(total.toFixed(2))
+        taxAmount: split.tax,
+        total: split.gross
     };
 };
 

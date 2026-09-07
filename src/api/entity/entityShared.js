@@ -3,6 +3,7 @@
  */
 import { supabase } from "@/lib/supabaseClient";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
+import { commercialLineItemSelectList } from "@shared/commercial/commercialLineItem.js";
 
 const entityListTimeoutWarnState = new Map();
 
@@ -36,11 +37,11 @@ export function shouldLogEntityTimeoutWarning(entityName, maxWaitMs) {
 
 /** Explicit select columns per table for better query performance (avoid .select("*")). */
 export const SUPABASE_SELECT_COLUMNS = {
-  invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, document_brand_primary, document_brand_secondary, pos_sale_event_id",
+  invoices: "id, org_id, client_id, company_id, invoice_number, status, project_title, project_description, invoice_date, delivery_date, delivery_address, subtotal, tax_rate, tax_amount, discount_type, discount_value, discount_amount, total_amount, vat_mode, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, upfront_payment, milestone_payment, final_payment, milestone_date, final_date, pdf_url, recurring_invoice_id, public_share_token, sent_to_email, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_phone, owner_vat_number, owner_currency, document_brand_primary, document_brand_secondary, pos_sale_event_id, source_quote_id, client_operation_id",
   companies: "id, org_id, name, logo_url, created_at, updated_at",
-  quotes: "id, org_id, client_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_currency, sent_date",
-  invoice_items: "id, invoice_id, service_name, description, quantity, unit_price, total_price",
-  quote_items: "id, quote_id, service_name, description, quantity, unit_price, total_price",
+  quotes: "id, org_id, client_id, company_id, quote_number, status, project_title, project_description, valid_until, subtotal, tax_rate, tax_amount, discount_type, discount_value, discount_amount, total_amount, vat_mode, currency, notes, terms_conditions, created_by, user_id, created_at, updated_at, banking_detail_id, document_brand_primary, document_brand_secondary, public_share_token, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_phone, owner_vat_number, owner_currency, sent_date, converted_at",
+  invoice_items: commercialLineItemSelectList("invoice_id"),
+  quote_items: commercialLineItemSelectList("quote_id"),
   clients:
     "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, " +
     "payment_terms, payment_terms_days, follow_up_enabled, segment, total_spent, last_invoice_date, " +
@@ -108,19 +109,48 @@ export function getOrderAscending(sortBy) {
   return !(sortBy || "").startsWith("-");
 }
 
-/** Multi-brand: attach invoice.company from companies table when invoice.company_id is set. */
-export async function attachInvoiceCompany(record) {
+const COMPANY_ISSUER_COLUMNS = "id, org_id, name, logo_url, vat_number, address, email, phone";
+
+/** Attach the org-scoped brand row used by commercial invoices and quotes. */
+export async function attachDocumentCompany(record) {
   if (!record || !record.company_id || record.company) return;
   try {
     let query = supabase
       .from("companies")
-      .select("id, name, logo_url")
+      .select(COMPANY_ISSUER_COLUMNS)
       .eq("id", record.company_id);
     if (record.org_id) query = query.eq("org_id", record.org_id);
-    const { data } = await query.maybeSingle();
-    if (data) record.company = { id: data.id, name: data.name, logo_url: data.logo_url };
+    const { data, error } = await query.maybeSingle();
+    if (error && /vat_number|address|email|phone/i.test(error.message || "")) {
+      let fallback = supabase.from("companies").select("id, org_id, name, logo_url").eq("id", record.company_id);
+      if (record.org_id) fallback = fallback.eq("org_id", record.org_id);
+      const { data: basic } = await fallback.maybeSingle();
+      if (basic) record.company = basic;
+      return;
+    }
+    if (data) record.company = data;
   } catch {
     /* ignore */
+  }
+}
+
+/** @deprecated Use attachDocumentCompany */
+export const attachInvoiceCompany = attachDocumentCompany;
+
+/** Never persist a company_id that is not a companies row for this org. */
+export async function sanitizeCommercialCompanyId(orgId, companyId) {
+  const id = String(companyId || "").trim();
+  if (!id || !orgId) return null;
+  try {
+    const { data } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    return data?.id || null;
+  } catch {
+    return null;
   }
 }
 
