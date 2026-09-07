@@ -233,21 +233,22 @@ Do not create a second tenant system. `CompanyContext` remains org RBAC. Active 
 ```
 organizations → memberships (employee_id)
   → workforce_events (outbox)
-  → payroll_profiles → pay_runs → pay_run_items → payslips
-  → leave_types / leave_balances / leave_transactions / leave_requests
+  → payroll_profiles → pay_runs → pay_run_items → payslips.membership_id
+  → leave_types / leave_balances.employee_id / leave_requests.employee_id / leave_transactions
+  → attendance_profiles (1:1 stub)
   → company_invites.membership_id (portal)
 ```
 
-- **Identity:** `memberships.id` is the employee ID. `user_id` is Auth and may be null until invite accept. `profiles` holds person name/contact once linked. Do not create a parallel `employees` table.
-- **Provisioning:** `employee.created` (idempotent outbox) auto-creates payroll profile + leave balances + audit. `/api/company/employees` on the existing company function. Cron `workforce-events` retries failed rows.
-- **Calculation:** `shared/payroll/calculatePayroll.js` is the only payroll math. `/api/payroll/*` and `/api/leave/*` are the source of truth (Vercel Hobby rewrites them onto `api/company`). Statutory rates live in versioned `payroll_statutory_rules` (not in React).
+- **Identity:** `memberships.id` is the employee ID. `user_id` is Auth and may be null until invite accept. `profiles` holds person name/contact once linked. Do not create a parallel `employees` table. UI labels (`Name (EMP-002)`) are display-only; FKs store the membership UUID. `payslips.employee_id` remains the printed employee number; the UUID link is `payslips.membership_id`.
+- **Provisioning:** `provisionEmployeeWorkforce()` (idempotent) auto-creates payroll profile + leave balances + attendance profile + audit on `employee.created`. `/api/company/employees` on the existing company function. Cron `workforce-events` retries failed rows.
+- **Calculation:** `shared/payroll/calculatePayroll.js` is the only payroll math. `/api/payroll/*` and `/api/leave/*` are the source of truth (Vercel Hobby rewrites them onto `api/company`). Statutory rates live in versioned `payroll_statutory_rules` (not in React). Approved unpaid leave overlapping the pay period reduces gross via a negative `UNPAID` earning. Pay-run items snapshot `base_salary` and unpaid-leave impact so later salary changes do not rewrite history.
 - **Locking:** Finalized pay runs and locked payslips cannot be silently rewritten. Corrections use an adjustment pay run.
-- **Leave:** Server-side working-day counts (`Africa/Johannesburg`), overlap checks, and a leave ledger (`leave_transactions`). Approvals update balances transactionally via `/api/leave` and emit `employee.leave_approved` (payroll calc unchanged this phase).
-- **RBAC:** Existing company permissions. Manager + `job_function=hr` gains employee/leave admin; manager + `finance` gains payroll. POS-only staff cannot administer payroll or workforce.
-- **Delivery:** Issued payslips stay on `payslips` with authenticated / email-gated public share tokens. Email uses the existing Resend path.
-- **Future subscribers:** attendance, reporting, leave→payroll rules — subscribe to `workforce_events` without rewriting create-employee.
+- **Leave:** Server-side working-day counts (`Africa/Johannesburg`), overlap checks, and a leave ledger (`leave_transactions`). Approvals update balances transactionally via `/api/leave` and emit `employee.leave_approved`. Leave rows also store `employee_id → memberships.id`.
+- **RBAC:** Existing company permissions. Manager + `job_function=hr` gains employee/leave admin; manager + `finance` gains payroll. POS-only staff cannot administer payroll or workforce. Payslip self-service matches `employee_user_id`, `membership_id`, or employee email.
+- **Delivery:** Issued payslips stay on `payslips` with authenticated / email-gated public share tokens. Email uses the existing Resend path. Canonical issue path is pay-run finalize (payslip copies the payroll item). Standalone compose still exists for drafts and must attach `membership_id`.
+- **Attendance:** `attendance_profiles` is a derived 1:1 stub provisioned with the employee. Time-and-attendance product features subscribe later without creating a second person.
 
-**Migration status:** `supabase/migrations/20260902120000_payroll_engine_and_leave_ledger.sql`, `supabase/migrations/20260905120000_workforce_engine_core.sql`.
+**Migration status:** `supabase/migrations/20260902120000_payroll_engine_and_leave_ledger.sql`, `supabase/migrations/20260905120000_workforce_engine_core.sql`, `supabase/migrations/20260907200000_workforce_canonical_employee_identity.sql`.
 
 **Migration status (implementation):**
 

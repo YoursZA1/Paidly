@@ -13,14 +13,18 @@ import { useServerPayrollPreview } from "@/hooks/useServerPayrollPreview";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAutoDraft } from "@/hooks/useAutoDraft";
 import { useToast } from "@/components/ui/use-toast";
-import { resolveOrgMemberUserIdByEmail } from "@/services/CompanyContextService";
-import { Invoice } from "@/api/entities";
+import { listWorkforceEmployees } from "@/services/CompanyTeamService";
+import { payrollApi } from "@/services/PayrollApiService";
+import EmployeeSelect from "@/components/workforce/EmployeeSelect";
+import { parseUuid } from "@shared/ids/uuid.js";
 
 export default function CreatePayslip() {
     const navigate = useNavigate();
     const { toast } = useToast();
     const { authUserId } = useAuth();
     const lastDraftNoticeIdRef = useRef(null);
+    const [employees, setEmployees] = useState([]);
+    const [employeeUuid, setEmployeeUuid] = useState("");
     const [payslipData, setPayslipData] = useState({
         employee_name: "",
         employee_id: "",
@@ -28,6 +32,7 @@ export default function CreatePayslip() {
         employee_phone: "",
         position: "",
         department: "",
+        payroll_profile_id: "",
         pay_period_start: "",
         pay_period_end: "",
         pay_date: "",
@@ -64,6 +69,79 @@ export default function CreatePayslip() {
         : "";
 
     useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const rows = await listWorkforceEmployees();
+                if (!cancelled) setEmployees(Array.isArray(rows) ? rows : []);
+            } catch {
+                try {
+                    const profiles = await payrollApi.profiles();
+                    if (cancelled) return;
+                    setEmployees(
+                        (profiles || [])
+                            .map((p) => {
+                                const id = parseUuid(p.membership_id);
+                                if (!id) return null;
+                                return {
+                                    id,
+                                    employee_id: id,
+                                    membership_id: id,
+                                    payroll_profile_id: parseUuid(p.id),
+                                    user_id: parseUuid(p.user_id),
+                                    employee_number: p.employee_number,
+                                    full_name: p.full_name,
+                                    email: p.email,
+                                    job_title: p.job_title,
+                                    department: p.department,
+                                    base_salary: p.base_salary,
+                                    label: p.full_name,
+                                };
+                            })
+                            .filter(Boolean)
+                    );
+                } catch (err) {
+                    if (!cancelled) {
+                        toast({ title: "Could not load employees", description: err.message, variant: "destructive" });
+                    }
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [toast]);
+
+    const applyEmployee = (id) => {
+        const selectedId = parseUuid(id) || "";
+        setEmployeeUuid(selectedId);
+        const emp = employees.find(
+            (row) => parseUuid(row.id) === selectedId || parseUuid(row.employee_id) === selectedId
+        );
+        if (!emp) {
+            setPayslipData((prev) => ({
+                ...prev,
+                employee_name: "",
+                employee_id: "",
+                employee_email: "",
+                payroll_profile_id: "",
+            }));
+            return;
+        }
+        setPayslipData((prev) => ({
+            ...prev,
+            employee_name: emp.full_name || emp.label || "",
+            employee_id: emp.employee_number || "",
+            employee_email: emp.email || "",
+            employee_phone: emp.phone || prev.employee_phone,
+            position: emp.job_title || "",
+            department: emp.department || "",
+            basic_salary: Number(emp.base_salary) > 0 ? Number(emp.base_salary) : prev.basic_salary,
+            payroll_profile_id: parseUuid(emp.payroll_profile_id) || "",
+        }));
+    };
+
+    useEffect(() => {
         if (!draftRestoreNotice?.id) return;
         if (lastDraftNoticeIdRef.current === draftRestoreNotice.id) return;
         lastDraftNoticeIdRef.current = draftRestoreNotice.id;
@@ -77,16 +155,16 @@ export default function CreatePayslip() {
     }, [draftRestoreNotice, toast]);
 
     const isFormValid = useMemo(() => {
-        const { employee_name, employee_id, pay_period_start, pay_period_end, pay_date, basic_salary } = payslipData;
+        const { employee_name, pay_period_start, pay_period_end, pay_date, basic_salary } = payslipData;
         return (
+            Boolean(parseUuid(employeeUuid)) &&
             employee_name.trim() !== "" &&
-            employee_id.trim() !== "" &&
             pay_period_start !== "" &&
             pay_period_end !== "" &&
             pay_date !== "" &&
             parseFloat(basic_salary) > 0
         );
-    }, [payslipData]);
+    }, [payslipData, employeeUuid]);
 
     const { calculatedPayroll } = useServerPayrollPreview({
         basicSalary: payslipData.basic_salary,
@@ -171,19 +249,17 @@ export default function CreatePayslip() {
             const payslipNumber = `PAY-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${employeeInitials}${timestamp}`;
 
             let employee_user_id = null;
-            if (authUserId && payslipData.employee_email?.trim()) {
-                try {
-                    const orgId = await Invoice.ensureUserHasOrganization(authUserId);
-                    employee_user_id = await resolveOrgMemberUserIdByEmail(orgId, payslipData.employee_email);
-                } catch {
-                    employee_user_id = null;
-                }
-            }
+            const selected = employees.find(
+                (row) => parseUuid(row.id) === parseUuid(employeeUuid) || parseUuid(row.employee_id) === parseUuid(employeeUuid)
+            );
+            employee_user_id = parseUuid(selected?.user_id);
 
             await Payroll.create({
                 ...payslipData,
                 payslip_number: payslipNumber,
                 employee_user_id: employee_user_id || undefined,
+                payroll_profile_id: parseUuid(payslipData.payroll_profile_id) || undefined,
+                membership_id: parseUuid(employeeUuid) || undefined,
                 gross_pay: grossPay,
                 total_deductions: totalDeductions,
                 net_pay: netPay,
@@ -226,9 +302,20 @@ export default function CreatePayslip() {
                     </Button>
                     <div>
                         <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Create New Payslip</h1>
-                        <p className="text-sm sm:text-base text-muted-foreground mt-1">Generate payslips with automatic PAYE tax calculation</p>
+                        <p className="text-sm sm:text-base text-muted-foreground mt-1">
+                            Prefer generating payslips from a processed pay run so amounts match payroll.
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1">
                             Payslips use your organization profile — they are not assigned to a company / brand.
+                            {" "}
+                            <button
+                                type="button"
+                                className="underline"
+                                onClick={() => navigate(createPageUrl("Payroll"))}
+                            >
+                                Run payroll
+                            </button>
+                            {" "}to issue payslips from processed entries.
                         </p>
                     </div>
                 </motion.div>
@@ -237,25 +324,53 @@ export default function CreatePayslip() {
                     {/* Employee Information */}
                     <Card className="bg-card border border-border">
                         <CardHeader>
-                            <CardTitle>Employee Information</CardTitle>
+                            <CardTitle>Employee</CardTitle>
                         </CardHeader>
                         <CardContent className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2 md:col-span-2">
+                                <Label htmlFor="employee">Employee*</Label>
+                                <EmployeeSelect
+                                    id="employee"
+                                    employees={employees}
+                                    value={employeeUuid}
+                                    onChange={applyEmployee}
+                                    required
+                                    emptyLabel={employees.length ? "Select employee" : "No employees yet"}
+                                />
+                                {!employees.length ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        Add the person once in{" "}
+                                        <button
+                                            type="button"
+                                            className="underline"
+                                            onClick={() => navigate(createPageUrl("TeamMembers"))}
+                                        >
+                                            Team Members
+                                        </button>
+                                        . Payroll, leave, and payslips use that record.
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">
+                                        Name, employee number, and salary come from the employee record. You do not re-enter them here.
+                                    </p>
+                                )}
+                            </div>
                             <div className="space-y-2">
-                                <Label htmlFor="employee_name">Full Name*</Label>
+                                <Label htmlFor="employee_name">Full Name</Label>
                                 <Input
                                     id="employee_name"
                                     value={payslipData.employee_name}
-                                    onChange={(e) => setPayslipData({...payslipData, employee_name: e.target.value})}
-                                    placeholder="John Doe"
+                                    readOnly
+                                    placeholder="Select an employee"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="employee_id">Employee ID*</Label>
+                                <Label htmlFor="employee_id">Employee number</Label>
                                 <Input
                                     id="employee_id"
                                     value={payslipData.employee_id}
-                                    onChange={(e) => setPayslipData({...payslipData, employee_id: e.target.value})}
-                                    placeholder="EMP001"
+                                    readOnly
+                                    placeholder="EMP-002"
                                 />
                             </div>
                             <div className="space-y-2">

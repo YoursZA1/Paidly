@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { CalendarOff, Check, X } from "lucide-react";
 import PageTemplate from "@/components/layout/PageTemplate";
 import PageHeader from "@/components/dashboard/PageHeader";
@@ -16,6 +16,8 @@ import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
+import { parseUuid } from "@shared/ids/uuid.js";
+import EmployeeSelect from "@/components/workforce/EmployeeSelect";
 
 const EMPTY_TYPE = {
   id: "",
@@ -39,16 +41,19 @@ export default function LeaveManagementPage() {
   const userPlan = profile?.subscription_plan || profile?.plan || "starter";
   const { hasPermission } = useCompanyContext();
   const canManage = hasPermission(PERMISSIONS.MANAGE_LEAVE);
+  const location = useLocation();
   const [requests, setRequests] = useState([]);
   const [types, setTypes] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [status, setStatus] = useState("pending");
-  const [userId, setUserId] = useState("");
+  const [employeeId, setEmployeeId] = useState(
+    () => parseUuid(new URLSearchParams(location.search).get("employee_id")) || ""
+  );
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [department, setDepartment] = useState("");
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
-  const [adjust, setAdjust] = useState({ payroll_profile_id: "", leave_type_id: "", days: "", reason: "" });
+  const [adjust, setAdjust] = useState({ employee_id: "", leave_type_id: "", days: "", reason: "" });
   const [typeForm, setTypeForm] = useState(EMPTY_TYPE);
 
   const load = async () => {
@@ -56,8 +61,8 @@ export default function LeaveManagementPage() {
       const [r, t, e] = await Promise.all([
         leaveApi.requests({
           status,
-          user_id: userId || undefined,
-          leave_type_id: leaveTypeId || undefined,
+          employee_id: parseUuid(employeeId) || undefined,
+          leave_type_id: parseUuid(leaveTypeId) || undefined,
           department: department || undefined,
         }),
         leaveApi.types(),
@@ -73,7 +78,7 @@ export default function LeaveManagementPage() {
 
   useEffect(() => {
     load();
-  }, [status, userId, leaveTypeId, department]);
+  }, [status, employeeId, leaveTypeId, department]);
 
   const departments = useMemo(() => {
     return [...new Set((employees || []).map((row) => row.department).filter(Boolean))].sort();
@@ -111,14 +116,24 @@ export default function LeaveManagementPage() {
   const submitAdjust = async (e) => {
     e.preventDefault();
     try {
+      const selectedEmployeeId = parseUuid(adjust.employee_id);
+      const typeId = parseUuid(adjust.leave_type_id);
+      if (!selectedEmployeeId || !typeId) {
+        toast({
+          title: "Adjustment failed",
+          description: "Select an employee and leave type from the list. Display names cannot be saved as ids.",
+          variant: "destructive",
+        });
+        return;
+      }
       await leaveApi.adjust({
-        payroll_profile_id: adjust.payroll_profile_id,
-        leave_type_id: adjust.leave_type_id,
+        employee_id: selectedEmployeeId,
+        leave_type_id: typeId,
         days: Number(adjust.days),
         reason: adjust.reason,
       });
       toast({ title: "Balance adjusted" });
-      setAdjust({ payroll_profile_id: "", leave_type_id: "", days: "", reason: "" });
+      setAdjust({ employee_id: "", leave_type_id: "", days: "", reason: "" });
     } catch (err) {
       toast({ title: "Adjustment failed", description: err.message, variant: "destructive" });
     }
@@ -129,7 +144,7 @@ export default function LeaveManagementPage() {
     try {
       await leaveApi.saveType({
         ...typeForm,
-        id: typeForm.id || undefined,
+        id: parseUuid(typeForm.id) || undefined,
         max_balance: typeForm.max_balance === "" ? null : Number(typeForm.max_balance),
       });
       toast({ title: typeForm.id ? "Leave type updated" : "Leave type created" });
@@ -171,23 +186,31 @@ export default function LeaveManagementPage() {
                 ))}
               </div>
               <div className="grid gap-2 sm:grid-cols-3 mb-4">
-                <select className={selectClass} value={userId} onChange={(e) => setUserId(e.target.value)}>
-                  <option value="">All employees</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.user_id}>{emp.full_name} ({emp.employee_number})</option>
-                  ))}
-                </select>
+                <EmployeeSelect
+                  employees={employees}
+                  value={employeeId}
+                  onChange={setEmployeeId}
+                  emptyLabel="All employees"
+                />
                 <select className={selectClass} value={department} onChange={(e) => setDepartment(e.target.value)}>
                   <option value="">All departments</option>
                   {departments.map((dept) => (
                     <option key={dept} value={dept}>{dept}</option>
                   ))}
                 </select>
-                <select className={selectClass} value={leaveTypeId} onChange={(e) => setLeaveTypeId(e.target.value)}>
+                <select
+                  className={selectClass}
+                  value={leaveTypeId}
+                  onChange={(e) => setLeaveTypeId(parseUuid(e.target.value) || "")}
+                >
                   <option value="">All leave types</option>
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
+                  {types.map((t) => {
+                    const id = parseUuid(t.id);
+                    if (!id) return null;
+                    return (
+                      <option key={id} value={id}>{t.name}</option>
+                    );
+                  })}
                 </select>
               </div>
               <Card className="rounded-xl overflow-hidden">
@@ -328,6 +351,7 @@ export default function LeaveManagementPage() {
                           <Button size="sm" variant="ghost" className="rounded-xl" onClick={() => setTypeForm({
                             ...EMPTY_TYPE,
                             ...t,
+                            id: parseUuid(t.id) || "",
                             max_balance: t.max_balance ?? "",
                           })}>
                             Edit
@@ -352,32 +376,30 @@ export default function LeaveManagementPage() {
                     <form className="space-y-3" onSubmit={submitAdjust}>
                       <div>
                         <Label>Employee</Label>
-                        <select
-                          className={selectClass}
-                          value={adjust.payroll_profile_id}
-                          onChange={(e) => setAdjust({ ...adjust, payroll_profile_id: e.target.value })}
+                        <EmployeeSelect
+                          employees={employees}
+                          value={adjust.employee_id}
+                          onChange={(id) => setAdjust({ ...adjust, employee_id: id })}
                           required
-                        >
-                          <option value="">Select employee</option>
-                          {employees.map((emp) => (
-                            <option key={emp.id} value={emp.id}>
-                              {emp.full_name} ({emp.employee_number})
-                            </option>
-                          ))}
-                        </select>
+                          emptyLabel="Select employee"
+                        />
                       </div>
                       <div>
                         <Label>Leave type</Label>
                         <select
                           className={selectClass}
                           value={adjust.leave_type_id}
-                          onChange={(e) => setAdjust({ ...adjust, leave_type_id: e.target.value })}
+                          onChange={(e) => setAdjust({ ...adjust, leave_type_id: parseUuid(e.target.value) || "" })}
                           required
                         >
                           <option value="">Select type</option>
-                          {types.map((t) => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
+                          {types.map((t) => {
+                            const id = parseUuid(t.id);
+                            if (!id) return null;
+                            return (
+                              <option key={id} value={id}>{t.name}</option>
+                            );
+                          })}
                         </select>
                       </div>
                       <div>

@@ -37,7 +37,7 @@ export async function listEmployees(orgId) {
   const { data: members, error } = await supabaseAdmin
     .from("memberships")
     .select(
-      "id, user_id, role, job_function, employee_number, department, employment_status, invited_email, disabled_at, created_at"
+      "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, invited_email, disabled_at, created_at"
     )
     .eq("org_id", orgId)
     .order("created_at", { ascending: true });
@@ -45,26 +45,46 @@ export async function listEmployees(orgId) {
 
   const userIds = (members || []).map((m) => m.user_id).filter(Boolean);
   const { data: profiles } = userIds.length
-    ? await supabaseAdmin.from("profiles").select("id, full_name, email").in("id", userIds)
+    ? await supabaseAdmin.from("profiles").select("id, full_name, email, phone, job_title, department").in("id", userIds)
     : { data: [] };
   const byUser = new Map((profiles || []).map((p) => [p.id, p]));
 
+  const { data: payrollRows } = await supabaseAdmin
+    .from("payroll_profiles")
+    .select(
+      "id, membership_id, user_id, employee_number, full_name, email, job_title, department, base_salary, hourly_rate, daily_rate, pay_type, employment_status, payroll_status"
+    )
+    .eq("org_id", orgId);
+  const payrollByMembership = new Map((payrollRows || []).map((p) => [p.membership_id, p]));
+
   return (members || []).map((m) => {
     const person = byUser.get(m.user_id);
-    const email = person?.email || m.invited_email || null;
-    const name = person?.full_name || email || "Employee";
+    const payroll = payrollByMembership.get(m.id);
+    const email = person?.email || m.invited_email || payroll?.email || null;
+    const name = person?.full_name || payroll?.full_name || email || "Employee";
     return {
       id: m.id,
       employee_id: m.id,
+      membership_id: m.id,
+      payroll_profile_id: payroll?.id || null,
       user_id: m.user_id,
       role: normalizeCompanyRole(m.role),
       job_function: normalizeJobFunction(m.job_function),
-      employee_number: m.employee_number,
-      department: m.department,
-      employment_status: m.employment_status || "active",
+      employee_number: m.employee_number || payroll?.employee_number || null,
+      department: m.department || payroll?.department || person?.department || null,
+      job_title: payroll?.job_title || person?.job_title || null,
+      employment_status: m.employment_status || payroll?.employment_status || "active",
+      employment_start_date: m.employment_start_date || null,
       email,
-      full_name: person?.full_name || null,
+      phone: person?.phone || null,
+      full_name: person?.full_name || payroll?.full_name || null,
+      base_salary: payroll?.base_salary ?? 0,
+      hourly_rate: payroll?.hourly_rate ?? 0,
+      daily_rate: payroll?.daily_rate ?? 0,
+      pay_type: payroll?.pay_type || "monthly_salary",
       label: name,
+      payroll_status: payroll?.payroll_status || (payroll?.id ? "active" : "unprovisioned"),
+      attendance_status: "active",
       portal_status: m.user_id ? "active" : "invited",
       disabled_at: m.disabled_at || null,
     };

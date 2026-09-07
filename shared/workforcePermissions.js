@@ -3,8 +3,13 @@
 export const WORKFORCE_EVENT_TYPES = Object.freeze({
   EMPLOYEE_CREATED: "employee.created",
   EMPLOYEE_UPDATED: "employee.updated",
+  EMPLOYEE_TERMINATED: "employee.terminated",
   EMPLOYEE_PORTAL_INVITED: "employee.portal.invited",
   EMPLOYEE_PORTAL_ACTIVATED: "employee.portal.activated",
+  PAYROLL_CREATED: "payroll.created",
+  PAYROLL_PROCESSED: "payroll.processed",
+  PAYSLIP_GENERATED: "payslip.generated",
+  LEAVE_APPLIED: "leave.applied",
   EMPLOYEE_LEAVE_APPROVED: "employee.leave_approved",
   EMPLOYEE_LEAVE_REJECTED: "employee.leave_rejected",
 });

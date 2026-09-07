@@ -7,6 +7,7 @@ import {
   PERMISSIONS,
 } from "../companyRouteAccess.js";
 import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
+import { parseUuid } from "../../../shared/ids/uuid.js";
 import { createEmployee, getEmployee, listEmployees } from "./employeeService.js";
 
 function jsonError(res, status, message, extra = {}) {
@@ -33,7 +34,7 @@ async function requireWorkforce(req, res, permission) {
 
 export async function handleWorkforceEmployees(req, res) {
   const body = normalizeRequestBody(req);
-  const employeeId = String(req.query?.id || body.id || "").trim() || null;
+  const employeeId = parseUuid(req.query?.id || body.id);
 
   if (req.method === "GET" && employeeId) {
     const gate = await requireWorkforce(req, res, PERMISSIONS.VIEW_OWN_PROFILE);

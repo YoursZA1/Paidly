@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
@@ -8,6 +9,8 @@ import { listCompanyMembers } from "@/services/CompanyContextService";
 import { listWorkforceEmployees } from "@/services/CompanyTeamService";
 import CompanyTeamManagePanel from "@/components/company/CompanyTeamManagePanel";
 import CompanyInvitesPanel from "@/components/company/CompanyInvitesPanel";
+import { createPageUrl } from "@/utils";
+import { parseUuid } from "@shared/ids/uuid.js";
 
 /**
  * Company team management — invite/manage panels (admins) plus the company directory.
@@ -68,9 +71,11 @@ export default function CompanyTeamMembersPanel() {
             <p className="text-sm text-muted-foreground">No team members found.</p>
           ) : (
             <ul className="divide-y divide-border rounded-lg border border-border">
-              {members.map((m) => (
-                <li key={m.id || m.user_id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                  <div>
+              {members.map((m) => {
+                const employeeId = parseUuid(m.id || m.employee_id || m.membership_id);
+                return (
+                <li key={employeeId || m.user_id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                  <div className="min-w-0">
                     <p className="font-medium">{m.label}</p>
                     {m.email ? <p className="text-sm text-muted-foreground">{m.email}</p> : null}
                     {m.employee_number || m.portal_status === "invited" ? (
@@ -80,12 +85,28 @@ export default function CompanyTeamMembersPanel() {
                           .join(" · ")}
                       </p>
                     ) : null}
+                    {employeeId ? (
+                      <p className="text-xs mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                        <Link className="underline" to={createPageUrl("Payroll")}>Payroll</Link>
+                        <Link className="underline" to={`${createPageUrl("Leave")}?employee_id=${employeeId}`}>Leave</Link>
+                        <Link className="underline" to={createPageUrl("Payslips")}>Payslips</Link>
+                        <Link className="underline" to={createPageUrl("MyPayroll")}>Portal</Link>
+                      </p>
+                    ) : null}
                   </div>
-                  <Badge variant="outline" className="capitalize">
-                    {m.role_label || m.company_role || m.role}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {m.payroll_status ? (
+                      <Badge variant="outline" className="capitalize">
+                        Payroll: {m.payroll_status}
+                      </Badge>
+                    ) : null}
+                    <Badge variant="outline" className="capitalize">
+                      {m.role_label || m.company_role || m.role}
+                    </Badge>
+                  </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </CardContent>

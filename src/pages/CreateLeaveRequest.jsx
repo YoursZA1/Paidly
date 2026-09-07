@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CalendarOff } from "lucide-react";
 import { leaveApi } from "@/services/PayrollApiService";
 import { countWorkingDays } from "@shared/leave/leaveMath.js";
+import { parseUuid } from "@shared/ids/uuid.js";
 import { createPageUrl } from "@/utils";
 import FeatureGate from "@/components/subscription/FeatureGate";
 
@@ -41,7 +42,9 @@ export default function CreateLeaveRequestPage() {
       .me()
       .then((data) => {
         setMe(data);
-        if (data?.balances?.[0]?.leave_type?.id) setLeaveTypeId(data.balances[0].leave_type.id);
+        if (data?.balances?.[0]?.leave_type?.id) {
+          setLeaveTypeId(parseUuid(data.balances[0].leave_type.id) || "");
+        }
       })
       .catch((err) => toast({ title: "Could not load leave balances", description: err.message, variant: "destructive" }));
   }, [toast]);
@@ -58,14 +61,15 @@ export default function CreateLeaveRequestPage() {
   const remaining = selected ? Math.round((selected.available - workingDays) * 100) / 100 : null;
 
   const submit = async () => {
-    if (!leaveTypeId || !startDate || !endDate || workingDays <= 0) {
+    const typeId = parseUuid(leaveTypeId);
+    if (!typeId || !startDate || !endDate || workingDays <= 0) {
       toast({ variant: "destructive", title: "Select leave type and valid dates" });
       return;
     }
     setSaving(true);
     try {
       const result = await leaveApi.apply({
-        leave_type_id: leaveTypeId,
+        leave_type_id: typeId,
         start_date: isoFromDate(startDate),
         end_date: isoFromDate(endDate),
         half_day: halfDay && startDate === endDate,
@@ -139,13 +143,17 @@ export default function CreateLeaveRequestPage() {
                 <select
                   className="mt-1 w-full h-10 rounded-xl border border-border bg-background px-3"
                   value={leaveTypeId}
-                  onChange={(e) => setLeaveTypeId(e.target.value)}
+                  onChange={(e) => setLeaveTypeId(parseUuid(e.target.value) || "")}
                 >
-                  {(me?.balances || []).map((b) => (
-                    <option key={b.leave_type.id} value={b.leave_type.id}>
-                      {b.leave_type.name} ({b.available} available)
-                    </option>
-                  ))}
+                  {(me?.balances || []).map((b) => {
+                    const id = parseUuid(b.leave_type.id);
+                    if (!id) return null;
+                    return (
+                      <option key={id} value={id}>
+                        {b.leave_type.name} ({b.available} available)
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">

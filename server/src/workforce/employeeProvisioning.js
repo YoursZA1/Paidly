@@ -13,7 +13,7 @@ async function loadEmployee(employeeId) {
   const { data } = await supabaseAdmin
     .from("memberships")
     .select(
-      "id, org_id, user_id, role, job_function, employee_number, department, employment_status, invited_email"
+      "id, org_id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, invited_email"
     )
     .eq("id", employeeId)
     .maybeSingle();
@@ -36,10 +36,10 @@ async function writeAudit(event, action, afterState = {}) {
   }
 }
 
-async function ensurePayrollProfile(event, employee) {
+async function ensurePayrollProfile(employee) {
   const { data: existing } = await supabaseAdmin
     .from("payroll_profiles")
-    .select("id")
+    .select("*")
     .eq("membership_id", employee.id)
     .maybeSingle();
   if (existing?.id) return existing;
@@ -59,7 +59,7 @@ async function ensurePayrollProfile(event, employee) {
     employee.invited_email ||
     "Employee";
 
-  return insertPayrollProfileRow({
+  const created = await insertPayrollProfileRow({
     org_id: employee.org_id,
     membership_id: employee.id,
     user_id: employee.user_id || null,
@@ -69,10 +69,19 @@ async function ensurePayrollProfile(event, employee) {
     job_title: person?.job_title || null,
     department: employee.department || person?.department || null,
     employment_status: employee.employment_status || "active",
+    employment_start_date: employee.employment_start_date || null,
     payroll_status: "active",
     pay_frequency: "monthly",
     pay_type: "monthly_salary",
   });
+  if (created?.id) return created;
+
+  const retry = await supabaseAdmin
+    .from("payroll_profiles")
+    .select("*")
+    .eq("membership_id", employee.id)
+    .maybeSingle();
+  return retry.data || existing || null;
 }
 
 async function ensureLeaveBalances(orgId, profile) {
@@ -84,6 +93,7 @@ async function ensureLeaveBalances(orgId, profile) {
     .select("id, days_per_year")
     .eq("org_id", orgId)
     .eq("active", true);
+  const employeeId = profile.membership_id || null;
   for (const leaveType of types || []) {
     const { data: existing } = await supabaseAdmin
       .from("leave_balances")
@@ -94,7 +104,7 @@ async function ensureLeaveBalances(orgId, profile) {
       .maybeSingle();
     if (existing?.id) continue;
     const entitled = Number(leaveType.days_per_year) || 0;
-    const { error } = await supabaseAdmin.from("leave_balances").insert({
+    const row = {
       org_id: orgId,
       payroll_profile_id: profile.id,
       leave_type_id: leaveType.id,
@@ -103,20 +113,79 @@ async function ensureLeaveBalances(orgId, profile) {
       accrued: 0,
       used: 0,
       pending: 0,
-    });
+    };
+    if (employeeId) row.employee_id = employeeId;
+    const { error } = await supabaseAdmin.from("leave_balances").insert(row);
+    if (error && row.employee_id && /employee_id/i.test(error.message || "")) {
+      delete row.employee_id;
+      const retry = await supabaseAdmin.from("leave_balances").insert(row);
+      if (retry.error && !/duplicate|unique/i.test(retry.error.message || "")) throw retry.error;
+      continue;
+    }
     if (error && !/duplicate|unique/i.test(error.message || "")) throw error;
   }
 }
 
-async function onEmployeeCreated(event) {
-  const employee = await loadEmployee(event.employee_id);
-  if (!employee) return;
+async function ensureAttendanceProfile(orgId, employee, profile) {
+  if (!employee?.id) return null;
+  const { data: existing } = await supabaseAdmin
+    .from("attendance_profiles")
+    .select("id, status")
+    .eq("employee_id", employee.id)
+    .maybeSingle();
+  if (existing?.id) return existing;
 
-  const profile = await ensurePayrollProfile(event, employee);
-  await ensureLeaveBalances(employee.org_id, profile);
-  await writeAudit(event, WORKFORCE_EVENT_TYPES.EMPLOYEE_CREATED, {
-    membership_id: employee.id,
+  const insert = {
+    org_id: orgId,
+    employee_id: employee.id,
     payroll_profile_id: profile?.id || null,
+    status: "active",
+  };
+  const { data, error } = await supabaseAdmin
+    .from("attendance_profiles")
+    .insert(insert)
+    .select("id, status")
+    .maybeSingle();
+  if (error && (error.code === "23505" || /duplicate|unique/i.test(error.message || ""))) {
+    const retry = await supabaseAdmin
+      .from("attendance_profiles")
+      .select("id, status")
+      .eq("employee_id", employee.id)
+      .maybeSingle();
+    return retry.data;
+  }
+  if (error && /attendance_profiles|schema cache|does not exist/i.test(error.message || "")) {
+    return null;
+  }
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Idempotent workforce provisioning for one canonical employee (`memberships.id`).
+ * Safe to call twice — unique constraints prevent duplicate derived rows.
+ */
+export async function provisionEmployeeWorkforce(orgId, employeeId) {
+  const employee = await loadEmployee(employeeId);
+  if (!employee) return null;
+  if (orgId && employee.org_id !== orgId) return null;
+
+  const profile = await ensurePayrollProfile(employee);
+  await ensureLeaveBalances(employee.org_id, profile);
+  const attendance = await ensureAttendanceProfile(employee.org_id, employee, profile);
+  return {
+    employee,
+    payroll_profile: profile,
+    attendance_profile: attendance,
+  };
+}
+
+async function onEmployeeCreated(event) {
+  const provisioned = await provisionEmployeeWorkforce(event.org_id, event.employee_id);
+  await writeAudit(event, WORKFORCE_EVENT_TYPES.EMPLOYEE_CREATED, {
+    membership_id: provisioned?.employee?.id || event.employee_id,
+    payroll_profile_id: provisioned?.payroll_profile?.id || null,
+    attendance_profile_id: provisioned?.attendance_profile?.id || null,
   });
 }
 

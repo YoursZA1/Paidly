@@ -222,7 +222,7 @@ export default function EditPayslip() {
                                 <Input
                                     id="employee_name"
                                     value={payslipData.employee_name}
-                                    onChange={(e) => setPayslipData({...payslipData, employee_name: e.target.value})}
+                                    readOnly
                                     placeholder="John Doe"
                                 />
                             </div>
@@ -231,8 +231,8 @@ export default function EditPayslip() {
                                 <Input
                                     id="employee_id"
                                     value={payslipData.employee_id}
-                                    onChange={(e) => setPayslipData({...payslipData, employee_id: e.target.value})}
-                                    placeholder="EMP001"
+                                    readOnly
+                                    placeholder="EMP-002"
                                 />
                             </div>
                             <div className="space-y-2">

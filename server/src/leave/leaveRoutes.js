@@ -1,6 +1,8 @@
 import { normalizeRequestBody } from "../validateBody.js";
 import { jsonError, requirePayrollPermission, PERMISSIONS } from "../payroll/payrollGate.js";
 import { membershipHasPermission } from "../companyRouteAccess.js";
+import { parseLeaveListFilters, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
+import { parseUuid } from "../../../shared/ids/uuid.js";
 import {
   myLeave,
   applyForLeave,
@@ -19,8 +21,9 @@ async function handle(res, fn) {
     const data = await fn();
     return res.status(200).json({ ok: true, data });
   } catch (err) {
-    const status = Number(err?.status) || 500;
-    return jsonError(res, status, err?.message || "Leave request failed", { details: err?.details });
+    const mapped = mapLeaveDbError(err);
+    const status = Number(mapped?.status) || 500;
+    return jsonError(res, status, mapped?.message || "Leave request failed", { details: mapped?.details });
   }
 }
 
@@ -80,17 +83,14 @@ export async function handleLeaveRoute(req, res, resolved) {
     });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
-    const requestedUserId = String(req.query?.user_id || "").trim();
-    const allowUserFilter =
-      membershipHasPermission(gate.membership, PERMISSIONS.VIEW_TEAM_LEAVE) &&
-      requestedUserId &&
-      requestedUserId === String(req.query?.user_id || "");
+    const filters = parseLeaveListFilters(req.query);
+    const canFilterTeam = membershipHasPermission(gate.membership, PERMISSIONS.VIEW_TEAM_LEAVE);
     return handle(res, () =>
       listLeaveRequests(gate.membership.companyId, {
-        status: req.query?.status,
-        user_id: allowUserFilter ? requestedUserId : undefined,
-        leave_type_id: req.query?.leave_type_id,
-        department: req.query?.department,
+        ...filters,
+        payroll_profile_id: canFilterTeam ? filters.payroll_profile_id : undefined,
+        employee_id: canFilterTeam ? filters.employee_id : undefined,
+        user_id: canFilterTeam ? filters.user_id : undefined,
       })
     );
   }
@@ -101,8 +101,10 @@ export async function handleLeaveRoute(req, res, resolved) {
     });
     if (!gate.ok) return gate.response;
     if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
+    const requestId = parseUuid(id);
+    if (!requestId) return jsonError(res, 400, "Invalid leave request id.");
     return handle(res, () =>
-      decideLeaveRequest(gate.membership.companyId, gate.user.id, id, {
+      decideLeaveRequest(gate.membership.companyId, gate.user.id, requestId, {
         approve: route === "approve",
         reason: body.reason,
       })
@@ -115,9 +117,11 @@ export async function handleLeaveRoute(req, res, resolved) {
     });
     if (!own.ok) return own.response;
     if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
+    const requestId = parseUuid(id);
+    if (!requestId) return jsonError(res, 400, "Invalid leave request id.");
     const asAdmin = own.membership.companyRole === "admin" || own.membership.companyRole === "manager";
     return handle(res, () =>
-      cancelLeaveRequest(own.membership.companyId, own.user.id, id, { asAdmin })
+      cancelLeaveRequest(own.membership.companyId, own.user.id, requestId, { asAdmin })
     );
   }
 

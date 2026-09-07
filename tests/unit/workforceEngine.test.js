@@ -49,6 +49,8 @@ describe("workforce events", () => {
   it("uses a stable idempotency key per membership", () => {
     expect(membershipCreatedIdempotencyKey("abc")).toBe("membership:abc:created");
     expect(WORKFORCE_EVENT_TYPES.EMPLOYEE_CREATED).toBe("employee.created");
+    expect(WORKFORCE_EVENT_TYPES.PAYROLL_PROCESSED).toBe("payroll.processed");
+    expect(WORKFORCE_EVENT_TYPES.LEAVE_APPLIED).toBe("leave.applied");
   });
 });
 

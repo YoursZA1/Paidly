@@ -1,4 +1,5 @@
 import { sanitizeEmailHtmlContent } from "./sanitizeHtmlStrings.js";
+import { isUuid, parseUuid } from "../../shared/ids/uuid.js";
 
 /**
  * Strict validation / sanitization for HTTP inputs (defense in depth; Supabase uses parameterized queries).
@@ -14,8 +15,10 @@ const EMAIL_MAX = 254;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function isValidUuid(value) {
-  return typeof value === "string" && UUID_RE.test(value.trim());
+  return isUuid(value);
 }
+
+export { parseUuid };
 
 /** PayFast `m_payment_id` from subscription checkout: `sub_<userUuid>_<unique>`. */
 const SUBSCRIPTION_M_PAYMENT_ID_RE =

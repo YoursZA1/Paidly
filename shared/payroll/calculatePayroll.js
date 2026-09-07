@@ -1,4 +1,5 @@
 import { ROUND_MONEY } from "./constants.js";
+import { unpaidLeaveAmount } from "./unpaidLeaveImpact.js";
 
 function asNumber(value) {
   const n = Number(value);
@@ -154,6 +155,13 @@ export function calculatePayroll({
   const frequency = String(profile?.pay_frequency || "monthly");
   const basic = resolveBasicPay(profile, extras);
   const overtimePay = ROUND_MONEY(asNumber(overtimeHours) * asNumber(overtimeRate));
+  const unpaidDays = asNumber(extras.unpaid_leave_days);
+  const workingDaysInPeriod = asNumber(extras.working_days_in_period);
+  const unpaidAmount = unpaidLeaveAmount({
+    basicPay: basic,
+    unpaidDays,
+    workingDaysInPeriod,
+  });
 
   const earningLines = [];
   if (basic > 0) {
@@ -164,6 +172,16 @@ export function calculatePayroll({
       amount: basic,
       taxable: true,
       recurring: true,
+    });
+  }
+  if (unpaidAmount > 0) {
+    earningLines.push({
+      code: "UNPAID",
+      name: "Unpaid leave",
+      type: "unpaid_leave",
+      amount: ROUND_MONEY(-unpaidAmount),
+      taxable: true,
+      recurring: false,
     });
   }
   if (overtimePay > 0) {
@@ -278,6 +296,8 @@ export function calculatePayroll({
     uif_deduction: ROUND_MONEY(uif?.amount || 0),
     pension_deduction: ROUND_MONEY(pension),
     medical_aid_deduction: ROUND_MONEY(medical),
+    unpaid_leave_days: unpaidDays,
+    unpaid_leave_amount: unpaidAmount,
     warnings,
     breakdown: {
       basic,
@@ -287,6 +307,9 @@ export function calculatePayroll({
       other: otherDeductionLines,
       total_deductions: totalDeductions,
       net: netPay,
+      unpaid_leave_days: unpaidDays,
+      unpaid_leave_amount: unpaidAmount,
+      base_salary_snapshot: asNumber(profile?.base_salary),
     },
   };
 }

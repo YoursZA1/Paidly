@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { calculatePayroll, selectStatutoryRules, applyStatutoryRule } from "@shared/payroll/calculatePayroll.js";
+import { unpaidLeaveDaysInPeriod } from "@shared/payroll/unpaidLeaveImpact.js";
 import { buildPayslipNumber, buildEmployeeNumber, nextEmployeeSequence } from "@shared/payroll/payslipNumber.js";
 import { countWorkingDays, computeLeaveBalance, accrueLeaveDays } from "@shared/leave/leaveMath.js";
 import { validateLeaveApplication } from "@shared/leave/validateLeave.js";
@@ -46,6 +47,19 @@ describe("calculatePayroll", () => {
     expect(result.tax_deduction).toBeGreaterThan(0);
     expect(result.net_pay).toBe(result.gross_pay - result.total_deductions);
     expect(result.warnings).toEqual([]);
+  });
+
+  it("reduces gross for unpaid leave in the period without changing contractual basic", () => {
+    const result = calculatePayroll({
+      profile: { base_salary: 21000, pay_frequency: "monthly", pay_type: "monthly_salary" },
+      statutoryRules: [uifTemplate],
+      extras: { unpaid_leave_days: 2, working_days_in_period: 21 },
+    });
+    expect(result.basic).toBe(21000);
+    expect(result.unpaid_leave_days).toBe(2);
+    expect(result.unpaid_leave_amount).toBe(2000);
+    expect(result.earnings.find((line) => line.code === "UNPAID")?.amount).toBe(-2000);
+    expect(result.gross_pay).toBe(19000);
   });
 
   it("does not invent statutory amounts when no rules are provided", () => {
@@ -110,6 +124,28 @@ describe("leave math", () => {
   it("counts weekdays inclusive and skips weekends", () => {
     expect(countWorkingDays("2026-09-01", "2026-09-03")).toBe(3);
     expect(countWorkingDays("2026-09-04", "2026-09-07")).toBe(2);
+  });
+
+  it("counts only unpaid leave that overlaps the payroll period", () => {
+    const days = unpaidLeaveDaysInPeriod({
+      periodStart: "2026-09-01",
+      periodEnd: "2026-09-30",
+      requests: [
+        {
+          status: "approved",
+          start_date: "2026-09-28",
+          end_date: "2026-10-02",
+          leave_types: { paid: false, exclude_weekends: true },
+        },
+        {
+          status: "approved",
+          start_date: "2026-09-10",
+          end_date: "2026-09-11",
+          leave_types: { paid: true, exclude_weekends: true },
+        },
+      ],
+    });
+    expect(days).toBe(3);
   });
 
   it("supports half-day same-day requests", () => {
