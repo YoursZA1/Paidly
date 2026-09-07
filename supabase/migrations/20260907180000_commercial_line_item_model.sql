@@ -381,5 +381,10 @@ EXCEPTION
 END;
 $$;
 
+-- Nested callers of insert_commercial_invoice_item (convert_quote_to_invoice)
+-- fail after REVOKE FROM PUBLIC unless EXECUTE is granted — same pattern as
+-- apply_inventory_movement in 20260804120000.
 REVOKE ALL ON FUNCTION public.insert_commercial_invoice_item(uuid, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.insert_commercial_invoice_item(uuid, jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.convert_quote_to_invoice(uuid, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.convert_quote_to_invoice(uuid, jsonb) TO authenticated;
