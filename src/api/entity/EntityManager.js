@@ -22,6 +22,7 @@ import {
   getSelectColumns,
   isPostgrestSelectSchemaDriftError,
   DEFAULT_LIST_LIMIT,
+  resolveListPageBounds,
   getOrderColumn,
   getOrderAscending,
   attachDocumentCompany,
@@ -353,20 +354,21 @@ export class EntityManager {
           const orderColumn = opts.orderBy?.column ?? "created_at";
           const orderAsc = opts.orderBy?.ascending ?? false;
           if (opts.limit != null && opts.limit > 0) {
-            query = query.order(orderColumn, { ascending: orderAsc });
-            const from = Number(opts.offset ?? 0);
-            const size = Number(opts.limit);
-            if (!Number.isInteger(from) || from < 0 || !Number.isInteger(size) || size < 1) {
+            const page = resolveListPageBounds(opts.limit, opts.offset ?? 0);
+            if (!page.ok) {
               console.error("[entity-list] integer page bind rejected", {
                 table: supabaseTable,
                 operation: "range",
                 column: "limit/offset",
                 valueType: typeof opts.limit,
-                valueIsFinite: Number.isFinite(size),
+                valueIsFinite: Number.isFinite(Number(opts.limit)),
               });
-            } else {
-              query = query.range(from, from + size - 1);
+              const pageErr = new Error(page.error);
+              pageErr.name = "EntityListPageError";
+              throw pageErr;
             }
+            query = query.order(orderColumn, { ascending: orderAsc });
+            query = query.range(page.offset, page.offset + page.limit - 1);
           }
 
           return query;
@@ -636,8 +638,24 @@ export class EntityManager {
     // Note: payments and invoice_views can grow unbounded and were causing 30s timeouts.
     const largeTables = ['invoices', 'quotes', 'clients', 'expenses', 'payments', 'invoice_views', 'message_logs', 'document_sends'];
     const useDefaultLimit = largeTables.includes(table) && opts.limit == null;
-    const limit = opts.limit ?? (useDefaultLimit ? DEFAULT_LIST_LIMIT : undefined);
-    const offset = opts.offset ?? 0;
+    const page = resolveListPageBounds(
+      opts.limit ?? (useDefaultLimit ? DEFAULT_LIST_LIMIT : undefined),
+      opts.offset ?? 0
+    );
+    if (!page.ok) {
+      console.error("[entity-list] integer page bind rejected", {
+        table,
+        operation: "range",
+        column: "limit/offset",
+        valueType: typeof opts.limit,
+        valueIsFinite: Number.isFinite(Number(opts.limit)),
+      });
+      const pageErr = new Error(page.error);
+      pageErr.name = "EntityListPageError";
+      throw pageErr;
+    }
+    const limit = page.limit;
+    const offset = page.offset;
     const maxWaitMs = typeof opts.maxWaitMs === 'number' ? opts.maxWaitMs : null;
     // Default: do not treat empty timeout as success for non-persisted entity caches
     // (callers with maxWaitMs + retries need a real signal). Opt out with errorOnEmptyTimeout: false.

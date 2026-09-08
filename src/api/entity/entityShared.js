@@ -90,6 +90,32 @@ export function isPostgrestSelectSchemaDriftError(error) {
 /** Default limit for list queries on large tables to avoid loading thousands of rows at once. */
 export const DEFAULT_LIST_LIMIT = 100;
 
+/**
+ * LIMIT/OFFSET are row counts, not commercial quantities.
+ * Reject decimals such as 1.25 instead of flooring them or skipping `.range()`.
+ */
+export function resolveListPageBounds(limit, offset = 0) {
+  if (limit == null || limit === "") {
+    if (offset == null || offset === "" || offset === 0) {
+      return { ok: true, limit: undefined, offset: 0 };
+    }
+    const from = Number(offset);
+    if (!Number.isInteger(from) || from < 0) {
+      return { ok: false, error: "Invalid offset (use integer >= 0)" };
+    }
+    return { ok: true, limit: undefined, offset: from };
+  }
+  const size = Number(limit);
+  const from = Number(offset ?? 0);
+  if (!Number.isInteger(size) || size < 1) {
+    return { ok: false, error: "Invalid limit (use integer >= 1)" };
+  }
+  if (!Number.isInteger(from) || from < 0) {
+    return { ok: false, error: "Invalid offset (use integer >= 0)" };
+  }
+  return { ok: true, limit: size, offset: from };
+}
+
 /** Map app sort field names to Supabase column names for .order() */
 export const SORT_FIELD_TO_COLUMN = {
   created_date: "created_at",

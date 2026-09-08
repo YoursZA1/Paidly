@@ -146,7 +146,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
 
   const usersFetching = useIsFetching({ queryKey: ['platform-users'] }) > 0;
 
-  const usersWithInvoiceCounts = useMemo(() => {
+  const visibleUsers = useMemo(() => {
     const list = staffOnly
       ? users.filter((u) => isKnownStaffRole(u.role))
       : users;
@@ -155,24 +155,24 @@ export default function UsersPage({ staffOnly = false } = {}) {
 
   const uniquePlanSlugs = useMemo(() => {
     const s = new Set();
-    for (const u of usersWithInvoiceCounts) {
+    for (const u of visibleUsers) {
       const r = rawPlanSlug(u);
       if (r !== EMPTY_PLAN) s.add(r);
     }
     return [...s].sort();
-  }, [usersWithInvoiceCounts]);
+  }, [visibleUsers]);
 
   const uniqueRoles = useMemo(() => {
     const s = new Set();
-    for (const u of usersWithInvoiceCounts) {
+    for (const u of visibleUsers) {
       s.add(String(u.role || 'user').trim().toLowerCase() || 'user');
     }
     return [...s].sort();
-  }, [usersWithInvoiceCounts]);
+  }, [visibleUsers]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return usersWithInvoiceCounts.filter((u) => {
+    return visibleUsers.filter((u) => {
       const matchSearch =
         !q ||
         (u.full_name || '').toLowerCase().includes(q) ||
@@ -206,7 +206,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
       return true;
     });
   }, [
-    usersWithInvoiceCounts,
+    visibleUsers,
     search,
     statusFilter,
     confirmationFilter,
@@ -255,11 +255,11 @@ export default function UsersPage({ staffOnly = false } = {}) {
 
   const selectedUsers = useMemo(
     () =>
-      usersWithInvoiceCounts.filter((u) => {
+      visibleUsers.filter((u) => {
         const id = adminRowPrimaryId(u);
         return id && selectedIds.has(id);
       }),
-    [usersWithInvoiceCounts, selectedIds]
+    [visibleUsers, selectedIds]
   );
 
   const bulkEligibleUsers = useMemo(
@@ -444,7 +444,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
   const totalUsersPages = Math.max(1, Math.ceil(filtered.length / USERS_PAGE_SIZE));
   const pagedFiltered = filtered.slice(usersPage * USERS_PAGE_SIZE, (usersPage + 1) * USERS_PAGE_SIZE);
 
-  const colCount = 10;
+  const colCount = 9;
 
   return (
     <div>
