@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Service } from "@/api/entities";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
-import { normalizeCatalogRows, normalizeInventoryRows } from "@/utils/inventoryNormalization";
+import { normalizeCatalogRows, normalizeInventoryRows, toQuantity } from "@/utils/inventoryNormalization";
 import { alertSupabaseWriteFailure, checkSupabaseWriteResult } from "@/utils/supabaseErrorUtils";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
 import { servicesToCsv, parseServiceCsv, csvRowToServicePayload } from "@/utils/serviceCsvMapping";
@@ -32,11 +32,6 @@ import InventoryToolsSheet from "../components/inventory/InventoryToolsSheet";
 import BarcodeScannerDialog from "../components/inventory/BarcodeScannerDialog";
 import IndustryTemplatesDialog from "../components/inventory/IndustryTemplatesDialog";
 import { activeProductHasBarcode } from "@/lib/pos/posBarcode";
-
-function toInt(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : 0;
-}
 
 const DELIVERY_ADDRESS_MARKER = "DELIVERY_ADDRESS:\n";
 const COUNT_STYLE_TO_DB_UNIT = {
@@ -428,7 +423,7 @@ export default function Inventory() {
   const handleReceive = useCallback(
     async ({ product_id, quantity, notes }) => {
       const product = products.find((p) => p.id === product_id);
-      const qty = toInt(quantity);
+      const qty = toQuantity(quantity);
       if (!product || qty <= 0) {
         toast({
           title: "✗ Invalid Quantity",
@@ -478,7 +473,7 @@ export default function Inventory() {
   const handleSell = useCallback(
     async ({ product_id, quantity }) => {
       const product = products.find((p) => p.id === product_id);
-      const qty = toInt(quantity);
+      const qty = toQuantity(quantity);
       if (!product || qty <= 0) {
         toast({
           title: "✗ Invalid Quantity",
@@ -565,7 +560,7 @@ export default function Inventory() {
         return;
       }
 
-      const qty = toInt(scannerQty) || 1;
+      const qty = toQuantity(scannerQty) || 1;
 
       if (scannerMode === "receive") {
         await handleReceive({ product_id: product.id, quantity: qty, notes: `barcode:${code}` });
@@ -766,7 +761,7 @@ export default function Inventory() {
           return;
         }
 
-        const requestedStockQuantity = toInt(productData?.stock_on_hand);
+        const requestedStockQuantity = toQuantity(productData?.stock_on_hand);
         const barcodeValue = String(productData?.barcode || "").trim();
         if (
           barcodeValue &&
@@ -794,7 +789,7 @@ export default function Inventory() {
           image_url: productData?.image_url || null,
           default_unit: toDbDefaultUnit(productData?.count_style, editingProduct?._raw?.default_unit),
           stock_capacity: Number(productData?.stock_capacity) > 0 ? Number(productData.stock_capacity) : null,
-          low_stock_threshold: toInt(productData?.reorder_level || 10),
+          low_stock_threshold: toQuantity(productData?.reorder_level || 10),
           cost_price: Number(productData?.cost ?? 0) || 0,
           price: Number(productData?.price ?? 0) || 0,
           default_rate: Number(productData?.price ?? 0) || 0,
@@ -847,7 +842,7 @@ export default function Inventory() {
             }
           }
 
-          const currentStock = toInt(editingProduct.stock_on_hand);
+          const currentStock = toQuantity(editingProduct.stock_on_hand);
           const stockDelta = requestedStockQuantity - currentStock;
           if (stockDelta !== 0) {
             const { error: rpcErr } = await supabase.rpc("adjust_inventory_stock", {
@@ -955,7 +950,7 @@ export default function Inventory() {
         if (!delivery || delivery.status === "cancelled") return;
         if (!alreadyMarkedDelivered && delivery.status === "delivered") return;
 
-        const qty = toInt(delivery.quantity);
+        const qty = toQuantity(delivery.quantity);
         if (qty <= 0) {
           toast({
             title: "✗ Invalid Quantity",
@@ -1030,7 +1025,7 @@ export default function Inventory() {
         const baseFields = {
           product_id: deliveryData.product_id,
           org_id: deliveryOrgId,
-          quantity: toInt(deliveryData.quantity),
+          quantity: toQuantity(deliveryData.quantity),
           status: deliveryData.status,
           supplier: deliveryData.supplier || null,
           expected_date: deliveryData.expected_date || null,
@@ -1133,7 +1128,7 @@ export default function Inventory() {
     (product, suggestedQty) => {
       const stock = Number(product.stock_on_hand ?? 0);
       const threshold = Number(product.reorder_level ?? 10);
-      const suggested = Number.isFinite(Number(suggestedQty)) ? toInt(suggestedQty) : Math.max(1, threshold - stock);
+      const suggested = Number.isFinite(Number(suggestedQty)) ? toQuantity(suggestedQty) : Math.max(1, threshold - stock);
       const expected = format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), "yyyy-MM-dd");
 
       setReorderingIds((ids) => [...ids, product.id]);

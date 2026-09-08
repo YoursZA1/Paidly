@@ -355,7 +355,7 @@ There is **no** `MANAGE_POS_MANUAL_CARD` (or similar) permission. Paidly does no
 
 **POS inventory commit:**
 
-Stock lives on `services.stock_quantity` and the ledger `inventory_movements`. POS uses the existing RPCs `adjust_inventory_stock` → `apply_inventory_movement` (`source = pos`, `reference_id = pos_sales_events.id`). Inventory **must not** decrease because a product was added to the till cart, Pay was opened, or a `payment_intents` row was created. Those steps are local/pending only.
+Stock lives on `services.stock_quantity` and the ledger `inventory_movements` (`numeric(12,2)`, same scale as `invoice_items.quantity` — 1.25 units is valid). POS uses the existing RPCs `adjust_inventory_stock` → `apply_inventory_movement` (`source = pos`, `reference_id = pos_sales_events.id`). Inventory **must not** decrease because a product was added to the till cart, Pay was opened, or a `payment_intents` row was created. Those steps are local/pending only.
 
 ```
 Cart (device state)
@@ -520,7 +520,12 @@ Client viewed invoice 3 times without a `paid` event in the observation window �
 
 **This is how Paidly scales:** repeatable growth mechanics without entangling them in the document compose path.
 
-**Operator / platform admin** (users, oversight, platform messages, `/admin-v2/*`) is **platform operations**, not SMB document logic. The live Admin IA is grouped (`Overview`, `Business`, `Documents`, `Workforce`, `Financial`, `Platform`, `Reporting`, `Administration`) in `src/lib/adminNavConfig.js`. Existing pages stay at their `/admin-v2/*` URLs; new modules list real tables through `GET /api/admin/overview` and `GET /api/admin/directory` on the existing `api/admin` function. Metrics that have no ledger (for example platform payment fees) stay unavailable rather than invented.
+**Operator / platform admin** (`/admin-v2/*`) is the **Paidly control centre**, not another customer account.
+
+- **Admin data** = platform intelligence (users, businesses, subscriptions, Paidly revenue, feature usage, errors, health).
+- **Customer data** = tenant books (invoice balances, POS sales, payroll, outstanding). Those stay on the SMB product.
+
+`GET /api/admin/overview` and `GET /api/admin/directory` on the existing `api/admin` function aggregate with the **service-role** client. They must not scope to `current_user.organization_id`. Paidly revenue is `payment_history` + active `subscriptions` (MRR). Document/POS/workforce pages show **usage counts**, not customer money. Internal/test orgs (`organizations.is_internal`) are excluded from aggregates and labelled on the Businesses list. Product writes emit `platform_events` (ids + feature only). Metrics with no ledger (page views, trial conversion, platform fees) stay unavailable rather than invented. Live staff roles remain `admin` / `management` / `sales` / `support` (labelled Super Admin / Operations / Sales / Support). Do not add a 13th Vercel function for Admin.
 
 ---
 

@@ -13,7 +13,7 @@ export default function AdminFailedPaymentsPage() {
   return (
     <PageContainer
       title="Failed payments"
-      description="SaaS payment_history failures. Customer invoice/POS failures appear under Payment Intents when those rows exist."
+      description="Failed Paidly subscription payments. Use this to find businesses that need billing help. Customer Payment Engine failures are on Payment Intents."
       onRefresh={() => refetch()}
       isRefreshing={isFetching}
     >

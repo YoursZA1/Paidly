@@ -25,8 +25,8 @@ export default function AdminRevenuePage() {
 
   return (
     <PageContainer
-      title="Revenue"
-      description="SaaS subscription cash is payment_history. Invoice and POS totals come from their own settlement tables."
+      title="Paidly revenue"
+      description="What customers pay Paidly (PayFast → payment_history and active subscription MRR). Customer invoice and POS totals are not Paidly revenue."
       onRefresh={() => {
         overviewQuery.refetch();
         saasQuery.refetch();

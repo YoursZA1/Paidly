@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { normalizeInventoryProductRow } from "@/utils/inventoryNormalization";
+import { normalizeInventoryProductRow, toQuantity } from "@/utils/inventoryNormalization";
+
+describe("toQuantity", () => {
+  it("keeps fractional stock such as 1.25 instead of truncating to 1", () => {
+    expect(toQuantity(1.25)).toBe(1.25);
+    expect(toQuantity("1.25")).toBe(1.25);
+    expect(toQuantity(1.256)).toBe(1.26);
+  });
+});
 
 describe("normalizeInventoryProductRow", () => {
   it("includes barcode, image_url, cost, and stock_capacity", () => {

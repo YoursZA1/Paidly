@@ -42,7 +42,7 @@ export default function AdminSystemHealthPage() {
   return (
     <PageContainer
       title="System health"
-      description="Operational signals from billing, payment intents, and API telemetry."
+      description="Live checks only: database probe, last SaaS payment_history row, last email send, and in-process HTTP counters. Decorative statuses are not invented."
       onRefresh={() => {
         overviewQuery.refetch();
         healthQuery.refetch();

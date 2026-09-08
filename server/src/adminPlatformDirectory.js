@@ -1,17 +1,19 @@
 import {
   ADMIN_DIRECTORY_KINDS,
-  buildSparkline,
-  healthStatus,
-  inWindow,
+  countExact,
+  isIntegerBindError,
   isMissingRelationError,
+  logIntegerBindError,
   money,
   normalizeAdminPeriod,
-  percentChange,
-  resolvePeriodWindow,
-  sumField,
+  resolveDirectoryLimit,
+  startOfUtcDay,
+  startOfUtcMonth,
 } from "../../shared/admin/adminPlatformDirectory.js";
-
-const DIRECTORY_LIMIT_MAX = 200;
+import {
+  planFamilyLabel,
+  successRate,
+} from "../../shared/admin/adminPlatformMetrics.js";
 
 function unavailable(kind, reason) {
   return {
@@ -27,6 +29,13 @@ async function queryTable(supabase, table, build) {
   try {
     const result = await build(supabase.from(table));
     if (result.error) {
+      if (isIntegerBindError(result.error)) {
+        logIntegerBindError("admin-directory", {
+          table,
+          operation: "select",
+          message: result.error.message,
+        });
+      }
       if (isMissingRelationError(result.error)) {
         return { data: [], count: 0, unavailable: true, reason: `${table} is not available in this environment.` };
       }
@@ -51,25 +60,50 @@ async function countTable(supabase, table, apply = (q) => q) {
   return result;
 }
 
+function isMissingColumnError(error) {
+  const code = String(error?.code || "");
+  const msg = String(error?.message || error || "").toLowerCase();
+  return code === "42703" || msg.includes("does not exist") || msg.includes("is_internal");
+}
+
+async function countCustomerOrgs(supabase) {
+  const filtered = await queryTable(supabase, "organizations", (q) =>
+    q.select("id", { count: "exact", head: true }).eq("is_internal", false)
+  );
+  if (filtered.unavailable && isMissingColumnError({ message: filtered.reason })) {
+    return countTable(supabase, "organizations");
+  }
+  return filtered;
+}
+
+async function countInRange(supabase, table, column, from, to, apply = (q) => q) {
+  return countTable(supabase, table, (q) => {
+    let next = apply(q).gte(column, from.toISOString());
+    if (to) next = next.lt(column, to.toISOString());
+    return next;
+  });
+}
+
+async function usageSnapshot(supabase, table, column = "created_at") {
+  const now = new Date();
+  const today = startOfUtcDay(now);
+  const month = startOfUtcMonth(now);
+  const [total, todayCount, monthCount] = await Promise.all([
+    countTable(supabase, table),
+    countInRange(supabase, table, column, today, null),
+    countInRange(supabase, table, column, month, null),
+  ]);
+  return {
+    total: countExact(total),
+    today: countExact(todayCount),
+    thisMonth: countExact(monthCount),
+    unavailable: Boolean(total.unavailable),
+    unavailableReason: total.reason,
+  };
+}
+
 function orgName(org) {
   return String(org?.name || org?.company_name || "Untitled business").trim();
-}
-
-function pickTime(row, keys) {
-  for (const key of keys) {
-    if (row?.[key]) return row[key];
-  }
-  return null;
-}
-
-function paidLike(status) {
-  const s = String(status || "").toLowerCase();
-  return s === "paid" || s === "completed" || s === "success" || s === "settled";
-}
-
-function failedLike(status) {
-  const s = String(status || "").toLowerCase();
-  return s === "failed" || s === "declined" || s === "error";
 }
 
 async function loadOrgNames(supabase, ids) {
@@ -86,23 +120,50 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
   if (!ADMIN_DIRECTORY_KINDS.includes(normalized)) {
     return { error: "Unknown directory kind", status: 400 };
   }
-  const limit = Math.min(DIRECTORY_LIMIT_MAX, Math.max(1, Number(opts.limit) || 50));
+  const parsedLimit = resolveDirectoryLimit(opts.limit);
+  if (!parsedLimit.ok) {
+    logIntegerBindError("admin-directory", {
+      table: normalized,
+      column: "limit",
+      operation: "select",
+      value: opts.limit,
+      valueType: typeof opts.limit,
+      message: "LIMIT must be an integer row count",
+    });
+    return { error: "Invalid limit (use integer 1–200)", status: 400 };
+  }
+  const limit = parsedLimit.value;
 
   if (normalized === "businesses") {
-    const orgs = await queryTable(supabase, "organizations", (q) =>
-      q.select("id, name, industry, business_type, created_at, owner_id").order("created_at", { ascending: false }).limit(limit)
+    let orgs = await queryTable(supabase, "organizations", (q) =>
+      q.select("id, name, industry, business_type, created_at, owner_id, is_internal").order("created_at", { ascending: false }).limit(limit)
     );
+    if (orgs.unavailable && isMissingColumnError({ message: orgs.reason })) {
+      orgs = await queryTable(supabase, "organizations", (q) =>
+        q.select("id, name, industry, business_type, created_at, owner_id").order("created_at", { ascending: false }).limit(limit)
+      );
+    }
     if (orgs.unavailable) return unavailable("businesses", orgs.reason);
     const ids = orgs.data.map((o) => o.id);
-    const [subs, memberships, invoices] = await Promise.all([
+    const empty = ["00000000-0000-0000-0000-000000000000"];
+    const [subs, memberships, invoices, quotes, posSales, owners] = await Promise.all([
       queryTable(supabase, "subscriptions", (q) =>
-        q.select("id, company_id, status, plan, plan_slug, plan_family, amount").in("company_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"])
+        q.select("id, company_id, status, plan, plan_slug, plan_family, trial_ends_at").in("company_id", ids.length ? ids : empty)
       ),
       queryTable(supabase, "memberships", (q) =>
-        q.select("id, org_id").in("org_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"])
+        q.select("id, org_id, user_id").in("org_id", ids.length ? ids : empty)
       ),
       queryTable(supabase, "invoices", (q) =>
-        q.select("id, org_id, total, amount").in("org_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"])
+        q.select("id, org_id, created_at").in("org_id", ids.length ? ids : empty)
+      ),
+      queryTable(supabase, "quotes", (q) =>
+        q.select("id, org_id").in("org_id", ids.length ? ids : empty)
+      ),
+      queryTable(supabase, "pos_sales_events", (q) =>
+        q.select("id, org_id").in("org_id", ids.length ? ids : empty)
+      ),
+      queryTable(supabase, "profiles", (q) =>
+        q.select("id, last_active_at, role").in("id", orgs.data.map((o) => o.owner_id).filter(Boolean).length ? orgs.data.map((o) => o.owner_id).filter(Boolean) : empty)
       ),
     ]);
     const subByOrg = new Map();
@@ -115,27 +176,49 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
       usersByOrg.set(key, (usersByOrg.get(key) || 0) + 1);
     }
     const docsByOrg = new Map();
-    const revByOrg = new Map();
+    const quotesByOrg = new Map();
+    const posByOrg = new Map();
     for (const inv of invoices.data) {
       const key = String(inv.org_id);
       docsByOrg.set(key, (docsByOrg.get(key) || 0) + 1);
-      revByOrg.set(key, money((revByOrg.get(key) || 0) + money(inv.total ?? inv.amount)));
     }
+    for (const q of quotes.data) {
+      const key = String(q.org_id);
+      quotesByOrg.set(key, (quotesByOrg.get(key) || 0) + 1);
+    }
+    for (const sale of posSales.data) {
+      const key = String(sale.org_id);
+      posByOrg.set(key, (posByOrg.get(key) || 0) + 1);
+    }
+    const ownerById = new Map((owners.data || []).map((p) => [String(p.id), p]));
     return {
       kind: "businesses",
+      view: "platform",
       unavailable: false,
       count: orgs.count,
       rows: orgs.data.map((o) => {
         const sub = subByOrg.get(String(o.id));
+        const owner = ownerById.get(String(o.owner_id));
+        const invoiceCount = docsByOrg.get(String(o.id)) || 0;
+        const quoteCount = quotesByOrg.get(String(o.id)) || 0;
+        const posCount = posByOrg.get(String(o.id)) || 0;
+        const usage = [
+          invoiceCount ? `${invoiceCount} invoices` : null,
+          quoteCount ? `${quoteCount} quotes` : null,
+          posCount ? "POS active" : null,
+        ].filter(Boolean).join(" · ") || "No usage yet";
         return {
           id: o.id,
           title: orgName(o),
           business: orgName(o),
-          plan: sub?.plan_family || sub?.plan_slug || sub?.plan || "none",
+          plan: planFamilyLabel(sub?.plan_family || sub?.plan_slug || sub?.plan),
           status: sub?.status || "none",
           users: usersByOrg.get(String(o.id)) || 0,
-          documents: docsByOrg.get(String(o.id)) || 0,
-          revenue: revByOrg.get(String(o.id)) || 0,
+          documents: invoiceCount + quoteCount,
+          featureUsage: usage,
+          lastActive: owner?.last_active_at || null,
+          internal: Boolean(o.is_internal),
+          extra: o.is_internal ? "Internal" : o.business_type || null,
           date: o.created_at,
         };
       }),
@@ -144,23 +227,57 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
 
   if (normalized === "plans") {
     let plans = await queryTable(supabase, "plans", (q) =>
-      q.select("id, slug, name, billing_cycle, amount, currency, active, created_at").order("amount", { ascending: true }).limit(limit)
+      q.select("id, slug, name, billing_cycle, amount, currency, active, is_legacy, is_public, plan_family, contact_sales, created_at").order("sort_order", { ascending: true }).limit(limit)
     );
+    if (plans.unavailable) {
+      plans = await queryTable(supabase, "plans", (q) =>
+        q.select("id, slug, name, billing_cycle, amount, currency, active, created_at").order("amount", { ascending: true }).limit(limit)
+      );
+    }
     if (plans.unavailable) return unavailable("plans", plans.reason);
+    const subs = await queryTable(supabase, "subscriptions", (q) =>
+      q.select("id, status, plan_id, plan_slug, plan_family, amount, billing_cycle").limit(5000)
+    );
+    const activeByKey = new Map();
+    const trialByKey = new Map();
+    const mrrByKey = new Map();
+    for (const s of subs.data || []) {
+      const key = String(s.plan_id || s.plan_slug || "");
+      if (!key) continue;
+      const status = String(s.status || "").toLowerCase();
+      if (status === "active") {
+        activeByKey.set(key, (activeByKey.get(key) || 0) + 1);
+        const monthly = s.billing_cycle === "annual" || s.billing_cycle === "yearly" ? money(s.amount) / 12 : money(s.amount);
+        mrrByKey.set(key, money((mrrByKey.get(key) || 0) + monthly));
+      }
+      if (status === "trialing" || status === "trial") {
+        trialByKey.set(key, (trialByKey.get(key) || 0) + 1);
+      }
+    }
+    const catalog = plans.data.filter((p) => p.is_legacy !== true);
+    const rowsSource = catalog.length ? catalog : plans.data;
     return {
       kind: "plans",
+      view: "platform",
       unavailable: false,
-      count: plans.count,
-      rows: plans.data.map((p) => ({
-        id: p.id,
-        title: p.name || p.slug,
-        subtitle: p.slug,
-        plan: p.plan_family || p.slug,
-        status: p.active === false ? "inactive" : p.is_legacy ? "legacy" : "active",
-        amount: money(p.amount),
-        extra: p.billing_cycle,
-        date: p.created_at,
-      })),
+      count: rowsSource.length,
+      rows: rowsSource.map((p) => {
+        const active = activeByKey.get(String(p.id)) || activeByKey.get(String(p.slug)) || 0;
+        const trial = trialByKey.get(String(p.id)) || trialByKey.get(String(p.slug)) || 0;
+        const mrr = mrrByKey.get(String(p.id)) || mrrByKey.get(String(p.slug)) || 0;
+        return {
+          id: p.id,
+          title: p.name || p.slug,
+          subtitle: p.contact_sales ? "Custom" : `${p.billing_cycle || "monthly"}`,
+          plan: planFamilyLabel(p.plan_family || p.slug),
+          status: p.active === false ? "inactive" : p.is_legacy ? "legacy" : "active",
+          amount: p.contact_sales ? null : money(p.amount),
+          users: active,
+          extra: p.contact_sales ? "Custom" : `${trial} trial`,
+          mrr: p.contact_sales ? null : money(mrr),
+          date: p.created_at,
+        };
+      }),
     };
   }
 
@@ -230,8 +347,11 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
       };
     }
     const names = await loadOrgNames(supabase, docs.data.map((r) => r.org_id));
+    const usage = await usageSnapshot(supabase, table, "created_at");
     return {
       kind: normalized,
+      view: "usage",
+      usage,
       unavailable: false,
       count: docs.count,
       rows: docs.data.map((r) => ({
@@ -239,7 +359,6 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
         title: r.invoice_number || r.quote_number || r.number || r.project_title || r.id,
         subtitle: r.client_name || null,
         business: names.get(String(r.org_id)) || "—",
-        amount: money(r.total ?? r.amount),
         status: r.status || "unknown",
         date: r.created_at,
       })),
@@ -252,15 +371,25 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     );
     if (sales.unavailable) return unavailable("pos", sales.reason);
     const names = await loadOrgNames(supabase, sales.data.map((r) => r.org_id));
+    const [usage, enabled, connections] = await Promise.all([
+      usageSnapshot(supabase, "pos_sales_events", "occurred_at"),
+      countTable(supabase, "organizations", (q) => q.in("business_type", ["retail", "mixed"])),
+      countTable(supabase, "pos_connections"),
+    ]);
     return {
       kind: "pos",
+      view: "usage",
+      usage: {
+        ...usage,
+        enabledBusinesses: countExact(enabled),
+        connections: countExact(connections),
+      },
       unavailable: false,
       count: sales.count,
       rows: sales.data.map((r) => ({
         id: r.id,
         title: r.provider || "POS",
         business: names.get(String(r.org_id)) || "—",
-        amount: money(r.total_amount),
         status: r.status || "completed",
         extra: r.payment_method || "—",
         date: r.occurred_at || r.created_at,
@@ -269,23 +398,40 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
   }
 
   if (normalized === "payments") {
-    const payments = await queryTable(supabase, "payments", (q) =>
-      q.select("id, org_id, invoice_id, amount, status, method, paid_at, created_at").order("created_at", { ascending: false }).limit(limit)
+    const payments = await queryTable(supabase, "payment_history", (q) =>
+      q.select("id, company_id, amount, currency, payment_status, payment_method, created_at").order("created_at", { ascending: false }).limit(limit)
     );
     if (payments.unavailable) return unavailable("payments", payments.reason);
-    const names = await loadOrgNames(supabase, payments.data.map((r) => r.org_id));
+    const names = await loadOrgNames(supabase, payments.data.map((r) => r.company_id));
+    const [completed, failed, total] = await Promise.all([
+      countTable(supabase, "payment_history", (q) => q.eq("payment_status", "completed")),
+      countTable(supabase, "payment_history", (q) => q.eq("payment_status", "failed")),
+      countTable(supabase, "payment_history"),
+    ]);
+    const ok = countExact(completed);
+    const bad = countExact(failed);
+    const all = countExact(total);
     return {
       kind: "payments",
+      view: "platform",
+      usage: {
+        total: all,
+        successful: ok,
+        failed: bad,
+        successRate: successRate(ok, (ok || 0) + (bad || 0)),
+        unavailable: Boolean(total.unavailable),
+        unavailableReason: total.reason,
+      },
       unavailable: false,
       count: payments.count,
       rows: payments.data.map((r) => ({
         id: r.id,
-        title: r.invoice_id || r.id,
-        business: names.get(String(r.org_id)) || "—",
+        title: "Subscription payment",
+        business: names.get(String(r.company_id)) || "—",
         amount: money(r.amount),
-        status: r.status || "unknown",
-        extra: r.method || "—",
-        date: r.paid_at || r.created_at,
+        status: r.payment_status || "unknown",
+        extra: r.payment_method || "PayFast",
+        date: r.created_at,
       })),
     };
   }
@@ -298,6 +444,8 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     const names = await loadOrgNames(supabase, members.data.map((r) => r.org_id));
     return {
       kind: "employees",
+      view: "usage",
+      usage: await usageSnapshot(supabase, "memberships"),
       unavailable: false,
       count: members.count,
       rows: members.data.map((r) => ({
@@ -319,6 +467,8 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     const names = await loadOrgNames(supabase, profiles.data.map((r) => r.org_id));
     return {
       kind: "payroll",
+      view: "usage",
+      usage: await usageSnapshot(supabase, "payroll_profiles"),
       unavailable: false,
       count: profiles.count,
       rows: profiles.data.map((r) => ({
@@ -340,6 +490,8 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     const names = await loadOrgNames(supabase, requests.data.map((r) => r.org_id));
     return {
       kind: "leave",
+      view: "usage",
+      usage: await usageSnapshot(supabase, "leave_requests"),
       unavailable: false,
       count: requests.count,
       rows: requests.data.map((r) => ({
@@ -361,6 +513,8 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     const names = await loadOrgNames(supabase, rows.data.map((r) => r.org_id));
     return {
       kind: "attendance",
+      view: "usage",
+      usage: await usageSnapshot(supabase, "attendance_profiles"),
       unavailable: false,
       count: rows.count,
       rows: rows.data.map((r) => ({
@@ -378,8 +532,24 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     );
     if (intents.unavailable) return unavailable("payment-intents", intents.reason);
     const names = await loadOrgNames(supabase, intents.data.map((r) => r.org_id));
+    const [total, successful, pending, failed] = await Promise.all([
+      countTable(supabase, "payment_intents"),
+      countTable(supabase, "payment_intents", (q) => q.in("status", ["succeeded", "completed", "paid"])),
+      countTable(supabase, "payment_intents", (q) => q.in("status", ["pending", "requires_action", "processing"])),
+      countTable(supabase, "payment_intents", (q) => q.eq("status", "failed")),
+    ]);
+    const ok = countExact(successful);
+    const bad = countExact(failed);
     return {
       kind: "payment-intents",
+      view: "operations",
+      usage: {
+        total: countExact(total),
+        successful: ok,
+        pending: countExact(pending),
+        failed: bad,
+        successRate: successRate(ok, (ok || 0) + (bad || 0)),
+      },
       unavailable: false,
       count: intents.count,
       rows: intents.data.map((r) => ({
@@ -417,55 +587,22 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
   }
 
   if (normalized === "transactions") {
-    const [history, invoicePayments, pos] = await Promise.all([
-      queryTable(supabase, "payment_history", (q) =>
-        q.select("id, company_id, amount, currency, payment_status, payment_method, created_at").order("created_at", { ascending: false }).limit(limit)
-      ),
-      queryTable(supabase, "payments", (q) =>
-        q.select("id, org_id, amount, status, method, paid_at, created_at").order("created_at", { ascending: false }).limit(limit)
-      ),
-      queryTable(supabase, "pos_sales_events", (q) =>
-        q.select("id, org_id, total_amount, status, payment_method, occurred_at, created_at").order("occurred_at", { ascending: false }).limit(limit)
-      ),
-    ]);
-    const names = await loadOrgNames(supabase, [
-      ...history.data.map((r) => r.company_id),
-      ...invoicePayments.data.map((r) => r.org_id),
-      ...pos.data.map((r) => r.org_id),
-    ]);
-    const rows = [
-      ...history.data.map((r) => ({
-        id: `sub-${r.id}`,
-        title: "Subscription",
-        type: "subscription",
-        business: names.get(String(r.company_id)) || "—",
-        amount: money(r.amount),
-        status: r.payment_status,
-        extra: r.payment_method || "PayFast",
-        date: r.created_at,
-      })),
-      ...invoicePayments.data.map((r) => ({
-        id: `inv-${r.id}`,
-        title: "Invoice",
-        type: "invoice",
-        business: names.get(String(r.org_id)) || "—",
-        amount: money(r.amount),
-        status: r.status,
-        extra: r.method || "—",
-        date: r.paid_at || r.created_at,
-      })),
-      ...pos.data.map((r) => ({
-        id: `pos-${r.id}`,
-        title: "POS",
-        type: "pos",
-        business: names.get(String(r.org_id)) || "—",
-        amount: money(r.total_amount),
-        status: r.status,
-        extra: r.payment_method || "—",
-        date: r.occurred_at || r.created_at,
-      })),
-    ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-    return { kind: "transactions", unavailable: false, count: rows.length, rows: rows.slice(0, limit) };
+    const history = await queryTable(supabase, "payment_history", (q) =>
+      q.select("id, company_id, amount, currency, payment_status, payment_method, created_at").order("created_at", { ascending: false }).limit(limit)
+    );
+    if (history.unavailable) return unavailable("transactions", history.reason);
+    const names = await loadOrgNames(supabase, history.data.map((r) => r.company_id));
+    const rows = history.data.map((r) => ({
+      id: r.id,
+      title: r.payment_status === "refunded" ? "Refund" : "Subscription payment",
+      type: r.payment_status === "refunded" ? "refund" : "subscription",
+      business: names.get(String(r.company_id)) || "—",
+      amount: money(r.amount),
+      status: r.payment_status,
+      extra: r.payment_method || "PayFast",
+      date: r.created_at,
+    }));
+    return { kind: "transactions", view: "platform", unavailable: false, count: history.count, rows };
   }
 
   if (normalized === "templates") {
@@ -511,451 +648,5 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
   return unavailable(normalized, "Unknown directory kind");
 }
 
-function filterWindow(rows, from, to, keys) {
-  return (rows || []).filter((row) => inWindow(pickTime(row, keys), from, to));
-}
-
-export async function buildAdminPlatformOverview(supabase, opts = {}) {
-  const window = resolvePeriodWindow(opts.period);
-  const lookback = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-
-  const [
-    orgs,
-    orgsPrev,
-    profiles,
-    waitlist,
-    invoices,
-    quotes,
-    payslips,
-    invoicePayments,
-    posSales,
-    paymentHistory,
-    failedHistory,
-    refundHistory,
-    intents,
-    subscriptions,
-    affiliateApps,
-  ] = await Promise.all([
-    countTable(supabase, "organizations"),
-    queryTable(supabase, "organizations", (q) =>
-      q.select("id, created_at").lt("created_at", window.from.toISOString()).limit(5000)
-    ),
-    countTable(supabase, "profiles"),
-    countTable(supabase, "waitlist_signups"),
-    queryTable(supabase, "invoices", (q) =>
-      q.select("id, org_id, status, total, amount, created_at").order("created_at", { ascending: false }).limit(500)
-    ),
-    queryTable(supabase, "quotes", (q) =>
-      q.select("id, org_id, status, total, amount, created_at").order("created_at", { ascending: false }).limit(300)
-    ),
-    queryTable(supabase, "payslips", (q) =>
-      q.select("id, org_id, status, created_at").order("created_at", { ascending: false }).limit(300)
-    ),
-    queryTable(supabase, "payments", (q) =>
-      q.select("id, org_id, amount, status, method, paid_at, created_at").order("created_at", { ascending: false }).limit(500)
-    ),
-    queryTable(supabase, "pos_sales_events", (q) =>
-      q.select("id, org_id, total_amount, status, payment_method, occurred_at, created_at").order("occurred_at", { ascending: false }).limit(500)
-    ),
-    queryTable(supabase, "payment_history", (q) =>
-      q.select("id, company_id, amount, payment_status, payment_method, created_at").gte("created_at", lookback.toISOString()).order("created_at", { ascending: false }).limit(1000)
-    ),
-    queryTable(supabase, "payment_history", (q) =>
-      q.select("id, company_id, amount, payment_status, created_at").eq("payment_status", "failed").order("created_at", { ascending: false }).limit(20)
-    ),
-    queryTable(supabase, "payment_history", (q) =>
-      q.select("id, company_id, amount, payment_status, created_at").eq("payment_status", "refunded").order("created_at", { ascending: false }).limit(20)
-    ),
-    queryTable(supabase, "payment_intents", (q) =>
-      q.select("id, org_id, status, amount, source_kind, created_at").in("status", ["pending", "requires_action", "processing", "failed"]).order("created_at", { ascending: false }).limit(50)
-    ),
-    queryTable(supabase, "subscriptions", (q) =>
-      q.select("id, status, company_id, user_id, plan, plan_slug, plan_family, amount, trial_ends_at, created_at").order("created_at", { ascending: false }).limit(500)
-    ),
-    queryTable(supabase, "affiliate_applications", (q) =>
-      q.select("id, status").eq("status", "pending")
-    ),
-  ]);
-
-  const orgRows = await queryTable(supabase, "organizations", (q) =>
-    q.select("id, name, created_at").order("created_at", { ascending: false }).limit(8)
-  );
-  const profileRows = await queryTable(supabase, "profiles", (q) =>
-    q.select("id, status, created_at, full_name, email").order("created_at", { ascending: false }).limit(200)
-  );
-
-  const docsCurrent = [
-    ...filterWindow(invoices.data, window.from, window.to, ["created_at"]),
-    ...filterWindow(quotes.data, window.from, window.to, ["created_at"]),
-    ...filterWindow(payslips.data, window.from, window.to, ["created_at"]),
-  ];
-  const docsPrev = [
-    ...filterWindow(invoices.data, window.prevFrom, window.prevTo, ["created_at"]),
-    ...filterWindow(quotes.data, window.prevFrom, window.prevTo, ["created_at"]),
-    ...filterWindow(payslips.data, window.prevFrom, window.prevTo, ["created_at"]),
-  ];
-
-  const paidInvoicePayments = invoicePayments.data.filter((r) => paidLike(r.status));
-  const completedPos = posSales.data.filter((r) => !failedLike(r.status));
-  const completedSubs = paymentHistory.data.filter((r) => String(r.payment_status || "").toLowerCase() === "completed");
-
-  const subscriptionRevenue = sumField(filterWindow(completedSubs, window.from, window.to, ["created_at"]), "amount");
-  const subscriptionRevenuePrev = sumField(filterWindow(completedSubs, window.prevFrom, window.prevTo, ["created_at"]), "amount");
-  const invoiceRevenue = sumField(filterWindow(paidInvoicePayments, window.from, window.to, ["paid_at", "created_at"]), "amount");
-  const invoiceRevenuePrev = sumField(filterWindow(paidInvoicePayments, window.prevFrom, window.prevTo, ["paid_at", "created_at"]), "amount");
-  const posRevenue = sumField(filterWindow(completedPos, window.from, window.to, ["occurred_at", "created_at"]), "total_amount");
-  const posRevenuePrev = sumField(filterWindow(completedPos, window.prevFrom, window.prevTo, ["occurred_at", "created_at"]), "total_amount");
-
-  const monthlyRevenue = money(subscriptionRevenue + invoiceRevenue + posRevenue);
-  const monthlyRevenuePrev = money(subscriptionRevenuePrev + invoiceRevenuePrev + posRevenuePrev);
-
-  const paymentsProcessed = filterWindow(
-    [
-      ...completedSubs.map((r) => ({ ...r, _t: r.created_at })),
-      ...paidInvoicePayments.map((r) => ({ ...r, _t: r.paid_at || r.created_at })),
-      ...completedPos.map((r) => ({ ...r, _t: r.occurred_at || r.created_at })),
-    ],
-    window.from,
-    window.to,
-    ["_t"]
-  ).length;
-  const paymentsProcessedPrev = filterWindow(
-    [
-      ...completedSubs.map((r) => ({ ...r, _t: r.created_at })),
-      ...paidInvoicePayments.map((r) => ({ ...r, _t: r.paid_at || r.created_at })),
-      ...completedPos.map((r) => ({ ...r, _t: r.occurred_at || r.created_at })),
-    ],
-    window.prevFrom,
-    window.prevTo,
-    ["_t"]
-  ).length;
-
-  const orgsCreatedPrev = orgsPrev.data.length;
-  const activeBusinesses = orgs.unavailable ? null : orgs.count;
-  const platformUsers = profiles.unavailable ? null : profiles.count;
-
-  const trialSubs = subscriptions.data.filter((s) => String(s.status || "").toLowerCase() === "trialing");
-  const pastDue = subscriptions.data.filter((s) => ["past_due", "failed", "suspended"].includes(String(s.status || "").toLowerCase()));
-  const pendingIntents = intents.data.filter((i) => ["pending", "requires_action", "processing"].includes(String(i.status || "").toLowerCase()));
-  const failedIntents = intents.data.filter((i) => String(i.status || "").toLowerCase() === "failed");
-  const suspendedUsers = profileRows.data.filter((p) => String(p.status || "").toLowerCase() === "suspended");
-
-  const failedPaymentCount = failedHistory.unavailable ? null : failedHistory.count;
-  const attentionCount =
-    (failedPaymentCount || 0) +
-    pastDue.length +
-    failedIntents.length +
-    suspendedUsers.length +
-    (affiliateApps.unavailable ? 0 : affiliateApps.data.length);
-  const criticalCount = (failedPaymentCount || 0) > 5 || failedIntents.length > 3 ? 1 : 0;
-
-  const orgNames = await loadOrgNames(supabase, [
-    ...orgRows.data.map((o) => o.id),
-    ...failedHistory.data.map((r) => r.company_id),
-    ...intents.data.map((r) => r.org_id),
-    ...invoices.data.map((r) => r.org_id),
-    ...paidInvoicePayments.map((r) => r.org_id),
-    ...completedPos.map((r) => r.org_id),
-    ...subscriptions.data.map((r) => r.company_id),
-  ]);
-
-  const attention = [
-    ...failedHistory.data.map((r) => ({
-      id: `failed-${r.id}`,
-      issue: "Payment failed",
-      entity: orgNames.get(String(r.company_id)) || "Unknown business",
-      amount: money(r.amount),
-      severity: "critical",
-      date: r.created_at,
-      href: "/admin-v2/failed-payments",
-      action: "Review",
-    })),
-    ...pastDue.slice(0, 8).map((s) => ({
-      id: `sub-${s.id}`,
-      issue: `Subscription ${s.status}`,
-      entity: orgNames.get(String(s.company_id)) || s.plan_slug || "Subscription",
-      amount: money(s.amount),
-      severity: "attention",
-      date: s.created_at,
-      href: "/admin-v2/subscriptions",
-      action: "Review",
-    })),
-    ...failedIntents.slice(0, 8).map((i) => ({
-      id: `intent-${i.id}`,
-      issue: "Payment intent failed",
-      entity: orgNames.get(String(i.org_id)) || i.source_kind,
-      amount: money(i.amount),
-      severity: "critical",
-      date: i.created_at,
-      href: "/admin-v2/payment-intents",
-      action: "Review",
-    })),
-    ...suspendedUsers.slice(0, 6).map((u) => ({
-      id: `user-${u.id}`,
-      issue: "Suspended account",
-      entity: u.full_name || u.email || u.id,
-      amount: null,
-      severity: "attention",
-      date: u.created_at,
-      href: "/admin-v2/users",
-      action: "Review",
-    })),
-    ...affiliateApps.data.slice(0, 5).map((a) => ({
-      id: `aff-${a.id}`,
-      issue: "Affiliate application pending",
-      entity: "Affiliate program",
-      amount: null,
-      severity: "attention",
-      date: null,
-      href: "/admin-v2/affiliates",
-      action: "Review",
-    })),
-  ]
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
-    .slice(0, 8);
-
-  const activity = [
-    ...orgRows.data.map((o) => ({
-      id: `biz-${o.id}`,
-      event: "Business registered",
-      entity: orgName(o),
-      date: o.created_at,
-      href: "/admin-v2/businesses",
-    })),
-    ...subscriptions.data.slice(0, 8).map((s) => ({
-      id: `subact-${s.id}`,
-      event: `Subscription ${s.status}`,
-      entity: orgNames.get(String(s.company_id)) || s.plan_family || s.plan || "Plan",
-      date: s.created_at,
-      href: "/admin-v2/subscriptions",
-    })),
-    ...invoices.data.filter((inv) => paidLike(inv.status)).slice(0, 8).map((inv) => ({
-      id: `invact-${inv.id}`,
-      event: "Invoice paid",
-      entity: orgNames.get(String(inv.org_id)) || "Business",
-      date: inv.created_at,
-      href: "/admin-v2/invoices",
-    })),
-    ...failedHistory.data.slice(0, 5).map((r) => ({
-      id: `failact-${r.id}`,
-      event: "Payment failed",
-      entity: orgNames.get(String(r.company_id)) || "Business",
-      date: r.created_at,
-      href: "/admin-v2/failed-payments",
-    })),
-    ...completedPos.slice(0, 6).map((r) => ({
-      id: `posact-${r.id}`,
-      event: "POS transaction processed",
-      entity: orgNames.get(String(r.org_id)) || "Business",
-      date: r.occurred_at || r.created_at,
-      href: "/admin-v2/pos",
-    })),
-  ]
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
-    .slice(0, 10);
-
-  const recentBusinesses = orgRows.data.map((o) => {
-    const sub = subscriptions.data.find((s) => String(s.company_id) === String(o.id));
-    return {
-      id: o.id,
-      business: orgName(o),
-      plan: sub?.plan_family || sub?.plan_slug || sub?.plan || "none",
-      status: sub?.status || "none",
-      users: null,
-      documents: invoices.data.filter((inv) => String(inv.org_id) === String(o.id)).length,
-      revenue: money(
-        paidInvoicePayments
-          .filter((p) => String(p.org_id) === String(o.id))
-          .reduce((sum, p) => sum + money(p.amount), 0)
-      ),
-      date: o.created_at,
-    };
-  });
-
-  const recentTransactions = [
-    ...completedSubs.slice(0, 6).map((r) => ({
-      id: `tx-sub-${r.id}`,
-      title: "Subscription",
-      type: "subscription",
-      business: orgNames.get(String(r.company_id)) || "—",
-      amount: money(r.amount),
-      status: r.payment_status,
-      extra: r.payment_method || "PayFast",
-      date: r.created_at,
-    })),
-    ...paidInvoicePayments.slice(0, 6).map((r) => ({
-      id: `tx-inv-${r.id}`,
-      title: "Invoice",
-      type: "invoice",
-      business: orgNames.get(String(r.org_id)) || "—",
-      amount: money(r.amount),
-      status: r.status,
-      extra: r.method || "—",
-      date: r.paid_at || r.created_at,
-    })),
-    ...completedPos.slice(0, 6).map((r) => ({
-      id: `tx-pos-${r.id}`,
-      title: "POS",
-      type: "pos",
-      business: orgNames.get(String(r.org_id)) || "—",
-      amount: money(r.total_amount),
-      status: r.status,
-      extra: r.payment_method || "—",
-      date: r.occurred_at || r.created_at,
-    })),
-    ...refundHistory.data.slice(0, 4).map((r) => ({
-      id: `tx-ref-${r.id}`,
-      title: "Refund",
-      type: "refund",
-      business: orgNames.get(String(r.company_id)) || "—",
-      amount: money(r.amount),
-      status: r.payment_status,
-      extra: "PayFast",
-      date: r.created_at,
-    })),
-  ]
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
-    .slice(0, 8);
-
-  const sparkDays = [];
-  for (let i = 6; i >= 0; i -= 1) {
-    const dayFrom = addDaysUtc(startOfUtcDayNow(), -i);
-    const dayTo = addDaysUtc(dayFrom, 1);
-    sparkDays.push(
-      money(
-        sumField(filterWindow(completedSubs, dayFrom, dayTo, ["created_at"]), "amount") +
-          sumField(filterWindow(paidInvoicePayments, dayFrom, dayTo, ["paid_at", "created_at"]), "amount") +
-          sumField(filterWindow(completedPos, dayFrom, dayTo, ["occurred_at", "created_at"]), "total_amount")
-      )
-    );
-  }
-
-  return {
-    period: window.period,
-    compareLabel: window.compareLabel,
-    window: {
-      from: window.from.toISOString(),
-      to: window.to.toISOString(),
-    },
-    kpis: {
-      activeBusinesses: {
-        value: activeBusinesses,
-        previous: orgsCreatedPrev,
-        change: activeBusinesses == null ? null : percentChange(activeBusinesses, orgsCreatedPrev),
-        unavailable: orgs.unavailable,
-        unavailableReason: orgs.reason,
-      },
-      monthlyRevenue: {
-        value: monthlyRevenue,
-        previous: monthlyRevenuePrev,
-        change: percentChange(monthlyRevenue, monthlyRevenuePrev),
-        unavailable: false,
-      },
-      documentsProcessed: {
-        value: invoices.unavailable && quotes.unavailable && payslips.unavailable ? null : docsCurrent.length,
-        previous: docsPrev.length,
-        change: percentChange(docsCurrent.length, docsPrev.length),
-        unavailable: invoices.unavailable && quotes.unavailable && payslips.unavailable,
-        unavailableReason: invoices.reason,
-      },
-      paymentsProcessed: {
-        value: paymentsProcessed,
-        previous: paymentsProcessedPrev,
-        change: percentChange(paymentsProcessed, paymentsProcessedPrev),
-        unavailable: false,
-      },
-      platformUsers: {
-        value: platformUsers,
-        previous: null,
-        change: null,
-        unavailable: profiles.unavailable,
-        unavailableReason: profiles.reason,
-      },
-    },
-    revenue: {
-      period: window.period,
-      compareLabel: window.compareLabel,
-      sources: {
-        subscription: {
-          label: "Subscription Revenue",
-          amount: subscriptionRevenue,
-          previous: subscriptionRevenuePrev,
-          change: percentChange(subscriptionRevenue, subscriptionRevenuePrev),
-          source: "payment_history",
-        },
-        invoice: {
-          label: "Invoice Revenue",
-          amount: invoiceRevenue,
-          previous: invoiceRevenuePrev,
-          change: percentChange(invoiceRevenue, invoiceRevenuePrev),
-          source: "payments",
-          unavailable: invoicePayments.unavailable,
-          unavailableReason: invoicePayments.reason,
-        },
-        pos: {
-          label: "POS Revenue",
-          amount: posRevenue,
-          previous: posRevenuePrev,
-          change: percentChange(posRevenue, posRevenuePrev),
-          source: "pos_sales_events",
-          unavailable: posSales.unavailable,
-          unavailableReason: posSales.reason,
-        },
-        fees: {
-          label: "Payment Fees",
-          amount: null,
-          unavailable: true,
-          unavailableReason: "Paidly does not store a platform fee ledger yet. SaaS fees stay in PayFast settlement, not payment_intents.",
-        },
-        other: {
-          label: "Other Revenue",
-          amount: 0,
-          unavailable: false,
-          unavailableReason: null,
-        },
-      },
-      total: monthlyRevenue,
-      sparkline: buildSparkline(sparkDays),
-    },
-    health: {
-      status: healthStatus({ critical: criticalCount, attention: attentionCount }),
-      activeBusinesses: activeBusinesses,
-      businessesOnTrial: trialSubs.length,
-      businessesAtRisk: pastDue.length,
-      failedPayments: failedPaymentCount,
-      pendingPaymentIntents: intents.unavailable ? null : pendingIntents.length,
-      waitlist: waitlist.unavailable ? null : waitlist.count,
-      sources: {
-        failedPayments: failedHistory.unavailable ? failedHistory.reason : null,
-        paymentIntents: intents.unavailable ? intents.reason : null,
-      },
-    },
-    attention,
-    activity,
-    recentBusinesses,
-    recentTransactions,
-    reports: {
-      documents: {
-        invoices: invoices.unavailable ? null : invoices.data.length,
-        quotes: quotes.unavailable ? null : quotes.data.length,
-        payslips: payslips.unavailable ? null : payslips.data.length,
-      },
-      workforce: {
-        note: "Employee identity is memberships; payroll/leave/attendance are separate tables.",
-      },
-    },
-  };
-}
-
-function startOfUtcDayNow() {
-  const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-function addDaysUtc(date, days) {
-  const d = new Date(date.getTime());
-  d.setUTCDate(d.getUTCDate() + days);
-  return d;
-}
-
+export { buildAdminPlatformOverview } from "./adminPlatformOverview.js";
 export { normalizeAdminPeriod };

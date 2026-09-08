@@ -1,6 +1,6 @@
 import UsersPage from "@/pages/UsersPage";
 
-/** Same directory as Users — kept as a distinct Administration route. */
+/** Platform staff only — not the customer user directory. */
 export default function AdminStaffUsersPage() {
-  return <UsersPage />;
+  return <UsersPage staffOnly />;
 }

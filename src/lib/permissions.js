@@ -38,18 +38,18 @@ export function canAccess(role, page) {
 }
 
 export const ROLE_LABELS = {
-  admin: 'Admin',
-  management: 'Management',
+  admin: 'Super Admin',
+  management: 'Operations',
   sales: 'Sales',
   support: 'Support',
   user: 'User',
 };
 
 export const ROLE_DESCRIPTIONS = {
-  admin: 'Full platform admin, billing, and team management',
-  management: 'Full platform admin, billing, and team management',
-  sales: 'Users, subscriptions, waitlist, and financial oversight',
-  support: 'Users, messages, waitlist, and operational lists',
+  admin: 'Super Admin — full platform access, billing writes, and staff management',
+  management: 'Operations — users, businesses, subscriptions, and platform health',
+  sales: 'Sales / finance overview — growth, subscriptions, plans, and Paidly revenue',
+  support: 'Support — users, businesses, messages, and operational lists',
   user: 'No dashboard access',
 };
 

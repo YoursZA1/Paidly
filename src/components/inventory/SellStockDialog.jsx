@@ -50,7 +50,8 @@ export default function SellStockDialog({ open, onOpenChange, products, onSell }
             <Label>Quantity ({selectedProduct?.count_style || "units"}) *</Label>
             <Input
               type="number"
-              min={1}
+              min={0.01}
+              step="0.01"
               value={quantity}
               max={selectedProduct?.stock_on_hand || 9999}
               onChange={(e) => setQuantity(e.target.value)}

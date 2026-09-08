@@ -199,7 +199,7 @@ create table if not exists public.services (
   -- Optional Fields
   category text,
   pricing_type text check (pricing_type in ('hourly', 'fixed', 'per_item', 'daily', 'weekly', 'monthly')),
-  min_quantity integer default 1,
+  min_quantity numeric(12,2) default 1,
   tags text[],
   estimated_duration text,
   requirements text,

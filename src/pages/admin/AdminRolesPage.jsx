@@ -8,7 +8,7 @@ export default function AdminRolesPage() {
   return (
     <PageContainer
       title="Roles & permissions"
-      description="Platform staff roles enforced by RequireAuth and /api/admin. This is the live 5-role model, not the unused 7-tier list."
+      description="Live staff roles enforced server-side: Super Admin (admin), Operations (management), Sales, Support. Finance and Analytics are not separate database roles yet — they use this model."
     >
       <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
         <table className="w-full text-sm">

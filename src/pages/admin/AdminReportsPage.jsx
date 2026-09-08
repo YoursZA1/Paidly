@@ -6,24 +6,24 @@ import { AdminErrorState, AdminUnavailableState } from "@/components/admin/ui/Ad
 
 const COPY = {
   business: {
-    title: "Business reports",
-    description: "Organisation and trial posture from live tables.",
+    title: "Business report",
+    description: "Who is using Paidly — growth and subscription posture, not customer books.",
   },
   revenue: {
-    title: "Revenue reports",
-    description: "Source-split revenue for the current month.",
+    title: "Revenue report",
+    description: "Paidly SaaS revenue from payment_history and active subscriptions. Customer invoice/POS totals are excluded.",
   },
   documents: {
-    title: "Document reports",
-    description: "Invoice, quote, and payslip counts from the latest overview sample.",
+    title: "Document report",
+    description: "Platform document creation volume. Amounts stay with the customer.",
   },
   workforce: {
-    title: "Workforce reports",
-    description: "Platform-wide workforce analytics are not aggregated yet. Use Employees, Payroll, Leave, and Payslips modules.",
+    title: "Workforce report",
+    description: "Workforce adoption across Paidly — not Admin’s own company HR.",
   },
   platform: {
     title: "Platform analytics",
-    description: "High-level platform counts. No invented engagement scores.",
+    description: "How Paidly is being used: growth, feature volume, and operational health.",
   },
 };
 
@@ -34,48 +34,65 @@ export default function AdminReportsPage({ report }) {
     queryFn: () => fetchAdminPlatformOverview("monthly"),
     staleTime: 60000,
   });
+  const usage = data?.usage || {};
+  const growth = data?.growth || {};
+  const kpis = data?.kpis || {};
+  const subscriptions = data?.subscriptions || {};
 
   return (
     <PageContainer title={meta.title} description={meta.description} onRefresh={() => refetch()} isRefreshing={isFetching}>
       {isError ? <AdminErrorState message={error?.message} onRetry={() => refetch()} /> : null}
-      {report === "workforce" ? (
-        <AdminUnavailableState reason={meta.description} />
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {report === "business" ? (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {report === "business" ? (
+          <>
+            <MetricCard title="Active businesses" value={data?.health?.activeBusinesses} />
+            <MetricCard title="New this period" value={growth.newBusinesses} change={growth.newBusinessesChange} compareLabel={data?.compareLabel} />
+            <MetricCard title="On trial" value={subscriptions.trial ?? data?.health?.businessesOnTrial} />
+            <MetricCard title="Cancelled this period" value={growth.cancelled} />
+          </>
+        ) : null}
+        {report === "revenue" ? (
+          <>
+            <MetricCard title="MRR" value={kpis.mrr?.value} isMoney unavailable={kpis.mrr?.unavailable} unavailableReason={kpis.mrr?.unavailableReason} />
+            <MetricCard title="Paidly revenue" value={data?.revenue?.total} isMoney />
+            <MetricCard title="Active subscriptions" value={kpis.activeSubscriptions?.value} />
+            <MetricCard title="Failed SaaS payments" value={data?.health?.failedPayments} />
+          </>
+        ) : null}
+        {report === "documents" ? (
+          <>
+            <MetricCard title="Invoices (all time)" value={usage.invoices?.total ?? data?.reports?.documents?.invoices} />
+            <MetricCard title="Invoices this period" value={usage.invoices?.period ?? data?.reports?.documents?.invoicesPeriod} change={usage.invoices?.change} compareLabel={data?.compareLabel} />
+            <MetricCard title="Quotes this period" value={usage.quotes?.period ?? data?.reports?.documents?.quotesPeriod} />
+            <MetricCard title="POS this period" value={usage.pos?.period ?? data?.reports?.documents?.posPeriod} />
+          </>
+        ) : null}
+        {report === "workforce" ? (
+          usage.workforce?.employees == null && data?.reports?.workforce?.employees == null ? (
+            <div className="sm:col-span-2 lg:col-span-4">
+              <AdminUnavailableState reason="Workforce tables are not available in this environment." />
+            </div>
+          ) : (
             <>
-              <MetricCard title="Active businesses" value={data?.health?.activeBusinesses} />
-              <MetricCard title="On trial" value={data?.health?.businessesOnTrial} />
-              <MetricCard title="At risk" value={data?.health?.businessesAtRisk} />
-              <MetricCard title="Waitlist" value={data?.health?.waitlist} />
+              <MetricCard title="Employees managed" value={usage.workforce?.employees ?? data?.reports?.workforce?.employees} />
+              <MetricCard title="Payroll profiles" value={usage.workforce?.payroll ?? data?.reports?.workforce?.payroll} />
+              <MetricCard title="Leave requests" value={usage.workforce?.leave ?? data?.reports?.workforce?.leave} />
+              <MetricCard title="Payslips" value={usage.workforce?.payslips ?? data?.reports?.workforce?.payslips} />
             </>
-          ) : null}
-          {report === "revenue" ? (
-            <>
-              <MetricCard title="Subscription" value={data?.revenue?.sources?.subscription?.amount} isMoney />
-              <MetricCard title="Invoice" value={data?.revenue?.sources?.invoice?.amount} isMoney unavailable={data?.revenue?.sources?.invoice?.unavailable} unavailableReason={data?.revenue?.sources?.invoice?.unavailableReason} />
-              <MetricCard title="POS" value={data?.revenue?.sources?.pos?.amount} isMoney unavailable={data?.revenue?.sources?.pos?.unavailable} unavailableReason={data?.revenue?.sources?.pos?.unavailableReason} />
-              <MetricCard title="Total" value={data?.revenue?.total} isMoney />
-            </>
-          ) : null}
-          {report === "documents" ? (
-            <>
-              <MetricCard title="Invoices (sample)" value={data?.reports?.documents?.invoices} />
-              <MetricCard title="Quotes (sample)" value={data?.reports?.documents?.quotes} />
-              <MetricCard title="Payslips (sample)" value={data?.reports?.documents?.payslips} />
-              <MetricCard title="Documents this period" value={data?.kpis?.documentsProcessed?.value} />
-            </>
-          ) : null}
-          {report === "platform" ? (
-            <>
-              <MetricCard title="Platform users" value={data?.kpis?.platformUsers?.value} />
-              <MetricCard title="Active businesses" value={data?.kpis?.activeBusinesses?.value} />
-              <MetricCard title="Payments this period" value={data?.kpis?.paymentsProcessed?.value} />
-              <MetricCard title="Failed payments" value={data?.health?.failedPayments} />
-            </>
-          ) : null}
-        </div>
-      )}
+          )
+        ) : null}
+        {report === "platform" ? (
+          <>
+            <MetricCard title="Total users" value={kpis.totalUsers?.value ?? kpis.platformUsers?.value} />
+            <MetricCard title="Active businesses" value={kpis.activeBusinesses?.value} />
+            <MetricCard title="Feature usage this period" value={kpis.platformUsage?.value} change={kpis.platformUsage?.change} compareLabel={data?.compareLabel} />
+            <MetricCard title="Failed SaaS payments" value={data?.health?.failedPayments} />
+          </>
+        ) : null}
+      </div>
+      {report === "platform" && usage.pageViews?.unavailable ? (
+        <p className="mt-4 text-xs text-muted-foreground">{usage.pageViews.unavailableReason}</p>
+      ) : null}
     </PageContainer>
   );
 }

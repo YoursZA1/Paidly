@@ -81,10 +81,11 @@ export function formatQueryError(err, fallback = "Unknown error") {
  * @returns {string}
  */
 export function formatHttpStatusMessage(status, overrides = {}) {
+  const opts = typeof overrides === "string" ? { fallback: overrides } : overrides || {};
   const code = Number(status) || 0;
-  if (code === 401) return overrides.unauthorized || "Authentication required. Please sign in again.";
-  if (code === 403) return overrides.forbidden || "Admin access required.";
-  if (code === 404) return overrides.notFound || "Not found.";
-  if (code === 503) return overrides.serviceUnavailable || "Service unavailable.";
-  return overrides.fallback || `HTTP ${code}`;
+  if (code === 401) return opts.unauthorized || "Authentication required. Please sign in again.";
+  if (code === 403) return opts.forbidden || "Admin access required.";
+  if (code === 404) return opts.notFound || "Not found.";
+  if (code === 503) return opts.serviceUnavailable || "Service unavailable.";
+  return opts.fallback || `HTTP ${code}`;
 }

@@ -69,6 +69,7 @@ export default function ReceivePurchaseOrderDialog({ open, onOpenChange, purchas
                     <Input
                       type="number"
                       min="0"
+                      step="0.01"
                       max={outstanding}
                       value={draft.quantity}
                       onChange={(e) => setDrafts((prev) => ({ ...prev, [item.id]: { ...prev[item.id], quantity: e.target.value } }))}

@@ -229,6 +229,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSave,
                 id="product-stock"
                 type="number"
                 min="0"
+                step="0.01"
                 value={form.stock_on_hand}
                 onChange={(e) => setForm({ ...form, stock_on_hand: e.target.value })}
               />

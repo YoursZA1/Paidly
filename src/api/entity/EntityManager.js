@@ -354,9 +354,19 @@ export class EntityManager {
           const orderAsc = opts.orderBy?.ascending ?? false;
           if (opts.limit != null && opts.limit > 0) {
             query = query.order(orderColumn, { ascending: orderAsc });
-            const from = opts.offset ?? 0;
-            const to = from + opts.limit - 1;
-            query = query.range(from, to);
+            const from = Number(opts.offset ?? 0);
+            const size = Number(opts.limit);
+            if (!Number.isInteger(from) || from < 0 || !Number.isInteger(size) || size < 1) {
+              console.error("[entity-list] integer page bind rejected", {
+                table: supabaseTable,
+                operation: "range",
+                column: "limit/offset",
+                valueType: typeof opts.limit,
+                valueIsFinite: Number.isFinite(size),
+              });
+            } else {
+              query = query.range(from, from + size - 1);
+            }
           }
 
           return query;

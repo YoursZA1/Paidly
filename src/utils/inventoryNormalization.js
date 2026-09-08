@@ -7,6 +7,12 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/** Stock / line quantity at numeric(12,2). Keeps 1.25 — does not truncate to 1. */
+export function toQuantity(value, fallback = 0) {
+  const n = toNumber(value, fallback);
+  return Math.round(n * 100) / 100;
+}
+
 function toTrimmedString(value, fallback = "") {
   if (value == null) return fallback;
   const s = String(value).trim();

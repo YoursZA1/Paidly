@@ -28,7 +28,7 @@ export default function RevenueBreakdown({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">Revenue overview</h2>
-          <p className="text-xs text-muted-foreground">Where Paidly’s money is coming from this period.</p>
+          <p className="text-xs text-muted-foreground">Paidly’s own revenue this period. Customer books are excluded.</p>
         </div>
         <div className="flex rounded-full border border-border bg-muted/40 p-1">
           {PERIODS.map((p) => (

@@ -67,7 +67,7 @@ export const cancelPurchaseOrder = async (purchaseOrderId) => {
  * to the receive_purchase_order_item RPC (supabase/migrations/20260804133000_*).
  */
 export const receivePurchaseOrderItem = async (purchaseOrderItemId, quantityReceived, unitCost) => {
-  const qty = Number(quantityReceived);
+  const qty = Math.round(Number(quantityReceived) * 100) / 100;
   if (!Number.isFinite(qty) || qty <= 0) {
     throw new Error('Quantity received must be a positive number.');
   }
@@ -95,11 +95,15 @@ export const addPurchaseOrderItem = async (purchaseOrderId, { product_id, quanti
   if (po.status !== 'draft') {
     throw new Error('Line items can only be added while the purchase order is a draft.');
   }
+  const qty = Math.round(Number(quantity_ordered) * 100) / 100;
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw new Error('Quantity ordered must be a positive number.');
+  }
   return PurchaseOrderItem.create({
     org_id: po.org_id,
     purchase_order_id: purchaseOrderId,
     product_id,
-    quantity_ordered,
+    quantity_ordered: qty,
     unit_cost,
   });
 };

@@ -34,7 +34,7 @@ import PlanBadge from '@/components/dashboard/PlanBadge';
 import UserFormDialog from '@/components/users/UserFormDialog';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLogger';
 import { useCurrentUser } from '@/lib/useCurrentUser';
-import { mergeUsersWithInvoiceCounts } from '@/utils/documentOwnership';
+import { isKnownStaffRole } from '@/lib/staffDashboard';
 import { adminRowPrimaryId, stableDirectoryRowKey } from '@/utils/stableListKey';
 import { normalizePlanSlug, PLANS, isLegacyPlanSlug, familyForSlug } from '@/lib/plans.js';
 import { bulkUpdateUsers } from '@/api/userManagement';
@@ -99,7 +99,7 @@ function isExcludedFromBulk(userId, adminSelfId) {
   return Boolean(adminSelfId && userId === adminSelfId);
 }
 
-export default function UsersPage() {
+export default function UsersPage({ staffOnly = false } = {}) {
   const { user: currentUser } = useCurrentUser();
   const adminSelfId = currentUser?.id || currentUser?.supabase_id || null;
   const [search, setSearch] = useState('');
@@ -146,18 +146,12 @@ export default function UsersPage() {
 
   const usersFetching = useIsFetching({ queryKey: ['platform-users'] }) > 0;
 
-  const { data: invoices = [] } = useQuery({
-    queryKey: ['invoices'],
-    queryFn: () => paidly.entities.Invoice.list('-created_date', 500),
-    refetchInterval: USERS_PAGE_REFETCH_MS,
-    staleTime: USERS_PAGE_STALE_MS,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
-  });
-
   const usersWithInvoiceCounts = useMemo(() => {
-    return mergeUsersWithInvoiceCounts(users, invoices);
-  }, [users, invoices]);
+    const list = staffOnly
+      ? users.filter((u) => isKnownStaffRole(u.role))
+      : users;
+    return list;
+  }, [users, staffOnly]);
 
   const uniquePlanSlugs = useMemo(() => {
     const s = new Set();
@@ -455,8 +449,8 @@ export default function UsersPage() {
   return (
     <div>
       <PageHeader
-        title="Users"
-        description="Manage platform users and their accounts"
+        title={staffOnly ? "Admin users" : "Users"}
+        description={staffOnly ? "Platform staff accounts only." : "Paidly customer and staff accounts. Subscription status comes from billing, not invoice history."}
         onRefresh={() => refetch()}
         isRefreshing={usersFetching}
       >
@@ -657,7 +651,6 @@ export default function UsersPage() {
                 <th className="px-4 py-3 text-left font-medium">Acct status</th>
                 <th className="px-4 py-3 text-left font-medium">Plan</th>
                 <th className="px-4 py-3 text-left font-medium">Profile billing</th>
-                <th className="px-4 py-3 text-left font-medium">Invoices</th>
                 <th className="px-4 py-3 text-left font-medium">Joined</th>
                 <th className="px-4 py-3 text-left font-medium">Presence</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -741,7 +734,6 @@ export default function UsersPage() {
                         slug: {slugDisplay}
                       </p>
                     </td>
-                    <td className="px-4 py-4 text-sm">{u.invoices_sent ?? 0}</td>
                     <td className="px-4 py-4 text-sm text-muted-foreground">
                       {u.created_date ? format(new Date(u.created_date), 'dd MMM yyyy') : '—'}
                     </td>

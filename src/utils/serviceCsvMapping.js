@@ -111,7 +111,7 @@ export function csvRowToServicePayload(headers, values) {
     unit_of_measure: (row.unit_of_measure || "").trim() || undefined,
     service_type: (row.service_type || "").trim() || undefined,
     category: (row.category || "").trim() || undefined,
-    min_quantity: row.min_quantity !== "" && row.min_quantity != null ? parseInt(row.min_quantity, 10) : 1,
+    min_quantity: row.min_quantity !== "" && row.min_quantity != null ? Math.round(Number(row.min_quantity) * 100) / 100 : 1,
     is_active: parseBool(row.is_active),
     tags: tags.length > 0 ? tags : undefined,
     estimated_duration: (row.estimated_duration || "").trim() || undefined,

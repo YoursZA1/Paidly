@@ -280,9 +280,9 @@ async function handleSystemHealth(req, res, supabase) {
       .order("sent_at", { ascending: false })
       .limit(1),
     supabase
-      .from("payments")
-      .select("status, payment_status, state, paid_at, updated_at, created_at")
-      .order("updated_at", { ascending: false })
+      .from("payment_history")
+      .select("payment_status, created_at, updated_at")
+      .order("created_at", { ascending: false })
       .limit(1),
   ]);
 

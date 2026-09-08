@@ -577,12 +577,13 @@ export default function ServiceForm({
                                                     id="stock_quantity"
                                                     type="number"
                                                     min="0"
+                                                    step="0.01"
                                                     data-testid="service-stock-quantity"
                                                     value={formData.stock_quantity ?? ''}
                                                     onChange={(e) =>
                                                         handleInputChange(
                                                             'stock_quantity',
-                                                            e.target.value === '' ? null : parseInt(e.target.value, 10) || 0
+                                                            e.target.value === '' ? null : Number(e.target.value) || 0
                                                         )
                                                     }
                                                     placeholder="e.g., 100"
@@ -850,9 +851,10 @@ export default function ServiceForm({
                                     <Input
                                         id="min_quantity"
                                         type="number"
-                                        min="1"
+                                        min="0.01"
+                                        step="0.01"
                                         value={formData.min_quantity}
-                                        onChange={(e) => handleInputChange('min_quantity', parseInt(e.target.value) || 1)}
+                                        onChange={(e) => handleInputChange('min_quantity', Number(e.target.value) || 1)}
                                         className="h-12 rounded-xl"
                                     />
                                     <p className="text-xs text-slate-500 dark:text-slate-400">Smallest quantity allowed per invoice</p>

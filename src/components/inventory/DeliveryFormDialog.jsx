@@ -69,7 +69,7 @@ export default function DeliveryFormDialog({ open, onOpenChange, delivery, produ
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="delivery_quantity">Quantity *</Label>
-              <Input id="delivery_quantity" name="quantity" type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
+              <Input id="delivery_quantity" name="quantity" type="number" min="0.01" step="0.01" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="delivery_status">Status</Label>

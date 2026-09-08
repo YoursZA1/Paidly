@@ -25,6 +25,42 @@ export const ADMIN_DIRECTORY_KINDS = [
 ];
 
 export const ADMIN_REVENUE_PERIODS = ["daily", "weekly", "monthly", "yearly"];
+export const DIRECTORY_LIMIT_MAX = 200;
+export const DIRECTORY_LIMIT_DEFAULT = 50;
+
+/**
+ * PostgREST `.limit()` / PostgreSQL LIMIT is an integer row count.
+ * A decimal such as 1.25 is not a valid LIMIT — do not truncate it.
+ */
+export function resolveDirectoryLimit(raw) {
+  if (raw == null || String(raw).trim() === "") {
+    return { ok: true, value: DIRECTORY_LIMIT_DEFAULT };
+  }
+  const n = Number(String(raw).trim());
+  if (!Number.isInteger(n) || n < 1 || n > DIRECTORY_LIMIT_MAX) {
+    return { ok: false, value: n };
+  }
+  return { ok: true, value: n };
+}
+
+export function isIntegerBindError(error) {
+  const msg = String(error?.message || error || "").toLowerCase();
+  return msg.includes("invalid input syntax for type integer");
+}
+
+export function logIntegerBindError(scope, details = {}) {
+  const numericValue = Number(details.value);
+  const safe = {
+    scope,
+    table: details.table || null,
+    column: details.column || null,
+    operation: details.operation || null,
+    value: Number.isFinite(numericValue) ? numericValue : null,
+    valueType: details.valueType || typeof details.value,
+    message: details.message || null,
+  };
+  console.error("[integer-bind]", safe);
+}
 
 export function normalizeAdminPeriod(raw) {
   const p = String(raw || "monthly").trim().toLowerCase();
@@ -154,4 +190,9 @@ export function healthStatus({ critical = 0, attention = 0 } = {}) {
 
 export function buildSparkline(dailyAmounts = []) {
   return (dailyAmounts || []).slice(-7).map((n) => money(n));
+}
+
+export function countExact(result) {
+  if (!result || result.unavailable) return null;
+  return typeof result.count === "number" ? result.count : null;
 }
