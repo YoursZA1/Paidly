@@ -122,9 +122,38 @@ flowchart LR
 | Concern | System of record |
 |--------|-------------------|
 | Users, orgs, invoices, clients, … | **Supabase Postgres** (RLS enforces who sees what) |
+| Customer money (POS, invoices, future) | **Payment Engine** — `payment_intents` via `/api/payment-intents`. Settlement stays in `payments` / `pos_sales_events`. PayFast is SaaS-only (`payment_history`). |
 | Signed-in session (JWT + refresh) | **Supabase Auth** (persisted in browser storage via `supabaseClient`) |
 | Pending offline / deferred writes | **Browser** `localStorage` sync queue (per device) |
 | Product direction & system names | **`docs/Paidly-Application-Blueprint.md`** |
+
+---
+
+## 4b. Payment Engine (one capture path)
+
+POS, invoices, and future payable modules do **not** each own Ozow/PayFast/webhooks. They call one engine; settlement stays in the existing domain tables.
+
+```mermaid
+flowchart LR
+  POS[POS till]
+  Inv[Invoices]
+  Fut[Future modules]
+  Eng[Payment Engine]
+  Ozow[Ozow / cash / card_terminal]
+  Pay[invoice payments]
+  Till[pos_sales_events]
+  SaaS[PayFast SaaS only]
+
+  POS --> Eng
+  Inv --> Eng
+  Fut --> Eng
+  Eng --> Ozow
+  Ozow --> Pay
+  Ozow --> Till
+  SaaS -.->|not payment_intents| Eng
+```
+
+Contract: `shared/payments/paymentEngine.js`. Facade: `server/src/payments/paymentEngine.js`. API: existing `api/payment-intents` (do not add a 13th Vercel function).
 
 ---
 

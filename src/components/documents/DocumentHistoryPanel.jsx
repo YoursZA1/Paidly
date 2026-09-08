@@ -9,8 +9,19 @@ const HISTORY_EVENT_TYPES = new Set([
   "updated",
   "sent",
   "viewed",
+  "opened",
+  "clicked",
   "accepted",
+  "rejected",
+  "expired",
+  "converted_to_invoice",
+  "payment_intent",
   "paid",
+  "reminded",
+  "viewed_not_paid",
+  "due_soon",
+  "due_today",
+  "overdue",
   "converted",
   "created_from_quote",
   "created_from_conversion",
@@ -59,7 +70,7 @@ export default function DocumentHistoryPanel({ events = [] }) {
               aria-hidden
             />
             <div className="pl-2">
-              <p className="text-sm font-semibold">{formatDocumentEventType(ev.event_type)}</p>
+              <p className="text-sm font-semibold">{formatDocumentEventType(ev.event_type, ev.source_kind || ev.document_type)}</p>
               {dt && !Number.isNaN(dt.getTime()) ? (
                 <time className="text-xs text-muted-foreground" dateTime={ev.created_at}>
                   {format(dt, "EEEE, MMM d, yyyy · HH:mm")}

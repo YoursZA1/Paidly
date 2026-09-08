@@ -10,10 +10,12 @@ import {
 } from "./paymentIntentContract.js";
 import { getCustomerPaymentProvider, listCustomerPaymentProviders } from "./paymentProviders.js";
 import {
-  createPaymentIntentRow,
+  applyVerifiedProviderEvent,
+  assertPaymentEngineSource,
+  createCustomerPaymentIntent,
   getOrgPaymentIntent,
   mapPaymentIntentSchemaError,
-} from "./paymentIntentService.js";
+} from "./paymentEngine.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -32,9 +34,14 @@ export async function handlePaymentIntentCreate(req, res) {
   if (!gate.ok) return gate.response;
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
-  const sourceKind = String(body.source_kind || "pos").trim().toLowerCase();
-  if (sourceKind !== "pos" && sourceKind !== "document") {
-    return jsonError(res, 422, "source_kind must be pos or document");
+  let sourceKind;
+  try {
+    sourceKind = assertPaymentEngineSource(body.source_kind || "pos");
+  } catch (err) {
+    if (err?.code === "UNKNOWN_PAYMENT_ENGINE_SOURCE") {
+      return jsonError(res, 422, err.message, { code: err.code });
+    }
+    throw err;
   }
   if (sourceKind === "pos") {
     const featureOk = await requirePosPlan(req, res);
@@ -55,7 +62,7 @@ export async function handlePaymentIntentCreate(req, res) {
   }
 
   try {
-    const intent = await createPaymentIntentRow({
+    const intent = await createCustomerPaymentIntent({
       orgId: gate.membership.orgId,
       sourceKind,
       provider,
@@ -121,11 +128,50 @@ export async function handleCustomerPaymentWebhook(req, res) {
     }
     const result = await provider.handleWebhook(req.body || {}, req);
     if (!result?.ok) {
-      return jsonError(res, 501, result?.error || "Provider webhook is not implemented", {
-        code: result?.code || "PROVIDER_NOT_IMPLEMENTED",
+      const status = result?.code === "PROVIDER_NOT_IMPLEMENTED" ? 501 : 400;
+      return jsonError(res, status, result?.error || "Provider webhook failed", {
+        code: result?.code || "PROVIDER_WEBHOOK_FAILED",
       });
     }
-    return res.status(200).json({ ok: true, ...result });
+    if (!result.intentId || !result.nextStatus) {
+      return res.status(200).json({ ok: true, ...result });
+    }
+    try {
+      const applied = await applyVerifiedProviderEvent({
+        intentId: result.intentId,
+        nextStatus: result.nextStatus,
+        externalId: result.externalId,
+        amount: result.amount,
+        metadata: {
+          ozow_status: result.ozowStatus || null,
+          webhook_verified: true,
+        },
+      });
+      return res.status(200).json({
+        ok: true,
+        duplicate: Boolean(applied.duplicate),
+        payment_intent: publicPaymentIntentView(applied.intent),
+        settlement: applied.settlement
+          ? {
+              settled: applied.settlement.settled,
+              duplicate: applied.settlement.duplicate,
+              invoice_id: applied.settlement.invoice?.id || null,
+              invoice_status: applied.settlement.invoice?.status || null,
+              amount_due: applied.settlement.amountDue,
+            }
+          : null,
+      });
+    } catch (applyErr) {
+      if (applyErr?.code === "INTENT_NOT_FOUND") {
+        console.error("[payment-webhook] intent missing", result.intentId);
+        return jsonError(res, 404, applyErr.message, { code: applyErr.code });
+      }
+      if (applyErr?.code === "AMOUNT_MISMATCH" || applyErr?.code === "INVALID_INTENT_TRANSITION") {
+        console.error("[payment-webhook] rejected", applyErr.code, result.intentId);
+        return jsonError(res, 409, applyErr.message, { code: applyErr.code });
+      }
+      throw applyErr;
+    }
   } catch (err) {
     if (err?.code === "PAYFAST_NOT_CUSTOMER_RAIL" || err?.code === "UNKNOWN_PAYMENT_PROVIDER") {
       return jsonError(res, err.code === "UNKNOWN_PAYMENT_PROVIDER" ? 404 : 400, err.message, { code: err.code });

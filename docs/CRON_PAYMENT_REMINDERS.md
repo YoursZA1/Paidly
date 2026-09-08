@@ -45,11 +45,7 @@ Example pattern (conceptual — adjust to your Supabase version and security mod
 
 ## Implementing the batch
 
-The handler in `api/cron/payment-reminders.js` currently returns a **placeholder** result. To run reminders for all tenants without a browser:
-
-1. **Persist** `reminder_settings` in the database (e.g. `profiles.reminder_settings` JSONB or inside `business`) so the cron can read it with the **service role**.
-2. Query **invoices** (and **clients**) per `org_id` with status `sent` / `partial_paid` / `overdue`.
-3. Reuse the same date rules as `PaymentReminderService` and send email via **Resend** (`RESEND_API_KEY`, `RESEND_FROM`), mirroring `sendEmail` logic without `window.location` (use `https://www.paidly.co.za` or `CLIENT_ORIGIN` for public invoice links).
+`api/cron.js?job=payment-reminders` now runs `server/src/documents/documentReminderEngine.js`. It reads `organizations.reminder_settings` (fallback: owner `profiles.reminder_settings`), evaluates due-date and viewed-not-paid rules, sends email via Resend, and appends immutable `document_events` (`due_*` / `viewed_not_paid` / `reminded`). Paid, void, and already-reminded invoices are skipped. The in-app `PaymentReminderScheduler` remains a best-effort fallback.
 
 ## Related files
 

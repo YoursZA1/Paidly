@@ -97,6 +97,10 @@
       "destination": "/api/public-share?doc=quote&op=get"
     },
     {
+      "source": "/api/public-quote/decide",
+      "destination": "/api/public-share?doc=quote&op=decide"
+    },
+    {
       "source": "/api/public-payslip",
       "destination": "/api/public-share?doc=payslip&op=get"
     },
@@ -299,6 +303,10 @@
     {
       "path": "/api/cron/expire-trials",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 8 * * *"
     },
     {
       "path": "/api/cron/subscription-dunning",

@@ -17,7 +17,8 @@ export default function PaymentReminderSettings() {
     const [settings, setSettings] = useState({
         reminders_enabled: true,
         auto_send: true,
-        reminder_rules: []
+        reminder_rules: [],
+        viewed_not_paid: { enabled: true, wait_hours: 24 },
     });
     const [isSaving, setIsSaving] = useState(false);
     const [editingRule, setEditingRule] = useState(null);
@@ -60,7 +61,11 @@ export default function PaymentReminderSettings() {
                 // Ensure reminder_rules exists, if not use defaults or migration logic
                 const loadedSettings = {
                     ...user.reminder_settings,
-                    reminder_rules: user.reminder_settings.reminder_rules || defaultRules
+                    reminder_rules: user.reminder_settings.reminder_rules || defaultRules,
+                    viewed_not_paid: {
+                        enabled: user.reminder_settings.viewed_not_paid?.enabled !== false,
+                        wait_hours: Number(user.reminder_settings.viewed_not_paid?.wait_hours) || 24,
+                    },
                 };
                 setSettings(loadedSettings);
             } else {
@@ -165,6 +170,45 @@ export default function PaymentReminderSettings() {
                             }
                         />
                     </div>
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <Label className="text-base font-medium">Viewed, still unpaid</Label>
+                            <p className="text-sm text-muted-foreground">
+                                Follow up after a client opens an invoice but has not paid. Uses friendly wording — it does not mention tracking.
+                            </p>
+                        </div>
+                        <Switch
+                            checked={settings.viewed_not_paid?.enabled !== false}
+                            onCheckedChange={(checked) =>
+                                setSettings((prev) => ({
+                                    ...prev,
+                                    viewed_not_paid: { ...(prev.viewed_not_paid || {}), enabled: checked, wait_hours: prev.viewed_not_paid?.wait_hours || 24 },
+                                }))
+                            }
+                        />
+                    </div>
+                    {settings.viewed_not_paid?.enabled !== false && (
+                        <div className="flex items-center gap-3">
+                            <Label htmlFor="viewed-wait-hours">Wait hours after open</Label>
+                            <Input
+                                id="viewed-wait-hours"
+                                type="number"
+                                min={1}
+                                className="w-24"
+                                value={settings.viewed_not_paid?.wait_hours || 24}
+                                onChange={(e) =>
+                                    setSettings((prev) => ({
+                                        ...prev,
+                                        viewed_not_paid: {
+                                            ...(prev.viewed_not_paid || {}),
+                                            enabled: true,
+                                            wait_hours: Math.max(1, Number(e.target.value) || 24),
+                                        },
+                                    }))
+                                }
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Reminder Rules List */}

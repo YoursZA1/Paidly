@@ -47,6 +47,12 @@ export default function FinancialSummary({
   overdueHint,
   drafts,
   draftsHint,
+  quoted,
+  quotedHint,
+  invoiced,
+  invoicedHint,
+  paidLifetime,
+  paidLifetimeHint,
   isLoading,
 }) {
   return (
@@ -79,6 +85,28 @@ export default function FinancialSummary({
         <SecondaryMetric label="Overdue" value={overdue} hint={overdueHint} isLoading={isLoading} />
         <SecondaryMetric label="Drafts" value={drafts} hint={draftsHint} isLoading={isLoading} />
       </div>
+      {quoted != null || invoiced != null || paidLifetime != null ? (
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <SecondaryMetric
+            label="Quoted"
+            value={quoted}
+            hint={quotedHint || "Proposed value — not revenue"}
+            isLoading={isLoading}
+          />
+          <SecondaryMetric
+            label="Invoiced"
+            value={invoiced}
+            hint={invoicedHint || "Issued invoices"}
+            isLoading={isLoading}
+          />
+          <SecondaryMetric
+            label="Paid"
+            value={paidLifetime}
+            hint={paidLifetimeHint || "Confirmed payments"}
+            isLoading={isLoading}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -95,5 +123,11 @@ FinancialSummary.propTypes = {
   overdueHint: PropTypes.node,
   drafts: PropTypes.node,
   draftsHint: PropTypes.node,
+  quoted: PropTypes.node,
+  quotedHint: PropTypes.node,
+  invoiced: PropTypes.node,
+  invoicedHint: PropTypes.node,
+  paidLifetime: PropTypes.node,
+  paidLifetimeHint: PropTypes.node,
   isLoading: PropTypes.bool,
 };

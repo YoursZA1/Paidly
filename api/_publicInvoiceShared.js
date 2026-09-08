@@ -211,6 +211,15 @@ export async function handlePublicInvoiceGet(req, res) {
     const sentTo = invoice.sent_to_email ? normalizeEmail(invoice.sent_to_email) : "";
 
     if (!sentTo) {
+      const { recordPublicDocumentOpened } = await import("../server/src/documents/documentEventService.js");
+      const { DOCUMENT_EVENT_SOURCE } = await import("../shared/documents/documentEvents.js");
+      await recordPublicDocumentOpened({
+        orgId: invoice.org_id,
+        sourceKind: DOCUMENT_EVENT_SOURCE.INVOICE,
+        sourceId: invoice.id,
+        clientId: invoice.client_id || client?.id || null,
+        source: "invoice_public_page",
+      }, supabase);
       return res.status(200).json({
         requiresEmailVerification: false,
         invoice,
@@ -226,6 +235,15 @@ export async function handlePublicInvoiceGet(req, res) {
       viewer.email === sentTo;
 
     if (okViewer) {
+      const { recordPublicDocumentOpened } = await import("../server/src/documents/documentEventService.js");
+      const { DOCUMENT_EVENT_SOURCE } = await import("../shared/documents/documentEvents.js");
+      await recordPublicDocumentOpened({
+        orgId: invoice.org_id,
+        sourceKind: DOCUMENT_EVENT_SOURCE.INVOICE,
+        sourceId: invoice.id,
+        clientId: invoice.client_id || client?.id || null,
+        source: "invoice_public_page",
+      }, supabase);
       return res.status(200).json({
         requiresEmailVerification: false,
         invoice,

@@ -1571,6 +1571,12 @@ function DashboardMain() {
             }
             drafts={String(draftTotal)}
             draftsHint={draftsHint}
+            quoted={formatCurrency(financials.quotedValue, userCurrency)}
+            quotedHint="Proposed quote value — not revenue"
+            invoiced={formatCurrency(financials.invoicedValue, userCurrency)}
+            invoicedHint="Issued invoices, excluding drafts"
+            paidLifetime={formatCurrency(financials.paidValue, userCurrency)}
+            paidLifetimeHint="Confirmed invoice payments"
             isLoading={isLoading}
           />
         </div>

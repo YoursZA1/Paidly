@@ -33,8 +33,8 @@
 <ol>
 <li><strong>Identity System</strong> — Auth, users, organizations, roles, RLS-backed tenancy.</li>
 <li><strong>Document Engine</strong> — Shared compose, send, and PDF behaviour for commercial documents (invoices, quotes, payslips) <strong>plus</strong> a Documents Hub for other business document types. Persistence is split: specialised tables vs <code>documents</code>.</li>
-<li><strong>Payment Intent Layer</strong> — Canonical handoff from document delivery/observation to payment rails and settlement orchestration.</li>
-<li><strong>Revenue System</strong> — Payment providers, subscriptions, cash flow, and reporting (reads/rails downstream of documents).</li>
+<li><strong>Payment Engine</strong> — First-class money capture. POS, invoices, and future payable modules create one <code>payment_intents</code> row here, then a registered rail (Ozow / cash / card_terminal) confirms it. Settlement adapters write the existing domain tables. PayFast is SaaS-only and never a customer rail. Do not fork a second payment stack per module (the Payroll / Payslips / Leave failure mode).</li>
+<li><strong>Revenue System</strong> — Cash flow, reporting, and tenant billing <strong>downstream</strong> of Payment Engine settlement (reads <code>payments</code>, <code>pos_sales_events</code>, <code>payment_history</code>).</li>
 <li><strong>Relationship System</strong> — Clients + catalog + offering intelligence that feeds document composition.</li>
 <li><strong>Experience System</strong> — Shared UI/interaction contracts (shell, sticky actions, money UX consistency).</li>
 <li><strong>Payment Intelligence Layer</strong> — Get Paid logic: reminders, nudges, triggers, and follow-up intelligence.</li>
@@ -94,22 +94,23 @@ SHARED CORE (not duplicated per workplace)
 ├── Products            → public.services
 ├── Inventory           → services.stock_quantity + inventory_movements
 ├── Customers           → public.clients
-├── Payment Intents     → payment_intents
-├── Payments / Settlement  (invoice payments vs till pos_sales_events vs SaaS payment_history)
+├── Payment Engine      → payment_intents (POS + invoices + future sources)
+├── Settlement adapters    invoice `payments` · till `pos_sales_events` · SaaS `payment_history`
 └── Reporting</code></pre>
 <p>Nav copy: <strong>Products</strong> (catalog page <code>Services</code>), <strong>Clients</strong> (customers). Staff open the till from back-office <strong>POS</strong>; they do not run invoices from till chrome.</p>
-<p><strong>Payment architecture — two completely separate domains:</strong></p>
-<pre><code>Paidly Subscription
-  → PayFast
-  → Paidly subscription billing     (subscriptions + payment_history)
+<p><strong>Payment architecture — one customer engine, isolated SaaS billing:</strong></p>
+<pre><code>POS ────────┐
+Invoices ───┼──→ PAYMENT ENGINE ──→ Ozow | cash | card_terminal
+Future ─────┘         │
+                      ↓ verified event
+             Settlement adapter
+             ├── document → invoice payments
+             └── pos      → pos_sales_events
 
-Customer POS Payment
-  → payment_intent
-  → POS payment rail                (cash | ozow | card_terminal)
-  → provider
-  → verified settlement
-  → POS sale completed              (pos_sales_events)</code></pre>
-<p>Do not route till money through PayFast. Do not write till sales into invoice <code>payments</code> or SaaS <code>payment_history</code>. Invoice customer capture (when used) is also not PayFast on <code>payment_intents</code> — Ozow for documents; PayFast stays SaaS.</p>
+Paidly Subscription
+  → PayFast (not a customer rail)
+  → subscriptions + payment_history</code></pre>
+<p>Do not route till or invoice customer money through PayFast. Do not write till sales into invoice <code>payments</code> or SaaS <code>payment_history</code>. Do not add a per-module payment table, Ozow client, or webhook. Contract: <code>shared/payments/paymentEngine.js</code>. Facade: <code>server/src/payments/paymentEngine.js</code>. API: <code>api/payment-intents</code> only.</p>
 <p>On-call session/runtime guardrails: see <code>docs/SESSION_RUNTIME_GUARDS.md</code>.</p>
 <p><strong>New to the codebase:</strong> see <strong><code>docs/HOW_EVERYTHING_CONNECTS.md</code></strong> (one-page diagrams: browser ↔ Supabase ↔ <code>/api</code> ↔ optional Express).</p>
 <p><strong>Runtime scalability &amp; coordination:</strong> <code>docs/runtime-audit-report.md</code>, <code>src/core/</code> (<code>RuntimeCoordinator</code>, <code>RealtimeManager</code> logical registry over <code>paidlyRealtimeManager</code>, query policies, mutation dedupe, request budgeting, error classification).</p>
@@ -138,10 +139,10 @@ Customer POS Payment
 <td>POS + invoices + quotes + inventory (<code>mixed</code>)</td>
 </tr>
 </tbody></table>
-<p>The hybrid path is the interesting one: a salon, clothing store, or agency can take <strong>walk-in till sales and normal invoicing</strong> on the same account. The platform loop is <strong>Catalog → POS → Payment Intent → Settlement → Inventory → Reporting</strong>. <strong>PayFast stays isolated</strong> as Paidly’s subscription billing rail.</p>
+<p>The hybrid path is the interesting one: a salon, clothing store, or agency can take <strong>walk-in till sales and normal invoicing</strong> on the same account. The platform loop is <strong>Catalog → POS → Payment Engine → Settlement → Inventory → Reporting</strong>. <strong>PayFast stays isolated</strong> as Paidly’s subscription billing rail.</p>
 <p><strong>Investor-facing framing:</strong> shift the story from “invoice app” to <strong>financial workflow platform for SMEs</strong>.</p>
 <p><strong>You already have (in shipped or advanced form):</strong> invoices, quotes, payslips (specialised commercial tables), Documents Hub (generic business documents), clients, catalog/inventory, <strong>native POS till</strong> (plus Yoco/Square adapters), reporting, and the plumbing for payments, subscriptions, and cash visibility.</p>
-<p><strong>Competitive edge:</strong> most tools <strong>excel at one slice</strong> (invoicing-only, or accounting-only, or a disconnected referral program). <strong>Few competitors unify</strong> issuance (document engine), relationship/catalog input, revenue/ops read models, and payment intelligence <strong>under one coherent architecture</strong> and vocabulary. That unification—<strong>Document → Payment Intent → Revenue System</strong> plus shared <strong>Experience</strong> and <strong>Payment Intelligence</strong>—is the defensible story: not “another invoice PDF,” but <strong>operating the business</strong> in one system.</p>
+<p><strong>Competitive edge:</strong> most tools <strong>excel at one slice</strong> (invoicing-only, or accounting-only, or a disconnected referral program). <strong>Few competitors unify</strong> issuance (document engine), relationship/catalog input, revenue/ops read models, and payment intelligence <strong>under one coherent architecture</strong> and vocabulary. That unification—<strong>Document / POS → Payment Engine → Revenue System</strong> plus shared <strong>Experience</strong> and <strong>Payment Intelligence</strong>—is the defensible story: not “another invoice PDF,” but <strong>operating the business</strong> in one system.</p>
 <p><strong>Execution reality:</strong> roughly 70% of the SaaS architecture is already in place. The remaining value-defining 30% is: payment abstraction, event tracking, and experience consistency.</p>
 <hr />
 <h2>Executive framing</h2>
@@ -286,20 +287,18 @@ Customer POS Payment
 <p><strong>Schema upgrade (<code>document_events</code>):</strong></p>
 <ul>
 <li><code>id</code></li>
-<li><code>document_id</code></li>
-<li><code>event_type</code> (<code>sent</code> | <code>opened</code> | <code>clicked</code> | <code>paid</code> | <code>reminded</code>)</li>
+<li><code>source_kind</code> (<code>hub</code> | <code>invoice</code> | <code>quote</code>) + <code>source_id</code> (commercial document UUID). Hub rows still use <code>document_id</code> → <code>documents</code>.</li>
+<li><code>event_type</code> (document-type allowlisted)</li>
 <li><code>occurred_at</code></li>
 <li><code>actor_type</code> (system | recipient | user | webhook)</li>
-<li><code>metadata</code> (jsonb for channel, provider payload refs, reminder run id, etc.)</li>
+<li><code>idempotency_key</code> (append-only; never overwrite history)</li>
+<li><code>metadata</code> / <code>payload</code> (channel, payment intent, reminder type, quote→invoice id)</li>
 </ul>
-<p><strong>Event taxonomy (minimum canonical set):</strong></p>
-<ul>
-<li><code>sent</code></li>
-<li><code>opened</code></li>
-<li><code>clicked</code></li>
-<li><code>paid</code></li>
-<li><code>reminded</code></li>
-</ul>
+<p><code>document_events</code> is the <strong>activity timeline</strong>, not the source of truth for invoice status, quote status, payment status, due date, or <code>paid_at</code>. Never infer paid or accepted from events alone.</p>
+<p><strong>Quotes and invoices have separate lifecycles</strong> on the same <code>document_events</code> table. A quote is a proposal, not a payment request. Quoted value is never revenue.</p>
+<p><strong>Quote events:</strong> <code>created</code> · <code>sent</code> · <code>opened</code> · <code>clicked</code> · <code>reminded</code> (decision follow-up) · <code>accepted</code> · <code>rejected</code> · <code>expired</code> · <code>converted_to_invoice</code>. Quotes never record <code>paid</code>, <code>viewed_not_paid</code>, <code>due_soon</code>, <code>due_today</code>, <code>overdue</code>, or <code>payment_intent</code>.</p>
+<p><strong>Invoice events:</strong> <code>created</code> · <code>sent</code> · <code>opened</code> · <code>clicked</code> · <code>reminded</code> (payment) · <code>viewed_not_paid</code> · <code>due_soon</code> · <code>due_today</code> · <code>overdue</code> · <code>payment_intent</code> · <code>paid</code> (verified Payment Engine webhook only).</p>
+<p><strong>Conversion:</strong> keep the quote; create a new draft invoice via <code>convert_quote_to_invoice</code>. Do not auto-send the invoice.</p>
 <p><strong>This powers:</strong></p>
 <ul>
 <li>Timeline (client and document history)</li>
@@ -315,12 +314,12 @@ Customer POS Payment
 <li>Feature parity (e.g. quote send = invoice send) becomes <strong>engine work</strong>, not three copies.</li>
 </ul>
 <p><strong>Technical anchor today:</strong> <code>Invoice</code> / <code>Quote</code> / <code>Payslip</code> entities + <code>InvoiceSendService</code>-style orchestration + <code>/api/send-email</code> + public share routes. <strong>In code:</strong> <code>src/document-engine/</code> exports <code>DOCUMENT_TYPES</code>, <code>normalizeDocumentType</code>, <code>parseRouteDocumentTypeStrict</code>, <code>getDocumentEntity</code>, <code>documentRef</code>. <strong>PDF engine:</strong> html2pdf (html2canvas + jsPDF) on A4 (<code>src/lib/documentPdf/</code>). Pagination is <strong>Document → Page → Blocks → measured content</strong>, not a fixed item count. Invoice and quote are adapters that emit the same block kinds (line item, totals+payment, notes, flowable terms); <code>paginateBlocks</code> packs by measured height so a long description moves as a whole row. Later kinds (delivery note, statement, receipt, PO) add blocks — they do not fork a second paginator. Capture waits for fonts/images/<code>data-paidly-doc-ready</code>. Do not recalculate financial totals in the renderer. <strong>Roadmap:</strong> grow this module (shared send/PDF adapters, shared status vocabulary) so new document kinds plug in, not fork.</p>
-<h4>Critical addition: Payment Intent layer (Document Engine ↔ Revenue &amp; Ops)</h4>
-<p>Without a first-class <code>Payment Intent</code>, payments feel bolted on, Payfast-specific logic leaks across product surfaces, and the engine is harder to scale. Introduce a canonical handoff object between document delivery/observation (and native POS) and financial capture.</p>
+<h4>Critical addition: Payment Engine (POS + Documents + future → one capture path)</h4>
+<p>Without a first-class <strong>Payment Engine</strong>, each payable surface grows its own Ozow/PayFast/webhook stack — the Payroll / Payslips / Leave failure mode. The engine owns the <code>payment_intents</code> row. Modules add a <code>source_kind</code> and a settlement adapter. They do not add a second payment system.</p>
 <p><strong>Why this matters:</strong></p>
 <ul>
 <li><strong>Without it:</strong> payments feel bolted on, provider logic leaks everywhere, and cross-surface consistency breaks.</li>
-<li><strong>With it:</strong> clean abstraction between document/POS and payment rails, multi-provider readiness, and analytics-ready payment funneling.</li>
+<li><strong>With it:</strong> POS, invoices, and future payable modules share one create → verify → settle path; PayFast stays SaaS-only.</li>
 </ul>
 <p><strong>Payment intent contract:</strong></p>
 <ul>
@@ -613,8 +612,9 @@ Customer POS Payment
         │                       │
         │                       ▼
         │            ┌───────────────────────┐
-        │            │ Payment Intent Layer  │
-        │            │ create · track · map  │
+        │            │   Payment Engine      │
+        │            │ POS · invoices · future│
+        │            │ create · verify · settle│
         │            └──────────┬────────────┘
         │                       │
         │                       ├──────────────┐
@@ -655,7 +655,7 @@ Customer POS Payment
                     └───────────────────────┘</code></pre>
 <p><strong>Money loop (explicit):</strong></p>
 <p>Customer money and SaaS billing are <strong>completely separate domains</strong>.</p>
-<p><code>Document Engine</code> / <code>POS till</code> → <code>Payment Intent Layer</code> → customer rail (<code>cash</code> | <code>ozow</code> | <code>card_terminal</code>) → verified event → settle (<code>payments</code> for invoices, <code>pos_sales_events</code> for till).</p>
+<p><code>Document Engine</code> / <code>POS till</code> / future payable module → <strong>Payment Engine</strong> → customer rail (<code>cash</code> | <code>ozow</code> | <code>card_terminal</code>) → verified event → settlement adapter (<code>payments</code> for invoices, <code>pos_sales_events</code> for till).</p>
 <p><strong>SaaS billing (not a customer rail):</strong> Paidly subscription → PayFast → <code>subscriptions</code> + <code>payment_history</code>. Never POS. Never till <code>payment_intents</code>.</p>
 <p><strong>Get Paid loop (differentiator):</strong></p>
 <p><code>Observe</code> (<code>document_events</code>) + <code>Payment Intent</code> state → <code>Payment Intelligence Layer</code> → smart reminders/CTA/retry strategy → <code>Revenue &amp; Ops</code> + <code>Experience System</code></p>
@@ -855,7 +855,7 @@ Customer POS Payment
 <ol>
 <li><strong>Grow <code>src/document-engine/</code></strong> — status enums, send + PDF adapters, and thin facades over <code>Invoice</code> / <code>Quote</code> / <code>Payslip</code> where behaviour overlaps (<strong>supports § High impact 1</strong>).</li>
 <li><strong>Line up quote / invoice / payslip</strong> on the same <strong>deliver + observe</strong> interfaces (even if tables stay separate short term); keep <strong>compose</strong> converging on <strong>Create Document + type</strong>, not parallel product UIs (<strong>supports § High impact 1</strong>).</li>
-<li><strong>Add first-class Payment Intent model + APIs</strong> — define intent create/update/reconcile contract between <code>Document Engine</code> and <code>Revenue &amp; Ops</code> (idempotency, status normalization, expiry/retry rules).</li>
+<li><strong>Keep Payment Engine first-class</strong> — POS, invoices, and future payable modules call <code>server/src/payments/paymentEngine.js</code>. New modules add a <code>source_kind</code> + settlement adapter. They do not add a second Ozow/PayFast/intent stack.</li>
 <li><strong>Make Revenue &amp; Ops consumers explicit</strong> — cash flow and reports should pull through document-shaped APIs or views, not ad hoc duplicates (<strong>supports Client Timeline + money story</strong>).</li>
 <li><strong>Publish payment UX contract in Experience checklist</strong> — one status vocabulary + CTA matrix for document detail, public invoice, and portal paths.</li>
 <li><strong>Stabilize Auth + Session</strong> — execute <strong>Foundation §4</strong> (session/read/write matrix, invites, org bootstrap, documentation).</li>

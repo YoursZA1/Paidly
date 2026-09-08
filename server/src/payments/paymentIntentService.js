@@ -7,6 +7,12 @@ import {
 } from "./paymentIntentContract.js";
 import { getCustomerPaymentProvider } from "./paymentProviders.js";
 import { settleTillCash, tillCashIntentMetadata } from "../pos/posCashSettlement.js";
+import {
+  applyPaymentIntentTransition,
+  PAYMENT_INTENT_STATUS,
+  paymentIntentIsExpired,
+} from "../../../shared/payments/paymentIntentStates.js";
+import { assertPaymentEngineSource } from "../../../shared/payments/paymentEngine.js";
 
 export function mapPaymentIntentSchemaError(message) {
   const msg = String(message || "");
@@ -47,7 +53,8 @@ export async function createPaymentIntentRow({
   metadata,
   expiresAt,
 }) {
-  const rail = assertCustomerPaymentProvider(provider, sourceKind);
+  const source = assertPaymentEngineSource(sourceKind);
+  const rail = assertCustomerPaymentProvider(provider, source);
   const existing = await findPaymentIntentByIdempotency(orgId, idempotencyKey);
   if (existing) return existing;
 
@@ -55,7 +62,7 @@ export async function createPaymentIntentRow({
     .from("payment_intents")
     .insert({
       org_id: orgId,
-      source_kind: sourceKind,
+      source_kind: source,
       provider: rail,
       amount,
       currency,
@@ -82,6 +89,72 @@ export async function createPaymentIntentRow({
   return data;
 }
 
+export async function markPaymentIntentExpired(intent) {
+  if (!intent?.id) return intent;
+  const transition = applyPaymentIntentTransition(intent.status, PAYMENT_INTENT_STATUS.expired);
+  if (!transition.ok) return intent;
+  if (transition.same) return intent;
+  const { data, error } = await supabaseAdmin
+    .from("payment_intents")
+    .update({
+      status: PAYMENT_INTENT_STATUS.expired,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", intent.id)
+    .eq("org_id", intent.org_id)
+    .eq("status", intent.status)
+    .select("*")
+    .maybeSingle();
+  if (error) throw error;
+  return data || intent;
+}
+
+export async function applyVerifiedIntentStatus(intent, nextStatus, extra = {}) {
+  if (!intent?.id) {
+    const error = new Error("Payment intent is required");
+    error.code = "INTENT_REQUIRED";
+    throw error;
+  }
+  const transition = applyPaymentIntentTransition(intent.status, nextStatus);
+  if (!transition.ok) {
+    const error = new Error(transition.error);
+    error.code = transition.code;
+    throw error;
+  }
+  if (transition.same) {
+    return { intent, duplicate: true };
+  }
+
+  const metadata = {
+    ...(intent.metadata && typeof intent.metadata === "object" ? intent.metadata : {}),
+    ...(extra.metadata && typeof extra.metadata === "object" ? extra.metadata : {}),
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from("payment_intents")
+    .update({
+      status: transition.next,
+      external_id: extra.externalId || intent.external_id || null,
+      metadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", intent.id)
+    .eq("org_id", intent.org_id)
+    .eq("status", intent.status)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    const latest = await getOrgPaymentIntent(intent.org_id, intent.id);
+    if (latest && latest.status === transition.next) {
+      return { intent: latest, duplicate: true };
+    }
+    return { intent: latest || intent, duplicate: true };
+  }
+  return { intent: data, duplicate: false };
+}
+
 export async function confirmPaymentIntent(intent, chargeCtx = {}) {
   if (!intent?.id) {
     const error = new Error("Payment intent is required");
@@ -94,6 +167,13 @@ export async function confirmPaymentIntent(intent, chargeCtx = {}) {
     throw error;
   }
   if (intent.status === "paid") return { intent, charge: { status: "paid", duplicate: true } };
+  if (paymentIntentIsExpired(intent)) {
+    const expired = await markPaymentIntentExpired(intent);
+    return {
+      intent: expired,
+      charge: { status: "expired", code: "INTENT_EXPIRED", error: "This payment intent has expired." },
+    };
+  }
 
   const provider = getCustomerPaymentProvider(intent.provider);
   const charge = await provider.createCharge(intent, chargeCtx);
@@ -105,6 +185,20 @@ export async function confirmPaymentIntent(intent, chargeCtx = {}) {
     charge.error =
       "Card cannot be marked paid from a till click. A connected terminal or webhook confirmation is required.";
   }
+
+  const transition = applyPaymentIntentTransition(intent.status, nextStatus);
+  if (!transition.ok) {
+    return {
+      intent,
+      charge: {
+        ...charge,
+        status: intent.status,
+        code: transition.code,
+        error: transition.error,
+      },
+    };
+  }
+
   const metadata = {
     ...(intent.metadata && typeof intent.metadata === "object" ? intent.metadata : {}),
     code: charge.code || null,
@@ -115,12 +209,13 @@ export async function confirmPaymentIntent(intent, chargeCtx = {}) {
   const { data, error } = await supabaseAdmin
     .from("payment_intents")
     .update({
-      status: nextStatus,
+      status: transition.next,
       external_id: charge.external_id || intent.external_id || null,
       metadata,
       updated_at: new Date().toISOString(),
     })
     .eq("id", intent.id)
+    .eq("org_id", intent.org_id)
     .select("*")
     .single();
 

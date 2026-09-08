@@ -8,40 +8,10 @@ import InvoiceActions from "./InvoiceActions";
 import InvoiceStatusBadge from "./InvoiceStatusBadge";
 import PartialPaymentIndicator from "../payments/PartialPaymentIndicator";
 import { createPageUrl } from "@/utils";
-import { Button } from "@/components/ui/button";
-import { CheckCircle2, Pencil } from "lucide-react";
-import { Invoice } from "@/api/entities";
-import { useToast } from "@/components/ui/use-toast";
 import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
 import { documentNumericClass, documentRowCellClass } from "@/lib/documentTableClasses";
 import { cn } from "@/lib/utils";
-import { isInvoiceFullyPaid, isInvoiceVoidLike } from "@shared/commercial/documentStatuses.js";
-
-const QuickActionButtons = React.memo(function QuickActionButtons({ invoice, onMarkPaid }) {
-    const isPaid = isInvoiceFullyPaid(invoice?.status) || isInvoiceVoidLike(invoice?.status);
-    return (
-        <div className="flex items-center justify-end gap-0.5">
-            <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                <Link to={createPageUrl(`EditInvoice?id=${invoice.id}`)} aria-label="Edit invoice">
-                    <Pencil className="h-4 w-4" />
-                </Link>
-            </Button>
-            {!isPaid ? (
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-status-paid"
-                    onClick={() => onMarkPaid(invoice)}
-                    aria-label="Mark invoice as paid"
-                    title="Mark as paid"
-                >
-                    <CheckCircle2 className="h-4 w-4" />
-                </Button>
-            ) : null}
-        </div>
-    );
-});
+import InvoiceListPaymentActions from "./InvoiceListPaymentActions";
 
 const InvoiceRow = React.memo(function InvoiceRow({
     invoice,
@@ -53,7 +23,6 @@ const InvoiceRow = React.memo(function InvoiceRow({
     onActionSuccess,
     onPaymentFullyPaid,
     onOptimisticUpdate,
-    onMarkPaid,
 }) {
     const totalPaid = getTotalPaid(invoice.id);
     const clientName = getClientName(invoice.client_id);
@@ -81,16 +50,16 @@ const InvoiceRow = React.memo(function InvoiceRow({
                 </div>
             </TableCell>
             <TableCell className={documentRowCellClass(density, "px-4")}>
-                <InvoiceStatusBadge status={invoice.status || "draft"} compact />
+                <InvoiceStatusBadge status={invoice.status || "draft"} invoice={invoice} compact />
             </TableCell>
             <TableCell className={documentRowCellClass(density, "px-4 text-muted-foreground whitespace-nowrap")}>
                 {issuedDate}
             </TableCell>
             <TableCell className={documentRowCellClass(density, "px-3")}>
+                <InvoiceListPaymentActions invoice={invoice} onActionSuccess={onActionSuccess} />
+            </TableCell>
+            <TableCell className={documentRowCellClass(density, "px-3")}>
                 <div className="flex items-center justify-end gap-1">
-                    <div className="hidden md:flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                        <QuickActionButtons invoice={invoice} onMarkPaid={onMarkPaid} />
-                    </div>
                     <InvoiceActions
                         invoice={invoice}
                         client={client}
@@ -127,10 +96,11 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
                     {totalPaid > 0 ? (
                         <PartialPaymentIndicator invoice={invoice} totalPaid={totalPaid} currency={userCurrency} size="compact" />
                     ) : null}
-                    <InvoiceStatusBadge status={invoice.status || "draft"} compact />
+                    <InvoiceStatusBadge status={invoice.status || "draft"} invoice={invoice} compact />
                 </div>
             </Link>
-            <div className="flex shrink-0 items-center border-l border-border/50" onClick={(e) => e.preventDefault()}>
+            <div className="flex shrink-0 flex-col justify-center gap-1 border-l border-border/50 px-2" onClick={(e) => e.preventDefault()}>
+                <InvoiceListPaymentActions invoice={invoice} onActionSuccess={onActionSuccess} />
                 <InvoiceActions
                     invoice={invoice}
                     client={client}
@@ -144,7 +114,6 @@ const InvoiceMobileCard = React.memo(function InvoiceMobileCard({ invoice, total
 });
 
 function InvoiceList({ invoices, clients = [], isLoading, userCurrency, paymentsMap, onActionSuccess, onPaymentFullyPaid, onOptimisticUpdate, density: densityProp }) {
-    const { toast } = useToast();
     const densityState = useDocumentTableDensity();
     const density = densityProp || densityState.density;
 
@@ -157,25 +126,6 @@ function InvoiceList({ invoices, clients = [], isLoading, userCurrency, payments
         const payments = paymentsMap?.get(invoiceId) || [];
         return payments.reduce((sum, p) => sum + (p.amount || 0), 0);
     }, [paymentsMap]);
-
-    const handleMarkAsPaidQuick = useCallback(async (invoice) => {
-        try {
-            await Invoice.update(invoice.id, { status: "paid" });
-            onActionSuccess?.();
-            onPaymentFullyPaid?.();
-            toast({
-                title: "Marked as paid",
-                description: `Invoice ${invoice.invoice_number || ""} updated successfully.`,
-                variant: "success",
-            });
-        } catch (error) {
-            toast({
-                title: "Could not update invoice",
-                description: error?.message || "Try again in a moment.",
-                variant: "destructive",
-            });
-        }
-    }, [onActionSuccess, onPaymentFullyPaid, toast]);
 
     const clientMap = useMemo(() => new Map((clients || []).map((c) => [c.id, c])), [clients]);
     const rows = invoices || [];
@@ -195,7 +145,10 @@ function InvoiceList({ invoices, clients = [], isLoading, userCurrency, payments
                 <TableHead className="h-9 w-28 px-4 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                     Date
                 </TableHead>
-                <TableHead className="h-9 w-28 px-3 text-right">
+                <TableHead className="h-9 w-32 px-3 text-right text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    Payment
+                </TableHead>
+                <TableHead className="h-9 w-16 px-3 text-right">
                     <span className="sr-only">Actions</span>
                 </TableHead>
             </TableRow>
@@ -244,6 +197,7 @@ function InvoiceList({ invoices, clients = [], isLoading, userCurrency, payments
                                     <TableCell className={documentRowCellClass(density, documentNumericClass("px-4"))}><Skeleton className="ml-auto h-4 w-16" /></TableCell>
                                     <TableCell className={documentRowCellClass(density, "px-4")}><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
                                     <TableCell className={documentRowCellClass(density, "px-4")}><Skeleton className="h-4 w-20" /></TableCell>
+                                    <TableCell className={documentRowCellClass(density, "px-3")}><Skeleton className="ml-auto h-8 w-16 rounded-lg" /></TableCell>
                                     <TableCell className={documentRowCellClass(density, "px-3")}><Skeleton className="ml-auto h-8 w-8 rounded-lg" /></TableCell>
                                 </TableRow>
                             ))
@@ -259,7 +213,6 @@ function InvoiceList({ invoices, clients = [], isLoading, userCurrency, payments
                                     onActionSuccess={onActionSuccess}
                                     onPaymentFullyPaid={onPaymentFullyPaid}
                                     onOptimisticUpdate={onOptimisticUpdate}
-                                    onMarkPaid={handleMarkAsPaidQuick}
                                 />
                             ))}
                     </TableBody>

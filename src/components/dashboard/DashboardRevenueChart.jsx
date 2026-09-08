@@ -44,9 +44,12 @@ function RevenueTooltip({ active, payload, label, userCurrency, showQuotes }) {
   );
 }
 
-export default function DashboardRevenueChart({ chart = [], userCurrency, showQuotes = false }) {
+export default function DashboardRevenueChart({ chart = [], userCurrency, showQuotes = false, onChartClick }) {
   return (
-    <div className="h-[220px] w-full sm:h-[240px]">
+    <div
+      className={`h-[220px] w-full sm:h-[240px] ${onChartClick ? "cursor-pointer" : ""}`}
+      onClick={onChartClick || undefined}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />

@@ -359,6 +359,7 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
   const userData = await retryOnAbort(() => User.me());
   let html = htmlOverride;
   let quoteForSend = quote;
+  let trackingToken = null;
 
   if (!html) {
     quoteForSend = await ensureQuotePublicShareToken(quote);
@@ -427,6 +428,15 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
   }
 
   await recordDocumentSend('quote', quoteForSend.id, client.id, 'email');
+  const { recordDocumentSentEvent } = await import('@/services/documentEventClient');
+  await recordDocumentSentEvent({
+    orgId: quoteForSend.org_id,
+    documentType: 'quote',
+    documentId: quoteForSend.id,
+    clientId: client.id,
+    sendAttemptId: trackingToken || quoteForSend.id,
+    channel: 'email',
+  });
 
   return { success: true, sentAt: new Date().toISOString() };
   } finally {
@@ -578,6 +588,15 @@ export async function sendInvoicePdfEmailToClient(invoice, client, options = {})
     await retryOnAbort(() => Invoice.update(invoiceForSend.id, persistPatch));
     if (!alreadyDelivered) {
       await recordDocumentSend('invoice', invoiceForSend.id, client?.id || invoiceForSend.client_id, 'email');
+      const { recordDocumentSentEvent } = await import('@/services/documentEventClient');
+      await recordDocumentSentEvent({
+        orgId: invoiceForSend.org_id,
+        documentType: 'invoice',
+        documentId: invoiceForSend.id,
+        clientId: client?.id || invoiceForSend.client_id,
+        sendAttemptId: trackingToken || idempotencyKey,
+        channel: 'email',
+      });
     }
 
     return {

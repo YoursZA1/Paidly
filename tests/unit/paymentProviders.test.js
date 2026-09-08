@@ -56,17 +56,27 @@ describe("customer payment rails", () => {
     expect(charge.code).toBe("PROVIDER_NOT_CONFIGURED");
   });
 
-  it("does not complete digital even when Ozow credentials are present until the charge API confirms", async () => {
+  it("does not complete digital even when Ozow credentials are present until the webhook confirms", async () => {
     const keys = ["OZOW_SITE_CODE", "OZOW_API_KEY", "OZOW_PRIVATE_KEY"];
     const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
-    process.env.OZOW_SITE_CODE = "site";
+    process.env.OZOW_SITE_CODE = "TSTSTE0001";
     process.env.OZOW_API_KEY = "key";
     process.env.OZOW_PRIVATE_KEY = "private";
     try {
       expect(ozowCredentialsPresent()).toBe(true);
-      const charge = await ozowProvider.createCharge({ id: "i3", amount: 10 });
+      const charge = await ozowProvider.createCharge({
+        id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        amount: 10,
+        currency: "ZAR",
+        source_kind: "document",
+        document_id: "inv-1",
+        org_id: "org-1",
+        metadata: { invoice_number: "INV-1" },
+      });
       expect(charge.status).not.toBe("paid");
-      expect(charge.code).toBe("PROVIDER_NOT_IMPLEMENTED");
+      expect(charge.status).toBe("requires_action");
+      expect(charge.code).toBe("OZOW_REDIRECT");
+      expect(charge.next_action.redirect_url).toContain("pay.ozow.com");
     } finally {
       for (const key of keys) {
         if (previous[key] == null) delete process.env[key];

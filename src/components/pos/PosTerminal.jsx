@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import {
   Minus,
@@ -56,6 +56,7 @@ import { isPosOnlyStaff, posAccessPath } from "@shared/posStaffInvite.js";
 import PosStaffInviteSheet from "@/components/pos/PosStaffInviteSheet";
 import PosTillStaffSheet from "@/components/pos/PosTillStaffSheet";
 import { formatCurrency } from "@/utils/currencyCalculations";
+import { fetchOrgPaymentIntent } from "@/api/documentPaymentApi";
 import { createPageUrl, triggerHaptic } from "@/utils";
 import {
   checkoutPosSale,
@@ -325,6 +326,7 @@ function CartLineList({ cart, currency, onQty }) {
 export default function PosTerminal({ requestedTillId = null } = {}) {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { user, profile, logout } = useAuth();
   const { hasPermission, jobFunction, companyRole, isOrgOwner, ctx: companyCtx } = useCompanyContext();
@@ -932,7 +934,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     }
     setSubmitting(true);
     try {
-      const result = await checkoutPosSale({
+      const checkoutPayload = {
         items: cart.map((line) => ({
           product_id: line.product_id,
           quantity: line.quantity,
@@ -950,7 +952,23 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         cashier_name: cashierName,
         customer_name: attachedCustomer?.name || undefined,
         customer_email: attachedCustomer?.email || undefined,
-      });
+      };
+      const result = await checkoutPosSale(checkoutPayload);
+      if (result.pending && result.next_action?.redirect_url) {
+        try {
+          sessionStorage.setItem(
+            "paidly_pos_ozow_checkout",
+            JSON.stringify({
+              payload: checkoutPayload,
+              intentId: result.payment_intent?.id || null,
+            })
+          );
+        } catch {
+          /* ignore */
+        }
+        window.location.assign(result.next_action.redirect_url);
+        return;
+      }
       const sale = result.sale;
       setCompletedSale(sale);
       setReceiptEmailTo(sale.customer_email || attachedCustomer?.email || "");
@@ -984,6 +1002,60 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    const intentId = searchParams.get("intent");
+    if (searchParams.get("ozow") !== "return" || !intentId) return undefined;
+    let cancelled = false;
+    const finishDigital = async () => {
+      let stored = null;
+      try {
+        stored = JSON.parse(sessionStorage.getItem("paidly_pos_ozow_checkout") || "null");
+      } catch {
+        stored = null;
+      }
+      try {
+        const status = await fetchOrgPaymentIntent(intentId);
+        if (cancelled) return;
+        if (status.payment_intent?.status !== "paid") {
+          toast({
+            title: "Payment not confirmed yet",
+            description: "Ozow must notify Paidly before this sale can complete. Stay on this till.",
+          });
+          return;
+        }
+        if (!stored?.payload) return;
+        setSubmitting(true);
+        const result = await checkoutPosSale(stored.payload);
+        if (cancelled) return;
+        if (result.sale) {
+          setCompletedSale(result.sale);
+          applyInventory(result.inventory_result);
+          void loadToday();
+          void loadSession(activeRegister);
+          try {
+            sessionStorage.removeItem("paidly_pos_ozow_checkout");
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          toast({
+            title: "Could not finish digital sale",
+            description: err?.message || "Retry checkout after Ozow confirms.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (!cancelled) setSubmitting(false);
+      }
+    };
+    void finishDigital();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, toast, activeRegister, loadToday, loadSession]);
 
   const waitForReceiptNode = async () => {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));

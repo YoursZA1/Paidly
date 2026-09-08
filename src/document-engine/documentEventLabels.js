@@ -6,10 +6,21 @@ const EVENT_TYPE_LABELS = Object.freeze({
   created: "Document created",
   updated: "Details updated",
   status_changed: "Status changed",
-  sent: "Marked sent",
+  sent: "Sent to client",
+  opened: "Client opened document",
+  clicked: "Link clicked",
   viewed: "Viewed",
   accepted: "Quote accepted",
-  paid: "Marked paid",
+  rejected: "Quote rejected",
+  expired: "Quote expired",
+  converted_to_invoice: "Quote converted to invoice",
+  payment_intent: "Payment started",
+  paid: "Payment received",
+  reminded: "Follow-up sent",
+  viewed_not_paid: "Viewed, still unpaid",
+  due_soon: "Due soon",
+  due_today: "Due today",
+  overdue: "Overdue",
   converted: "Converted",
   created_from_quote: "Created from quote",
   created_from_conversion: "Created from conversion",
@@ -31,9 +42,38 @@ const EVENT_TYPE_LABELS = Object.freeze({
 /**
  * @param {string} eventType
  */
-export function formatDocumentEventType(eventType) {
+const QUOTE_EVENT_LABELS = Object.freeze({
+  created: "Quote created",
+  sent: "Quote sent",
+  opened: "Client viewed quote",
+  clicked: "Quote action clicked",
+  reminded: "Quote follow-up sent",
+  accepted: "Client accepted quote",
+  rejected: "Client rejected quote",
+  expired: "Quote expired",
+  converted_to_invoice: "Quote converted to invoice",
+});
+
+const INVOICE_EVENT_LABELS = Object.freeze({
+  created: "Invoice created",
+  sent: "Invoice sent",
+  opened: "Client viewed invoice",
+  clicked: "Payment link clicked",
+  reminded: "Payment reminder sent",
+  viewed_not_paid: "Viewed, still unpaid",
+  due_soon: "Invoice due soon",
+  due_today: "Invoice due today",
+  overdue: "Invoice overdue",
+  paid: "Payment received",
+  payment_intent: "Payment started",
+});
+
+export function formatDocumentEventType(eventType, documentType) {
   const t = String(eventType || "").trim();
   if (!t) return "Event";
+  const kind = String(documentType || "").trim().toLowerCase();
+  if (kind === "quote" && QUOTE_EVENT_LABELS[t]) return QUOTE_EVENT_LABELS[t];
+  if (kind === "invoice" && INVOICE_EVENT_LABELS[t]) return INVOICE_EVENT_LABELS[t];
   if (EVENT_TYPE_LABELS[t]) return EVENT_TYPE_LABELS[t];
   return t
     .split("_")
@@ -57,8 +97,11 @@ export function summarizeDocumentEventPayload(payload) {
       value: `${String(p.from_status)} → ${String(p.to_status)}`,
     });
   }
-  if (p.new_invoice_document_id) {
-    rows.push({ label: "New invoice", value: String(p.new_invoice_document_id) });
+  if (p.invoice_id || p.new_invoice_document_id) {
+    rows.push({ label: "Invoice", value: String(p.invoice_id || p.new_invoice_document_id) });
+  }
+  if (p.invoice_number) {
+    rows.push({ label: "Invoice number", value: String(p.invoice_number) });
   }
   if (p.target_document_id) {
     rows.push({ label: "Target document", value: String(p.target_document_id) });
@@ -81,7 +124,7 @@ export function summarizeDocumentEventPayload(payload) {
       value: p.changed_fields.slice(0, 10).join(", ") + (p.changed_fields.length > 10 ? "…" : ""),
     });
   }
-  if (p.action && typeof p.action === "string" && !p.from_status) {
+  if (p.action && typeof p.action === "string" && !p.from_status && !rows.some((row) => row.label === "Clicked")) {
     rows.push({ label: "Action", value: String(p.action) });
   }
   if (p.type && p.status && !p.from_status) {
@@ -93,6 +136,15 @@ export function summarizeDocumentEventPayload(payload) {
   }
   if (p.surface) {
     rows.push({ label: "Where", value: String(p.surface) });
+  }
+  if (p.action && typeof p.action === "string") {
+    rows.push({ label: "Clicked", value: String(p.action).replace(/_/g, " ") });
+  }
+  if (p.reminder_type) {
+    rows.push({ label: "Reminder", value: String(p.reminder_type).replace(/-/g, " ") });
+  }
+  if (p.source) {
+    rows.push({ label: "Source", value: String(p.source).replace(/_/g, " ") });
   }
   if (p.recipient_email) {
     const label = p.recipient_name

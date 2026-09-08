@@ -59,6 +59,8 @@ export {
   isInvoicePaymentLocked,
   isQuoteTerminal,
   invoiceStatusLabel,
+  invoiceLifecycleLabel,
+  invoiceLifecyclePillClass,
   quoteStatusLabel,
   INVOICE_FILTER_OPTIONS,
   QUOTE_FILTER_OPTIONS,

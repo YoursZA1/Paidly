@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { recordToStyledPreviewDoc, profileForQuotePreview } from "@/utils/documentPreviewData";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
-import { useParams, useNavigate, Navigate } from "react-router-dom";
+import { useParams, useNavigate, Navigate, useSearchParams } from "react-router-dom";
 import { Invoice, Quote, Client, User, BankingDetail } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,6 +10,10 @@ import DocumentPreview from "@/components/DocumentPreview";
 import DocumentLineItemsViewTable from "@/components/document-table/DocumentLineItemsViewTable";
 import StatusBadge from "@/components/StatusBadge";
 import SendEmailDialog from "@/components/SendEmailDialog";
+import DocumentPaymentActionBar from "@/components/invoice/DocumentPaymentActionBar";
+import InvoicePaymentHistory from "@/components/invoice/InvoicePaymentHistory";
+import { fetchDocumentPaymentHistory, fetchDocumentTimeline, fetchOzowReturnStatus } from "@/api/documentPaymentApi";
+import { DocumentTimeline } from "@/components/documents/DocumentTimeline";
 import { createPageUrl, createViewDocumentUrl } from "@/utils";
 import CommercialSourceLink from "@/components/documents/CommercialSourceLink";
 import {
@@ -38,6 +42,7 @@ export default function ViewDocument() {
   const { docType: docTypeParam, id } = useParams();
   const docType = parseRouteDocumentTypeStrict(docTypeParam);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
   const [record, setRecord] = useState(null);
@@ -47,6 +52,8 @@ export default function ViewDocument() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [activityEvents, setActivityEvents] = useState([]);
   const previewPdfRef = useRef(null);
 
   const loadDocument = useCallback(async () => {
@@ -149,6 +156,20 @@ export default function ViewDocument() {
         await Quote.update(record.id, { status });
       }
       setRecord((prev) => (prev ? { ...prev, status } : prev));
+      if (docType === "quote") {
+        const { recordQuoteLifecycleEvent } = await import("@/services/documentEventClient");
+        const eventType =
+          status === "accepted" ? "accepted" : status === "declined" || status === "rejected" ? "rejected" : status === "expired" ? "expired" : null;
+        if (eventType) {
+          await recordQuoteLifecycleEvent({
+            orgId: record.org_id,
+            quoteId: record.id,
+            clientId: record.client_id,
+            eventType,
+            metadata: { source: "owner_status" },
+          });
+        }
+      }
       if (docType === "quote" && status === "accepted") {
         toast({
           title: "Quote accepted",
@@ -223,6 +244,51 @@ export default function ViewDocument() {
     }
   };
 
+  useEffect(() => {
+    if ((docType !== "invoice" && docType !== "quote") || !id) {
+      setActivityEvents([]);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchDocumentTimeline({ documentId: id, sourceKind: docType })
+      .then((payload) => {
+        if (!cancelled) setActivityEvents(payload.events || []);
+      })
+      .catch(() => {
+        if (!cancelled) setActivityEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [docType, id]);
+
+  useEffect(() => {
+    if (docType !== "invoice" || !id) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const snap = await fetchDocumentPaymentHistory({ invoiceId: id });
+        if (!cancelled) setPaymentHistory(snap.history || []);
+      } catch {
+        if (!cancelled) setPaymentHistory([]);
+      }
+    };
+    void load();
+    const intentId = searchParams.get("intent");
+    if (searchParams.get("pay") === "return" && intentId) {
+      void fetchOzowReturnStatus({ intentId }).then((status) => {
+        if (cancelled) return;
+        if (status.snapshot?.history) setPaymentHistory(status.snapshot.history);
+        if (status.snapshot?.invoice_status && status.snapshot.invoice_status !== record?.status) {
+          setRecord((prev) => (prev ? { ...prev, status: status.snapshot.invoice_status } : prev));
+        }
+      }).catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [docType, id, searchParams, record?.status]);
+
   const listHref = docType === "quote" ? createPageUrl("Quotes") : createPageUrl("Invoices");
   const currentStatus = useMemo(() => {
     if (docType === "quote") return normalizeQuoteStatus(record?.status);
@@ -296,7 +362,17 @@ export default function ViewDocument() {
   const displayName = client?.name || previewDoc.client_name || "Client";
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto pb-28 md:pb-6">
+      {docType === "invoice" && (
+        <DocumentPaymentActionBar
+          invoice={record}
+          client={client}
+          onEdit={() => navigate(`${createPageUrl("EditInvoice")}?id=${encodeURIComponent(record.id)}`)}
+          onSend={() => setEmailOpen(true)}
+          onDownloadReceipt={downloadPDF}
+          onRefresh={loadDocument}
+        />
+      )}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
           <Button variant="ghost" size="icon" onClick={() => navigate(listHref)} aria-label="Back">
@@ -307,7 +383,11 @@ export default function ViewDocument() {
               <h1 className="text-2xl font-bold tracking-tight capitalize truncate">
                 {docType} #{titleNumber}
               </h1>
-              <StatusBadge status={record.status} variant={docType === "quote" ? "quote" : "invoice"} />
+              <StatusBadge
+                status={record.status}
+                variant={docType === "quote" ? "quote" : "invoice"}
+                invoice={docType === "invoice" ? record : null}
+              />
             </div>
             <p className="text-sm text-muted-foreground mt-0.5 truncate">{displayName}</p>
             <CommercialSourceLink quote={docType === "quote" ? record : null} invoice={docType === "invoice" ? record : null} />
@@ -406,6 +486,17 @@ export default function ViewDocument() {
             total: Number(record.total_amount) || 0,
           }}
         />
+      </div>
+
+      {docType === "invoice" && (
+        <InvoicePaymentHistory
+          history={paymentHistory}
+          currency={record.currency || previewDoc.currency || profile?.currency}
+        />
+      )}
+
+      <div className="rounded-xl border border-border/50 bg-card p-4 sm:p-5">
+        <DocumentTimeline events={activityEvents} />
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">

@@ -8,6 +8,7 @@ import {
   FilePlus,
   Pencil,
   Send,
+  Mail,
   Eye,
   CheckCircle2,
   DollarSign,
@@ -31,9 +32,20 @@ const EVENT_META = {
   created:                 { Icon: FilePlus,       ring: "bg-blue-500",      label: "created" },
   updated:                 { Icon: Pencil,          ring: "bg-zinc-400",      label: "updated" },
   sent:                    { Icon: Send,            ring: "bg-orange-500",    label: "sent" },
+  opened:                  { Icon: Eye,             ring: "bg-sky-500",       label: "opened" },
+  clicked:                 { Icon: ArrowRightLeft,  ring: "bg-amber-500",     label: "clicked" },
   viewed:                  { Icon: Eye,             ring: "bg-sky-500",       label: "viewed" },
   accepted:                { Icon: CheckCircle2,    ring: "bg-emerald-500",   label: "accepted" },
+  rejected:                { Icon: XCircle,         ring: "bg-destructive",   label: "rejected" },
+  expired:                 { Icon: RefreshCw,       ring: "bg-zinc-400",      label: "expired" },
+  converted_to_invoice:    { Icon: ArrowRightLeft,  ring: "bg-violet-500",    label: "converted" },
+  payment_intent:          { Icon: DollarSign,      ring: "bg-amber-500",     label: "payment" },
   paid:                    { Icon: DollarSign,      ring: "bg-emerald-600",   label: "paid" },
+  reminded:                { Icon: Mail,            ring: "bg-orange-400",    label: "reminded" },
+  viewed_not_paid:         { Icon: Eye,             ring: "bg-amber-600",     label: "viewed" },
+  due_soon:                { Icon: RefreshCw,       ring: "bg-amber-400",     label: "due" },
+  due_today:               { Icon: RefreshCw,       ring: "bg-orange-500",    label: "due" },
+  overdue:                 { Icon: XCircle,         ring: "bg-destructive",   label: "overdue" },
   converted:               { Icon: ArrowRightLeft,  ring: "bg-violet-500",    label: "converted" },
   created_from_quote:      { Icon: GitBranch,       ring: "bg-violet-400",    label: "converted" },
   created_from_conversion: { Icon: GitBranch,       ring: "bg-violet-400",    label: "converted" },
@@ -134,7 +146,7 @@ export function DocumentTimeline({ events, className }) {
         {list.map((ev) => {
           const { Icon, ring } = getEventMeta(ev.event_type);
           const rows = summarizeDocumentEventPayload(ev.payload);
-          const dateLabel = formatEventDate(ev.created_at);
+          const dateLabel = formatEventDate(ev.occurred_at || ev.created_at);
 
           return (
             <li key={ev.id} className="relative pb-6 last:pb-0">
@@ -152,12 +164,12 @@ export function DocumentTimeline({ events, className }) {
               <div className="min-w-0 pl-2">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-sm font-medium leading-none text-foreground">
-                    {formatDocumentEventType(ev.event_type)}
+                    {formatDocumentEventType(ev.event_type, ev.source_kind || ev.document_type)}
                   </span>
                   {dateLabel && (
                     <time
                       className="text-xs text-muted-foreground"
-                      dateTime={ev.created_at}
+                      dateTime={ev.occurred_at || ev.created_at}
                     >
                       {dateLabel}
                     </time>

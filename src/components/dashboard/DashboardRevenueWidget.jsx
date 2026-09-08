@@ -1,9 +1,8 @@
-import { lazy, Suspense } from "react";
-import { Link } from "react-router-dom";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/utils/currencyCalculations";
-import { createPageUrl } from "@/utils";
 import { REVENUE_SERIES } from "@/lib/dashboard/revenueComposition";
+import DocumentEngagementWidget from "@/components/dashboard/DocumentEngagementWidget";
 
 const DashboardRevenueChart = lazy(() => import("@/components/dashboard/DashboardRevenueChart"));
 
@@ -33,11 +32,21 @@ export default function DashboardRevenueWidget({
   currency,
   isLoading,
 }) {
+  const [activityOpen, setActivityOpen] = useState(false);
+  const activityRef = useRef(null);
   const showQuotes = Boolean(breakdown?.hasQuotePoints || breakdown?.quotes);
   const empty = Boolean(breakdown?.empty);
 
+  const openActivity = () => setActivityOpen(true);
+
+  useEffect(() => {
+    if (!activityOpen) return;
+    activityRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [activityOpen]);
+
   return (
-    <section aria-labelledby="dashboard-revenue-heading" className="rounded-lg border border-border bg-card px-4 py-5 sm:px-5">
+    <div className="space-y-6">
+    <section aria-labelledby="dashboard-revenue-heading" className="dashboard-card px-4 py-5 sm:px-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 id="dashboard-revenue-heading" className="text-sm font-semibold text-foreground">
@@ -96,6 +105,7 @@ export default function DashboardRevenueWidget({
                   chart={breakdown?.chart || []}
                   userCurrency={currency}
                   showQuotes={showQuotes}
+                  onChartClick={openActivity}
                 />
               </Suspense>
             )}
@@ -119,6 +129,7 @@ export default function DashboardRevenueWidget({
                 </li>
               ) : null}
             </ul>
+            <p className="mt-2 text-[11px] text-muted-foreground">Click the chart to open quote and invoice activity.</p>
           </div>
 
           <div className="mt-6 border-t border-border pt-4">
@@ -147,12 +158,21 @@ export default function DashboardRevenueWidget({
         </>
       )}
 
-      <Link
-        to={createPageUrl("Reports")}
-        className="mt-5 inline-block text-sm font-medium text-primary hover:text-primary/80"
+      <button
+        type="button"
+        onClick={openActivity}
+        aria-expanded={activityOpen}
+        aria-controls="quote-invoice-activity"
+        className="mt-5 text-sm font-medium text-primary hover:text-primary/80"
       >
-        View revenue details →
-      </Link>
+        View quote and invoice activity →
+      </button>
     </section>
+    {activityOpen ? (
+      <div ref={activityRef}>
+        <DocumentEngagementWidget onClose={() => setActivityOpen(false)} />
+      </div>
+    ) : null}
+    </div>
   );
 }

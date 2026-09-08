@@ -24,3 +24,22 @@ export async function fetchPublicQuotePayload(shareToken) {
   }
   return data;
 }
+
+export async function decidePublicQuote({ shareToken, action }) {
+  const apiBase = getPublicApiBase();
+  const url = `${apiBase}/api/public-quote/decide`;
+  // eslint-disable-next-line no-restricted-syntax -- public share endpoint intentionally does not use session auth wrappers
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token: String(shareToken || "").trim(),
+      action: String(action || "").trim(),
+    }),
+  });
+  const data = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(data?.error || "Could not update quote");
+  }
+  return data;
+}

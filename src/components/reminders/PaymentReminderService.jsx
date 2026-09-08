@@ -104,6 +104,20 @@ class PaymentReminderService {
                 if (rule.type === 'after' && rule.days > 0 && invoice.status !== 'overdue') {
                     await Invoice.update(invoice.id, { status: 'overdue' });
                 }
+                const { appendCommercialDocumentEventBestEffort } = await import('@/services/documentEventClient');
+                await appendCommercialDocumentEventBestEffort({
+                    orgId: invoice.org_id,
+                    sourceKind: 'invoice',
+                    sourceId: invoice.id,
+                    documentType: 'invoice',
+                    eventType: 'reminded',
+                    clientId: invoice.client_id,
+                    reminderType: rule.id,
+                    metadata: {
+                        reminder_type: rule.id,
+                        source: 'payment_reminder_service',
+                    },
+                });
             }
 
             await PaymentReminder.create(reminderData);

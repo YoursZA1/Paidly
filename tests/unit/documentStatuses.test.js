@@ -12,6 +12,9 @@ import {
   isInvoiceVoidLike,
   isInvoiceOpenReceivable,
   invoiceStatusesMatch,
+  invoiceLifecycleLabel,
+  invoiceLifecyclePillClass,
+  quoteStatusLabel,
 } from "@shared/commercial/documentStatuses.js";
 import { getDerivedStatus, isManualStatusChangeAllowed } from "@/utils/invoiceStatus";
 import { canTransitionStatus, allowedNextStatuses } from "@/document-engine/documentStateMachine";
@@ -39,6 +42,39 @@ describe("invoice status aliases", () => {
 describe("quote status aliases", () => {
   it("maps rejected to declined", () => {
     expect(normalizeQuoteStatus("rejected")).toBe(QUOTE_STATUS.declined);
+  });
+
+  it("labels declined as Rejected and never Overdue or Paid", () => {
+    expect(quoteStatusLabel("declined")).toBe("Rejected");
+    expect(quoteStatusLabel("accepted")).toBe("Accepted");
+    expect(quoteStatusLabel("expired")).toBe("Expired");
+    expect(Object.values(QUOTE_STATUS).every((status) => quoteStatusLabel(status) !== "Overdue")).toBe(true);
+    expect(Object.values(QUOTE_STATUS).every((status) => quoteStatusLabel(status) !== "Paid")).toBe(true);
+  });
+});
+
+describe("invoice collection labels", () => {
+  const now = new Date("2026-09-08T12:00:00Z");
+
+  it("shows due-soon and due-today without changing stored status", () => {
+    expect(invoiceLifecycleLabel({ status: "sent", delivery_date: "2026-09-10" }, now)).toBe("Due Soon");
+    expect(invoiceLifecycleLabel({ status: "viewed", delivery_date: "2026-09-08" }, now)).toBe("Due Today");
+    expect(invoiceLifecycleLabel({ status: "sent", delivery_date: "2026-09-01" }, now)).toBe("Overdue");
+    expect(invoiceLifecycleLabel({ status: "paid", delivery_date: "2026-09-01" }, now)).toBe("Paid");
+    expect(invoiceLifecycleLabel({ status: "draft" }, now)).toBe("Draft");
+  });
+
+  it("styles the displayed collection label, not the stored status", () => {
+    expect(invoiceLifecyclePillClass("Overdue", "sent")).toBe("overdue");
+    expect(invoiceLifecyclePillClass("Due Soon", "viewed")).toBe("due_soon");
+    expect(invoiceLifecyclePillClass("Due Today", "sent")).toBe("due_today");
+    expect(invoiceLifecyclePillClass("Unpaid", "partially_paid")).toBe("sent");
+    expect(invoiceLifecyclePillClass("Paid", "paid")).toBe("paid");
+    expect(invoiceLifecyclePillClass("Draft", "draft")).toBe("draft");
+    expect(invoiceLifecyclePillClass("Viewed", "viewed")).toBe("viewed");
+    expect(invoiceLifecyclePillClass("Sent", "sent")).toBe("sent");
+    expect(invoiceLifecyclePillClass("Partially Paid", "partially_paid")).toBe("partially_paid");
+    expect(invoiceLifecyclePillClass("Void", "void")).toBe("void");
   });
 });
 

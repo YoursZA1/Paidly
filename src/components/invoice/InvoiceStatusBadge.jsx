@@ -2,22 +2,25 @@ import React from "react";
 import PropTypes from "prop-types";
 import { cn } from "@/lib/utils";
 import {
-  normalizeInvoiceStatus,
   invoiceStatusLabel,
+  invoiceLifecycleLabel,
+  invoiceLifecyclePillClass,
 } from "@shared/commercial/documentStatuses.js";
 
-function InvoiceStatusBadge({ status, compact = false }) {
-  const pillStatus = normalizeInvoiceStatus(status);
+function InvoiceStatusBadge({ status, invoice = null, compact = false }) {
+  const label = invoice ? invoiceLifecycleLabel(invoice) : invoiceStatusLabel(status);
+  const pillStatus = invoiceLifecyclePillClass(label, status || invoice?.status);
 
   return (
     <div className={cn("status-pill", pillStatus, compact && "status-pill-compact")}>
-      {invoiceStatusLabel(status)}
+      {label}
     </div>
   );
 }
 
 InvoiceStatusBadge.propTypes = {
   status: PropTypes.string,
+  invoice: PropTypes.object,
   compact: PropTypes.bool,
 };
 

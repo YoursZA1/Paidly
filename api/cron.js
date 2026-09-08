@@ -18,14 +18,10 @@ function isAuthorized(req) {
 }
 
 async function runPaymentReminderBatch() {
-  return {
-    ran: false,
-    skipped: true,
-    reason: "not_scheduled",
-    processedUsers: 0,
-    message:
-      "Payment reminder cron is disabled in vercel.json until Payment Intelligence (Wave 4) ships. Manual GET/POST still returns this payload. See docs/CRON_PAYMENT_REMINDERS.md",
-  };
+  const { runPaymentReminderBatch: runDocumentReminders } = await import(
+    "../server/src/documents/documentReminderEngine.js"
+  );
+  return runDocumentReminders({ supabase: getSupabaseAdmin() });
 }
 
 function getSupabaseAdmin() {

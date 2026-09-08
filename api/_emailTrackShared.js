@@ -2,6 +2,8 @@
  * Email open/click tracking (shared by public-share Vercel function).
  */
 import { createClient } from "@supabase/supabase-js";
+import { DOCUMENT_EVENT_TYPE } from "../shared/documents/documentEvents.js";
+import { appendEventFromMessageLog } from "../server/src/documents/documentEventService.js";
 
 const TRACKING_PIXEL_GIF = Buffer.from(
   "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
@@ -81,11 +83,20 @@ export async function handleEmailTrack(req, res) {
     }
     if (!supabase) return res.status(503).json({ error: "Server misconfigured" });
     try {
+      const { data: log, error: findErr } = await supabase
+        .from("message_logs")
+        .select("id, org_id, document_id, document_type, client_id, channel, tracking_token")
+        .eq("tracking_token", trimmed)
+        .maybeSingle();
+      if (findErr) return res.status(500).json({ error: "Failed to record open" });
       const { error } = await supabase
         .from("message_logs")
         .update({ viewed: true, opened_at: new Date().toISOString() })
         .eq("tracking_token", trimmed);
       if (error) return res.status(500).json({ error: "Failed to record open" });
+      if (log) {
+        await appendEventFromMessageLog(log, DOCUMENT_EVENT_TYPE.opened, { channel: "public_page", source: "track_open" }, supabase);
+      }
       return res.status(200).json({ ok: true });
     } catch (e) {
       return res.status(500).json({ error: e?.message || "Failed" });
@@ -113,11 +124,24 @@ export async function handleEmailTrack(req, res) {
     }
     if (supabase) {
       try {
+        const { data: log } = await supabase
+          .from("message_logs")
+          .select("id, org_id, document_id, document_type, client_id, channel, tracking_token")
+          .eq("tracking_token", trimmed)
+          .maybeSingle();
         await supabase
           .from("message_logs")
           .update({ clicked_at: new Date().toISOString() })
           .eq("tracking_token", trimmed)
           .is("clicked_at", null);
+        if (log) {
+          await appendEventFromMessageLog(
+            log,
+            DOCUMENT_EVENT_TYPE.clicked,
+            { channel: "email", source: "invoice_email", action: "primary_cta", metadata: { action: "primary_cta" } },
+            supabase
+          );
+        }
       } catch (e) {
         console.warn("[track-link]", e?.message || e);
       }
@@ -142,10 +166,18 @@ export async function handleEmailTrack(req, res) {
 
   if (supabase) {
     try {
+      const { data: log } = await supabase
+        .from("message_logs")
+        .select("id, org_id, document_id, document_type, client_id, channel, tracking_token")
+        .eq("tracking_token", trimmed)
+        .maybeSingle();
       await supabase
         .from("message_logs")
         .update({ viewed: true, opened_at: new Date().toISOString() })
         .eq("tracking_token", trimmed);
+      if (log) {
+        await appendEventFromMessageLog(log, DOCUMENT_EVENT_TYPE.opened, { channel: "email", source: "email_pixel" }, supabase);
+      }
     } catch (e) {
       console.warn("[email-track]", e?.message || e);
     }

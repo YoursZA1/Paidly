@@ -340,6 +340,26 @@ body {
   color: #fcd34d;
   border-color: color-mix(in srgb, var(--status-pending) 35%, #334155);
 }
+.status-pill.due_soon {
+  background: color-mix(in srgb, var(--status-pending) 14%, white);
+  color: var(--status-pending);
+  border-color: color-mix(in srgb, var(--status-pending) 28%, white);
+}
+.dark .status-pill.due_soon {
+  background: color-mix(in srgb, var(--status-pending) 22%, #0f172a);
+  color: #fcd34d;
+  border-color: color-mix(in srgb, var(--status-pending) 38%, #1e293b);
+}
+.status-pill.due_today {
+  background: color-mix(in srgb, var(--status-overdue) 10%, white);
+  color: var(--status-overdue);
+  border-color: color-mix(in srgb, var(--status-overdue) 24%, white);
+}
+.dark .status-pill.due_today {
+  background: color-mix(in srgb, var(--status-overdue) 18%, #0f172a);
+  color: #fdba74;
+  border-color: color-mix(in srgb, var(--status-overdue) 34%, #1e293b);
+}
 .status-pill.overdue {
   background: color-mix(in srgb, var(--status-overdue) 14%, white);
   color: var(--status-overdue);

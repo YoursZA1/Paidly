@@ -256,10 +256,10 @@
         <td>Code unification in <code>src/document-engine/</code>; persistence still <code>invoices</code> / <code>quotes</code> / <code>payslips</code> plus hub <code>documents</code></td>
       </tr>
       <tr>
-        <td>Payment Intent Layer</td>
-        <td>Canonical handoff document → rails</td>
-        <td><span class="badge stub">Not built</span></td>
-        <td>Specified in blueprint; no <code>payment_intents</code> table; PayFast logic still surface-adjacent</td>
+        <td>Payment Engine</td>
+        <td>POS + invoices + future → one intent → rails</td>
+        <td><span class="badge full">Built</span></td>
+        <td><code>payment_intents</code> via <code>server/src/payments/paymentEngine.js</code>; PayFast remains SaaS-only</td>
       </tr>
       <tr>
         <td>Relationship</td>

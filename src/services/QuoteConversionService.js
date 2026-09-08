@@ -83,7 +83,36 @@ export async function convertQuoteToInvoice(quote, overrides = {}) {
     throw new Error(message);
   }
 
-  return asResult(data || {});
+  const result = asResult(data || {});
+  if (!result.already_converted && result.invoice_id) {
+    const { appendCommercialDocumentEventBestEffort } = await import("@/services/documentEventClient");
+    let orgId = quoteRow.org_id;
+    let clientId = quoteRow.client_id || null;
+    if (!orgId) {
+      const { data: quoteMeta } = await supabase
+        .from("quotes")
+        .select("org_id, client_id")
+        .eq("id", quoteId)
+        .maybeSingle();
+      orgId = quoteMeta?.org_id;
+      clientId = clientId || quoteMeta?.client_id || null;
+    }
+    if (orgId) {
+      await appendCommercialDocumentEventBestEffort({
+        orgId,
+        sourceKind: "quote",
+        sourceId: quoteId,
+        documentType: "quote",
+        eventType: "converted_to_invoice",
+        clientId,
+        metadata: {
+          invoice_id: result.invoice_id,
+          invoice_number: result.invoice_number || null,
+        },
+      });
+    }
+  }
+  return result;
 }
 
 export function invoiceUrlFromConversion(result) {

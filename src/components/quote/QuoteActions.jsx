@@ -109,6 +109,24 @@ function QuoteActions({ quote, onActionSuccess }) {
         if (!canTransitionQuoteStatus(quote.status, newStatus)) return;
         try {
             await Quote.update(quote.id, { status: newStatus });
+            const eventType =
+              newStatus === QUOTE_STATUS.accepted
+                ? "accepted"
+                : newStatus === QUOTE_STATUS.declined
+                  ? "rejected"
+                  : newStatus === QUOTE_STATUS.expired
+                    ? "expired"
+                    : null;
+            if (eventType) {
+              const { recordQuoteLifecycleEvent } = await import("@/services/documentEventClient");
+              await recordQuoteLifecycleEvent({
+                orgId: quote.org_id,
+                quoteId: quote.id,
+                clientId: quote.client_id,
+                eventType,
+                metadata: { source: "owner_status" },
+              });
+            }
             onActionSuccess();
             if (newStatus === 'accepted') {
                 toast({
@@ -230,7 +248,7 @@ function QuoteActions({ quote, onActionSuccess }) {
                             )}
                             {allowedNextQuoteStatuses(quote.status).includes(QUOTE_STATUS.declined) && (
                              <DropdownMenuItem onClick={() => handleStatusChange(QUOTE_STATUS.declined)}>
-                                <XCircle className="w-4 h-4 mr-2"/>Declined
+                                <XCircle className="w-4 h-4 mr-2"/>Rejected
                             </DropdownMenuItem>
                             )}
                         </DropdownMenuSubContent>

@@ -239,13 +239,28 @@ async function hydrateFullDocumentData(doc, service, options = {}) {
 }
 
 async function insertDocumentEvent({ orgId, documentId, userId, eventType, payload }) {
-  const { error } = await supabase.from("document_events").insert({
+  const row = {
     org_id: orgId,
     document_id: documentId,
+    source_kind: "hub",
+    source_id: documentId,
+    document_type: payload?.type || "hub",
     actor_user_id: userId,
+    actor_type: "user",
     event_type: eventType,
     payload: payload && typeof payload === "object" ? payload : {},
-  });
+    occurred_at: new Date().toISOString(),
+  };
+  let { error } = await supabase.from("document_events").insert(row);
+  if (error && isSupabaseMissingColumnError(error)) {
+    ({ error } = await supabase.from("document_events").insert({
+      org_id: orgId,
+      document_id: documentId,
+      actor_user_id: userId,
+      event_type: eventType,
+      payload: payload && typeof payload === "object" ? payload : {},
+    }));
+  }
   if (error) {
     throw throwWithCause(getSupabaseErrorMessage(error, "Failed to log document event"), error);
   }

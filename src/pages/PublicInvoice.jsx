@@ -14,12 +14,14 @@ import {
 } from '@/lib/publicInvoiceViewerStorage';
 import { formatCurrency } from '../components/CurrencySelector';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
-import { AlertCircle, Download, CreditCard, Mail, Loader2 } from 'lucide-react';
+import { AlertCircle, Download, Mail, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
-import PayfastService from '@/services/PayfastService';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
+import DocumentPaymentActionBar from '@/components/invoice/DocumentPaymentActionBar';
+import InvoicePaymentHistory from '@/components/invoice/InvoicePaymentHistory';
+import { fetchDocumentPaymentHistory } from '@/api/documentPaymentApi';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
@@ -37,8 +39,7 @@ export default function PublicInvoice() {
     const [verificationError, setVerificationError] = useState('');
     const [sentToEmailHint, setSentToEmailHint] = useState('');
     const [shareToken, setShareToken] = useState('');
-    const [isPaying, setIsPaying] = useState(false);
-    const [payError, setPayError] = useState('');
+    const [paymentHistory, setPaymentHistory] = useState([]);
 
     useEffect(() => {
         clearLegacyInvoiceVerificationSessionKeys();
@@ -103,6 +104,21 @@ export default function PublicInvoice() {
 
         fetchInvoiceData();
     }, [location]);
+
+    useEffect(() => {
+        if (!invoice?.id || !shareToken || needsEmailVerification) return undefined;
+        let cancelled = false;
+        fetchDocumentPaymentHistory({ invoiceId: invoice.id, shareToken })
+            .then((snap) => {
+                if (!cancelled) setPaymentHistory(snap.history || []);
+            })
+            .catch(() => {
+                if (!cancelled) setPaymentHistory([]);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [invoice?.id, shareToken, needsEmailVerification]);
 
     const handleEmailVerification = async () => {
         if (!emailVerification.trim()) {
@@ -238,7 +254,6 @@ export default function PublicInvoice() {
         );
     }
     
-    const canPayOnline = bankingDetail && bankingDetail.payment_gateway_url;
     const ownerCurrency = invoice.owner_currency || invoice.currency || 'ZAR';
     const templateKey =
       normalizeInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
@@ -259,32 +274,6 @@ export default function PublicInvoice() {
         document_brand_secondary: parseDocumentBrandHex(invoice.document_brand_secondary),
     };
 
-    const handlePayFast = async () => {
-        if (!invoice) return;
-        setIsPaying(true);
-        setPayError('');
-        try {
-            const amount = invoice.total_amount || 0;
-            const clientName = client?.name || '';
-            const clientEmail = client?.email || invoice.sent_to_email || '';
-            const returnPath = location.pathname + location.search;
-
-            await PayfastService.startOneTimePayment({
-                invoiceId: invoice.id,
-                amount,
-                currency: ownerCurrency || 'ZAR',
-                clientName,
-                clientEmail,
-                returnPath,
-                cancelPath: returnPath,
-            });
-        } catch (err) {
-            console.error('Failed to start PayFast payment:', err);
-            setPayError(err?.message || 'Could not start PayFast payment. Please try again.');
-            setIsPaying(false);
-        }
-    };
-
     const shareTokenForPdf =
         invoice.public_share_token || new URLSearchParams(location.search).get('token') || '';
     const pdfDownloadHref = shareTokenForPdf
@@ -292,32 +281,25 @@ export default function PublicInvoice() {
         : `${createPageUrl('InvoicePDF')}?id=${encodeURIComponent(invoice.id)}&download=true`;
 
     return (
-        <div className="min-h-screen bg-background p-4 sm:p-8">
+        <div className="min-h-screen bg-background p-4 sm:p-8 pb-28">
             <div className="max-w-4xl mx-auto">
-                {/* Action Buttons */}
-                <div className="mb-6 flex flex-col sm:flex-row gap-2 justify-end">
-                    {canPayOnline && (
-                        <a
-                            href={bankingDetail.payment_gateway_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-grow sm:flex-grow-0 w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2"
-                        >
-                            <CreditCard className="w-5 h-5"/>
-                            Pay Now ({formatCurrency(invoice.total_amount, ownerCurrency)})
-                        </a>
-                    )}
-                    {ownerCurrency === 'ZAR' && (
-                        <button
-                            type="button"
-                            onClick={handlePayFast}
-                            disabled={isPaying}
-                            className="flex-grow sm:flex-grow-0 w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-70 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2"
-                        >
-                            <CreditCard className="w-5 h-5" />
-                            {isPaying ? 'Redirecting to PayFast…' : `Pay with PayFast (${formatCurrency(invoice.total_amount, ownerCurrency)})`}
-                        </button>
-                    )}
+                <div className="mb-4 rounded-xl border border-border bg-card p-4">
+                    <p className="text-sm text-muted-foreground">{issuerBrand.name || invoice.owner_company_name || 'Invoice'}</p>
+                    <p className="text-lg font-semibold text-foreground">{invoice.invoice_number}</p>
+                    <p className="text-sm text-muted-foreground">{invoice.project_title || invoice.project_description || 'Payment request'}</p>
+                    <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{formatCurrency(invoice.total_amount, ownerCurrency)}</p>
+                    {invoice.delivery_date ? (
+                        <p className="text-xs text-muted-foreground">Due {invoice.delivery_date}</p>
+                    ) : null}
+                </div>
+                <DocumentPaymentActionBar
+                    invoice={invoice}
+                    client={client}
+                    shareToken={shareTokenForPdf}
+                    publicMode
+                    onDownloadReceipt={() => window.open(pdfDownloadHref, '_blank', 'noopener,noreferrer')}
+                />
+                <div className="mb-6 flex justify-end">
                     <a
                         href={pdfDownloadHref}
                         target="_blank"
@@ -328,12 +310,7 @@ export default function PublicInvoice() {
                         Download as PDF
                     </a>
                 </div>
-
-                {payError && (
-                    <div className="mb-4 text-sm text-red-600">
-                        {payError}
-                    </div>
-                )}
+                <InvoicePaymentHistory history={paymentHistory} currency={ownerCurrency} />
 
                 <div className="bg-card border border-border shadow-xl rounded-lg p-4 sm:p-6 overflow-x-auto">
                     <InvoicePreview

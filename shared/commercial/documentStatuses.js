@@ -58,7 +58,7 @@ export const QUOTE_STATUS_LABELS = Object.freeze({
   [QUOTE_STATUS.sent]: "Sent",
   [QUOTE_STATUS.viewed]: "Viewed",
   [QUOTE_STATUS.accepted]: "Accepted",
-  [QUOTE_STATUS.declined]: "Declined",
+  [QUOTE_STATUS.declined]: "Rejected",
   [QUOTE_STATUS.expired]: "Expired",
   [QUOTE_STATUS.converted]: "Converted",
 });
@@ -299,6 +299,50 @@ export function isQuoteTerminal(status) {
 export function invoiceStatusLabel(status) {
   const canonical = normalizeInvoiceStatus(status);
   return INVOICE_STATUS_LABELS[canonical] || String(status || "Draft").replace(/_/g, " ");
+}
+
+/** Collection-facing invoice label. Does not change the stored status. */
+export function invoiceLifecycleLabel(invoice, now = new Date()) {
+  const status = normalizeInvoiceStatus(invoice?.status);
+  if (status === INVOICE_STATUS.draft) return "Draft";
+  if (status === INVOICE_STATUS.paid) return "Paid";
+  if (status === INVOICE_STATUS.void) return "Void";
+  if (status === INVOICE_STATUS.overdue) return "Overdue";
+  const dueRaw = invoice?.delivery_date || invoice?.due_date;
+  if (dueRaw) {
+    const due = new Date(dueRaw);
+    if (!Number.isNaN(due.getTime())) {
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const dueDay = new Date(due);
+      dueDay.setHours(0, 0, 0, 0);
+      const days = Math.round((today.getTime() - dueDay.getTime()) / 86400000);
+      if (days > 0) return "Overdue";
+      if (days === 0) return "Due Today";
+      if (days >= -7) return "Due Soon";
+    }
+  }
+  if (status === INVOICE_STATUS.viewed) return "Viewed";
+  if (status === INVOICE_STATUS.sent) return "Sent";
+  if (status === INVOICE_STATUS.partially_paid) return "Partially Paid";
+  return "Unpaid";
+}
+
+/** CSS class for `invoiceLifecycleLabel` / `invoiceStatusLabel`. Follows the displayed label, not stored status. */
+export function invoiceLifecyclePillClass(label, status) {
+  const mapped = {
+    Draft: "draft",
+    Sent: "sent",
+    Viewed: "viewed",
+    Unpaid: "sent",
+    "Due Soon": "due_soon",
+    "Due Today": "due_today",
+    Overdue: "overdue",
+    "Partially Paid": "partially_paid",
+    Paid: "paid",
+    Void: "void",
+  }[String(label || "")];
+  return mapped || normalizeInvoiceStatus(status);
 }
 
 export function quoteStatusLabel(status) {

@@ -1,0 +1,39 @@
+---
+description: One Payment Engine for POS, invoices, and future payable modules
+alwaysApply: true
+---
+
+# Paidly — Payment Engine (do not fork)
+
+Customer money goes through **one Payment Engine**. This is the same class of rule as Document Engine and Workforce: do not grow a second stack that does the same job.
+
+```
+POS + Invoices + future payable modules
+        → Payment Engine
+        → Ozow / cash / card_terminal
+        → settlement adapter
+```
+
+## Source of truth
+
+- Table: `payment_intents` (`source_kind` = `document` | `pos`)
+- Contract: `shared/payments/paymentEngine.js`
+- Runtime facade: `server/src/payments/paymentEngine.js`
+- API: existing `api/payment-intents` (Hobby — do not add `api/ozow.js` or `api/invoice-pay.js`)
+
+## Do
+
+- Create/reuse intents through the Payment Engine facade
+- Add a **source adapter** (document, POS, future) that calls the engine
+- Add a **settlement adapter** that writes the existing domain table after a **verified** provider event
+- Reuse Ozow hash, webhook, and provider registry
+
+## Do not
+
+- Create a second payment-intent table, provider client, or webhook path for a new module
+- Put PayFast on `payment_intents` (SaaS only → `payment_history`)
+- Merge invoice `payments`, POS `pos_sales_events`, and SaaS `payment_history`
+- Mark paid from a Success URL / browser callback
+- Trust amount, status, or customer id from the browser
+
+A new payable module needs: `source_kind` migration + settlement adapter + engine import. It does not need its own payment system.

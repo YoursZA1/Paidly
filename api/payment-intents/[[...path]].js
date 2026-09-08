@@ -6,6 +6,17 @@ import {
   handlePaymentProvidersList,
   handleCustomerPaymentWebhook,
 } from "../../server/src/payments/paymentIntentRoutes.js";
+import {
+  handleDocumentPay,
+  handleDocumentRemind,
+  handleDocumentHistory,
+  handleOzowReturn,
+} from "../../server/src/payments/documentPaymentRoutes.js";
+import {
+  handleDocumentEngagement,
+  handleDocumentEventIngest,
+  handleDocumentTimeline,
+} from "../../server/src/documents/documentEventRoutes.js";
 
 function firstQueryValue(value) {
   if (Array.isArray(value)) return String(value[0] ?? "").trim();
@@ -60,6 +71,14 @@ export default async function handler(req, res) {
     req.params = { ...(req.params || {}), provider };
     return handleCustomerPaymentWebhook(req, res);
   }
+
+  if (head === "document-pay") return handleDocumentPay(req, res);
+  if (head === "document-remind") return handleDocumentRemind(req, res);
+  if (head === "document-history") return handleDocumentHistory(req, res);
+  if (head === "document-timeline") return handleDocumentTimeline(req, res);
+  if (head === "document-engagement") return handleDocumentEngagement(req, res);
+  if (head === "document-event") return handleDocumentEventIngest(req, res);
+  if (head === "ozow-return") return handleOzowReturn(req, res);
 
   if (!head && req.method === "POST") return handlePaymentIntentCreate(req, res);
   if (!head && req.method === "GET") return handlePaymentProvidersList(req, res);

@@ -39,7 +39,7 @@ function parseApiJsonError(res, raw, fallbackMessage) {
       json = {};
     }
   }
-  if (res.ok) return json;
+  if (res.ok || res.status === 202) return json;
   const detail =
     (typeof json?.error === "string" && json.error) ||
     (typeof json?.message === "string" && json.message) ||

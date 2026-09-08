@@ -1,6 +1,11 @@
 /** Canonical customer-payment contract. PayFast is SaaS billing only. */
 
-export const PAYMENT_INTENT_SOURCE_KINDS = Object.freeze(["document", "pos"]);
+import {
+  PAYMENT_ENGINE_SOURCE_LIST,
+  assertPaymentEngineSource,
+} from "../../../shared/payments/paymentEngine.js";
+
+export const PAYMENT_INTENT_SOURCE_KINDS = PAYMENT_ENGINE_SOURCE_LIST;
 
 export const PAYMENT_INTENT_STATUSES = Object.freeze([
   "pending",
@@ -42,7 +47,7 @@ export function normalizeCustomerPaymentProvider(raw) {
 
 export function assertCustomerPaymentProvider(provider, sourceKind) {
   const id = String(provider || "").trim().toLowerCase();
-  const source = String(sourceKind || "").trim().toLowerCase();
+  const source = assertPaymentEngineSource(sourceKind);
   if (id === SAAS_BILLING_PROVIDER) {
     const error = new Error("PayFast is only for Paidly platform subscriptions, not customer payments");
     error.code = "PAYFAST_NOT_CUSTOMER_RAIL";

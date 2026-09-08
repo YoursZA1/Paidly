@@ -25,11 +25,11 @@ import {
 import { mapPosPaymentMethodToProvider, isTillCashSettlement, isCardTerminalSettlement, publicPaymentIntentView } from "../payments/paymentIntentContract.js";
 import {
   attachPosSaleToIntent,
-  confirmPaymentIntent,
-  createPaymentIntentRow,
+  confirmCustomerPaymentIntent,
+  createCustomerPaymentIntent,
   mapPaymentIntentSchemaError,
   settleTillCashIntent,
-} from "../payments/paymentIntentService.js";
+} from "../payments/paymentEngine.js";
 import {
   filterCatalogForRegister,
   saleCompanyIdFromRegister,
@@ -498,7 +498,7 @@ export async function handleNativePosCheckout(req, res, gate) {
 
   let intent;
   try {
-    intent = await createPaymentIntentRow({
+    intent = await createCustomerPaymentIntent({
       orgId: gate.membership.orgId,
       sourceKind: "pos",
       provider: rail,
@@ -561,7 +561,7 @@ export async function handleNativePosCheckout(req, res, gate) {
     try {
       const confirmed = isTillCashSettlement(rail)
         ? await settleTillCashIntent(intent, body.amount_tendered)
-        : await confirmPaymentIntent(intent, {
+        : await confirmCustomerPaymentIntent(intent, {
             paymentMethod,
             amountTendered: body.amount_tendered,
           });
@@ -573,6 +573,16 @@ export async function handleNativePosCheckout(req, res, gate) {
   }
 
   if (!posSaleCompletesWhenPaid(intent)) {
+    const redirectUrl = charge.next_action?.redirect_url || intent.metadata?.next_action?.redirect_url;
+    if (redirectUrl && (charge.status === "requires_action" || intent.status === "requires_action")) {
+      return res.status(202).json({
+        ok: true,
+        pending: true,
+        code: charge.code || "OZOW_REDIRECT",
+        payment_intent: publicPaymentIntentView(intent),
+        next_action: charge.next_action || intent.metadata?.next_action || { type: "redirect", redirect_url: redirectUrl },
+      });
+    }
     await recordPosAuditEvent(
       posAuditCancellation({
         orgId: gate.membership.orgId,

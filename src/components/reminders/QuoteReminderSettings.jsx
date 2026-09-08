@@ -14,7 +14,7 @@ const defaultSettings = () => ({
     enabled: false,
     days_after_sent: 3,
     subject: 'Following up on Quote {{quote_number}}',
-    body: 'Hi {{client_name}},\n\nI just wanted to follow up on the quote I sent a few days ago. Have you had a chance to review it?\n\nYou can view it here: {{view_link}}\n\nLet me know if you have any questions.\n\nBest regards,\n{{company_name}}',
+    body: 'Just following up on your quote. Please let us know if you\'d like to proceed.\n\nYou can view it here: {{view_link}}',
 });
 
 export default function QuoteReminderSettings() {
@@ -55,14 +55,14 @@ export default function QuoteReminderSettings() {
                     Quote follow-up emails
                 </CardTitle>
                 <CardDescription>
-                    Send one reminder email per sent quote after the number of days you choose. Uses the same email integration as invoice reminders.
+                    Decision follow-ups only — not payment reminders. Stops when a quote is accepted, rejected, or expired.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div>
                         <Label className="text-base font-medium">Enable quote reminders</Label>
-                        <p className="text-sm text-muted-foreground">Applies to quotes still in Sent status.</p>
+                        <p className="text-sm text-muted-foreground">Applies to quotes still in Sent or Viewed status.</p>
                     </div>
                     <Switch
                         checked={settings.enabled}

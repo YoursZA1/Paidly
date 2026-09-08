@@ -13,7 +13,7 @@ import {
 } from '@/lib/publicInvoiceViewerStorage';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/currencyCalculations';
-import { Loader2, AlertCircle, Download, CreditCard, Mail } from 'lucide-react';
+import { Loader2, AlertCircle, Download, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
@@ -22,6 +22,9 @@ import InvoicePreview from '@/components/invoice/InvoicePreview';
 import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { isValidShareToken } from '@/utils/inputSanitization';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
+import DocumentPaymentActionBar from '@/components/invoice/DocumentPaymentActionBar';
+import InvoicePaymentHistory from '@/components/invoice/InvoicePaymentHistory';
+import { fetchDocumentPaymentHistory } from '@/api/documentPaymentApi';
 
 /**
  * Public read-only invoice view at /view/:token.
@@ -42,6 +45,7 @@ export default function InvoiceView() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationError, setVerificationError] = useState('');
   const [sentToEmailHint, setSentToEmailHint] = useState('');
+  const [paymentHistory, setPaymentHistory] = useState([]);
 
   useEffect(() => {
     clearLegacyInvoiceVerificationSessionKeys();
@@ -113,6 +117,21 @@ export default function InvoiceView() {
 
     fetchInvoiceData();
   }, [token, searchParams]);
+
+  useEffect(() => {
+    if (!invoice?.id || !token || needsEmailVerification) return undefined;
+    let cancelled = false;
+    fetchDocumentPaymentHistory({ invoiceId: invoice.id, shareToken: token })
+      .then((snap) => {
+        if (!cancelled) setPaymentHistory(snap.history || []);
+      })
+      .catch(() => {
+        if (!cancelled) setPaymentHistory([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice?.id, token, needsEmailVerification]);
 
   const handleEmailVerification = async () => {
     if (!emailVerification.trim()) {
@@ -243,7 +262,6 @@ export default function InvoiceView() {
     );
   }
 
-  const canPayOnline = bankingDetail && bankingDetail.payment_gateway_url;
   const ownerCurrency = invoice.owner_currency || invoice.currency || 'ZAR';
   const publicViewUrl =
     typeof window !== 'undefined' ? `${window.location.origin}/view/${token}` : '';
@@ -265,30 +283,33 @@ export default function InvoiceView() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 sm:p-8">
+    <div className="min-h-screen bg-slate-100 p-4 sm:p-8 pb-28">
       <InvoiceMetaTags
         invoice={invoice}
         client={client}
         baseUrl={publicViewUrl}
       />
       <div className="max-w-4xl mx-auto">
+        <div className="mb-4 rounded-xl border border-border bg-card p-4">
+          <p className="text-sm text-muted-foreground">{issuerBrand.name || invoice.owner_company_name || 'Invoice'}</p>
+          <p className="text-lg font-semibold text-foreground">{invoice.invoice_number}</p>
+          <p className="text-sm text-muted-foreground">{invoice.project_title || invoice.project_description || 'Payment request'}</p>
+          <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{formatCurrency(invoice.total_amount, ownerCurrency)}</p>
+          {invoice.delivery_date ? (
+            <p className="text-xs text-muted-foreground">Due {invoice.delivery_date}</p>
+          ) : null}
+        </div>
+        <DocumentPaymentActionBar
+          invoice={invoice}
+          client={client}
+          shareToken={token}
+          publicMode
+          onDownloadReceipt={() =>
+            window.open(`${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(token)}&download=true`, '_blank', 'noopener,noreferrer')
+          }
+        />
+        <InvoicePaymentHistory history={paymentHistory} currency={ownerCurrency} />
         <div className="mb-6 flex flex-col sm:flex-row gap-2 justify-end">
-          {canPayOnline && (
-            <a
-              href={bankingDetail.payment_gateway_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-grow sm:flex-grow-0"
-            >
-              <button
-                type="button"
-                className="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-5 h-5" />
-                Pay Now ({formatCurrency(invoice.total_amount, ownerCurrency)})
-              </button>
-            </a>
-          )}
           <a
             href={`${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(token)}&download=true`}
             target="_blank"
