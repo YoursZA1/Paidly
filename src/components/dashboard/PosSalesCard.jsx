@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import { ArrowRight, Store } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/utils/currencyCalculations";
@@ -41,62 +40,57 @@ export default function PosSalesCard({ currency = "ZAR" }) {
   }, []);
 
   return (
-    <Card className="border-border/70">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base font-semibold flex items-center gap-2">
-          <Store className="h-4 w-4 text-primary" />
-          POS
-        </CardTitle>
-        <div className="flex items-center gap-1">
-          <Button size="sm" asChild className="h-8 px-3 text-xs">
+    <section className="dashboard-card px-4 py-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">POS sales today</p>
+        <div className="flex items-center gap-2">
+          <Button size="sm" asChild className="dashboard-cta h-8 rounded-2xl px-3 text-xs">
             <Link to={createPageUrl("POS")}>Open POS</Link>
           </Button>
-          <Button variant="ghost" size="sm" asChild className="h-8 px-2 text-xs">
+          <Button variant="ghost" size="sm" asChild className="h-8 rounded-lg px-2 text-xs text-muted-foreground">
             <Link to={`${createPageUrl("Settings")}?tab=integrations`}>
               Manage
               <ArrowRight className="h-3.5 w-3.5 ml-1" />
             </Link>
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {loading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-5/6" />
-          </div>
-        ) : error ? (
-          <p className="text-sm text-muted-foreground">{error}</p>
-        ) : (
-          <>
-            <p className="text-2xl font-bold tracking-tight">{formatCurrency(totalToday, currency)}</p>
-            <p className="text-xs text-muted-foreground">Sales today</p>
-            {sales.length > 0 ? (
-              <ul className="space-y-2">
-                {sales.map((sale) => (
-                  <li key={sale.id} className="flex items-center justify-between text-sm gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-foreground">
-                        {sale.payment_method || "POS"} · {sale.external_id}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {sale.occurred_at ? format(new Date(sale.occurred_at), "HH:mm") : "—"}
-                        {sale.inventory_applied ? " · stock updated" : ""}
-                      </p>
-                    </div>
-                    <span className="font-medium shrink-0">
-                      {formatCurrency(Number(sale.total_amount) || 0, sale.currency || currency)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No sales recorded today. Open POS to take a sale.</p>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      {loading ? (
+        <div className="mt-3 space-y-2">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+      ) : error ? (
+        <p className="mt-3 text-sm text-muted-foreground">{error}</p>
+      ) : (
+        <>
+          <p className="currency-nums mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+            {formatCurrency(totalToday, currency)}
+          </p>
+          {sales.length > 0 ? (
+            <ul className="mt-3 divide-y divide-border">
+              {sales.map((sale) => (
+                <li key={sale.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate text-foreground">
+                      {sale.payment_method || "POS"} · {sale.external_id}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {sale.occurred_at ? format(new Date(sale.occurred_at), "HH:mm") : "—"}
+                      {sale.inventory_applied ? " · stock updated" : ""}
+                    </p>
+                  </div>
+                  <span className="currency-nums shrink-0 tabular-nums font-medium">
+                    {formatCurrency(Number(sale.total_amount) || 0, sale.currency || currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">No sales recorded today.</p>
+          )}
+        </>
+      )}
+    </section>
   );
 }

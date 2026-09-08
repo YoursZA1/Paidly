@@ -1,7 +1,8 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { insertPayrollProfileRow } from "../payroll/payrollService.js";
 import { ensureLeaveTypes } from "../leave/leaveService.js";
-import { johannesburgYmd } from "../../../shared/payroll/dates.js";
+import { johannesburgYmd, formatIsoDate } from "../../../shared/payroll/dates.js";
+import { yearToDateAccrual } from "../../../shared/leave/leaveMath.js";
 import { notifyUser } from "../payroll/payrollGate.js";
 import {
   registerWorkforceSubscriber,
@@ -90,7 +91,7 @@ async function ensureLeaveBalances(orgId, profile) {
   const year = johannesburgYmd().year;
   const { data: types } = await supabaseAdmin
     .from("leave_types")
-    .select("id, days_per_year")
+    .select("id, days_per_year, accrual_method")
     .eq("org_id", orgId)
     .eq("active", true);
   const employeeId = profile.membership_id || null;
@@ -104,13 +105,21 @@ async function ensureLeaveBalances(orgId, profile) {
       .maybeSingle();
     if (existing?.id) continue;
     const entitled = Number(leaveType.days_per_year) || 0;
+    const accrued = yearToDateAccrual({
+      daysPerYear: entitled,
+      method: leaveType.accrual_method,
+      employmentStartIso: profile.employment_start_date,
+      yearStartIso: formatIsoDate(year, 1, 1),
+      asOfIso: johannesburgYmd().iso,
+      employmentStatus: profile.employment_status,
+    });
     const row = {
       org_id: orgId,
       payroll_profile_id: profile.id,
       leave_type_id: leaveType.id,
       leave_year: year,
       entitled,
-      accrued: 0,
+      accrued,
       used: 0,
       pending: 0,
     };
@@ -199,11 +208,57 @@ async function onPortalActivated(event) {
   });
 }
 
+async function onNotificationPrefsStub(event) {
+  await writeAudit(event, "notification_prefs.stub", {
+    membership_id: event.employee_id,
+    stub: true,
+  });
+}
+
+async function onEmployeeUpdated(event) {
+  const employee = await loadEmployee(event.employee_id);
+  if (!employee) return;
+  const { data: person } = employee.user_id
+    ? await supabaseAdmin
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", employee.user_id)
+        .maybeSingle()
+    : { data: null };
+  const patch = {
+    department: employee.department,
+    employment_status: employee.employment_status || "active",
+    employment_start_date: employee.employment_start_date,
+  };
+  if (employee.employee_number) patch.employee_number = employee.employee_number;
+  if (person?.email || employee.invited_email) patch.email = person?.email || employee.invited_email;
+  if (person?.full_name) patch.full_name = person.full_name;
+  await supabaseAdmin
+    .from("payroll_profiles")
+    .update(patch)
+    .eq("membership_id", employee.id)
+    .eq("org_id", employee.org_id);
+  await writeAudit(event, WORKFORCE_EVENT_TYPES.EMPLOYEE_UPDATED, {
+    membership_id: employee.id,
+  });
+}
+
+async function onLeaveDecided(event) {
+  await writeAudit(event, event.event_type, {
+    membership_id: event.employee_id,
+    leave_request_id: event.payload?.leave_request_id || null,
+  });
+}
+
 let registered = false;
 
 export function registerWorkforceSubscribers() {
   if (registered) return;
   registered = true;
   registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_CREATED, onEmployeeCreated);
+  registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_CREATED, onNotificationPrefsStub);
+  registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_UPDATED, onEmployeeUpdated);
   registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_PORTAL_ACTIVATED, onPortalActivated);
+  registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_LEAVE_APPROVED, onLeaveDecided);
+  registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_LEAVE_REJECTED, onLeaveDecided);
 }

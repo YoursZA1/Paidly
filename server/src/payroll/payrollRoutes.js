@@ -14,6 +14,7 @@ import {
   markPayRunPaid,
   cancelPayRun,
   sendPayRunPayslips,
+  syncPayRunEmployees,
   listStatutoryRules,
   upsertStatutoryRule,
 } from "./payrollService.js";
@@ -96,6 +97,13 @@ export async function handlePayrollRoute(req, res, resolved) {
     return handle(res, () => getPayRun(gate.membership.companyId, id));
   }
 
+  if (route === "run-refresh") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
+    return handle(res, () => syncPayRunEmployees(gate.membership.companyId, id));
+  }
+
   const runActions = {
     "run-calculate": calculatePayRun,
     "run-submit": submitPayRunForApproval,
@@ -143,19 +151,45 @@ export async function handlePayrollRoute(req, res, resolved) {
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
     return handle(res, async () => {
-      const { data: profile } = await supabaseAdmin
-        .from("payroll_profiles")
-        .select("id, employee_number, full_name, email, job_title, department, pay_frequency, pay_type, employment_status")
-        .eq("org_id", gate.membership.companyId)
-        .eq("user_id", gate.user.id)
-        .maybeSingle();
-      const { data: payslips } = await supabaseAdmin
+      const orgId = gate.membership.companyId;
+      const userId = gate.user.id;
+      const membershipId = gate.membership.id || null;
+
+      let profile = null;
+      if (membershipId) {
+        const byMember = await supabaseAdmin
+          .from("payroll_profiles")
+          .select("id, membership_id, employee_number, full_name, email, job_title, department, pay_frequency, pay_type, employment_status")
+          .eq("org_id", orgId)
+          .eq("membership_id", membershipId)
+          .maybeSingle();
+        profile = byMember.data;
+      }
+      if (!profile) {
+        const byUser = await supabaseAdmin
+          .from("payroll_profiles")
+          .select("id, membership_id, employee_number, full_name, email, job_title, department, pay_frequency, pay_type, employment_status")
+          .eq("org_id", orgId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        profile = byUser.data;
+      }
+
+      const employeeId = membershipId || profile?.membership_id || null;
+      let payslipQuery = supabaseAdmin
         .from("payslips")
-        .select("id, payslip_number, pay_period_start, pay_period_end, pay_date, net_pay, gross_pay, status, employee_name")
-        .eq("org_id", gate.membership.companyId)
-        .eq("employee_user_id", gate.user.id)
+        .select("id, payslip_number, pay_period_start, pay_period_end, pay_date, net_pay, gross_pay, status, employee_name, membership_id")
+        .eq("org_id", orgId)
         .order("pay_date", { ascending: false })
         .limit(36);
+      if (employeeId) {
+        payslipQuery = payslipQuery.or(
+          `employee_user_id.eq.${userId},membership_id.eq.${employeeId}`
+        );
+      } else {
+        payslipQuery = payslipQuery.eq("employee_user_id", userId);
+      }
+      const { data: payslips } = await payslipQuery;
       return { profile, payslips: payslips || [] };
     });
   }
@@ -185,6 +219,7 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "run-paid") return { route: "run-paid", id: qid || segs[1] };
   if (segs[0] === "run-cancel") return { route: "run-cancel", id: qid || segs[1] };
   if (segs[0] === "run-send") return { route: "run-send", id: qid || segs[1] };
+  if (segs[0] === "run-refresh") return { route: "run-refresh", id: qid || segs[1] };
   if (segs[0] === "run-by-id") return { route: "run-by-id", id: qid || segs[1] };
   if (segs[0] === "runs" && segs.length === 1) return { route: "runs" };
   if (segs[0] === "runs" && segs[1] && segs[2] === "calculate") return { route: "run-calculate", id: segs[1] };
@@ -194,6 +229,7 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "runs" && segs[1] && segs[2] === "paid") return { route: "run-paid", id: segs[1] };
   if (segs[0] === "runs" && segs[1] && segs[2] === "cancel") return { route: "run-cancel", id: segs[1] };
   if (segs[0] === "runs" && segs[1] && segs[2] === "send") return { route: "run-send", id: segs[1] };
+  if (segs[0] === "runs" && segs[1] && segs[2] === "refresh") return { route: "run-refresh", id: segs[1] };
   if (segs[0] === "runs" && segs[1]) return { route: "run-by-id", id: segs[1] };
 
   if (req.query?.__payroll) {

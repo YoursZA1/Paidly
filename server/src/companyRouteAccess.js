@@ -185,7 +185,7 @@ async function resolveActiveOrgIdForUser(supabaseAdmin, userId) {
 async function fetchMembershipForOrg(supabaseAdmin, userId, orgId) {
   const withJobFunction = await supabaseAdmin
     .from("memberships")
-    .select("org_id, role, job_function, pos_register_id, created_at")
+    .select("id, org_id, role, job_function, pos_register_id, created_at")
     .eq("user_id", userId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -193,14 +193,14 @@ async function fetchMembershipForOrg(supabaseAdmin, userId, orgId) {
   if (withJobFunction.error && /pos_register_id/i.test(withJobFunction.error.message || "")) {
     const withoutTill = await supabaseAdmin
       .from("memberships")
-      .select("org_id, role, job_function, created_at")
+      .select("id, org_id, role, job_function, created_at")
       .eq("user_id", userId)
       .eq("org_id", orgId)
       .maybeSingle();
     if (withoutTill.error && /job_function/i.test(withoutTill.error.message || "")) {
       return supabaseAdmin
         .from("memberships")
-        .select("org_id, role, created_at")
+        .select("id, org_id, role, created_at")
         .eq("user_id", userId)
         .eq("org_id", orgId)
         .maybeSingle();
@@ -210,7 +210,7 @@ async function fetchMembershipForOrg(supabaseAdmin, userId, orgId) {
   if (withJobFunction.error && /job_function/i.test(withJobFunction.error.message || "")) {
     const withoutJobFunction = await supabaseAdmin
       .from("memberships")
-      .select("org_id, role, created_at")
+      .select("id, org_id, role, created_at")
       .eq("user_id", userId)
       .eq("org_id", orgId)
       .maybeSingle();
@@ -242,6 +242,7 @@ export async function loadCompanyMembership(supabaseAdmin, userId) {
   }
 
   return {
+    id: membership?.id || null,
     userId,
     companyId: orgId,
     orgId,
@@ -303,7 +304,8 @@ export function assertCompanyRecordAccess(membership, record, { selfOnly = false
     record.user_id === uid ||
     record.created_by === uid ||
     record.assigned_user_id === uid ||
-    record.employee_user_id === uid;
+    record.employee_user_id === uid ||
+    (membership.id && record.membership_id && record.membership_id === membership.id);
   if (!owned) {
     const err = new Error("Not authorized for this record");
     err.status = 403;

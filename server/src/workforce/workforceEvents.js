@@ -102,11 +102,13 @@ export async function processWorkforceEvent(row) {
   }
 }
 
-export async function retryFailedWorkforceEvents({ limit = 25 } = {}) {
+export async function retryFailedWorkforceEvents({ limit = 25, minAgeMs = 15_000 } = {}) {
+  const cutoff = new Date(Date.now() - Math.max(0, Number(minAgeMs) || 0)).toISOString();
   const { data, error } = await supabaseAdmin
     .from("workforce_events")
     .select("*")
     .in("status", ["pending", "failed"])
+    .lte("created_at", cutoff)
     .order("created_at", { ascending: true })
     .limit(limit);
   if (error) throw error;

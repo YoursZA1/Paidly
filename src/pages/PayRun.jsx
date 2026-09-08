@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Calculator, Check, Lock, Mail, Wallet } from "lucide-react";
+import { ArrowLeft, Calculator, Check, Lock, Mail, RefreshCw, Wallet } from "lucide-react";
 import PageTemplate from "@/components/layout/PageTemplate";
 import PageHeader from "@/components/dashboard/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -69,7 +69,8 @@ export default function PayRunPage() {
   };
 
   const items = run?.items || [];
-  const canCalculate = run && ["draft", "processing", "calculated"].includes(run.status) && !run.finalized_at;
+  const canRefreshEmployees = run && ["draft", "processing", "calculated"].includes(run.status) && !run.finalized_at;
+  const canCalculate = canRefreshEmployees;
   const canApprove = run && ["calculated", "awaiting_approval"].includes(run.status);
   const canFinalize = run && run.status === "approved" && !run.finalized_at;
   const canPay = run && run.finalized_at && run.status !== "paid";
@@ -100,6 +101,17 @@ export default function PayRunPage() {
                 <ArrowLeft className="h-4 w-4 mr-1" /> Payroll
               </Link>
             </Button>
+            {canRefreshEmployees ? (
+              <Button
+                variant="outline"
+                className="rounded-xl h-9"
+                disabled={Boolean(busy)}
+                onClick={() => act("refresh", () => payrollApi.refreshRunEmployees(id))}
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                {busy === "refresh" ? "Refreshing…" : "Refresh employees"}
+              </Button>
+            ) : null}
             {canCalculate ? (
               <Button
                 className="rounded-xl h-9 bg-primary text-primary-foreground"
@@ -190,7 +202,7 @@ export default function PayRunPage() {
                   {!items.length && !loading ? (
                     <tr>
                       <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
-                        No eligible employees. Add payroll profiles from team members.
+                        No eligible employees yet. Add the person once in Team Members — they appear here automatically. Use Refresh employees if they were added after this run was created.
                       </td>
                     </tr>
                   ) : null}

@@ -6,7 +6,7 @@ import {
   parseUuid,
   requireUuid,
 } from "../../shared/ids/uuid.js";
-import { leaveRequestEmployeeScope, mapLeaveDbError, parseLeaveListFilters } from "../../shared/leave/leaveIds.js";
+import { leaveRequestEmployeeScope, mapLeaveDbError, parseLeaveListFilters, scopedLeaveListFilters } from "../../shared/leave/leaveIds.js";
 import {
   canonicalEmployeeId,
   employeeOptionValue,
@@ -68,6 +68,12 @@ describe("employee identity", () => {
     expect(formatEmployeeLabel(employee)).toBe(DISPLAY);
   });
 
+  it("never uses the printed employee number as the selector value", () => {
+    expect(canonicalEmployeeId({ id: EMPLOYEE_UUID, employee_id: "EMP-002" })).toBe(EMPLOYEE_UUID);
+    expect(employeeOptionValue({ employee_id: "EMP-002", employee_number: "EMP-002", full_name: "Armando Mavelele" })).toBe("");
+    expect(employeeOptionValue({ membership_id: EMPLOYEE_UUID, employee_id: "EMP-002" })).toBe(EMPLOYEE_UUID);
+  });
+
   it("never treats a missing user_id as a reason to use the display label", () => {
     expect(employeeOptionValue({ ...employee, user_id: null })).toBe(EMPLOYEE_UUID);
     expect(employeeOptionValue({ id: DISPLAY, full_name: "Armando Mavelele", employee_number: "EMP-002" })).toBe("");
@@ -93,6 +99,22 @@ describe("leave list filters", () => {
       user_id: undefined,
       leave_type_id: undefined,
       department: "Ops",
+    });
+  });
+
+  it("drops teammate filters for employees without team leave access", () => {
+    const filters = parseLeaveListFilters({
+      status: "pending",
+      employee_id: EMPLOYEE_UUID,
+      user_id: EMPLOYEE_UUID,
+    });
+    expect(scopedLeaveListFilters(filters, false)).toEqual({
+      status: "pending",
+      employee_id: undefined,
+      payroll_profile_id: undefined,
+      user_id: undefined,
+      leave_type_id: undefined,
+      department: undefined,
     });
   });
 

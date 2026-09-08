@@ -659,7 +659,7 @@ export async function cancelLeaveRequest(orgId, actorId, requestId, { asAdmin = 
   const actor = requireUuid(actorId, "user id");
   const { data: request } = await supabaseAdmin
     .from("leave_requests")
-    .select("*, leave_types(*)")
+    .select("*, leave_types(*), payroll_profiles(*)")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -697,18 +697,24 @@ export async function cancelLeaveRequest(orgId, actorId, requestId, { asAdmin = 
     if (request.status === "approved") patch.used = Math.max(0, Number(balance.used) - days);
     if (Object.keys(patch).length) {
       await supabaseAdmin.from("leave_balances").update(patch).eq("id", balance.id);
-      await supabaseAdmin.from("leave_transactions").insert({
-        org_id: orgId,
-        payroll_profile_id: request.payroll_profile_id,
-        leave_type_id: request.leave_type_id,
-        leave_request_id: request.id,
-        leave_year: year,
-        kind: "reversal",
-        days,
-        balance_after: availableOf({ ...balance, ...patch }),
-        reason: "Leave cancelled",
-        actor_id: actor,
-      });
+      await insertLeaveRow(
+        "leave_transactions",
+        withEmployeeId(
+          {
+            org_id: orgId,
+            payroll_profile_id: request.payroll_profile_id,
+            leave_type_id: request.leave_type_id,
+            leave_request_id: request.id,
+            leave_year: year,
+            kind: "reversal",
+            days,
+            balance_after: availableOf({ ...balance, ...patch }),
+            reason: "Leave cancelled",
+            actor_id: actor,
+          },
+          request.payroll_profiles
+        )
+      );
     }
   }
 

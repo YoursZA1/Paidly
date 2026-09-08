@@ -1,48 +1,26 @@
 import { normalizeRequestBody } from "../validateBody.js";
-import { getUserFromRequest } from "../supabaseAuth.js";
-import { supabaseAdmin } from "../supabaseAdmin.js";
-import {
-  loadCompanyMembership,
-  membershipHasPermission,
-  PERMISSIONS,
-} from "../companyRouteAccess.js";
-import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
+import { membershipHasPermission, PERMISSIONS } from "../companyRouteAccess.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
-import { createEmployee, getEmployee, listEmployees } from "./employeeService.js";
+import { sanitizeEmployeeWritePayload } from "../../../shared/workforce/employeeWrite.js";
+import { createEmployee, getEmployee, listEmployees, updateEmployee } from "./employeeService.js";
+import { requireWorkforcePermission } from "./workforceAuth.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
 }
 
-async function requireWorkforce(req, res, permission) {
-  try {
-    const { user, error: authErr } = await getUserFromRequest(req);
-    if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
-    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
-    if (!membership) return { ok: false, response: jsonError(res, 403, "No company membership") };
-    if (isPosOnlyStaff(membership)) {
-      return { ok: false, response: jsonError(res, 403, "POS staff cannot access workforce", { code: "POS_SCOPE" }) };
-    }
-    if (!membershipHasPermission(membership, permission)) {
-      return { ok: false, response: jsonError(res, 403, "Forbidden", { code: "FORBIDDEN", permission }) };
-    }
-    return { ok: true, user, membership };
-  } catch (err) {
-    return { ok: false, response: jsonError(res, 500, err?.message || "Could not verify access") };
-  }
-}
-
 export async function handleWorkforceEmployees(req, res) {
-  const body = normalizeRequestBody(req);
+  const body = sanitizeEmployeeWritePayload(normalizeRequestBody(req));
   const employeeId = parseUuid(req.query?.id || body.id);
 
   if (req.method === "GET" && employeeId) {
-    const gate = await requireWorkforce(req, res, PERMISSIONS.VIEW_OWN_PROFILE);
+    const gate = await requireWorkforcePermission(req, res, PERMISSIONS.VIEW_OWN_PROFILE);
     if (!gate.ok) return gate.response;
     const canViewTeam = membershipHasPermission(gate.membership, PERMISSIONS.VIEW_TEAM_MEMBERS);
     try {
       const data = await getEmployee(gate.membership.companyId, employeeId, {
         actorUserId: gate.user.id,
+        actorMembershipId: gate.membership.id,
         canViewTeam,
       });
       return res.status(200).json({ ok: true, data });
@@ -52,7 +30,7 @@ export async function handleWorkforceEmployees(req, res) {
   }
 
   if (req.method === "GET") {
-    const gate = await requireWorkforce(req, res, PERMISSIONS.VIEW_TEAM_MEMBERS);
+    const gate = await requireWorkforcePermission(req, res, PERMISSIONS.VIEW_TEAM_MEMBERS);
     if (!gate.ok) return gate.response;
     try {
       const data = await listEmployees(gate.membership.companyId);
@@ -63,7 +41,7 @@ export async function handleWorkforceEmployees(req, res) {
   }
 
   if (req.method === "POST") {
-    const gate = await requireWorkforce(req, res, PERMISSIONS.MANAGE_EMPLOYEES);
+    const gate = await requireWorkforcePermission(req, res, PERMISSIONS.MANAGE_EMPLOYEES);
     if (!gate.ok) return gate.response;
     try {
       const data = await createEmployee(gate.membership.companyId, gate.membership, body);
@@ -73,7 +51,19 @@ export async function handleWorkforceEmployees(req, res) {
     }
   }
 
-  res.setHeader("Allow", "GET, POST");
+  if (req.method === "PATCH" || req.method === "PUT") {
+    const gate = await requireWorkforcePermission(req, res, PERMISSIONS.MANAGE_EMPLOYEES);
+    if (!gate.ok) return gate.response;
+    if (!employeeId) return jsonError(res, 400, "Employee id is required");
+    try {
+      const data = await updateEmployee(gate.membership.companyId, gate.membership, employeeId, body);
+      return res.status(200).json({ ok: true, data });
+    } catch (err) {
+      return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+    }
+  }
+
+  res.setHeader("Allow", "GET, POST, PATCH, PUT");
   return jsonError(res, 405, "Method not allowed");
 }
 

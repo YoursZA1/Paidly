@@ -17,6 +17,7 @@ import { listWorkforceEmployees } from "@/services/CompanyTeamService";
 import { payrollApi } from "@/services/PayrollApiService";
 import EmployeeSelect from "@/components/workforce/EmployeeSelect";
 import { parseUuid } from "@shared/ids/uuid.js";
+import { buildPayslipNumber } from "@shared/payroll/payslipNumber.js";
 
 export default function CreatePayslip() {
     const navigate = useNavigate();
@@ -33,6 +34,8 @@ export default function CreatePayslip() {
         position: "",
         department: "",
         payroll_profile_id: "",
+        pay_run_id: "",
+        pay_run_item_id: "",
         pay_period_start: "",
         pay_period_end: "",
         pay_date: "",
@@ -125,6 +128,8 @@ export default function CreatePayslip() {
                 employee_id: "",
                 employee_email: "",
                 payroll_profile_id: "",
+                pay_run_id: "",
+                pay_run_item_id: "",
             }));
             return;
         }
@@ -138,8 +143,54 @@ export default function CreatePayslip() {
             department: emp.department || "",
             basic_salary: Number(emp.base_salary) > 0 ? Number(emp.base_salary) : prev.basic_salary,
             payroll_profile_id: parseUuid(emp.payroll_profile_id) || "",
+            pay_run_id: "",
+            pay_run_item_id: "",
         }));
     };
+
+    useEffect(() => {
+        const membershipId = parseUuid(employeeUuid);
+        const start = payslipData.pay_period_start;
+        const end = payslipData.pay_period_end;
+        if (!membershipId || !start || !end) return undefined;
+        let cancelled = false;
+        (async () => {
+            try {
+                const result = await payrollApi.preview({
+                    membership_id: membershipId,
+                    period_start: start,
+                    period_end: end,
+                    profile: {
+                        base_salary: Number(payslipData.basic_salary) || 0,
+                        pay_frequency: "monthly",
+                        pay_type: "monthly_salary",
+                    },
+                });
+                if (cancelled || result?.source !== "pay_run_item") return;
+                const allowances = (result.earnings || []).filter(
+                    (line) => String(line.code || "").toUpperCase() !== "BASIC" && String(line.type || "") !== "basic"
+                );
+                setPayslipData((prev) => ({
+                    ...prev,
+                    pay_run_id: parseUuid(result.pay_run_id) || "",
+                    pay_run_item_id: parseUuid(result.pay_run_item_id) || "",
+                    basic_salary: Number(result.basic) || prev.basic_salary,
+                    overtime_hours: Number(result.overtime_hours) || 0,
+                    overtime_rate: Number(result.overtime_rate) || 0,
+                    allowances: allowances.length
+                        ? allowances.map((line) => ({ name: line.name || "Allowance", amount: Number(line.amount) || 0 }))
+                        : prev.allowances,
+                    tax_deduction: Number(result.tax_deduction) || 0,
+                    uif_deduction: Number(result.uif_deduction) || 0,
+                }));
+            } catch {
+                /* standalone compose still uses the live preview */
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [employeeUuid, payslipData.pay_period_start, payslipData.pay_period_end]);
 
     useEffect(() => {
         if (!draftRestoreNotice?.id) return;
@@ -234,19 +285,10 @@ export default function CreatePayslip() {
 
     const handleCreatePayslip = async () => {
         try {
-            const getInitials = (name) => {
-                if (!name) return "XX";
-                const parts = name.trim().split(/\s+/);
-                if (parts.length > 1 && parts[0] && parts[parts.length - 1]) {
-                    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-                }
-                return name.substring(0, 2).toUpperCase();
-            };
-
-            const now = new Date();
-            const employeeInitials = getInitials(payslipData.employee_name);
-            const timestamp = now.getTime().toString().slice(-6);
-            const payslipNumber = `PAY-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${employeeInitials}${timestamp}`;
+            const payslipNumber = buildPayslipNumber({
+                periodStart: payslipData.pay_period_start,
+                employeeNumber: payslipData.employee_id,
+            });
 
             let employee_user_id = null;
             const selected = employees.find(
@@ -260,6 +302,8 @@ export default function CreatePayslip() {
                 employee_user_id: employee_user_id || undefined,
                 payroll_profile_id: parseUuid(payslipData.payroll_profile_id) || undefined,
                 membership_id: parseUuid(employeeUuid) || undefined,
+                pay_run_id: parseUuid(payslipData.pay_run_id) || undefined,
+                pay_run_item_id: parseUuid(payslipData.pay_run_item_id) || undefined,
                 gross_pay: grossPay,
                 total_deductions: totalDeductions,
                 net_pay: netPay,
@@ -352,6 +396,9 @@ export default function CreatePayslip() {
                                 ) : (
                                     <p className="text-xs text-muted-foreground">
                                         Name, employee number, and salary come from the employee record. You do not re-enter them here.
+                                        {parseUuid(payslipData.pay_run_item_id)
+                                            ? " Amounts are taken from the processed payroll entry for this period."
+                                            : ""}
                                     </p>
                                 )}
                             </div>

@@ -3,8 +3,7 @@ import { ADMIN_ROLE_TIERS } from "@/constants/adminRoles";
 import { fetchSupabaseUsers, updateUserRole, deleteUser, addUser, syncAndCleanUsers } from "@/api/userManagement";
 import { formatQueryError } from "@/utils/apiErrorText";
 import { adminRowPrimaryId, stableDirectoryRowKey } from "@/utils/stableListKey";
-import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, memo } from "react";
-import PropTypes from 'prop-types';
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Invoice } from "@/api/entities";
 import { Client } from "@/api/entities";
 import { BankingDetail } from "@/api/entities";
@@ -33,18 +32,9 @@ import {
   Users as UsersIcon,
   Plus,
   Headset,
-  TrendingUp,
   Receipt,
-  Landmark,
-  Clock,
-  ArrowRightLeft,
-  PackageX,
-  PackageSearch,
-  Warehouse,
-  ClipboardList,
   Store,
 } from "lucide-react";
-import { TaxService } from "@/services/TaxService";
 import {
   isInvoicePaidLike,
   isInvoiceExcludedFromAging,
@@ -54,11 +44,8 @@ import {
 import { motion } from "framer-motion";
 import ViewInvoice from "@/pages/ViewInvoice";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { NumberTicker } from "@/components/dashboard/NumberTicker";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import CreditCardDisplay from '@/components/dashboard/CreditCardDisplay';
-import KPICarousel from '@/components/dashboard/KPICarousel';
 import GoalProgress from '@/components/dashboard/GoalProgress';
 import { GoalSetterModal } from '@/components/dashboard/GoalSetterModal';
 import UpcomingPayments from '@/components/dashboard/UpcomingPayments';
@@ -70,17 +57,21 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
+import { useDashboardRevenueSourcesQuery } from "@/hooks/useDashboardRevenueSourcesQuery";
+import DashboardRevenueWidget from "@/components/dashboard/DashboardRevenueWidget";
 import CompanyMemberDashboard from "@/components/dashboard/CompanyMemberDashboard";
 import DashboardSubscriptionBanner from "@/components/dashboard/DashboardSubscriptionBanner";
+import FinancialSummary from "@/components/dashboard/FinancialSummary";
 import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { buildTrend, computeDashboardFinancials } from "@/lib/dashboard/financialSummary";
+import { computeDashboardRevenue } from "@/lib/dashboard/revenueComposition";
+import { mergeRowsById } from "@/lib/dashboard/listDashboardRevenueSources";
 import {
   registerAdminDashboardRealtimeRefresh,
   PAIDLY_APP_FETCH_ALL_SETTLED_EVENT,
 } from "@/lib/realtimeStoreHydration";
-
-const DashboardRevenueChart = lazy(() => import('@/components/dashboard/DashboardRevenueChart'));
 
 /** Recent Invoices preview on the user dashboard; full list is on Invoices. */
 const RECENT_INVOICES_PREVIEW_ROWS = 3;
@@ -100,166 +91,12 @@ function setCachedDashboard(userId, data) {
   }
 }
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { y: 20, opacity: 0 },
-  visible: {
-    y: 0,
-    opacity: 1,
-    transition: { type: 'spring', stiffness: 100, damping: 30 },
-  },
-};
-
-const StatCard = memo(function StatCard({ title, value, icon: Icon, iconImageSrc, iconImageAlt, color: _color, iconBg: _iconBg, isLoading, fintech, accent, growth, subtitle, animateFromZero, numericValue, currencyForAnimation }) {
-  const useTicker = animateFromZero && currencyForAnimation != null && !isLoading && typeof numericValue === 'number';
-  const displayValue = useTicker ? null : value;
-  const accentTone =
-    accent === "purple"
-      ? "from-violet-500/18 via-violet-500/6 to-transparent"
-      : accent === "amber"
-        ? "from-amber-500/18 via-amber-500/6 to-transparent"
-        : "from-cyan-500/18 via-cyan-500/6 to-transparent";
-  const accentShadow =
-    accent === "purple"
-      ? "shadow-[0_6px_24px_rgba(124,58,237,0.14)] hover:shadow-[0_10px_30px_rgba(124,58,237,0.2)]"
-      : accent === "amber"
-        ? "shadow-[0_6px_24px_rgba(245,158,11,0.14)] hover:shadow-[0_10px_30px_rgba(245,158,11,0.2)]"
-        : "shadow-[0_6px_24px_rgba(6,182,212,0.14)] hover:shadow-[0_10px_30px_rgba(6,182,212,0.2)]";
-
-  return (
-  <Card className={`group relative overflow-hidden transition-all duration-300 ${
-    fintech
-      ? `glass-card rounded-fintech border border-border/80 hover:-translate-y-[1px] ${accentShadow}`
-      : "bg-card rounded-xl border border-border shadow-sm hover:-translate-y-0.5 hover:shadow-elevation-md"
-  }`}>
-    {fintech && (
-      <div className={`pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b ${accentTone}`} aria-hidden />
-    )}
-    <CardContent className="relative p-4 sm:p-6">
-      {fintech ? (
-        <>
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <p className="min-w-0 flex-1 text-xs font-semibold tracking-wide text-muted-foreground/95">{title}</p>
-            <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border sm:h-11 sm:w-11 ${
-                accent === "purple"
-                  ? "border-violet-500/25 bg-violet-500/12"
-                  : accent === "amber"
-                    ? "border-amber-500/30 bg-amber-500/15"
-                    : "border-cyan-500/25 bg-cyan-500/12"
-              }`}
-            >
-              {iconImageSrc ? (
-                <img
-                  src={iconImageSrc}
-                  alt={iconImageAlt || String(title || "Icon")}
-                  width={48}
-                  height={48}
-                  className="h-5 w-5 object-contain contrast-110 saturate-110 drop-shadow-[0_2px_2px_rgba(0,0,0,0.26)] dark:contrast-110 dark:saturate-110 dark:drop-shadow-[0_1px_1px_rgba(255,255,255,0.12)] sm:h-6 sm:w-6"
-                  loading="lazy"
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <Icon
-                  className={`h-5 w-5 sm:h-6 sm:w-6 ${accent === "purple" ? "text-violet-600" : accent === "amber" ? "text-amber-600" : "text-muted-foreground"}`}
-                />
-              )}
-            </div>
-          </div>
-          {isLoading ? (
-            <Skeleton className="h-6 w-3/4 rounded bg-muted sm:h-7" />
-          ) : (
-            <>
-              <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug tracking-tight text-foreground sm:text-base">
-                {useTicker ? <NumberTicker value={numericValue} currency={currencyForAnimation} enabled /> : displayValue}
-              </p>
-              {subtitle && (
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">{subtitle}</div>
-              )}
-              {typeof growth === "number" && (
-                <p className={`mt-1 text-xs font-medium ${growth >= 0 ? "text-status-paid" : "text-status-overdue"}`}>
-                  {growth >= 0 ? "+" : ""}
-                  {growth}% vs last month
-                </p>
-              )}
-            </>
-          )}
-        </>
-      ) : (
-        <div className="flex justify-between items-start gap-3 sm:gap-4">
-          <div className="flex-1 min-w-0">
-            <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground">{title}</p>
-            {isLoading ? (
-              <Skeleton className="h-6 w-3/4 rounded sm:h-7" />
-            ) : (
-              <>
-                <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-foreground sm:text-base">
-                  {useTicker ? <NumberTicker value={numericValue} currency={currencyForAnimation} enabled /> : displayValue}
-                </p>
-                {subtitle && <div className="mt-0.5 text-xs text-muted-foreground">{subtitle}</div>}
-              </>
-            )}
-          </div>
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted sm:h-14 sm:w-14">
-            {iconImageSrc ? (
-              <img
-                src={iconImageSrc}
-                alt={iconImageAlt || String(title || "Icon")}
-                width={48}
-                height={48}
-                className="h-6 w-6 object-contain contrast-110 saturate-110 drop-shadow-[0_2px_2px_rgba(0,0,0,0.26)] dark:contrast-110 dark:saturate-110 dark:drop-shadow-[0_1px_1px_rgba(255,255,255,0.12)] sm:h-7 sm:w-7"
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <Icon className="h-6 w-6 text-muted-foreground sm:h-7 sm:w-7" />
-            )}
-          </div>
-        </div>
-      )}
-      {fintech && (
-        <div
-          className="absolute bottom-0 left-4 right-4 h-px rounded-full bg-gradient-to-r from-transparent via-border to-transparent"
-        />
-      )}
-    </CardContent>
-  </Card>
-  );
-});
-
 /** Drop in-memory goal rows when the dashboard year changes (e.g. New Year) or legacy rows lack `year`. */
 function businessGoalMatchesYear(goal, calendarYear) {
   if (!goal || calendarYear == null) return false;
   const y = Number(goal.year);
   return Number.isFinite(y) && y === Number(calendarYear);
 }
-
-StatCard.propTypes = {
-  title: PropTypes.string.isRequired,
-  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
-  icon: PropTypes.elementType.isRequired,
-  color: PropTypes.string,
-  iconBg: PropTypes.string,
-  isLoading: PropTypes.bool,
-  fintech: PropTypes.bool,
-  accent: PropTypes.oneOf(['blue', 'purple', 'amber']),
-  growth: PropTypes.number,
-  subtitle: PropTypes.node,
-  animateFromZero: PropTypes.bool,
-  numericValue: PropTypes.number,
-  currencyForAnimation: PropTypes.string,
-};
 
 export default function Dashboard() {
   const { user: authUser } = useAuth();
@@ -395,6 +232,7 @@ function DashboardMain() {
     storeClients,
     storeExpenses,
     storePayments,
+    storeQuotes,
     storeIsLoading,
     fetchAll,
     payslips,
@@ -404,6 +242,7 @@ function DashboardMain() {
       storeClients: s.clients,
       storeExpenses: s.expenses,
       storePayments: s.payments,
+      storeQuotes: s.quotes,
       storeIsLoading: s.isLoading,
       fetchAll: s.fetchAll,
       payslips: s.payslips,
@@ -412,6 +251,7 @@ function DashboardMain() {
 
   const dashboardInvoicesQuery = useDashboardInvoicesQuery(authUser?.id);
   const dashboardPayslipsQuery = useDashboardPayslipsQuery(authUser?.id);
+  const revenueSourcesQuery = useDashboardRevenueSourcesQuery(authUser?.id, !isAdmin);
   const currentSubscriptionQuery = useCurrentSubscriptionQuery({ enabled: !isAdmin });
   const invoices = isAdmin ? invoicesState : storeInvoices;
   const resolvedInvoices = isAdmin
@@ -422,7 +262,8 @@ function DashboardMain() {
     : (dashboardPayslipsQuery.data && dashboardPayslipsQuery.data.length > 0 ? dashboardPayslipsQuery.data : payslips);
   const clients = isAdmin ? clientsState : storeClients;
   const expenses = isAdmin ? expensesState : storeExpenses;
-  const _payments = isAdmin ? paymentsState : storePayments;
+  const payments = isAdmin ? paymentsState : storePayments;
+  const quotes = isAdmin ? [] : (Array.isArray(storeQuotes) ? storeQuotes : []);
   const user = isAdmin ? userState : profileFromQuery ?? authUser;
   useEffect(() => {
     if (isAdmin || !authUser?.id || !profileFromQuery) return;
@@ -553,7 +394,7 @@ function DashboardMain() {
     return () => { cancelled = true; mountedRef.current = false; };
   }, [isAdmin, authUser?.id, calendarYear, profileFromQuery]);
 
-  // Inventory KPI cards (Low Stock, Out of Stock, Inventory Value, Outstanding POs):
+  // Inventory figures (shown only when product catalog items exist)
   // self-contained fetch, independent of the invoice/expense loading pipeline above.
   useEffect(() => {
     if (isAdmin || !authUser?.id) return undefined;
@@ -1026,15 +867,6 @@ function DashboardMain() {
     setBusinessGoal(businessGoalMatchesYear(goal, calendarYear) ? goal : null);
   }, [user, calendarYear]);
 
-  const refreshDashboardData = useCallback(async () => {
-    if (isAdmin) {
-      await loadAdminData();
-      return;
-    }
-    await fetchAll(authUser || null, { accessToken: session?.accessToken ?? null });
-    await refreshBusinessGoal();
-  }, [authUser, fetchAll, isAdmin, loadAdminData, refreshBusinessGoal, session?.accessToken]);
-
   /** Admin aggregate dashboard: SyncEngine debounces DB events → reload local admin state when this screen is mounted. */
   useEffect(() => {
     if (!isAdmin) return undefined;
@@ -1079,53 +911,37 @@ function DashboardMain() {
     }));
   }, [resolvedInvoices, revenueRange]);
 
-  // Fintech KPIs: Revenue, Awaiting payment (consolidated), VAT/Tax liability (SARS), Cash Flow + growth %
-  const fintechKpis = useMemo(() => {
-    const now = new Date();
-    const thisMonthStart = startOfMonth(now);
-    const lastMonthStart = startOfMonth(subMonths(now, 1));
-    const lastMonthEnd = endOfMonth(subMonths(now, 1));
+  const financials = useMemo(
+    () =>
+      computeDashboardFinancials({
+        invoices: resolvedInvoices,
+        payments,
+        quotes,
+      }),
+    [resolvedInvoices, payments, quotes]
+  );
 
-    const outstanding = OutstandingBalanceService.calculateTotalOutstanding(resolvedInvoices);
-    const paidInvoices = resolvedInvoices.filter(inv => isInvoicePaidLike(inv.status));
-    const taxSummary = TaxService.getTaxSummaryFromInvoices(paidInvoices);
-    const rev = paidInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-    const exp = expenses.reduce((s, e) => s + (e.amount || 0), 0);
-    const cashFlow = rev - exp;
+  const paidTrend = useMemo(
+    () =>
+      buildTrend({
+        current: financials.paidThisMonth,
+        previous: financials.paidLastMonth,
+        periodLabel: financials.previousMonthLabel,
+      }),
+    [financials]
+  );
 
-    const revThisMonth = resolvedInvoices
-      .filter(inv => {
-        const d = new Date(inv.created_date || inv.created_at || 0);
-        return d >= thisMonthStart && isInvoicePaidLike(inv.status);
-      })
-      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-    const revLastMonth = resolvedInvoices
-      .filter(inv => {
-        const d = new Date(inv.created_date || inv.created_at || 0);
-        return d >= lastMonthStart && d <= lastMonthEnd && isInvoicePaidLike(inv.status);
-      })
-      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-    const expLastMonth = expenses
-      .filter(e => {
-        const d = new Date(e.date || 0);
-        return d >= lastMonthStart && d <= lastMonthEnd;
-      })
-      .reduce((s, e) => s + (e.amount || 0), 0);
-
-    const revenueGrowth = revLastMonth > 0 ? Math.round(((revThisMonth - revLastMonth) / revLastMonth) * 100) : (revThisMonth > 0 ? 100 : 0);
-    const cashFlowLastMonth = revLastMonth - expLastMonth;
-    const cashFlowGrowth = cashFlowLastMonth !== 0 ? Math.round(((cashFlow - cashFlowLastMonth) / Math.abs(cashFlowLastMonth)) * 100) : (cashFlow !== 0 ? 100 : 0);
-
-    return {
-      revenue: rev,
-      outstandingTotal: outstanding.totalOutstanding,
-      outstandingCount: outstanding.unpaidInvoiceCount,
-      vatLiability: taxSummary.totalTax || 0,
-      cashFlow,
-      revenueGrowth,
-      cashFlowGrowth
-    };
-  }, [resolvedInvoices, expenses, resolvedPayslips]);
+  const revenueBreakdown = useMemo(
+    () =>
+      computeDashboardRevenue({
+        invoices: mergeRowsById(resolvedInvoices, revenueSourcesQuery.data?.invoices),
+        payments: mergeRowsById(payments, revenueSourcesQuery.data?.payments),
+        posSales: revenueSourcesQuery.data?.posSales || [],
+        quotes: mergeRowsById(quotes, revenueSourcesQuery.data?.quotes),
+        rangeDays: revenueRange,
+      }),
+    [resolvedInvoices, payments, quotes, revenueSourcesQuery.data, revenueRange]
+  );
 
   const inventoryKpis = useMemo(() => {
     let lowStockCount = 0;
@@ -1665,17 +1481,17 @@ function DashboardMain() {
     revenueTarget > 0 ? Math.min(100, (revenueForGoalYear / revenueTarget) * 100) : 0;
 
   const statusColors = {
-    paid: "bg-status-paid/12 text-status-paid border border-status-paid/25",
-    sent: "bg-status-sent/12 text-status-sent border border-status-sent/25",
-    sending: "bg-primary/15 text-primary border border-primary/25 animate-pulse",
-    preparing: "bg-primary/12 text-primary border border-primary/20 animate-pulse",
-    viewed: "bg-status-sent/10 text-status-sent border border-status-sent/20",
-    draft: "bg-status-draft/15 text-slate-600 dark:text-slate-300 border border-status-draft/30",
-    overdue: "bg-status-overdue/12 text-status-overdue border border-status-overdue/25",
-    partial_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
-    partially_paid: "bg-status-pending/12 text-status-pending border border-status-pending/25",
-    cancelled: "bg-status-declined/12 text-status-declined border border-status-declined/25",
-    void: "bg-status-declined/12 text-status-declined border border-status-declined/25",
+    paid: "text-status-paid",
+    sent: "text-status-sent",
+    sending: "text-primary",
+    preparing: "text-primary",
+    viewed: "text-status-sent",
+    draft: "text-muted-foreground",
+    overdue: "text-status-overdue",
+    partial_paid: "text-status-pending",
+    partially_paid: "text-status-pending",
+    cancelled: "text-status-declined",
+    void: "text-status-declined",
   };
 
   const getStatusLabel = (status) => invoiceStatusLabel(status);
@@ -1683,161 +1499,145 @@ function DashboardMain() {
   const today = startOfDay(new Date());
   const endOfThisWeek = new Date(today);
   endOfThisWeek.setDate(endOfThisWeek.getDate() + 7);
-  const overdueCount = invoices.filter(inv => {
+  const dueThisWeekCount = invoices.filter((inv) => {
     if (isInvoiceExcludedFromAging(inv.status)) return false;
-    if (inv.status === 'overdue') return true;
-    const due = inv.due_date ? startOfDay(new Date(inv.due_date)) : null;
-    return due && due < today;
-  }).length;
-  const dueThisWeekCount = invoices.filter(inv => {
-    if (isInvoiceExcludedFromAging(inv.status)) return false;
-    const due = inv.due_date ? startOfDay(new Date(inv.due_date)) : null;
+    const raw = inv.due_date || inv.delivery_date;
+    const due = raw ? startOfDay(new Date(raw)) : null;
     return due && due >= today && due <= endOfThisWeek;
   }).length;
-  const chipClassName =
-    "inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold tracking-tight shadow-sm";
-  const outstandingSubtitle = fintechKpis.outstandingCount === 0
-    ? 'No unpaid invoices'
-    : dueThisWeekCount > 0 || overdueCount > 0
-      ? (
-        <span className="flex flex-wrap items-center gap-2">
-          {dueThisWeekCount > 0 && (
-            <span className={`${chipClassName} border-status-pending/35 bg-status-pending/15 text-status-pending`}>
-              Due this week: {dueThisWeekCount}
-            </span>
-          )}
-          {overdueCount > 0 && (
-            <span className={`${chipClassName} border-status-overdue/35 bg-status-overdue/15 text-status-overdue`}>
-              Overdue: {overdueCount}
-            </span>
-          )}
-        </span>
-      )
-      : `${fintechKpis.outstandingCount} invoice${fintechKpis.outstandingCount !== 1 ? 's' : ''}`;
+  const outstandingHint =
+    financials.outstandingCount === 0
+      ? "No unpaid invoices"
+      : [
+          `${financials.outstandingCount} invoice${financials.outstandingCount === 1 ? "" : "s"} awaiting payment`,
+          financials.overdueCount > 0 ? `${financials.overdueCount} overdue` : null,
+          dueThisWeekCount > 0 ? `${dueThisWeekCount} due this week` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+  const draftTotal = financials.draftInvoiceCount + financials.draftQuoteCount;
+  const draftsHint = [
+    financials.draftInvoiceCount > 0
+      ? `${financials.draftInvoiceCount} invoice${financials.draftInvoiceCount === 1 ? "" : "s"}`
+      : null,
+    financials.draftQuoteCount > 0
+      ? `${financials.draftQuoteCount} quote${financials.draftQuoteCount === 1 ? "" : "s"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ") || "No drafts";
 
   return (
     <div className="min-h-full w-full min-w-0 mobile-page">
       <div className="responsive-page-shell w-full min-w-0 py-2 sm:py-6 md:py-8">
-        {/* Welcome Header — subtle fade, leads into staggered content */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.06, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
-          className="mb-2 sm:mb-6"
-        >
-          <p className="text-xs sm:text-[11px] font-semibold tracking-[0.1em] text-muted-foreground/70 uppercase mb-0.5 sm:mb-1 hidden sm:block">{timeGreeting}</p>
-          <h1 className="text-base sm:text-2xl md:text-[28px] font-bold text-foreground mb-0.5 sm:mb-1 font-display leading-tight">
+        <header className="mb-6 sm:mb-8">
+          <p className="mb-1 hidden text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:block">{timeGreeting}</p>
+          <h1 className="font-display text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
             {user?.company_name || userName}
           </h1>
-          <p className="finbank-body text-xs sm:text-sm text-muted-foreground hidden sm:block">Here&apos;s your business overview for today.</p>
-        </motion.div>
+          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">Business overview</p>
+        </header>
 
         {!isAdmin && !profileLoading && profileLoadError && (
-            <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-              Could not load your profile details right now. Core dashboard data is still available; please refresh in a moment.
-            </div>
+            <p className="mb-6 border-l-2 border-status-pending pl-3 text-sm text-muted-foreground">
+              Could not load your profile details right now. Core dashboard data is still available.
+            </p>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.3 }}
-        >
-          <DashboardSubscriptionBanner
-            serverStatus={currentSubscriptionQuery.data || null}
-            profileFallback={billingProfileFallback}
-            isLoading={currentSubscriptionQuery.isLoading && !currentSubscriptionQuery.data}
+        <DashboardSubscriptionBanner
+          serverStatus={currentSubscriptionQuery.data || null}
+          profileFallback={billingProfileFallback}
+          isLoading={currentSubscriptionQuery.isLoading && !currentSubscriptionQuery.data}
+        />
+
+        <div className="mb-8">
+          <FinancialSummary
+            primaryValue={formatCurrency(financials.outstandingTotal, userCurrency)}
+            primaryHint={outstandingHint}
+            trendText={paidTrend?.text}
+            sparklineValues={revenueBreakdown.chart.map((point) => Number(point.total) || 0)}
+            paidThisMonth={formatCurrency(financials.paidThisMonth, userCurrency)}
+            paidHint={
+              financials.paidThisMonthCount > 0
+                ? `${financials.paidThisMonthCount} paid in ${financials.currentMonthLabel}`
+                : `No invoices paid in ${financials.currentMonthLabel}`
+            }
+            overdue={formatCurrency(financials.overdueAmount, userCurrency)}
+            overdueHint={
+              financials.overdueCount === 0
+                ? "No overdue invoices"
+                : `${financials.overdueCount} overdue invoice${financials.overdueCount === 1 ? "" : "s"}`
+            }
+            drafts={String(draftTotal)}
+            draftsHint={draftsHint}
+            isLoading={isLoading}
           />
-        </motion.div>
-
-        {/* KPI Carousel — Framer Motion swipe on mobile, grid on desktop */}
-        <div className="mb-4 sm:mb-6">
-          <div className="glass-card rounded-2xl sm:rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
-            {/* Mobile: Framer Motion carousel */}
-            <div className="md:hidden">
-              <KPICarousel>
-                <StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} />
-                <StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={outstandingSubtitle} icon={Clock} isLoading={isLoading} fintech accent="purple" />
-                <StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} isLoading={isLoading} fintech accent="amber" />
-                <StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={ArrowRightLeft} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} />
-              </KPICarousel>
-            </div>
-            {/* Desktop: grid */}
-            <motion.div variants={containerVariants} initial="hidden" animate="visible" className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <motion.div variants={itemVariants}><StatCard title="Revenue" value={formatCurrency(fintechKpis.revenue, userCurrency)} icon={TrendingUp} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.revenueGrowth} animateFromZero numericValue={fintechKpis.revenue} currencyForAnimation={userCurrency} /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="Awaiting payment" value={formatCurrency(fintechKpis.outstandingTotal, userCurrency)} subtitle={outstandingSubtitle} icon={Clock} isLoading={isLoading} fintech accent="purple" /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="VAT / Tax liability" value={formatCurrency(fintechKpis.vatLiability, userCurrency)} subtitle="Set aside for SARS" icon={Landmark} isLoading={isLoading} fintech accent="amber" /></motion.div>
-              <motion.div variants={itemVariants}><StatCard title="Cash flow" value={formatCurrency(fintechKpis.cashFlow, userCurrency)} icon={ArrowRightLeft} isLoading={isLoading} fintech accent="blue" growth={fintechKpis.cashFlowGrowth} /></motion.div>
-            </motion.div>
-          </div>
         </div>
 
-        {/* Inventory KPI row — only shown once there are product-type catalog items */}
         {inventoryProductsState.length > 0 && (
-          <div className="mb-4 sm:mb-6">
-            <div className="glass-card rounded-2xl sm:rounded-fintech border border-border p-4 sm:p-6 mobile-card-wrap">
-              <div className="md:hidden">
-                <KPICarousel>
-                  <StatCard title="Low Stock" value={String(inventoryKpis.lowStockCount)} icon={PackageSearch} isLoading={isLoading} fintech accent="amber" />
-                  <StatCard title="Out of Stock" value={String(inventoryKpis.outOfStockCount)} icon={PackageX} isLoading={isLoading} fintech accent="purple" />
-                  <StatCard title="Inventory Value" value={formatCurrency(inventoryKpis.inventoryValue, userCurrency)} icon={Warehouse} isLoading={isLoading} fintech accent="blue" />
-                  <StatCard title="Outstanding POs" value={String(inventoryKpis.outstandingPOs)} icon={ClipboardList} isLoading={isLoading} fintech accent="blue" />
-                </KPICarousel>
-              </div>
-              <motion.div variants={containerVariants} initial="hidden" animate="visible" className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <motion.div variants={itemVariants}><StatCard title="Low Stock" value={String(inventoryKpis.lowStockCount)} icon={PackageSearch} isLoading={isLoading} fintech accent="amber" /></motion.div>
-                <motion.div variants={itemVariants}><StatCard title="Out of Stock" value={String(inventoryKpis.outOfStockCount)} icon={PackageX} isLoading={isLoading} fintech accent="purple" /></motion.div>
-                <motion.div variants={itemVariants}><StatCard title="Inventory Value" value={formatCurrency(inventoryKpis.inventoryValue, userCurrency)} icon={Warehouse} isLoading={isLoading} fintech accent="blue" /></motion.div>
-                <motion.div variants={itemVariants}><StatCard title="Outstanding POs" value={String(inventoryKpis.outstandingPOs)} icon={ClipboardList} isLoading={isLoading} fintech accent="blue" /></motion.div>
-              </motion.div>
+          <div className="mb-8 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border pt-5 sm:grid-cols-4">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Low stock</p>
+              <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{inventoryKpis.lowStockCount}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {inventoryKpis.lowStockCount === 0 ? "No low-stock items" : "At or below threshold"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Out of stock</p>
+              <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{inventoryKpis.outOfStockCount}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Inventory value</p>
+              <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{formatCurrency(inventoryKpis.inventoryValue, userCurrency)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Outstanding POs</p>
+              <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{inventoryKpis.outstandingPOs}</p>
             </div>
           </div>
         )}
 
-        {/* Total Income — full width, glassmorphism, below KPI carousel on mobile */}
-        <div className="mb-4 sm:mb-6 md:hidden w-full max-w-full">
-          <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={refreshDashboardData} isDataReady={!isLoading} variant="carousel" />
-        </div>
-
-        {/* Mobile: Action buttons + Recent Transactions — premium fintech order */}
+        {/* Mobile: Action buttons + Recent Transactions */}
         <div className="md:hidden space-y-4 mb-6">
-          <div className="glass-card rounded-2xl border border-border p-4">
-            <div className="grid grid-cols-2 gap-3">
+          <div className="border-y border-border py-3">
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 size="sm"
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-2xl min-h-[48px] h-12 px-4 gap-2 text-base transition-all hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] touch-manipulation"
+                className="dashboard-cta rounded-2xl"
                 onClick={() => navigate(createPageUrl("CreateInvoice"))}
               >
-                <FileText className="w-5 h-5 shrink-0" />
+                <FileText className="w-4 h-4 shrink-0" />
                 New Invoice
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-2xl min-h-[48px] h-12 px-4 gap-2 border-2 border-primary/40 bg-primary/10 text-primary font-semibold hover:bg-primary/20 hover:border-primary/60 text-base transition-all active:scale-[0.98] touch-manipulation"
+                className="rounded-2xl border-primary/40 text-primary"
                 onClick={() => navigate(createPageUrl("CashFlow"))}
               >
-                <Receipt className="w-5 h-5 shrink-0" />
+                <Receipt className="w-4 h-4 shrink-0" />
                 Add Expense
               </Button>
               {canShowPosEntry ? (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="col-span-2 rounded-2xl min-h-[48px] h-12 px-4 gap-2 border-border text-foreground font-semibold hover:bg-muted text-base transition-all active:scale-[0.98] touch-manipulation"
+                  className="col-span-2 rounded-2xl dashboard-cta"
                   onClick={() => navigate(createPageUrl("POS"))}
                 >
-                  <Store className="w-5 h-5 shrink-0" />
+                  <Store className="w-4 h-4 shrink-0" />
                   POS
                 </Button>
               ) : null}
             </div>
           </div>
           {/* Recent Transactions — compact mobile list */}
-          <div className="glass-card rounded-2xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border">
+          <div className="dashboard-card">
+            <div className="border-b border-border px-4 py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-base font-semibold text-foreground font-display">Recent Transactions</h3>
+                <h3 className="text-sm font-semibold text-foreground">Recent transactions</h3>
                 {mergedTransactions.length > TRANSACTION_PREVIEW_ROWS ? (
                   <span className="text-xs text-muted-foreground">Scroll for more</span>
                 ) : null}
@@ -1856,21 +1656,16 @@ function DashboardMain() {
               >
                 {mergedTransactions.map((tx) => {
                   const isIncome = tx.type === 'income';
-                  const statusColor = isIncome ? 'bg-status-paid/15 text-status-paid border-status-paid/30' : 'bg-status-pending/15 text-status-pending border-status-pending/30';
                   const displayAmount = isIncome ? tx.amount : Math.abs(tx.amount);
                   return (
-                    <div key={tx.id} className="py-4 px-4 min-h-[56px]">
+                    <div key={tx.id} className="px-4 py-3">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-semibold text-sm text-foreground truncate flex-1">{tx.label}</p>
-                        <p className="font-bold text-sm text-foreground currency-nums shrink-0">
+                        <p className="truncate text-sm font-medium text-foreground">{tx.label}</p>
+                        <p className="currency-nums shrink-0 text-sm font-medium tabular-nums text-foreground">
                           {isIncome ? '+' : '-'}{formatCurrency(displayAmount, userCurrency)}
                         </p>
                       </div>
-                      <div className="mt-1.5">
-                        <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-md border ${statusColor}`}>
-                          {isIncome ? 'Paid' : 'Expense'}
-                        </span>
-                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{isIncome ? 'Paid' : 'Expense'}</p>
                     </div>
                   );
                 })}
@@ -1884,29 +1679,21 @@ function DashboardMain() {
           </div>
         </div>
 
-        {/* Empty-state tip when Revenue (and Cash Flow) are zero */}
-        {!isLoading && fintechKpis.revenue === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6"
-          >
-            <div className="glass-card rounded-fintech border border-border p-6 flex flex-wrap items-center gap-3">
-              <span className="text-sm text-foreground">Looks like you&apos;re just starting!</span>
-              <span className="text-sm text-muted-foreground">Did you know you can import your existing client list from Excel?</span>
-              <Link
-                to={createPageUrl("Clients")}
-                className="text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/90"
-              >
-                Import clients →
-              </Link>
-            </div>
-          </motion.div>
+        {!isLoading && totalRevenue === 0 && (
+          <p className="mb-6 text-sm text-muted-foreground">
+            No billed revenue yet.{" "}
+            <Link
+              to={createPageUrl("Clients")}
+              className="font-medium text-primary underline underline-offset-2 hover:text-primary/90"
+            >
+              Import clients from Excel
+            </Link>
+            {" "}if you already have a list.
+          </p>
         )}
 
-        {/* Admin Roles Management Section (Visible to Admins Only) */}
         {isAdmin && (
-          <div className="glass-card rounded-fintech p-6 mb-6 border border-border">
+          <div className="dashboard-card mb-6 p-6">
             <h2 className="text-base font-semibold mb-4 text-foreground">Admin Roles Management</h2>
             <div className="mb-4 flex flex-wrap items-center gap-3">
               <label htmlFor="dashboard-admin-role" className="text-sm font-medium text-muted-foreground">Role:</label>
@@ -2051,70 +1838,21 @@ function DashboardMain() {
             transition={{ delay: 0.2 }}
             className="space-y-6"
           >
-            {/* Top row: Total Income (desktop) + Pending Payments */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
-              <div className="hidden md:block min-h-[220px]">
-                <CreditCardDisplay balance={totalRevenue} currency={userCurrency} user={user} onRefresh={refreshDashboardData} isDataReady={!isLoading} />
-              </div>
-              <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
-            </div>
+            <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
 
-            {/* Revenue trend — large chart; lazy-loaded Recharts to avoid blocking initial paint */}
-            <div className="glass-card rounded-fintech border border-border p-6">
-              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                <h3 className="text-lg font-semibold text-foreground font-display">Revenue trend</h3>
-                <div className="flex gap-2">
-                  {[30, 60, 90].map((range) => (
-                    <button
-                      key={range}
-                      type="button"
-                      onClick={() => setRevenueRange(range)}
-                      className={`px-3 py-1 text-[11px] font-semibold rounded-full transition-all duration-150 ${
-                        revenueRange === range
-                          ? "bg-primary/15 text-primary border border-primary/30"
-                          : "text-muted-foreground border border-transparent hover:border-border hover:text-foreground"
-                      }`}
-                    >
-                      {range}d
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {isLoading ? (
-                <div className="h-[300px] w-full rounded-xl" aria-hidden>
-                  <Skeleton className="h-full w-full rounded-xl bg-white/10 animate-pulse" />
-                </div>
-              ) : (
-                <Suspense
-                  fallback={
-                    <div className="h-[300px] w-full rounded-xl" aria-hidden>
-                      <Skeleton className="h-full w-full rounded-xl bg-white/10 animate-pulse" />
-                    </div>
-                  }
-                >
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5, duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-                    className="w-full min-h-[260px] h-[300px]"
-                  >
-                    <DashboardRevenueChart
-                      revenueTrendData={revenueTrendData}
-                      userCurrency={userCurrency}
-                    />
-                  </motion.div>
-                </Suspense>
-              )}
-            </div>
+            <DashboardRevenueWidget
+              breakdown={revenueBreakdown}
+              rangeDays={revenueRange}
+              onRangeChange={setRevenueRange}
+              currency={userCurrency}
+              isLoading={isLoading}
+            />
 
             {/* Recent Invoices — same width as Revenue trend, directly below */}
-            <div className="glass-card rounded-fintech border border-border overflow-hidden">
-              <div className="p-6 pb-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-6 bg-orange-500 rounded-full shrink-0" />
-                    <h3 className="text-lg font-semibold text-foreground font-display">Recent Invoices</h3>
-                  </div>
+            <div className="dashboard-card">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <h3 className="text-sm font-semibold text-foreground">Recent invoices</h3>
                   {invoices.length > RECENT_INVOICES_PREVIEW_ROWS ? (
                     <span className="text-xs text-muted-foreground">
                       Showing {RECENT_INVOICES_PREVIEW_ROWS} of {invoices.length}
@@ -2123,9 +1861,9 @@ function DashboardMain() {
                 </div>
                 <Link
                   to={createPageUrl("Invoices")}
-                  className="text-xs font-bold text-orange-600 hover:text-orange-700 transition-colors"
+                  className="text-sm font-medium text-primary hover:text-primary/80"
                 >
-                  View All →
+                  View all →
                 </Link>
               </div>
               <div className="px-6 pb-6">
@@ -2133,7 +1871,7 @@ function DashboardMain() {
                   <div className="overflow-x-auto rounded-lg border border-border/50">
                     <table className="w-full min-w-[320px] text-left">
                       <thead className="sticky top-0 z-[1] border-b border-border bg-muted/30 backdrop-blur-sm">
-                        <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+                        <tr className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                           <th className="py-3 pr-4">Client</th>
                           <th className="py-3 pr-4">Status</th>
                           <th className="py-3 text-right">Amount</th>
@@ -2164,7 +1902,7 @@ function DashboardMain() {
                     <Button
                       size="sm"
                       onClick={() => navigate(createPageUrl("CreateInvoice"))}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                      className="dashboard-cta rounded-2xl"
                     >
                       <Plus className="w-4 h-4 mr-1" />
                       Create invoice
@@ -2178,7 +1916,7 @@ function DashboardMain() {
                   >
                     <table className="w-full min-w-[320px] text-left">
                       <thead className="sticky top-0 z-[1] border-b border-border bg-muted/30 backdrop-blur-sm">
-                        <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+                        <tr className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                           <th className="py-3 pr-4">Client</th>
                           <th className="py-3 pr-4">Status</th>
                           <th className="py-3 text-right">Amount</th>
@@ -2202,11 +1940,11 @@ function DashboardMain() {
                                 <p className="text-[10px] text-muted-foreground">{invoice.invoice_number || `#${invoice.id?.slice(0, 8)}`}</p>
                               </td>
                               <td className="py-3 pr-4">
-                                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${statusClass} border-0`}>
+                                <span className={`text-xs font-medium ${statusClass}`}>
                                   {getStatusLabel(invoice.status)}
                                 </span>
                               </td>
-                              <td className="py-3 text-right font-bold text-foreground tabular-nums text-sm">
+                              <td className="py-3 text-right font-medium text-foreground tabular-nums text-sm">
                                 {formatCurrency(invoice.total_amount, userCurrency)}
                               </td>
                             </tr>
@@ -2237,41 +1975,41 @@ function DashboardMain() {
             )}
 
             {/* Quick Creator — hidden on mobile (shown in mobile block above) */}
-            <div className="glass-card rounded-2xl sm:rounded-fintech border border-border p-4 sm:p-5 hidden md:block">
-              <h3 className="text-sm font-semibold text-foreground font-display mb-3 tracking-tight hidden sm:block">Quick Creator</h3>
-              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 sm:gap-2">
+            <div className="dashboard-card hidden p-4 md:block">
+              <h3 className="mb-3 hidden text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:block">Create</h3>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 <Button
                   size="sm"
-                  className="group bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-2xl min-h-[48px] sm:min-h-[36px] h-12 sm:h-9 px-4 gap-2 text-base sm:text-sm transition-all duration-200 ease-out hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] touch-manipulation"
+                  className="dashboard-cta rounded-2xl"
                   onClick={() => navigate(createPageUrl("CreateInvoice"))}
                 >
-                  <FileText className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
+                  <FileText className="w-4 h-4 shrink-0" />
                   New Invoice
                 </Button>
                 {canShowPosEntry ? (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="group rounded-2xl min-h-[48px] sm:min-h-[36px] h-12 sm:h-9 px-4 gap-2 border-border text-foreground font-semibold hover:bg-muted text-base sm:text-sm transition-all duration-200 ease-out active:scale-[0.98] touch-manipulation"
+                    className="rounded-2xl"
                     onClick={() => navigate(createPageUrl("POS"))}
                   >
-                    <Store className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
+                    <Store className="w-4 h-4 shrink-0" />
                     POS
                   </Button>
                 ) : null}
                 <Button
                   variant="outline"
                   size="sm"
-                  className="group rounded-2xl min-h-[48px] sm:min-h-[36px] h-12 sm:h-9 px-4 gap-2 border-2 border-primary/40 bg-primary/10 text-primary font-semibold hover:bg-primary/20 hover:border-primary/60 text-base sm:text-sm transition-all duration-200 ease-out active:scale-[0.98] touch-manipulation"
+                  className="rounded-2xl border-primary/40 text-primary"
                   onClick={() => navigate(createPageUrl("CashFlow"))}
                 >
-                  <Receipt className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
+                  <Receipt className="w-4 h-4 shrink-0" />
                   Add Expense
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="hidden sm:inline-flex group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110"
+                  className="hidden rounded-lg sm:inline-flex"
                   onClick={() => navigate(createPageUrl("Clients"))}
                 >
                   <UsersIcon className="w-4 h-4 shrink-0" />
@@ -2280,14 +2018,14 @@ function DashboardMain() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="hidden sm:inline-flex group rounded-lg h-9 px-4 gap-1.5 border-border text-foreground font-medium hover:bg-muted transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-110"
+                  className="hidden rounded-lg sm:inline-flex"
                   onClick={() => navigate(createPageUrl("Services"))}
                 >
                   <Headset className="w-4 h-4 shrink-0" />
                   Service
                 </Button>
                 <Link to={createPageUrl("Invoices")} className="hidden sm:inline-flex sm:ml-auto">
-                  <Button variant="ghost" size="sm" className="group rounded-lg h-9 text-muted-foreground hover:text-foreground text-sm font-medium">
+                  <Button variant="ghost" size="sm" className="rounded-lg text-muted-foreground hover:text-foreground">
                     View all
                   </Button>
                 </Link>
@@ -2313,10 +2051,10 @@ function DashboardMain() {
             />
 
             {/* Transaction List — hidden on mobile (shown in mobile block above) */}
-            <div className="glass-card rounded-fintech border border-border overflow-hidden hidden md:block">
-              <div className="p-4 sm:p-6 border-b border-border flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+            <div className="dashboard-card hidden md:block">
+              <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <h3 className="text-base sm:text-lg font-semibold text-foreground font-display">Transactions</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Transactions</h3>
                   {mergedTransactions.length > TRANSACTION_PREVIEW_ROWS ? (
                     <span className="text-xs text-muted-foreground">Scroll for more</span>
                   ) : null}
@@ -2340,13 +2078,13 @@ function DashboardMain() {
                   <p className="text-muted-foreground/80 text-xs mt-1">Paid invoices and expenses will appear here.</p>
                   <div className="flex flex-wrap justify-center gap-2 mt-4">
                     <Link to={createPageUrl("CreateInvoice")}>
-                      <Button size="sm" className="bg-muted hover:bg-muted/80 text-foreground border border-border rounded-lg">
+                      <Button size="sm" variant="outline" className="rounded-lg">
                         Create invoice
                       </Button>
                     </Link>
                     <Link to={createPageUrl("CashFlow")}>
-                      <Button size="sm" className="rounded-lg bg-primary/10 text-primary border-2 border-primary/40 hover:bg-primary/20 hover:border-primary/60 font-semibold">
-                        Add Expense
+                      <Button size="sm" variant="outline" className="rounded-lg">
+                        Add expense
                       </Button>
                     </Link>
                   </div>
@@ -2359,36 +2097,19 @@ function DashboardMain() {
                 >
                   {mergedTransactions.map((tx) => {
                     const isIncome = tx.type === 'income';
-                    const Icon = isIncome ? FileText : Receipt;
                     return (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between py-3 px-3 sm:py-4 sm:px-4 hover:bg-muted/50 transition-colors gap-2"
+                        className="flex items-baseline justify-between gap-3 px-4 py-3"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                              isIncome ? 'bg-status-paid/10' : 'bg-status-overdue/10'
-                            }`}
-                          >
-                            <Icon
-                              className={`w-5 h-5 shrink-0 ${
-                                isIncome ? 'text-status-paid' : 'text-status-overdue'
-                              }`}
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm text-foreground truncate">{tx.label}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {tx.date ? formatDate(new Date(tx.date), 'dd MMM yyyy') : '—'}
-                            </p>
-                          </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">{tx.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {tx.date ? formatDate(new Date(tx.date), 'dd MMM yyyy') : '—'}
+                            {isIncome ? " · Paid" : " · Expense"}
+                          </p>
                         </div>
-                        <p
-                          className={`font-bold text-sm tabular-nums shrink-0 ml-2 ${
-                            isIncome ? 'text-status-paid' : 'text-status-overdue'
-                          }`}
-                        >
+                        <p className="currency-nums shrink-0 text-sm font-medium tabular-nums text-foreground">
                           {isIncome ? '+' : ''}{formatCurrency(tx.amount, userCurrency)}
                         </p>
                       </div>

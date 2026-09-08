@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAutoDraft } from "@/hooks/useAutoDraft";
 import { useServerPayrollPreview } from "@/hooks/useServerPayrollPreview";
 import { useToast } from "@/components/ui/use-toast";
+import { parseUuid } from "@shared/ids/uuid.js";
 
 export default function EditPayslip() {
     const navigate = useNavigate();
@@ -153,12 +154,24 @@ export default function EditPayslip() {
         };
     }, [calculatedPayroll, payslipData]);
 
+    const isLocked = Boolean(payslipData?.locked || payslipData?.finalized_at || payslipData?.pay_run_item_id);
+
     const handleUpdatePayslip = async () => {
+        if (isLocked) {
+            toast({
+                title: "This payslip is locked",
+                description: "Processed payroll payslips cannot be edited. Create an adjustment pay run instead.",
+                variant: "destructive",
+            });
+            return;
+        }
         try {
             const { id: _id, created_date: _createdDate, updated_date: _updatedDate, created_by: _createdBy, ...updateData } = payslipData;
             
             await Payroll.update(payslipId, {
                 ...updateData,
+                membership_id: parseUuid(payslipData.membership_id) || undefined,
+                payroll_profile_id: parseUuid(payslipData.payroll_profile_id) || undefined,
                 gross_pay: grossPay,
                 tax_deduction: payeDeduction,
                 uif_deduction: uifDeduction,
@@ -206,11 +219,20 @@ export default function EditPayslip() {
                     </Button>
                     <div>
                         <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Edit Payslip</h1>
-                        <p className="text-sm sm:text-base text-muted-foreground mt-1">Update payslip for {payslipData.employee_name}</p>
+                        <p className="text-sm sm:text-base text-muted-foreground mt-1">
+                            {isLocked
+                                ? `Locked payroll result for ${payslipData.employee_name}`
+                                : `Update payslip for ${payslipData.employee_name}`}
+                        </p>
                     </div>
                 </motion.div>
 
                 <div className="space-y-8">
+                    {isLocked ? (
+                        <p className="text-sm rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-900">
+                            This payslip was generated from payroll and is locked. Amounts stay as they were when the pay run was processed.
+                        </p>
+                    ) : null}
                     {/* Employee Information */}
                     <Card className="bg-card border border-border">
                         <CardHeader>
@@ -511,9 +533,9 @@ export default function EditPayslip() {
                                 {draftSavedAtLabel ? ` · ${draftSavedAtLabel}` : ""}
                             </span>
                         ) : null}
-                        <Button onClick={handleUpdatePayslip} size="lg" className="bg-primary hover:bg-primary/90">
+                        <Button onClick={handleUpdatePayslip} size="lg" className="bg-primary hover:bg-primary/90" disabled={isLocked}>
                             <Save className="w-4 h-4 mr-2" />
-                            Update Payslip
+                            {isLocked ? "Locked" : "Update Payslip"}
                         </Button>
                     </div>
                 </div>

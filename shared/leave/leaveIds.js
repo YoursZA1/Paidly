@@ -22,6 +22,21 @@ const LEAVE_STATUSES = new Set(["draft", "pending", "approved", "rejected", "can
  * @param {Record<string, unknown> | null | undefined} query
  * @returns {LeaveListFilters}
  */
+/**
+ * Drop another employee's identifiers unless the actor can view team leave.
+ * @param {LeaveListFilters} filters
+ * @param {boolean} canViewTeam
+ */
+export function scopedLeaveListFilters(filters = {}, canViewTeam) {
+  if (canViewTeam) return { ...filters };
+  return {
+    ...filters,
+    payroll_profile_id: undefined,
+    employee_id: undefined,
+    user_id: undefined,
+  };
+}
+
 export function parseLeaveListFilters(query = {}) {
   const statusRaw = firstQueryString(query.status).toLowerCase();
   const department = firstQueryString(query.department);

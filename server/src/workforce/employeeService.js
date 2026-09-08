@@ -10,7 +10,12 @@ import {
   WORKFORCE_EVENT_TYPES,
   membershipCreatedIdempotencyKey,
 } from "./workforceEvents.js";
-import { registerWorkforceSubscribers } from "./employeeProvisioning.js";
+import { provisionEmployeeWorkforce, registerWorkforceSubscribers } from "./employeeProvisioning.js";
+import { johannesburgYmd } from "../../../shared/payroll/dates.js";
+import { computeLeaveBalance } from "../../../shared/leave/leaveMath.js";
+import { sanitizeEmployeeWritePayload, parseManagerMembershipId } from "../../../shared/workforce/employeeWrite.js";
+import { parseUuid } from "../../../shared/ids/uuid.js";
+import { assertOwnEmployee, assertSameOrg } from "./workforceAuth.js";
 
 registerWorkforceSubscribers();
 
@@ -56,12 +61,65 @@ export async function listEmployees(orgId) {
     )
     .eq("org_id", orgId);
   const payrollByMembership = new Map((payrollRows || []).map((p) => [p.membership_id, p]));
+  const employeeIds = (members || []).map((m) => m.id).filter(Boolean);
+  const year = johannesburgYmd().year;
+
+  let attendanceRows = [];
+  let leaveRows = [];
+  let payslipRows = [];
+  if (employeeIds.length) {
+    try {
+      const attendance = await supabaseAdmin
+        .from("attendance_profiles")
+        .select("employee_id, status")
+        .in("employee_id", employeeIds);
+      attendanceRows = attendance.data || [];
+    } catch {
+      attendanceRows = [];
+    }
+    try {
+      const leave = await supabaseAdmin
+        .from("leave_balances")
+        .select("employee_id, accrued, used, pending, leave_types(code, name)")
+        .eq("org_id", orgId)
+        .eq("leave_year", year)
+        .in("employee_id", employeeIds);
+      leaveRows = leave.data || [];
+    } catch {
+      leaveRows = [];
+    }
+    try {
+      const payslips = await supabaseAdmin
+        .from("payslips")
+        .select("id, membership_id")
+        .eq("org_id", orgId)
+        .in("membership_id", employeeIds);
+      payslipRows = payslips.data || [];
+    } catch {
+      payslipRows = [];
+    }
+  }
+  const attendanceByEmployee = new Map(attendanceRows.map((row) => [row.employee_id, row]));
+  const leaveByEmployee = new Map();
+  for (const row of leaveRows) {
+    const list = leaveByEmployee.get(row.employee_id) || [];
+    list.push(row);
+    leaveByEmployee.set(row.employee_id, list);
+  }
+  const payslipCountByEmployee = new Map();
+  for (const row of payslipRows) {
+    if (!row.membership_id) continue;
+    payslipCountByEmployee.set(row.membership_id, (payslipCountByEmployee.get(row.membership_id) || 0) + 1);
+  }
 
   return (members || []).map((m) => {
     const person = byUser.get(m.user_id);
     const payroll = payrollByMembership.get(m.id);
     const email = person?.email || m.invited_email || payroll?.email || null;
     const name = person?.full_name || payroll?.full_name || email || "Employee";
+    const balances = leaveByEmployee.get(m.id) || [];
+    const annual = balances.find((row) => String(row.leave_types?.code || "").toUpperCase() === "ANNUAL");
+    const leaveDays = annual ? computeLeaveBalance(annual).available : null;
     return {
       id: m.id,
       employee_id: m.id,
@@ -84,14 +142,16 @@ export async function listEmployees(orgId) {
       pay_type: payroll?.pay_type || "monthly_salary",
       label: name,
       payroll_status: payroll?.payroll_status || (payroll?.id ? "active" : "unprovisioned"),
-      attendance_status: "active",
+      attendance_status: attendanceByEmployee.get(m.id)?.status || (payroll?.id ? "active" : "unprovisioned"),
+      leave_available: leaveDays,
+      payslip_count: payslipCountByEmployee.get(m.id) || 0,
       portal_status: m.user_id ? "active" : "invited",
       disabled_at: m.disabled_at || null,
     };
   });
 }
 
-export async function getEmployee(orgId, employeeId, { actorUserId, canViewTeam }) {
+export async function getEmployee(orgId, employeeId, { actorUserId, actorMembershipId, canViewTeam }) {
   const rows = await listEmployees(orgId);
   const row = rows.find((item) => item.id === employeeId);
   if (!row) {
@@ -99,11 +159,12 @@ export async function getEmployee(orgId, employeeId, { actorUserId, canViewTeam 
     err.status = 404;
     throw err;
   }
-  if (!canViewTeam && row.user_id !== actorUserId) {
-    const err = new Error("Not authorized for this employee");
-    err.status = 403;
-    throw err;
-  }
+  assertSameOrg({ companyId: orgId }, { org_id: orgId });
+  assertOwnEmployee(
+    { userId: actorUserId, id: actorMembershipId },
+    row,
+    { canViewTeam }
+  );
   return row;
 }
 
@@ -163,17 +224,18 @@ async function persistPortalInvite({ orgId, email, role, jobFunction, actorId, m
 }
 
 export async function createEmployee(orgId, actor, payload = {}) {
-  const email = String(payload.email || "").trim().toLowerCase();
-  const fullName = String(payload.full_name || payload.fullName || "").trim();
+  const safe = sanitizeEmployeeWritePayload(payload);
+  const email = String(safe.email || "").trim().toLowerCase();
+  const fullName = String(safe.full_name || safe.fullName || "").trim();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     const err = new Error("Enter a valid email address");
     err.status = 400;
     throw err;
   }
 
-  let role = normalizeCompanyRole(payload.role);
-  let jobFunction = normalizeJobFunction(payload.job_function ?? payload.jobFunction ?? "general");
-  if (isPosStaffInviteRequest({ role, jobFunction, source: payload.source })) {
+  let role = normalizeCompanyRole(safe.role);
+  let jobFunction = normalizeJobFunction(safe.job_function ?? safe.jobFunction ?? "general");
+  if (isPosStaffInviteRequest({ role, jobFunction, source: safe.source })) {
     const err = new Error("POS staff must be invited from Team or the till, not Workforce create.");
     err.status = 422;
     err.code = "POS_INVITE_PATH";
@@ -197,6 +259,21 @@ export async function createEmployee(orgId, actor, payload = {}) {
     throw err;
   }
 
+  const managerId = parseManagerMembershipId(safe.manager_membership_id || safe.managerMembershipId);
+  if (managerId) {
+    const { data: manager } = await supabaseAdmin
+      .from("memberships")
+      .select("id")
+      .eq("id", managerId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (!manager?.id) {
+      const err = new Error("manager_membership_id is not in your company");
+      err.status = 403;
+      throw err;
+    }
+  }
+
   const employeeNumber = await nextOrgEmployeeNumber(orgId);
   const membershipRow = {
     org_id: orgId,
@@ -204,9 +281,10 @@ export async function createEmployee(orgId, actor, payload = {}) {
     role: role === COMPANY_ROLES.ADMIN ? "admin" : role,
     job_function: jobFunction === POS_JOB_FUNCTION ? "general" : jobFunction,
     employee_number: employeeNumber,
-    department: String(payload.department || "").trim() || null,
+    department: String(safe.department || "").trim() || null,
     employment_status: "active",
     invited_email: email,
+    manager_membership_id: managerId || null,
   };
 
   const inserted = await supabaseAdmin
@@ -234,6 +312,12 @@ export async function createEmployee(orgId, actor, payload = {}) {
       return { employee: await getEmployee(orgId, existingMem.id, { canViewTeam: true }), mode: "existing_member" };
     }
   }
+  if (inserted.error && /manager_membership_id/i.test(inserted.error.message || "")) {
+    delete membershipRow.manager_membership_id;
+    const retry = await supabaseAdmin.from("memberships").insert(membershipRow).select("id, user_id").maybeSingle();
+    inserted.error = retry.error;
+    inserted.data = retry.data;
+  }
   if (inserted.error) {
     if (/user_id|not-null|null value/i.test(inserted.error.message || "")) {
       const err = new Error(
@@ -247,6 +331,11 @@ export async function createEmployee(orgId, actor, payload = {}) {
   }
 
   const employeeId = inserted.data.id;
+  try {
+    await provisionEmployeeWorkforce(orgId, employeeId);
+  } catch (err) {
+    console.warn("[workforce] immediate provision failed:", err?.message || err);
+  }
   await emitWorkforceEvent({
     orgId,
     employeeId,
@@ -301,6 +390,79 @@ export async function createEmployee(orgId, actor, payload = {}) {
   };
 }
 
+export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
+  const id = parseUuid(employeeId);
+  if (!id) {
+    const err = new Error("Employee id is required");
+    err.status = 400;
+    throw err;
+  }
+  const safe = sanitizeEmployeeWritePayload(payload);
+  const { data: existing } = await supabaseAdmin
+    .from("memberships")
+    .select("id, org_id, user_id, department, employment_status, employment_start_date, employment_end_date, manager_membership_id, employee_number")
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!existing?.id) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
+  }
+  assertSameOrg({ companyId: orgId }, existing);
+
+  const managerId = parseManagerMembershipId(safe.manager_membership_id || safe.managerMembershipId);
+  if (managerId) {
+    if (managerId === id) {
+      const err = new Error("An employee cannot manage themselves");
+      err.status = 400;
+      throw err;
+    }
+    const { data: manager } = await supabaseAdmin
+      .from("memberships")
+      .select("id")
+      .eq("id", managerId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (!manager?.id) {
+      const err = new Error("manager_membership_id is not in your company");
+      err.status = 403;
+      throw err;
+    }
+  }
+
+  const patch = {};
+  if (safe.department !== undefined) patch.department = String(safe.department || "").trim() || null;
+  if (safe.employment_status !== undefined) {
+    patch.employment_status = String(safe.employment_status || "active").trim() || "active";
+  }
+  if (safe.employment_start_date !== undefined) {
+    patch.employment_start_date = safe.employment_start_date || null;
+  }
+  if (safe.employment_end_date !== undefined) {
+    patch.employment_end_date = safe.employment_end_date || null;
+  }
+  if (safe.manager_membership_id !== undefined || safe.managerMembershipId !== undefined) {
+    patch.manager_membership_id = managerId || null;
+  }
+
+  if (Object.keys(patch).length) {
+    const { error } = await supabaseAdmin.from("memberships").update(patch).eq("id", id).eq("org_id", orgId);
+    if (error) throw error;
+  }
+
+  await emitWorkforceEvent({
+    orgId,
+    employeeId: id,
+    eventType: WORKFORCE_EVENT_TYPES.EMPLOYEE_UPDATED,
+    actorId: actor.userId,
+    payload: { fields: Object.keys(patch) },
+    idempotencyKey: `membership:${id}:updated:${Date.now()}`,
+  });
+
+  return getEmployee(orgId, id, { canViewTeam: true });
+}
+
 export async function emitEmployeeCreatedForMembership(orgId, membershipId, actorId) {
   if (!orgId || !membershipId) return null;
   return emitWorkforceEvent({
@@ -310,5 +472,17 @@ export async function emitEmployeeCreatedForMembership(orgId, membershipId, acto
     actorId,
     payload: { source: "membership_upsert" },
     idempotencyKey: membershipCreatedIdempotencyKey(membershipId),
+  });
+}
+
+export async function emitEmployeePortalActivated(orgId, membershipId, actorId) {
+  if (!orgId || !membershipId) return null;
+  return emitWorkforceEvent({
+    orgId,
+    employeeId: membershipId,
+    eventType: WORKFORCE_EVENT_TYPES.EMPLOYEE_PORTAL_ACTIVATED,
+    actorId,
+    payload: { source: "invite_accept" },
+    idempotencyKey: `membership:${membershipId}:portal_activated`,
   });
 }

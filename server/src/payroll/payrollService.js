@@ -6,6 +6,7 @@ import { buildPayslipNumber } from "../../../shared/payroll/payslipNumber.js";
 import { johannesburgYmd, monthBounds, monthLabel } from "../../../shared/payroll/dates.js";
 import { countWorkingDays } from "../../../shared/leave/leaveMath.js";
 import { PAY_RUN_STATUSES } from "../../../shared/payroll/constants.js";
+import { parseUuid } from "../../../shared/ids/uuid.js";
 import { sendHtmlEmail } from "../sendInvoice.js";
 
 const DEFAULT_COMPONENTS = [
@@ -202,12 +203,17 @@ export async function upsertPayrollProfile(orgId, actorId, payload) {
   if (payload.membership_id) {
     const { data: membership } = await supabaseAdmin
       .from("memberships")
-      .select("id")
+      .select("id, user_id")
       .eq("id", payload.membership_id)
       .eq("org_id", orgId)
       .maybeSingle();
     if (!membership?.id) {
       const err = new Error("membership_id is not in your company");
+      err.status = 403;
+      throw err;
+    }
+    if (payload.user_id && membership.user_id && payload.user_id !== membership.user_id) {
+      const err = new Error("user_id does not match this employee");
       err.status = 403;
       throw err;
     }
@@ -272,17 +278,61 @@ export async function upsertPayrollProfile(orgId, actorId, payload) {
   return row;
 }
 
+function previewFromPayRunItem(item, run) {
+  const paye = (item.statutory_deductions || []).find((d) => String(d.code).toUpperCase() === "PAYE");
+  const uif = (item.statutory_deductions || []).find((d) => String(d.code).toUpperCase() === "UIF");
+  return {
+    source: "pay_run_item",
+    pay_run_id: run.id,
+    pay_run_item_id: item.id,
+    period_label: run.period_label,
+    locked: Boolean(run.finalized_at),
+    basic: item.base_pay,
+    overtime_pay: item.overtime_amount,
+    overtime_hours: item.overtime_hours,
+    overtime_rate: item.overtime_rate,
+    earnings: item.earnings || [],
+    other_deductions: item.other_deductions || [],
+    statutory_deductions: item.statutory_deductions || [],
+    gross_pay: item.gross_pay,
+    taxable_income: item.taxable_income,
+    total_deductions: item.total_deductions,
+    net_pay: item.net_pay,
+    tax_deduction: paye?.amount || 0,
+    uif_deduction: uif?.amount || 0,
+    unpaid_leave_days: item.unpaid_leave_days || 0,
+    unpaid_leave_amount: item.unpaid_leave_amount || 0,
+    warnings: item.warnings || [],
+    breakdown: item.calculation || {},
+  };
+}
+
 export async function previewCalculation(orgId, payload) {
+  const membershipId = parseUuid(payload.membership_id || payload.employee_id);
+  if (membershipId && payload.period_start && payload.period_end) {
+    const found = await findPayRunItemForEmployeePeriod(
+      orgId,
+      membershipId,
+      payload.period_start,
+      payload.period_end
+    );
+    if (found?.item && Number(found.item.net_pay) > 0) {
+      return previewFromPayRunItem(found.item, found.run);
+    }
+  }
   const rules = await loadStatutoryRules(orgId, payload.period_end || johannesburgYmd().iso);
-  return calculatePayroll({
-    profile: payload.profile || {},
-    earnings: payload.earnings || [],
-    deductions: payload.deductions || [],
-    statutoryRules: rules,
-    overtimeHours: payload.overtime_hours,
-    overtimeRate: payload.overtime_rate,
-    extras: payload.extras || {},
-  });
+  return {
+    source: "preview",
+    ...calculatePayroll({
+      profile: payload.profile || {},
+      earnings: payload.earnings || [],
+      deductions: payload.deductions || [],
+      statutoryRules: rules,
+      overtimeHours: payload.overtime_hours,
+      overtimeRate: payload.overtime_rate,
+      extras: payload.extras || {},
+    }),
+  };
 }
 
 async function loadRecurringComponents(orgId) {
@@ -301,6 +351,67 @@ function eligibleProfile(profile) {
     profile.employment_status !== "terminated" &&
     profile.employment_status !== "suspended"
   );
+}
+
+function payRunItemInsert(orgId, runId, profile) {
+  return {
+    org_id: orgId,
+    pay_run_id: runId,
+    payroll_profile_id: profile.id,
+    membership_id: profile.membership_id,
+    user_id: profile.user_id,
+    employee_number: profile.employee_number,
+    employee_name: profile.full_name,
+    status: "pending",
+  };
+}
+
+const OPEN_PAY_RUN_STATUSES = new Set(["draft", "processing", "calculated"]);
+
+/**
+ * Add newly eligible employees to an open pay run. Does not remove existing items
+ * and never mutates finalized / approved / paid runs.
+ */
+export async function syncPayRunEmployees(orgId, runId) {
+  const run = await getPayRun(orgId, runId);
+  if (run.finalized_at || !OPEN_PAY_RUN_STATUSES.has(run.status)) {
+    return run;
+  }
+  const profiles = (await syncPayrollProfiles(orgId)).filter(eligibleProfile);
+  const existing = new Set((run.items || []).map((item) => item.payroll_profile_id));
+  const missing = profiles.filter((profile) => profile.id && !existing.has(profile.id));
+  if (missing.length) {
+    const { error } = await supabaseAdmin
+      .from("pay_run_items")
+      .insert(missing.map((profile) => payRunItemInsert(orgId, run.id, profile)));
+    if (error && !/duplicate|unique/i.test(error.message || "")) throw error;
+  }
+  const nextCount = (run.items || []).length + missing.length;
+  if (missing.length || run.employee_count !== nextCount) {
+    await supabaseAdmin.from("pay_runs").update({ employee_count: nextCount }).eq("id", run.id);
+  }
+  return getPayRun(orgId, runId);
+}
+
+export async function findPayRunItemForEmployeePeriod(orgId, membershipId, periodStart, periodEnd) {
+  if (!membershipId || !periodStart || !periodEnd) return null;
+  const { data: items, error } = await supabaseAdmin
+    .from("pay_run_items")
+    .select("*, pay_runs!inner(id, org_id, period_start, period_end, period_label, status, finalized_at)")
+    .eq("org_id", orgId)
+    .eq("membership_id", membershipId);
+  if (error) {
+    console.warn("[payroll] pay-run item lookup failed:", error.message);
+    return null;
+  }
+  const match = (items || []).find((item) => {
+    const run = item.pay_runs;
+    if (!run || run.status === "cancelled") return false;
+    return run.period_start === periodStart && run.period_end === periodEnd;
+  });
+  if (!match) return null;
+  const { pay_runs: run, ...item } = match;
+  return { item, run };
 }
 
 async function unpaidLeaveRequestsByProfile(orgId, periodStart, periodEnd, profileIds) {
@@ -355,16 +466,7 @@ export async function createPayRun(orgId, actorId, body) {
 
   const profiles = (await syncPayrollProfiles(orgId)).filter(eligibleProfile);
   if (profiles.length) {
-    const items = profiles.map((p) => ({
-      org_id: orgId,
-      pay_run_id: data.id,
-      payroll_profile_id: p.id,
-      membership_id: p.membership_id,
-      user_id: p.user_id,
-      employee_number: p.employee_number,
-      employee_name: p.full_name,
-      status: "pending",
-    }));
+    const items = profiles.map((p) => payRunItemInsert(orgId, data.id, p));
     const { error: itemErr } = await supabaseAdmin.from("pay_run_items").insert(items);
     if (itemErr) throw itemErr;
   }
@@ -414,7 +516,7 @@ export async function getPayRun(orgId, runId) {
 }
 
 export async function calculatePayRun(orgId, actorId, runId, body = {}) {
-  const run = await getPayRun(orgId, runId);
+  const run = await syncPayRunEmployees(orgId, runId);
   if (run.status === "cancelled" || run.status === "paid") {
     const err = new Error("This pay run cannot be recalculated.");
     err.status = 409;

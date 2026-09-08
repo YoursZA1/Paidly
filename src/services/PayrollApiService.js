@@ -64,6 +64,11 @@ export const payrollApi = {
   markPaid: (id) => payrollRequest(`/api/payroll/runs/${id}/paid`, { method: "POST", body: {} }),
   cancelRun: (id) => payrollRequest(`/api/payroll/runs/${id}/cancel`, { method: "POST", body: {} }),
   sendPayslips: (id) => payrollRequest(`/api/payroll/runs/${id}/send`, { method: "POST", body: {} }),
+  refreshRunEmployees: (id) =>
+    payrollRequest(`/api/payroll/runs/${requireRecordUuid(id, "pay run id")}/refresh`, {
+      method: "POST",
+      body: {},
+    }),
   statutory: () => payrollRequest("/api/payroll/statutory"),
   saveStatutory: (payload) => payrollRequest("/api/payroll/statutory", { method: "POST", body: payload }),
   me: () => payrollRequest("/api/payroll/me"),

@@ -418,12 +418,19 @@ export async function handleCompanyTeamInvite(req, res) {
         .eq("user_id", existingProfile.id)
         .maybeSingle();
       if (createdMem?.id) {
-        const { emitEmployeeCreatedForMembership } = await import("./workforce/employeeService.js");
+        const { emitEmployeeCreatedForMembership, emitEmployeePortalActivated } = await import(
+          "./workforce/employeeService.js"
+        );
         await emitEmployeeCreatedForMembership(
           gate.membership.companyId,
           createdMem.id,
           gate.user.id
         ).catch((err) => console.warn("[workforce] provision after invite failed:", err?.message || err));
+        await emitEmployeePortalActivated(
+          gate.membership.companyId,
+          createdMem.id,
+          gate.user.id
+        ).catch((err) => console.warn("[workforce] portal activate after invite failed:", err?.message || err));
       }
       return res.status(200).json({
         ok: true,

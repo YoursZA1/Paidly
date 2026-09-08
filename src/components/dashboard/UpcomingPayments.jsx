@@ -1,99 +1,67 @@
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { FileText, Clock } from 'lucide-react';
-import { formatCurrency } from '@/utils/currencyCalculations';
-import { format, parseISO, isValid } from 'date-fns';
-import { isInvoiceOpenReceivable } from '@shared/commercial/documentStatuses.js';
+import { Link } from "react-router-dom";
+import { format, parseISO, isValid } from "date-fns";
+import { formatCurrency } from "@/utils/currencyCalculations";
+import { isInvoiceOpenReceivable } from "@shared/commercial/documentStatuses.js";
+import { createPageUrl } from "@/utils";
 
-const PaymentCard = ({ label, amount, dueDate, iconBg }) => (
-    <div className="bg-card rounded-2xl p-4 border border-border shadow-elevation hover:shadow-elevation-md transition-all min-w-0">
-        <div className="flex items-center justify-between mb-4">
-            <div className={`w-14 h-14 ${iconBg} rounded-2xl flex items-center justify-center`}>
-                <FileText className="w-7 h-7 text-white" />
-            </div>
-        </div>
-        <p className="mb-1 min-w-0 break-words text-sm text-muted-foreground">{label}</p>
-        <p className="currency-nums tabular-nums min-w-0 break-words text-sm font-semibold leading-snug text-foreground sm:text-base">
-            {amount}
+const PREVIEW_ROWS = 5;
+
+function formatDue(dateStr) {
+  if (!dateStr) return null;
+  const date = typeof dateStr === "string" ? parseISO(dateStr) : new Date(dateStr);
+  return isValid(date) ? format(date, "d MMM yyyy") : null;
+}
+
+export default function UpcomingPayments({ invoices = [], clients = [], currency = "ZAR" }) {
+  const unpaidInvoices = invoices
+    .filter((inv) => isInvoiceOpenReceivable(inv.status))
+    .sort((a, b) => {
+      const aDue = new Date(a.due_date || a.delivery_date || 0).getTime();
+      const bDue = new Date(b.due_date || b.delivery_date || 0).getTime();
+      return aDue - bDue;
+    })
+    .slice(0, PREVIEW_ROWS);
+
+  const getClientName = (clientId) => clients.find((c) => c.id === clientId)?.name || "Unknown client";
+
+  return (
+    <section aria-labelledby="pending-payments-heading" className="dashboard-card">
+      <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3">
+        <h2 id="pending-payments-heading" className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          Pending payments
+        </h2>
+        <Link
+          to={createPageUrl("Invoices")}
+          className="text-sm font-medium text-primary hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+        >
+          View all →
+        </Link>
+      </div>
+      {unpaidInvoices.length === 0 ? (
+        <p className="px-4 py-5 text-sm text-muted-foreground">
+          No pending payments. Sent invoices will appear here with amount and due date.
         </p>
-        {dueDate && <p className="text-xs text-muted-foreground mt-1">Due: {dueDate}</p>}
-    </div>
-);
-
-export default function UpcomingPayments({ invoices = [], clients = [], currency = 'ZAR' }) {
-    // Filter unpaid invoices (sent, partial_paid, overdue)
-    const unpaidInvoices = invoices
-        .filter(inv => isInvoiceOpenReceivable(inv.status))
-        .sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date))
-        .slice(0, 2);
-
-    const getClientName = (clientId) => {
-        const client = clients.find(c => c.id === clientId);
-        return client?.name || 'Unknown Client';
-    };
-
-    const formatDate = (dateStr) => {
-        if (!dateStr) return null;
-        const date = parseISO(dateStr);
-        return isValid(date) ? format(date, 'MMM d') : null;
-    };
-
-    const iconBgs = [
-        'bg-gradient-to-br from-primary to-[#ff7c00]',
-        'bg-gradient-to-br from-[#f24e00] to-[#ff7c00]'
-    ];
-
-    return (
-        <Card className="glass-card rounded-fintech border border-border mobile-card-wrap">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-foreground flex items-center gap-2 text-base font-semibold">
-                    <Clock className="w-5 h-5" />
-                    Pending Payments
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                {unpaidInvoices.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3">
-                        {unpaidInvoices.map((invoice, index) => (
-                            <PaymentCard
-                                key={invoice.id}
-                                label={getClientName(invoice.client_id)}
-                                amount={formatCurrency(invoice.total_amount, currency)}
-                                dueDate={formatDate(invoice.delivery_date)}
-                                iconBg={iconBgs[index % iconBgs.length]}
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="py-2">
-                        {/* Empty state: premium ghost list preview */}
-                        <div className="flex items-center gap-2 mb-4">
-                            <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
-                                <FileText className="w-5 h-5 text-muted-foreground" />
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-sm font-semibold text-foreground">No pending payments</p>
-                                <p className="text-xs text-muted-foreground truncate">When invoices are sent, they’ll show up here with due dates.</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            {[0, 1].map((i) => (
-                                <div key={i} className="bg-card rounded-2xl p-4 border border-border shadow-elevation min-w-0">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
-                                            <Skeleton className="h-6 w-6 rounded-lg" />
-                                        </div>
-                                    </div>
-                                    <Skeleton className="h-3 w-24 mb-2 rounded" />
-                                    <Skeleton className="h-6 w-28 rounded" />
-                                    <Skeleton className="h-3 w-16 mt-2 rounded" />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
+      ) : (
+        <ul className="divide-y divide-border">
+          {unpaidInvoices.map((invoice) => {
+            const due = formatDue(invoice.due_date || invoice.delivery_date);
+            return (
+              <li key={invoice.id} className="flex items-baseline justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{getClientName(invoice.client_id)}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {due ? `Due ${due}` : "No due date"}
+                    {invoice.invoice_number ? ` · ${invoice.invoice_number}` : ""}
+                  </p>
+                </div>
+                <p className="currency-nums shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                  {formatCurrency(invoice.total_amount, currency)}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
 }

@@ -85,6 +85,16 @@ export default function CompanyTeamMembersPanel() {
                           .join(" · ")}
                       </p>
                     ) : null}
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {[
+                        m.payroll_status ? `Payroll: ${m.payroll_status}` : null,
+                        m.leave_available != null ? `Leave: ${m.leave_available} days` : null,
+                        `Payslips: ${m.payslip_count ?? 0}`,
+                        m.attendance_status ? `Attendance: ${m.attendance_status}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
                     {employeeId ? (
                       <p className="text-xs mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
                         <Link className="underline" to={createPageUrl("Payroll")}>Payroll</Link>

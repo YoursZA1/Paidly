@@ -235,6 +235,15 @@ describe("Hobby payroll/leave rewrites onto /api/company", () => {
     ).toEqual({ route: "run-calculate", id: "abc" });
   });
 
+  it("resolves nested pay-run employee refresh from __payroll path", () => {
+    expect(
+      resolvePayrollRoute({
+        url: "/api/company/payroll",
+        query: { path: "payroll", __payroll: "runs/abc/refresh" },
+      })
+    ).toEqual({ route: "run-refresh", id: "abc" });
+  });
+
   it("resolves leave approve from __leave path", () => {
     expect(
       resolveLeaveRoute({

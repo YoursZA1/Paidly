@@ -1,7 +1,7 @@
 import { normalizeRequestBody } from "../validateBody.js";
 import { jsonError, requirePayrollPermission, PERMISSIONS } from "../payroll/payrollGate.js";
 import { membershipHasPermission } from "../companyRouteAccess.js";
-import { parseLeaveListFilters, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
+import { parseLeaveListFilters, scopedLeaveListFilters, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import {
   myLeave,
@@ -83,16 +83,11 @@ export async function handleLeaveRoute(req, res, resolved) {
     });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
-    const filters = parseLeaveListFilters(req.query);
-    const canFilterTeam = membershipHasPermission(gate.membership, PERMISSIONS.VIEW_TEAM_LEAVE);
-    return handle(res, () =>
-      listLeaveRequests(gate.membership.companyId, {
-        ...filters,
-        payroll_profile_id: canFilterTeam ? filters.payroll_profile_id : undefined,
-        employee_id: canFilterTeam ? filters.employee_id : undefined,
-        user_id: canFilterTeam ? filters.user_id : undefined,
-      })
+    const filters = scopedLeaveListFilters(
+      parseLeaveListFilters(req.query),
+      membershipHasPermission(gate.membership, PERMISSIONS.VIEW_TEAM_LEAVE)
     );
+    return handle(res, () => listLeaveRequests(gate.membership.companyId, filters));
   }
 
   if (route === "approve" || route === "reject") {

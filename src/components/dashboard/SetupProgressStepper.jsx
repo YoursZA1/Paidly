@@ -18,7 +18,7 @@ export default function SetupProgressStepper({ checklist }) {
   if (allDone) return null;
 
   return (
-    <div className="glass-card rounded-fintech border border-border p-4 sm:p-5">
+    <div className="dashboard-card p-4 sm:p-5">
       <button
         type="button"
         onClick={() => setCollapsed((c) => !c)}

@@ -1053,6 +1053,58 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   }
 
+  /* Dashboard surfaces — match paidly.co.za preview: lift shadow + orange hero */
+  .dashboard-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    background-color: #ffffff;
+    background-image: none;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
+  }
+  .dark .dashboard-card {
+    border-color: hsl(var(--border));
+    background-color: hsl(var(--card));
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
+  }
+  .dashboard-card-hero {
+    border-color: transparent;
+    color: #ffffff;
+    background-color: #ff6b00;
+    background-image: linear-gradient(90deg, #ff6b00 0%, #ff8c42 52%, #ffb347 100%);
+    box-shadow: 0 16px 40px rgba(255, 92, 53, 0.38);
+  }
+  .dark .dashboard-card-hero {
+    border-color: transparent;
+    box-shadow: 0 16px 40px rgba(255, 92, 53, 0.28);
+  }
+  .dashboard-card-dark {
+    border-color: transparent;
+    color: #ffffff;
+    background-color: #1a1c23;
+    background-image: linear-gradient(160deg, #252830 0%, #1a1c23 48%, #12141a 100%);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+  }
+  .dark .dashboard-card-dark {
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  }
+  .dashboard-progress-track {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .dashboard-progress-fill {
+    background-image: linear-gradient(90deg, #ff6b00 0%, #ffb347 100%);
+  }
+  .dashboard-cta {
+    background-image: linear-gradient(135deg, #ff8c42 0%, #ff5c35 100%) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow: 0 8px 20px rgba(255, 92, 53, 0.28);
+  }
+  .dashboard-cta:hover {
+    background-image: linear-gradient(135deg, #ff7a2e 0%, #f24e00 100%) !important;
+  }
+
   /* Main card pattern: 16px padding via Card component; 12px radius; soft lift shadow */
   .card-float {
     background: var(--bg-card);
