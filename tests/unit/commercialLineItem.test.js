@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   COMMERCIAL_LINE_ITEM_COLUMNS,
+  COMMERCIAL_LINE_ITEM_CORE_COLUMNS,
+  COMMERCIAL_LINE_ITEM_WRITE_TIERS,
   commercialLineItemToComposeRow,
   fromStoredCommercialLineItem,
   pickCommercialLineItemWriteColumns,
+  projectCommercialLineItemWrite,
   toPersistableCommercialLineItem,
 } from "../../shared/commercial/commercialLineItem.js";
+import { isPostgrestMissingColumnError } from "@/api/entity/entityShared";
 import { csvRowToInvoicePayload, invoiceToCsvRow, INVOICE_CSV_HEADERS } from "../../src/utils/invoiceCsvMapping.js";
 import { csvRowToQuotePayload, quoteToCsvRow, QUOTE_CSV_HEADERS } from "../../src/utils/quoteCsvMapping.js";
 
@@ -103,6 +107,40 @@ describe("toPersistableCommercialLineItem", () => {
     expect(write.industry_preset).toBeUndefined();
     expect(write.invoice_id).toBeUndefined();
     expectRichFields(write);
+  });
+
+  it("projects older write tiers without catalog columns", () => {
+    const persisted = toPersistableCommercialLineItem(RICH_LINE);
+    const core = projectCommercialLineItemWrite(persisted, "invoice_id", "inv-1", COMMERCIAL_LINE_ITEM_CORE_COLUMNS);
+    expect(core.invoice_id).toBe("inv-1");
+    expect(core.service_name).toBe("Site labour");
+    expect(core.quantity).toBe(2);
+    expect(core.catalog_item_id).toBeUndefined();
+    expect(core.item_type).toBeUndefined();
+    expect(COMMERCIAL_LINE_ITEM_WRITE_TIERS).toHaveLength(3);
+  });
+});
+
+describe("isPostgrestMissingColumnError", () => {
+  it("detects schema-cache misses and ignores check/integer 400s", () => {
+    expect(
+      isPostgrestMissingColumnError({
+        code: "PGRST204",
+        message: "Could not find the 'catalog_item_id' column of 'invoice_items' in the schema cache",
+      })
+    ).toBe(true);
+    expect(
+      isPostgrestMissingColumnError({
+        code: "23514",
+        message: 'new row for relation "services" violates check constraint "product_stock_only"',
+      })
+    ).toBe(false);
+    expect(
+      isPostgrestMissingColumnError({
+        code: "22P02",
+        message: 'invalid input syntax for type integer: "1.25"',
+      })
+    ).toBe(false);
   });
 });
 

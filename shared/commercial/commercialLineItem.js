@@ -25,17 +25,50 @@ export const COMMERCIAL_LINE_ITEM_COLUMNS = Object.freeze([
   "unit_type",
 ]);
 
+/** Columns that existed before 20260907180000_commercial_line_item_model. */
+export const COMMERCIAL_LINE_ITEM_PRE_MODEL_COLUMNS = Object.freeze([
+  "service_id",
+  "service_name",
+  "description",
+  "quantity",
+  "unit_price",
+  "total_price",
+]);
+
+/** Oldest invoice_items / quote_items write shape. */
+export const COMMERCIAL_LINE_ITEM_CORE_COLUMNS = Object.freeze([
+  "service_name",
+  "description",
+  "quantity",
+  "unit_price",
+  "total_price",
+]);
+
+export const COMMERCIAL_LINE_ITEM_WRITE_TIERS = Object.freeze([
+  COMMERCIAL_LINE_ITEM_COLUMNS,
+  COMMERCIAL_LINE_ITEM_PRE_MODEL_COLUMNS,
+  COMMERCIAL_LINE_ITEM_CORE_COLUMNS,
+]);
+
 export function commercialLineItemSelectList(parentIdField) {
   return ["id", parentIdField, ...COMMERCIAL_LINE_ITEM_COLUMNS].join(", ");
 }
 
-export function pickCommercialLineItemWriteColumns(row) {
+export function pickCommercialLineItemWriteColumns(row, columns = COMMERCIAL_LINE_ITEM_COLUMNS) {
   const out = {};
   const source = row && typeof row === "object" ? row : {};
-  for (const key of COMMERCIAL_LINE_ITEM_COLUMNS) {
+  const keys = Array.isArray(columns) && columns.length ? columns : COMMERCIAL_LINE_ITEM_COLUMNS;
+  for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key];
   }
   return out;
+}
+
+export function projectCommercialLineItemWrite(row, parentIdField, parentId, columns) {
+  return {
+    [parentIdField]: parentId,
+    ...pickCommercialLineItemWriteColumns(row, columns),
+  };
 }
 
 const INDUSTRY_PRESET_KEYS = new Set([

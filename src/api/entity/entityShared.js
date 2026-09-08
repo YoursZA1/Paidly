@@ -86,6 +86,15 @@ export function isPostgrestSelectSchemaDriftError(error) {
   return /column|does not exist|schema cache|could not find|unknown column|pgrst/i.test(m);
 }
 
+/** Missing-column write (not CHECK / integer-bind 400s). */
+export function isPostgrestMissingColumnError(error) {
+  if (!error) return false;
+  const code = String(error.code ?? "").toUpperCase();
+  if (code === "PGRST204") return true;
+  const m = String(error.message ?? error.details ?? error.hint ?? "").toLowerCase();
+  return /could not find .+ column|column .+ does not exist|schema cache|unknown column/.test(m);
+}
+
 
 /** Default limit for list queries on large tables to avoid loading thousands of rows at once. */
 export const DEFAULT_LIST_LIMIT = 100;

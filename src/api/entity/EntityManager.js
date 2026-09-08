@@ -21,6 +21,7 @@ import {
   shouldLogEntityTimeoutWarning,
   getSelectColumns,
   isPostgrestSelectSchemaDriftError,
+  isPostgrestMissingColumnError,
   DEFAULT_LIST_LIMIT,
   resolveListPageBounds,
   getOrderColumn,
@@ -37,7 +38,8 @@ import {
 } from "@/document-engine/documentTotals";
 import {
   fromStoredCommercialLineItem,
-  pickCommercialLineItemWriteColumns,
+  COMMERCIAL_LINE_ITEM_WRITE_TIERS,
+  projectCommercialLineItemWrite,
 } from "@shared/commercial/commercialLineItem.js";
 import {
   allocateDocumentNumber,
@@ -57,14 +59,23 @@ import {
  * Centralizes the mapping previously duplicated between create() and update() so the
  * two write paths stay in lock-step.
  */
-function buildChildItemRows(parentIdField, parentId, items) {
-  if (!Array.isArray(items)) return [];
-  return items
+async function insertChildItemRows(supabase, itemsTable, parentIdField, parentId, items) {
+  const persisted = (Array.isArray(items) ? items : [])
     .filter((item) => item && !isLegacyDiscountLine(item))
-    .map((item, index) => ({
-      [parentIdField]: parentId,
-      ...pickCommercialLineItemWriteColumns(toCommercialItemRow(item, index)),
-    }));
+    .map((item, index) => toCommercialItemRow(item, index));
+  if (!persisted.length) return null;
+
+  let lastError = null;
+  for (const columns of COMMERCIAL_LINE_ITEM_WRITE_TIERS) {
+    const rows = persisted.map((row) =>
+      projectCommercialLineItemWrite(row, parentIdField, parentId, columns)
+    );
+    const { error } = await supabase.from(itemsTable).insert(rows);
+    if (!error) return null;
+    lastError = error;
+    if (!isPostgrestMissingColumnError(error)) break;
+  }
+  return lastError;
 }
 
 function applyCommercialHeaderTotals(target, items) {
@@ -1009,15 +1020,18 @@ export class EntityManager {
                 .eq("invoice_id", existing.id)
                 .limit(1);
               if (!itemsCheckErr && (!existingItems || existingItems.length === 0)) {
-                const healRows = buildChildItemRows("invoice_id", existing.id, data.items);
-                if (healRows.length > 0) {
-                  const { error: healErr } = await supabase.from("invoice_items").insert(healRows);
-                  if (healErr) {
-                    const healMsg = getSupabaseErrorMessage(healErr, "Insert items failed");
-                    console.error("[EntityManager] failed to heal invoice line items:", healMsg);
-                    alertSupabaseWriteFailure(healErr, "Heal invoice_items failed");
-                    throw new Error(`Failed to attach line items to invoice: ${healMsg}`);
-                  }
+                const healErr = await insertChildItemRows(
+                  supabase,
+                  "invoice_items",
+                  "invoice_id",
+                  existing.id,
+                  data.items
+                );
+                if (healErr) {
+                  const healMsg = getSupabaseErrorMessage(healErr, "Insert items failed");
+                  console.error("[EntityManager] failed to heal invoice line items:", healMsg);
+                  alertSupabaseWriteFailure(healErr, "Heal invoice_items failed");
+                  throw new Error(`Failed to attach line items to invoice: ${healMsg}`);
                 }
               }
             }
@@ -1304,14 +1318,15 @@ export class EntityManager {
         const itemsTable = supabaseTable === 'invoices' ? 'invoice_items' : 'quote_items';
         const parentIdField = supabaseTable === 'invoices' ? 'invoice_id' : 'quote_id';
         
-        const itemsToInsert = buildChildItemRows(parentIdField, record.id, data.items);
+        const itemsError = await insertChildItemRows(
+          supabase,
+          itemsTable,
+          parentIdField,
+          record.id,
+          data.items
+        );
 
-        if (itemsToInsert.length > 0) {
-          const { error: itemsError } = await supabase
-            .from(itemsTable)
-            .insert(itemsToInsert);
-
-          if (itemsError) {
+        if (itemsError) {
             const msg = getSupabaseErrorMessage(itemsError, "Create items failed");
             console.error(`Failed to create ${itemsTable}:`, msg);
             alertSupabaseWriteFailure(itemsError, `Create ${itemsTable} failed`);
@@ -1328,7 +1343,6 @@ export class EntityManager {
               throw new Error(`Failed to save quote line items: ${msg}`);
             }
             throw new Error(`Failed to save invoice line items: ${msg}`);
-          }
         }
       }
 
@@ -1712,19 +1726,19 @@ export class EntityManager {
           }
           const oldItemIds = Array.isArray(existingItems) ? existingItems.map((r) => r.id) : [];
 
-          const itemsToInsert = buildChildItemRows(parentIdField, id, itemsToUpdate);
-          if (itemsToInsert.length > 0) {
-            const { error: itemsError } = await supabase
-              .from(itemsTable)
-              .insert(itemsToInsert);
-
-            if (itemsError) {
-              const msg = getSupabaseErrorMessage(itemsError, "Update items failed");
-              console.error(`Failed to update ${itemsTable}:`, msg);
-              alertSupabaseWriteFailure(itemsError, `Update ${itemsTable} failed`);
-              // Old items are still intact — surface the failure instead of silently dropping them.
-              throw new Error(`Failed to save line items: ${msg}`);
-            }
+          const itemsError = await insertChildItemRows(
+            supabase,
+            itemsTable,
+            parentIdField,
+            id,
+            itemsToUpdate
+          );
+          if (itemsError) {
+            const msg = getSupabaseErrorMessage(itemsError, "Update items failed");
+            console.error(`Failed to update ${itemsTable}:`, msg);
+            alertSupabaseWriteFailure(itemsError, `Update ${itemsTable} failed`);
+            // Old items are still intact — surface the failure instead of silently dropping them.
+            throw new Error(`Failed to save line items: ${msg}`);
           }
 
           if (oldItemIds.length > 0) {

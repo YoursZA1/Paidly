@@ -4,13 +4,40 @@
 -- Do not truncate 1.25 to 1 — keep the same scale as invoice_items.quantity.
 
 -- ── Columns ──────────────────────────────────────────────────────────────────
+-- product_stock_only: service rows must keep stock_quantity NULL.
+-- Do not COALESCE stock to 0 — that violates the check and rolls the ALTER back.
+
+ALTER TABLE public.services
+  DROP CONSTRAINT IF EXISTS product_stock_only;
+
+ALTER TABLE public.services
+  ALTER COLUMN stock_quantity DROP NOT NULL;
 
 ALTER TABLE public.services
   ALTER COLUMN stock_quantity TYPE numeric(12,2)
-  USING COALESCE(stock_quantity::numeric(12,2), 0);
+  USING stock_quantity::numeric(12,2);
 
 ALTER TABLE public.services
-  ALTER COLUMN stock_quantity SET DEFAULT 0;
+  ALTER COLUMN stock_quantity DROP DEFAULT;
+
+UPDATE public.services
+SET type = CASE
+  WHEN COALESCE(item_type, 'service') = 'product' THEN 'product'
+  ELSE 'service'
+END
+WHERE type IS NULL OR type NOT IN ('product', 'service');
+
+UPDATE public.services
+SET stock_quantity = NULL
+WHERE type <> 'product'
+  AND stock_quantity IS NOT NULL;
+
+ALTER TABLE public.services
+  ADD CONSTRAINT product_stock_only CHECK (
+    (type = 'service' AND stock_quantity IS NULL)
+    OR
+    (type = 'product')
+  );
 
 ALTER TABLE public.services
   ALTER COLUMN low_stock_threshold TYPE numeric(12,2)

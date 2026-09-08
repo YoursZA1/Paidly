@@ -113,7 +113,9 @@ export default function SyncStatus({ className, onRetryFailed }) {
 
   const pendingCount = queue.filter((j) => j.status === "pending").length;
   const processingCount = queue.filter((j) => j.status === "processing").length;
-  const failedCount = queue.filter((j) => j.status === "failed").length;
+  const failedJobs = queue.filter((j) => j.status === "failed");
+  const failedCount = failedJobs.length;
+  const lastFailedError = failedJobs.find((j) => j.lastError)?.lastError || "";
 
   const rawState = deriveState({ connectionStatus, sessionStatus, pendingCount, processingCount, failedCount });
 
@@ -207,6 +209,7 @@ export default function SyncStatus({ className, onRetryFailed }) {
             )}
             role="status"
             aria-live="polite"
+            title={visibleState === S.ERROR && lastFailedError ? lastFailedError : cfg.label}
           >
             <Icon
               className={cn(
@@ -223,7 +226,7 @@ export default function SyncStatus({ className, onRetryFailed }) {
               <button
                 type="button"
                 aria-label="Retry failed sync jobs"
-                title="Retry failed sync jobs"
+                title={lastFailedError ? `Retry: ${lastFailedError}` : "Retry failed sync jobs"}
                 className="pointer-events-auto ml-0.5 rounded p-0.5 opacity-80 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10"
                 onClick={() => {
                   retryAllFailed();
