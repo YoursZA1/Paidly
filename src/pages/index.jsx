@@ -82,6 +82,15 @@ const HowTo = lazy(() => import("./HowTo"));
 const PayfastReturn = lazy(() => import("./PayfastReturn"));
 const PayfastCancel = lazy(() => import("./PayfastCancel"));
 const AdminLayout = lazy(() => import("@/components/layout/AdminLayout"));
+const AdminDirectoryPage = lazy(() => import("./admin/AdminDirectoryPage"));
+const AdminActivityPage = lazy(() => import("./admin/AdminActivityPage"));
+const AdminRevenuePage = lazy(() => import("./admin/AdminRevenuePage"));
+const AdminSystemHealthPage = lazy(() => import("./admin/AdminSystemHealthPage"));
+const AdminRolesPage = lazy(() => import("./admin/AdminRolesPage"));
+const AdminReportsPage = lazy(() => import("./admin/AdminReportsPage"));
+const AdminAutomationsPage = lazy(() => import("./admin/AdminAutomationsPage"));
+const AdminFailedPaymentsPage = lazy(() => import("./admin/AdminFailedPaymentsPage"));
+const AdminStaffUsersPage = lazy(() => import("./admin/AdminStaffUsersPage"));
 const NotFoundPage = lazy(() =>
   import("./ApplicationErrorPage").then((m) => ({ default: m.NotFoundPage }))
 );
@@ -356,6 +365,10 @@ const ADMIN_ROUTES = [
         element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminV2Dashboard /></AdminLayout></RequireAuth>,
     },
     {
+        path: "/admin-v2/activity",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminActivityPage /></AdminLayout></RequireAuth>,
+    },
+    {
         path: "/admin-v2/users",
         element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><UsersPage /></AdminLayout></RequireAuth>,
     },
@@ -378,6 +391,122 @@ const ADMIN_ROUTES = [
     {
         path: "/admin-v2/audit-log",
         element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AuditLogPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/businesses",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="businesses" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/plans",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminDirectoryPage kind="plans" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/affiliates",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminDirectoryPage kind="affiliates" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/invoices",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="invoices" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/quotes",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="quotes" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/pos",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="pos" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/payments",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="payments" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/recurring",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="recurring" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/employees",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="employees" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/payroll",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="payroll" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/leave",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="leave" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/attendance",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="attendance" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/payslips",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="payslips" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/revenue",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminRevenuePage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/transactions",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminDirectoryPage kind="transactions" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/payment-intents",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminDirectoryPage kind="payment-intents" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/failed-payments",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminFailedPaymentsPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/refunds",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminDirectoryPage kind="refunds" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/automations",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminAutomationsPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/templates",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="templates" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/integrations",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="integrations" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/system-health",
+        element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AdminSystemHealthPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/reports/business",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminReportsPage report="business" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/reports/revenue",
+        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminReportsPage report="revenue" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/reports/documents",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminReportsPage report="documents" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/reports/workforce",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminReportsPage report="workforce" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/reports/platform",
+        element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AdminReportsPage report="platform" /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/admin-users",
+        element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AdminStaffUsersPage /></AdminLayout></RequireAuth>,
+    },
+    {
+        path: "/admin-v2/roles",
+        element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AdminRolesPage /></AdminLayout></RequireAuth>,
     },
 ];
 

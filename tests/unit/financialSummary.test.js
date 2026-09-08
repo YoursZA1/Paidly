@@ -41,6 +41,8 @@ describe("computeDashboardFinancials", () => {
     expect(result.quotedValue).toBe(5000);
     expect(result.invoicedValue).toBe(4300);
     expect(result.paidValue).toBe(1000);
+    expect(result.pendingAmount).toBe(2500);
+    expect(result.pendingCount).toBe(1);
   });
 
   it("ignores failed and pending payments in revenue and outstanding", () => {

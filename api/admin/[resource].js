@@ -702,6 +702,8 @@ export default async function handler(req, res) {
       "revenue",
       "failed-payments",
       "payments",
+      "overview",
+      "directory",
     ]);
     const postResources = new Set([
       "invite-user",
@@ -969,6 +971,33 @@ export default async function handler(req, res) {
     if (resource === "payments") {
       const { handleAdminPayments } = await import("../../server/src/billing/adminBillingApi.js");
       return handleAdminPayments(req, res);
+    }
+    if (resource === "overview") {
+      const { buildAdminPlatformOverview } = await import("../../server/src/adminPlatformDirectory.js");
+      try {
+        const overview = await buildAdminPlatformOverview(supabase, {
+          period: req.query?.period,
+        });
+        return res.status(200).json({ ok: true, overview });
+      } catch (e) {
+        console.error("[GET /api/admin/overview]", e?.message || e);
+        return res.status(500).json({ error: e?.message || "Failed to load admin overview" });
+      }
+    }
+    if (resource === "directory") {
+      const { listAdminDirectory } = await import("../../server/src/adminPlatformDirectory.js");
+      try {
+        const result = await listAdminDirectory(supabase, req.query?.kind, {
+          limit: req.query?.limit,
+        });
+        if (result?.status === 400) {
+          return res.status(400).json({ error: result.error || "Unknown directory kind" });
+        }
+        return res.status(200).json({ ok: true, ...result });
+      } catch (e) {
+        console.error("[GET /api/admin/directory]", e?.message || e);
+        return res.status(500).json({ error: e?.message || "Failed to load admin directory" });
+      }
     }
 
     let limit = 500;

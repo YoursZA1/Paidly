@@ -1088,14 +1088,19 @@ body {
     background-color: hsl(var(--card));
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
   }
-  .dashboard-card-hero {
+  .dashboard-card-hero,
+  .dashboard-card-revenue-hero {
     border-color: transparent;
     color: #ffffff;
     background-color: #ff6b00;
     background-image: linear-gradient(90deg, #ff6b00 0%, #ff8c42 52%, #ffb347 100%);
     box-shadow: 0 16px 40px rgba(255, 92, 53, 0.38);
   }
-  .dark .dashboard-card-hero {
+  .dashboard-card-revenue-hero {
+    overflow: visible;
+  }
+  .dark .dashboard-card-hero,
+  .dark .dashboard-card-revenue-hero {
     border-color: transparent;
     box-shadow: 0 16px 40px rgba(255, 92, 53, 0.28);
   }

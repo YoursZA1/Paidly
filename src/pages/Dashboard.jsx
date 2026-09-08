@@ -65,7 +65,7 @@ import FinancialSummary from "@/components/dashboard/FinancialSummary";
 import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { buildTrend, computeDashboardFinancials } from "@/lib/dashboard/financialSummary";
+import { computeDashboardFinancials } from "@/lib/dashboard/financialSummary";
 import { computeDashboardRevenue } from "@/lib/dashboard/revenueComposition";
 import { mergeRowsById } from "@/lib/dashboard/listDashboardRevenueSources";
 import {
@@ -921,26 +921,27 @@ function DashboardMain() {
     [resolvedInvoices, payments, quotes]
   );
 
-  const paidTrend = useMemo(
-    () =>
-      buildTrend({
-        current: financials.paidThisMonth,
-        previous: financials.paidLastMonth,
-        periodLabel: financials.previousMonthLabel,
-      }),
-    [financials]
+  const revenueSourceArgs = useMemo(
+    () => ({
+      invoices: mergeRowsById(resolvedInvoices, revenueSourcesQuery.data?.invoices),
+      payments: mergeRowsById(payments, revenueSourcesQuery.data?.payments),
+      posSales: revenueSourcesQuery.data?.posSales || [],
+      quotes: mergeRowsById(quotes, revenueSourcesQuery.data?.quotes),
+    }),
+    [resolvedInvoices, payments, quotes, revenueSourcesQuery.data]
   );
 
   const revenueBreakdown = useMemo(
-    () =>
-      computeDashboardRevenue({
-        invoices: mergeRowsById(resolvedInvoices, revenueSourcesQuery.data?.invoices),
-        payments: mergeRowsById(payments, revenueSourcesQuery.data?.payments),
-        posSales: revenueSourcesQuery.data?.posSales || [],
-        quotes: mergeRowsById(quotes, revenueSourcesQuery.data?.quotes),
-        rangeDays: revenueRange,
-      }),
-    [resolvedInvoices, payments, quotes, revenueSourcesQuery.data, revenueRange]
+    () => computeDashboardRevenue({ ...revenueSourceArgs, rangeDays: revenueRange }),
+    [revenueSourceArgs, revenueRange]
+  );
+
+  const revenueHeroByPeriod = useMemo(
+    () => ({
+      month: computeDashboardRevenue({ ...revenueSourceArgs, period: "month" }),
+      year: computeDashboardRevenue({ ...revenueSourceArgs, period: "year" }),
+    }),
+    [revenueSourceArgs]
   );
 
   const inventoryKpis = useMemo(() => {
@@ -1553,21 +1554,21 @@ function DashboardMain() {
 
         <div className="mb-8">
           <FinancialSummary
-            primaryValue={formatCurrency(financials.outstandingTotal, userCurrency)}
-            primaryHint={outstandingHint}
-            trendText={paidTrend?.text}
-            sparklineValues={revenueBreakdown.chart.map((point) => Number(point.total) || 0)}
-            paidThisMonth={formatCurrency(financials.paidThisMonth, userCurrency)}
-            paidHint={
-              financials.paidThisMonthCount > 0
-                ? `${financials.paidThisMonthCount} paid in ${financials.currentMonthLabel}`
-                : `No invoices paid in ${financials.currentMonthLabel}`
-            }
+            heroByPeriod={revenueHeroByPeriod}
+            currency={userCurrency}
+            outstanding={formatCurrency(financials.outstandingTotal, userCurrency)}
+            outstandingHint={outstandingHint}
             overdue={formatCurrency(financials.overdueAmount, userCurrency)}
             overdueHint={
               financials.overdueCount === 0
                 ? "No overdue invoices"
                 : `${financials.overdueCount} overdue invoice${financials.overdueCount === 1 ? "" : "s"}`
+            }
+            pending={formatCurrency(financials.pendingAmount, userCurrency)}
+            pendingHint={
+              financials.pendingCount === 0
+                ? "No invoices awaiting payment"
+                : `${financials.pendingCount} awaiting payment`
             }
             drafts={String(draftTotal)}
             draftsHint={draftsHint}
@@ -1575,8 +1576,6 @@ function DashboardMain() {
             quotedHint="Proposed quote value — not revenue"
             invoiced={formatCurrency(financials.invoicedValue, userCurrency)}
             invoicedHint="Issued invoices, excluding drafts"
-            paidLifetime={formatCurrency(financials.paidValue, userCurrency)}
-            paidLifetimeHint="Confirmed invoice payments"
             isLoading={isLoading}
           />
         </div>
@@ -1835,25 +1834,129 @@ function DashboardMain() {
           </div>
         )}
         
-        {/* Main Dashboard Grid — Pro layout: 70% left (Revenue + Recent Invoices), 30% right (Setup, Quick Creator, annual target card, Transactions) */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] gap-4 sm:gap-6 mb-6">
-          {/* Left Column (70%) — Revenue trend + Recent Invoices */}
+          <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
+          <div className="space-y-6">
+            {user && !isAdmin && (
+              <SetupProgressStepper checklist={onboardingChecklist} />
+            )}
+            {user && !isAdmin && canShowPosEntry && (
+              <PosSalesCard currency={userCurrency} />
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] items-stretch gap-4 sm:gap-6 mb-6">
+          <DashboardRevenueWidget
+            breakdown={revenueBreakdown}
+            rangeDays={revenueRange}
+            onRangeChange={setRevenueRange}
+            currency={userCurrency}
+            isLoading={isLoading}
+            compact
+            className="h-full"
+          />
+          <div className="flex h-full min-h-0 flex-col gap-4 sm:gap-6">
+            <div className="dashboard-card hidden p-4 md:block">
+              <h3 className="mb-3 hidden text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:block">Create</h3>
+              <div className="space-y-2">
+                <Button
+                  size="sm"
+                  className="dashboard-cta w-full rounded-2xl"
+                  onClick={() => navigate(createPageUrl("CreateInvoice"))}
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  New Invoice
+                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  {canShowPosEntry ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-2xl"
+                      onClick={() => navigate(createPageUrl("POS"))}
+                    >
+                      <Store className="w-4 h-4 shrink-0" />
+                      POS
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-2xl border-primary/40 text-primary"
+                    onClick={() => navigate(createPageUrl("CashFlow"))}
+                  >
+                    <Receipt className="w-4 h-4 shrink-0" />
+                    Add Expense
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-2xl"
+                    onClick={() => navigate(createPageUrl("Clients"))}
+                  >
+                    <UsersIcon className="w-4 h-4 shrink-0" />
+                    Customer
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-2xl"
+                    onClick={() => navigate(createPageUrl("Services"))}
+                  >
+                    <Headset className="w-4 h-4 shrink-0" />
+                    Service
+                  </Button>
+                  {canShowPosEntry ? null : (
+                    <Link to={createPageUrl("Invoices")} className="min-w-0">
+                      <Button variant="ghost" size="sm" className="w-full rounded-2xl text-muted-foreground hover:text-foreground">
+                        View all
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+                {canShowPosEntry ? (
+                  <div className="flex justify-end pt-0.5">
+                    <Link
+                      to={createPageUrl("Invoices")}
+                      className="text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      View all
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-auto">
+            <GoalProgress
+              year={calendarYear}
+              progress={goalProgress}
+              revenueTarget={revenueTarget}
+              currentRevenue={revenueForGoalYear}
+              currency={userCurrency}
+              onClick={() => setGoalSetterOpen(true)}
+            />
+            <GoalSetterModal
+              isOpen={goalSetterOpen}
+              onClose={() => setGoalSetterOpen(false)}
+              onSaved={refreshBusinessGoal}
+              user={user}
+              year={calendarYear}
+              initialGoal={businessGoal}
+              lastYearRevenue={lastYearRevenue}
+            />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] gap-4 sm:gap-6 mb-6">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
             className="space-y-6"
           >
-            <UpcomingPayments invoices={invoices} clients={clients} currency={userCurrency} />
-
-            <DashboardRevenueWidget
-              breakdown={revenueBreakdown}
-              rangeDays={revenueRange}
-              onRangeChange={setRevenueRange}
-              currency={userCurrency}
-              isLoading={isLoading}
-            />
-
             {/* Recent Invoices — same width as Revenue trend, directly below */}
             <div className="dashboard-card">
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
@@ -1965,97 +2068,12 @@ function DashboardMain() {
 
           </motion.div>
 
-          {/* Right Column (30%) — Setup Progress, Quick Creator, revenue target, Transactions */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
             className="space-y-6"
           >
-            {user && !isAdmin && (
-              <SetupProgressStepper checklist={onboardingChecklist} />
-            )}
-
-            {user && !isAdmin && canShowPosEntry && (
-              <PosSalesCard currency={userCurrency} />
-            )}
-
-            {/* Quick Creator — hidden on mobile (shown in mobile block above) */}
-            <div className="dashboard-card hidden p-4 md:block">
-              <h3 className="mb-3 hidden text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:block">Create</h3>
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                <Button
-                  size="sm"
-                  className="dashboard-cta rounded-2xl"
-                  onClick={() => navigate(createPageUrl("CreateInvoice"))}
-                >
-                  <FileText className="w-4 h-4 shrink-0" />
-                  New Invoice
-                </Button>
-                {canShowPosEntry ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-2xl"
-                    onClick={() => navigate(createPageUrl("POS"))}
-                  >
-                    <Store className="w-4 h-4 shrink-0" />
-                    POS
-                  </Button>
-                ) : null}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-2xl border-primary/40 text-primary"
-                  onClick={() => navigate(createPageUrl("CashFlow"))}
-                >
-                  <Receipt className="w-4 h-4 shrink-0" />
-                  Add Expense
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="hidden rounded-lg sm:inline-flex"
-                  onClick={() => navigate(createPageUrl("Clients"))}
-                >
-                  <UsersIcon className="w-4 h-4 shrink-0" />
-                  Customer
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="hidden rounded-lg sm:inline-flex"
-                  onClick={() => navigate(createPageUrl("Services"))}
-                >
-                  <Headset className="w-4 h-4 shrink-0" />
-                  Service
-                </Button>
-                <Link to={createPageUrl("Invoices")} className="hidden sm:inline-flex sm:ml-auto">
-                  <Button variant="ghost" size="sm" className="rounded-lg text-muted-foreground hover:text-foreground">
-                    View all
-                  </Button>
-                </Link>
-              </div>
-            </div>
-
-            <GoalProgress
-              year={calendarYear}
-              progress={goalProgress}
-              revenueTarget={revenueTarget}
-              currentRevenue={revenueForGoalYear}
-              currency={userCurrency}
-              onClick={() => setGoalSetterOpen(true)}
-            />
-            <GoalSetterModal
-              isOpen={goalSetterOpen}
-              onClose={() => setGoalSetterOpen(false)}
-              onSaved={refreshBusinessGoal}
-              user={user}
-              year={calendarYear}
-              initialGoal={businessGoal}
-              lastYearRevenue={lastYearRevenue}
-            />
-
             {/* Transaction List — hidden on mobile (shown in mobile block above) */}
             <div className="dashboard-card hidden md:block">
               <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">

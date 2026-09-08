@@ -14,6 +14,12 @@ const statusStyles = {
   /** Email confirmation (admin user directory) */
   unverified: 'bg-amber-500/10 text-amber-600 border-amber-500/25',
   verified: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+  paid: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+  completed: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+  failed: 'bg-red-500/10 text-red-500 border-red-500/20',
+  inactive: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+  trialing: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  past_due: 'bg-amber-500/10 text-amber-600 border-amber-500/25',
 };
 
 export default function StatusBadge({ status }) {

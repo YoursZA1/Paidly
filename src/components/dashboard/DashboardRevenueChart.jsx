@@ -44,10 +44,16 @@ function RevenueTooltip({ active, payload, label, userCurrency, showQuotes }) {
   );
 }
 
-export default function DashboardRevenueChart({ chart = [], userCurrency, showQuotes = false, onChartClick }) {
+export default function DashboardRevenueChart({
+  chart = [],
+  userCurrency,
+  showQuotes = false,
+  onChartClick,
+  compact = false,
+}) {
   return (
     <div
-      className={`h-[220px] w-full sm:h-[240px] ${onChartClick ? "cursor-pointer" : ""}`}
+      className={`${compact ? "h-full min-h-[112px] w-full" : "h-[220px] w-full sm:h-[240px]"} ${onChartClick ? "cursor-pointer" : ""}`}
       onClick={onChartClick || undefined}
     >
       <ResponsiveContainer width="100%" height="100%">

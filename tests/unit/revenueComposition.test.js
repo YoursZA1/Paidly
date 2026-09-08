@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { differenceInCalendarDays, startOfDay, startOfMonth } from "date-fns";
 import { computeDashboardRevenue } from "@/lib/dashboard/revenueComposition";
 
 const now = new Date("2026-09-08T12:00:00Z");
@@ -107,5 +108,65 @@ describe("computeDashboardRevenue", () => {
       ],
     });
     expect(result.trend).toBeNull();
+  });
+
+  it("does not treat unpaid invoices as realized revenue", () => {
+    const result = computeDashboardRevenue({
+      now,
+      period: "month",
+      invoices: [
+        {
+          id: "open",
+          status: "sent",
+          total_amount: 9999,
+          created_at: "2026-09-02T00:00:00Z",
+        },
+      ],
+      payments: [],
+    });
+    expect(result.realized).toBe(0);
+  });
+
+  it("uses calendar month vs the equivalent prior-month days", () => {
+    const result = computeDashboardRevenue({
+      now,
+      period: "month",
+      payments: [
+        { id: "now", amount: 1000, status: "completed", paid_at: "2026-09-02T00:00:00Z" },
+        { id: "prior", amount: 800, status: "completed", paid_at: "2026-08-03T00:00:00Z" },
+        { id: "too-old", amount: 5000, status: "completed", paid_at: "2026-08-20T00:00:00Z" },
+      ],
+    });
+    expect(result.realized).toBe(1000);
+    expect(result.realizedPrevious).toBe(800);
+    expect(result.trend.text).toBe("+25% vs last month");
+    expect(result.chart).toHaveLength(differenceInCalendarDays(startOfDay(now), startOfMonth(now)) + 1);
+  });
+
+  it("uses calendar year-to-date vs last year-to-date", () => {
+    const result = computeDashboardRevenue({
+      now,
+      period: "year",
+      payments: [
+        { id: "ytd-late", amount: 1000, status: "completed", paid_at: "2026-09-02T00:00:00Z" },
+        { id: "ytd-early", amount: 500, status: "completed", paid_at: "2026-03-01T00:00:00Z" },
+        { id: "last-ytd", amount: 800, status: "completed", paid_at: "2025-03-01T00:00:00Z" },
+        { id: "last-year-after", amount: 9000, status: "completed", paid_at: "2025-11-01T00:00:00Z" },
+      ],
+    });
+    expect(result.realized).toBe(1500);
+    expect(result.realizedPrevious).toBe(800);
+    expect(result.trend.text).toBe("+88% vs last year");
+    expect(result.chart.map((row) => row.label)).toEqual([
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+    ]);
   });
 });

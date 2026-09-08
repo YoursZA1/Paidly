@@ -34,6 +34,14 @@ function invoiceDue(invoice) {
   return Number.isNaN(d.getTime()) ? null : startOfDay(d);
 }
 
+function openReceivableBalance(invoice, confirmedPayments) {
+  const invoicePayments = confirmedPayments.filter((p) => p.invoice_id === invoice.id);
+  if (invoicePayments.length > 0) {
+    return OutstandingBalanceService.calculateInvoiceBalance(invoice, invoicePayments).outstanding;
+  }
+  return invoiceAmount(invoice);
+}
+
 /**
  * Omit meaningless jumps (0 → n as +100%) and extreme percentages without a named period.
  */
@@ -90,6 +98,7 @@ export function computeDashboardFinancials({
     const due = invoiceDue(inv);
     return due && due < today;
   });
+  const pendingInvoices = openReceivables.filter((inv) => !overdueInvoices.includes(inv));
 
   const draftInvoiceCount = invoices.filter((inv) =>
     invoiceStatusIn(inv.status, INVOICE_STATUS.draft)
@@ -120,14 +129,16 @@ export function computeDashboardFinancials({
     paidThisMonth: paidThisMonth.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0),
     paidLastMonth: paidLastMonth.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0),
     paidThisMonthCount: new Set(paidThisMonth.map((payment) => payment.invoice_id).filter(Boolean)).size,
-    overdueAmount: overdueInvoices.reduce((sum, inv) => {
-      const invoicePayments = confirmedPayments.filter((p) => p.invoice_id === inv.id);
-      if (invoicePayments.length > 0) {
-        return sum + OutstandingBalanceService.calculateInvoiceBalance(inv, invoicePayments).outstanding;
-      }
-      return sum + invoiceAmount(inv);
-    }, 0),
+    overdueAmount: overdueInvoices.reduce(
+      (sum, inv) => sum + openReceivableBalance(inv, confirmedPayments),
+      0
+    ),
     overdueCount: overdueInvoices.length,
+    pendingAmount: pendingInvoices.reduce(
+      (sum, inv) => sum + openReceivableBalance(inv, confirmedPayments),
+      0
+    ),
+    pendingCount: pendingInvoices.length,
     draftInvoiceCount,
     draftQuoteCount,
     previousMonthLabel: previousCalendarMonthLabel(now),

@@ -31,6 +31,8 @@ export default function DashboardRevenueWidget({
   onRangeChange,
   currency,
   isLoading,
+  compact = false,
+  className = "",
 }) {
   const [activityOpen, setActivityOpen] = useState(false);
   const activityRef = useRef(null);
@@ -45,8 +47,11 @@ export default function DashboardRevenueWidget({
   }, [activityOpen]);
 
   return (
-    <div className="space-y-6">
-    <section aria-labelledby="dashboard-revenue-heading" className="dashboard-card px-4 py-5 sm:px-5">
+    <div className={`space-y-6 ${compact ? "h-full min-h-0" : ""} ${className}`.trim()}>
+    <section
+      aria-labelledby="dashboard-revenue-heading"
+      className={`dashboard-card px-4 py-4 sm:px-5 ${compact ? "flex h-full min-h-0 flex-col" : "py-5"}`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 id="dashboard-revenue-heading" className="text-sm font-semibold text-foreground">
@@ -76,14 +81,14 @@ export default function DashboardRevenueWidget({
       </div>
 
       {isLoading ? (
-        <Skeleton className="mt-4 h-10 w-48" />
+        <Skeleton className={`mt-3 h-10 w-48 ${compact ? "mt-2 h-8" : "mt-4"}`} />
       ) : (
-        <p className="currency-nums mt-4 text-[2rem] font-semibold leading-none tracking-tight text-foreground sm:text-[2.25rem]">
+        <p className={`currency-nums font-semibold leading-none tracking-tight text-foreground ${compact ? "mt-2 text-[1.75rem] sm:text-[2rem]" : "mt-4 text-[2rem] sm:text-[2.25rem]"}`}>
           {formatCurrency(breakdown?.realized || 0, currency)}
         </p>
       )}
 
-      {!isLoading && breakdown?.trend ? (
+      {!compact && !isLoading && breakdown?.trend ? (
         <p className="mt-2 text-xs tabular-nums text-muted-foreground">
           {breakdown.trend.direction === "down" ? "↘" : "↗"} {breakdown.trend.text}
         </p>
@@ -93,23 +98,28 @@ export default function DashboardRevenueWidget({
         <p className="mt-6 text-sm text-muted-foreground">No revenue recorded for this period.</p>
       ) : (
         <>
-          <div className="mt-6">
-            <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Revenue trend
-            </p>
-            {isLoading ? (
-              <Skeleton className="h-[220px] w-full" />
-            ) : (
-              <Suspense fallback={<Skeleton className="h-[220px] w-full" />}>
-                <DashboardRevenueChart
-                  chart={breakdown?.chart || []}
-                  userCurrency={currency}
-                  showQuotes={showQuotes}
-                  onChartClick={openActivity}
-                />
-              </Suspense>
+          <div className={compact ? "mt-3 flex min-h-0 flex-1 flex-col" : "mt-6"}>
+            {compact ? null : (
+              <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Revenue trend
+              </p>
             )}
-            <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            {isLoading ? (
+              <Skeleton className={compact ? "min-h-[112px] flex-1 w-full" : "h-[220px] w-full"} />
+            ) : (
+              <div className={compact ? "min-h-[112px] flex-1" : undefined}>
+                <Suspense fallback={<Skeleton className={compact ? "h-full w-full" : "h-[220px] w-full"} />}>
+                  <DashboardRevenueChart
+                    chart={breakdown?.chart || []}
+                    userCurrency={currency}
+                    showQuotes={showQuotes}
+                    onChartClick={openActivity}
+                    compact={compact}
+                  />
+                </Suspense>
+              </div>
+            )}
+            <ul className={`flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground ${compact ? "mt-2" : "mt-3"}`}>
               <li className="flex items-center gap-1.5">
                 <span className="h-px w-3.5" style={{ backgroundColor: REVENUE_SERIES.invoices.color }} />
                 Invoices
@@ -129,9 +139,26 @@ export default function DashboardRevenueWidget({
                 </li>
               ) : null}
             </ul>
-            <p className="mt-2 text-[11px] text-muted-foreground">Click the chart to open quote and invoice activity.</p>
+            {compact ? null : (
+              <p className="mt-2 text-[11px] text-muted-foreground">Click the chart to open quote and invoice activity.</p>
+            )}
           </div>
 
+          {compact ? (
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+              {(breakdown?.sources || []).map((source) => (
+                <span key={source.key}>
+                  {source.label}{" "}
+                  <span className="currency-nums tabular-nums text-foreground">
+                    {formatCurrency(source.amount, currency)}
+                  </span>
+                  {source.percent != null ? (
+                    <span className="tabular-nums"> ({source.percent.toFixed(1)}%)</span>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          ) : (
           <div className="mt-6 border-t border-border pt-4">
             <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
               Revenue sources
@@ -155,9 +182,11 @@ export default function DashboardRevenueWidget({
               />
             ) : null}
           </div>
+          )}
         </>
       )}
 
+      {compact ? null : (
       <button
         type="button"
         onClick={openActivity}
@@ -167,6 +196,7 @@ export default function DashboardRevenueWidget({
       >
         View quote and invoice activity →
       </button>
+      )}
     </section>
     {activityOpen ? (
       <div ref={activityRef}>

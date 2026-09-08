@@ -46,10 +46,10 @@ export const ROLE_LABELS = {
 };
 
 export const ROLE_DESCRIPTIONS = {
-  admin: 'Full access + team management',
-  management: 'Full access + team management',
-  sales: 'Users, subscriptions, waitlist',
-  support: 'Users, waitlist',
+  admin: 'Full platform admin, billing, and team management',
+  management: 'Full platform admin, billing, and team management',
+  sales: 'Users, subscriptions, waitlist, and financial oversight',
+  support: 'Users, messages, waitlist, and operational lists',
   user: 'No dashboard access',
 };
 

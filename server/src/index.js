@@ -1018,6 +1018,33 @@ app.patch("/api/admin/subscriptions", handleAdminSubscriptionUpdate);
 app.get("/api/admin/revenue", handleAdminRevenue);
 app.get("/api/admin/failed-payments", handleAdminFailedPayments);
 app.get("/api/admin/payments", handleAdminPayments);
+app.get("/api/admin/overview", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) return;
+    const { buildAdminPlatformOverview } = await import("./adminPlatformDirectory.js");
+    const overview = await buildAdminPlatformOverview(supabaseAdmin, { period: req.query?.period });
+    return res.json({ ok: true, overview });
+  } catch (err) {
+    logAdminApi(req.method, req.path, 500, err?.message);
+    return res.status(500).json({ error: err?.message || "Failed to load admin overview" });
+  }
+});
+app.get("/api/admin/directory", async (req, res) => {
+  try {
+    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    if (!adminUser) return;
+    const { listAdminDirectory } = await import("./adminPlatformDirectory.js");
+    const result = await listAdminDirectory(supabaseAdmin, req.query?.kind, { limit: req.query?.limit });
+    if (result?.status === 400) {
+      return res.status(400).json({ error: result.error || "Unknown directory kind" });
+    }
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    logAdminApi(req.method, req.path, 500, err?.message);
+    return res.status(500).json({ error: err?.message || "Failed to load admin directory" });
+  }
+});
 
 app.post("/api/admin/roles", async (req, res) => {
   try {
