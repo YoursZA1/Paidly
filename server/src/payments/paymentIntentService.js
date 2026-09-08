@@ -152,6 +152,11 @@ export async function applyVerifiedIntentStatus(intent, nextStatus, extra = {}) 
     }
     return { intent: latest || intent, duplicate: true };
   }
+  const { appendDocumentPaymentStatusEvent } = await import("./documentPaymentEventBridge.js");
+  await appendDocumentPaymentStatusEvent(data, transition.next, {
+    source: extra.source || "payment_webhook",
+    metadata: extra.metadata,
+  });
   return { intent: data, duplicate: false };
 }
 
@@ -220,6 +225,13 @@ export async function confirmPaymentIntent(intent, chargeCtx = {}) {
     .single();
 
   if (error) throw error;
+  if (data && data.status !== intent.status) {
+    const { appendDocumentPaymentStatusEvent } = await import("./documentPaymentEventBridge.js");
+    await appendDocumentPaymentStatusEvent(data, data.status, {
+      source: "payment_confirm",
+      metadata: { code: charge.code || null },
+    });
+  }
   return { intent: data, charge };
 }
 

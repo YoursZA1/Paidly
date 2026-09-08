@@ -5,7 +5,9 @@ import {
   DOCUMENT_EVENT_TYPE,
   assertEventAllowedForSource,
   buildDocumentEventIdempotencyKey,
+  documentEventSourceFromType,
 } from "@shared/documents/documentEvents.js";
+import { sanitizeDocumentEventMetadata } from "@shared/documents/documentEngine.js";
 
 export async function appendCommercialDocumentEventBestEffort({
   orgId,
@@ -30,7 +32,10 @@ export async function appendCommercialDocumentEventBestEffort({
     return null;
   }
   const occurredAt = new Date().toISOString();
-  const payload = metadata && typeof metadata === "object" ? metadata : {};
+  const payload = sanitizeDocumentEventMetadata(
+    kind,
+    metadata && typeof metadata === "object" ? metadata : {}
+  );
   const idempotencyKey = buildDocumentEventIdempotencyKey({
     eventType,
     sourceKind: kind,
@@ -78,16 +83,14 @@ export async function recordQuoteLifecycleEvent({ orgId, quoteId, clientId, even
 }
 
 export async function recordDocumentSentEvent({ orgId, documentType, documentId, clientId, sendAttemptId, channel = "email" }) {
-  const kind = String(documentType || "").toLowerCase() === "quote"
-    ? DOCUMENT_EVENT_SOURCE.QUOTE
-    : DOCUMENT_EVENT_SOURCE.INVOICE;
+  const kind = documentEventSourceFromType(documentType) || DOCUMENT_EVENT_SOURCE.INVOICE;
   return appendCommercialDocumentEventBestEffort({
     orgId,
     sourceKind: kind,
     sourceId: documentId,
     documentType: kind,
     eventType: DOCUMENT_EVENT_TYPE.sent,
-    clientId,
+    clientId: kind === DOCUMENT_EVENT_SOURCE.PAYSLIP ? null : clientId,
     sendAttemptId,
     metadata: {
       send_attempt_id: sendAttemptId,

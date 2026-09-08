@@ -47,7 +47,9 @@ export default function PayslipPDF() {
         setIsLoading(true);
         try {
             const viewerToken = getPublicPayslipViewerToken(token);
-            const payload = await fetchPublicPayslipPayload(token, viewerToken);
+            const payload = await fetchPublicPayslipPayload(token, viewerToken, {
+                observe: autoDownload ? 'downloaded' : 'opened',
+            });
             if (payload.requiresEmailVerification) {
                 setPayslip(null);
                 setUser(null);

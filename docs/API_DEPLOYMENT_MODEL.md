@@ -17,6 +17,10 @@ Hobby production is capped at **exactly 12** serverless functions (the current c
 
 **Payroll / leave:** `/api/payroll/*` and `/api/leave/*` rewrite onto `api/company/[[...path]].js` (`/api/company/payroll`, `/api/company/leave`). Do not add `api/payroll` or `api/leave` function files.
 
+**Client relationship timeline:** `GET /api/company/timeline`, `POST|PATCH|DELETE /api/company/client-notes`, `POST /api/company/client-events` — one extra segment on the existing `api/company` function. Do not add `api/timeline.js`. Payslip Observe events use `document_events.source_kind = payslip` on the same table and are excluded from this client feed.
+
+**Public share:** invoice, quote, payslip, OG, and email-track stay on `api/public-share.js`. Do not add `api/public-payslip.js`.
+
 **Rule:** When debugging “429 from Paidly” or “100 requests / 15 minutes,” first confirm whether the failing URL is handled by **A** or **B**. Tuning `RATE_LIMIT_MAX` on Express does **nothing** for routes that only exist as Vercel functions.
 
 **SPA client:** `src/api/backendClient.js` uses same-origin `/api` in production when `VITE_SERVER_URL` is unset (typical Vercel app hosting). Those requests hit **A**, not **B**, unless you proxy `/api` to an external Express origin.

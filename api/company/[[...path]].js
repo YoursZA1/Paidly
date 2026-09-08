@@ -12,6 +12,7 @@ import { normalizeRequestBody } from "../../server/src/validateBody.js";
 import { handlePayrollRoute, resolvePayrollRoute } from "../../server/src/payroll/payrollRoutes.js";
 import { handleLeaveRoute, resolveLeaveRoute } from "../../server/src/leave/leaveRoutes.js";
 import { handleWorkforceEmployees, resolveWorkforceRoute } from "../../server/src/workforce/workforceRoutes.js";
+import { handleClientTimelineRoute, resolveClientTimelineRoute } from "../../server/src/clients/clientTimelineRoutes.js";
 
 /**
  * Vercel: /api/company/invite | /api/company/role | /api/company/context
@@ -81,6 +82,10 @@ export default async function handler(req, res) {
   }
   if (pathHead === "employees" || resolveWorkforceRoute(req)) {
     return handleWorkforceEmployees(req, res);
+  }
+  const timelineResolved = resolveClientTimelineRoute(req);
+  if (pathHead === "timeline" || pathHead === "client-notes" || pathHead === "client-events" || timelineResolved) {
+    return handleClientTimelineRoute(req, res, timelineResolved || { route: pathHead });
   }
 
   const resolved = resolveCompanyRoute(req);

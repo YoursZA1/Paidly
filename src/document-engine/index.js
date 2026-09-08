@@ -144,3 +144,30 @@ export {
     ratingLabel,
     checklistProgress,
 } from "./documentFormRichFields";
+
+export {
+    DOCUMENT_ENGINE_ERROR,
+    DocumentEngineError,
+} from "./core/documentErrors";
+export {
+    DOCUMENT_ENGINE_TYPES,
+    DOCUMENT_ENGINE_CHANNELS,
+    DOCUMENT_OBSERVE_ACTION,
+    createDocumentContext,
+} from "./core/documentContext";
+export { generateDocumentPdf, generatePayslipPDF } from "./pdf/adapter";
+export { sendDocument } from "./send/adapter";
+export { dispatchDocumentEmail, dispatchInvoiceEmailViaCanonicalPath } from "./send/email";
+export { resolveDocumentDelivery } from "./delivery/adapter";
+export {
+    observeDocument,
+    observeDocumentOpened,
+    observeDocumentClicked,
+    observeDocumentDownloaded,
+    observeDeliveryStatus,
+} from "./observe/adapter";
+
+/** @deprecated Prefer {@link generateDocumentPdf} */
+export { generateDocumentPdf as generateDocument };
+/** @deprecated Prefer {@link generateDocumentPdf} */
+export { generateDocumentPdf as getDocumentArtifact };

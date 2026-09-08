@@ -7,7 +7,7 @@ import { johannesburgYmd, monthBounds, monthLabel } from "../../../shared/payrol
 import { countWorkingDays } from "../../../shared/leave/leaveMath.js";
 import { PAY_RUN_STATUSES } from "../../../shared/payroll/constants.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
-import { sendHtmlEmail } from "../sendInvoice.js";
+import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/documentSendAdapter.js";
 
 const DEFAULT_COMPONENTS = [
   { kind: "earning", code: "ALLOWANCE", name: "Allowance", taxable: true, recurring: true },
@@ -796,6 +796,7 @@ export async function finalizePayRun(orgId, actorId, runId) {
       error = retry.error;
     }
     if (error) throw error;
+    await recordPayslipCreatedEvent({ orgId, payslipId: payslip.id });
     await supabaseAdmin
       .from("pay_run_items")
       .update({ payslip_id: payslip.id, status: "payslip_generated" })
@@ -896,7 +897,7 @@ export async function cancelPayRun(orgId, actorId, runId) {
   return getPayRun(orgId, runId);
 }
 
-export async function sendPayRunPayslips(orgId, actorId, runId, origin) {
+export async function sendPayRunPayslips(orgId, actorId, runId, origin, options = {}) {
   const run = await getPayRun(orgId, runId);
   if (!run.finalized_at) {
     const err = new Error("Finalize payroll before sending payslips.");
@@ -905,29 +906,52 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin) {
   }
   const { data: payslips } = await supabaseAdmin
     .from("payslips")
-    .select("id, employee_name, employee_email, employee_user_id, public_share_token, payslip_number")
+    .select("id, employee_name, employee_email, employee_user_id, public_share_token, payslip_number, status, sent_to_email")
     .eq("org_id", orgId)
     .eq("pay_run_id", runId);
 
   const base = String(origin || "").replace(/\/$/, "") || "https://www.paidly.co.za";
+  const resend = Boolean(options.resend);
   let sent = 0;
+  let skipped = 0;
+  let failed = 0;
   for (const slip of payslips || []) {
     const to = slip.employee_email;
     if (!to) continue;
+    if (!resend && slip.status === "sent" && slip.sent_to_email) {
+      skipped += 1;
+      continue;
+    }
     const token = slip.public_share_token || crypto.randomUUID();
     if (!slip.public_share_token) {
       await supabaseAdmin.from("payslips").update({ public_share_token: token }).eq("id", slip.id);
     }
+    const sendAttempt = `${slip.id}:${runId}:${resend ? Date.now() : "send"}`;
+    try {
+      await sendPayslipEmail({
+        to,
+        employeeName: slip.employee_name,
+        periodLabel: run.period_label,
+        payslipNumber: slip.payslip_number,
+        shareToken: token,
+        origin: base,
+        orgId,
+        payslipId: slip.id,
+        sendAttempt,
+      });
+    } catch (err) {
+      failed += 1;
+      await writePayrollAudit({
+        orgId,
+        actorId,
+        action: "PAYSLIP_SEND_FAILED",
+        recordType: "payslips",
+        recordId: slip.id,
+        metadata: { reason: err?.code || "EMAIL_PROVIDER_FAILED" },
+      });
+      continue;
+    }
     await supabaseAdmin.from("payslips").update({ sent_to_email: to, status: "sent" }).eq("id", slip.id);
-    const url = `${base}/PublicPayslip?token=${encodeURIComponent(token)}`;
-    const html = `
-      <p>Hi ${escapeHtml(slip.employee_name || "there")},</p>
-      <p>Your Paidly payslip for <strong>${escapeHtml(run.period_label)}</strong> is ready.</p>
-      <p>Payslip number: <strong>${escapeHtml(slip.payslip_number || "")}</strong></p>
-      <p><a href="${escapeHtml(url)}">View your payslip</a> (sign-in or email verification may be required).</p>
-      <p>This link is for you only. Do not forward it.</p>
-    `;
-    await sendHtmlEmail(to, `Your Paidly payslip for ${run.period_label}`, html, "Paidly");
     await writePayrollAudit({
       orgId,
       actorId,
@@ -940,15 +964,7 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin) {
     }
     sent += 1;
   }
-  return { sent, total: (payslips || []).length };
-}
-
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return { sent, skipped, failed, total: (payslips || []).length };
 }
 
 export async function listStatutoryRules(orgId) {

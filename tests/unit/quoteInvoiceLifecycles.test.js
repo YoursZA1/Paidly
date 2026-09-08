@@ -176,5 +176,22 @@ describe("timeline labels", () => {
     expect(formatDocumentEventType("paid", "invoice")).toBe("Payment received");
     expect(formatDocumentEventType("overdue", "invoice")).toBe("Invoice overdue");
     expect(formatDocumentEventType("clicked", "invoice")).toBe("Payment link clicked");
+    expect(formatDocumentEventType("opened", "payslip")).toBe("Employee opened payslip");
+    expect(formatDocumentEventType("downloaded", "payslip")).toBe("Payslip downloaded");
+  });
+});
+
+describe("payslip event allowlist", () => {
+  it("allows delivery/observe events and rejects invoice payment events", () => {
+    expect(isEventAllowedForSource("payslip", "sent")).toBe(true);
+    expect(isEventAllowedForSource("payslip", "delivered")).toBe(true);
+    expect(isEventAllowedForSource("payslip", "opened")).toBe(true);
+    expect(isEventAllowedForSource("payslip", "downloaded")).toBe(true);
+    expect(isEventAllowedForSource("payslip", "paid")).toBe(false);
+    expect(isEventAllowedForSource("payslip", "overdue")).toBe(false);
+    expect(isEventAllowedForSource("payslip", "accepted")).toBe(false);
+    expect(() => assertEventAllowedForSource("payslip", DOCUMENT_EVENT_TYPE.payment_intent)).toThrow(
+      /Payslips cannot record/
+    );
   });
 });

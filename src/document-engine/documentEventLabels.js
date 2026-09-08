@@ -15,6 +15,11 @@ const EVENT_TYPE_LABELS = Object.freeze({
   expired: "Quote expired",
   converted_to_invoice: "Quote converted to invoice",
   payment_intent: "Payment started",
+  payment_processing: "Payment processing",
+  payment_failed: "Payment failed",
+  payment_cancelled: "Payment cancelled",
+  payment_refunded: "Payment refunded",
+  payment_partially_refunded: "Payment partially refunded",
   paid: "Payment received",
   reminded: "Follow-up sent",
   viewed_not_paid: "Viewed, still unpaid",
@@ -54,6 +59,17 @@ const QUOTE_EVENT_LABELS = Object.freeze({
   converted_to_invoice: "Quote converted to invoice",
 });
 
+const PAYSLIP_EVENT_LABELS = Object.freeze({
+  created: "Payslip created",
+  sent: "Payslip sent",
+  delivered: "Payslip delivered",
+  opened: "Employee opened payslip",
+  clicked: "Payslip link clicked",
+  downloaded: "Payslip downloaded",
+  failed: "Payslip delivery failed",
+  bounced: "Payslip email bounced",
+});
+
 const INVOICE_EVENT_LABELS = Object.freeze({
   created: "Invoice created",
   sent: "Invoice sent",
@@ -66,6 +82,11 @@ const INVOICE_EVENT_LABELS = Object.freeze({
   overdue: "Invoice overdue",
   paid: "Payment received",
   payment_intent: "Payment started",
+  payment_processing: "Payment processing",
+  payment_failed: "Payment failed",
+  payment_cancelled: "Payment cancelled",
+  payment_refunded: "Payment refunded",
+  payment_partially_refunded: "Payment partially refunded",
 });
 
 export function formatDocumentEventType(eventType, documentType) {
@@ -74,6 +95,7 @@ export function formatDocumentEventType(eventType, documentType) {
   const kind = String(documentType || "").trim().toLowerCase();
   if (kind === "quote" && QUOTE_EVENT_LABELS[t]) return QUOTE_EVENT_LABELS[t];
   if (kind === "invoice" && INVOICE_EVENT_LABELS[t]) return INVOICE_EVENT_LABELS[t];
+  if (kind === "payslip" && PAYSLIP_EVENT_LABELS[t]) return PAYSLIP_EVENT_LABELS[t];
   if (EVENT_TYPE_LABELS[t]) return EVENT_TYPE_LABELS[t];
   return t
     .split("_")

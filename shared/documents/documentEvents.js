@@ -7,6 +7,7 @@ export const DOCUMENT_EVENT_SOURCE = Object.freeze({
   HUB: "hub",
   INVOICE: "invoice",
   QUOTE: "quote",
+  PAYSLIP: "payslip",
 });
 
 export const DOCUMENT_EVENT_TYPE = Object.freeze({
@@ -27,18 +28,30 @@ export const DOCUMENT_EVENT_TYPE = Object.freeze({
   expired: "expired",
   converted_to_invoice: "converted_to_invoice",
   payment_intent: "payment_intent",
+  payment_processing: "payment_processing",
+  payment_failed: "payment_failed",
+  payment_cancelled: "payment_cancelled",
+  payment_refunded: "payment_refunded",
+  payment_partially_refunded: "payment_partially_refunded",
   status_changed: "status_changed",
   converted: "converted",
   created_from_quote: "created_from_quote",
+  delivered: "delivered",
+  failed: "failed",
+  bounced: "bounced",
+  downloaded: "downloaded",
 });
 
 /** Shared Observe events. Quotes never share invoice payment events. */
 export const SHARED_DOCUMENT_EVENT_TYPES = Object.freeze([
   DOCUMENT_EVENT_TYPE.created,
+  DOCUMENT_EVENT_TYPE.updated,
   DOCUMENT_EVENT_TYPE.sent,
   DOCUMENT_EVENT_TYPE.opened,
   DOCUMENT_EVENT_TYPE.clicked,
   DOCUMENT_EVENT_TYPE.reminded,
+  DOCUMENT_EVENT_TYPE.viewed,
+  DOCUMENT_EVENT_TYPE.status_changed,
 ]);
 
 export const QUOTE_ONLY_EVENT_TYPES = Object.freeze([
@@ -46,6 +59,8 @@ export const QUOTE_ONLY_EVENT_TYPES = Object.freeze([
   DOCUMENT_EVENT_TYPE.rejected,
   DOCUMENT_EVENT_TYPE.expired,
   DOCUMENT_EVENT_TYPE.converted_to_invoice,
+  DOCUMENT_EVENT_TYPE.converted,
+  DOCUMENT_EVENT_TYPE.created_from_quote,
 ]);
 
 export const INVOICE_ONLY_EVENT_TYPES = Object.freeze([
@@ -55,10 +70,28 @@ export const INVOICE_ONLY_EVENT_TYPES = Object.freeze([
   DOCUMENT_EVENT_TYPE.due_today,
   DOCUMENT_EVENT_TYPE.overdue,
   DOCUMENT_EVENT_TYPE.payment_intent,
+  DOCUMENT_EVENT_TYPE.payment_processing,
+  DOCUMENT_EVENT_TYPE.payment_failed,
+  DOCUMENT_EVENT_TYPE.payment_cancelled,
+  DOCUMENT_EVENT_TYPE.payment_refunded,
+  DOCUMENT_EVENT_TYPE.payment_partially_refunded,
+  DOCUMENT_EVENT_TYPE.created_from_quote,
 ]);
 
 export const QUOTE_EVENT_TYPES = Object.freeze([...SHARED_DOCUMENT_EVENT_TYPES, ...QUOTE_ONLY_EVENT_TYPES]);
 export const INVOICE_EVENT_TYPES = Object.freeze([...SHARED_DOCUMENT_EVENT_TYPES, ...INVOICE_ONLY_EVENT_TYPES]);
+
+/** Payslips never share invoice payment or quote decision events. */
+export const PAYSLIP_EVENT_TYPES = Object.freeze([
+  DOCUMENT_EVENT_TYPE.created,
+  DOCUMENT_EVENT_TYPE.sent,
+  DOCUMENT_EVENT_TYPE.delivered,
+  DOCUMENT_EVENT_TYPE.opened,
+  DOCUMENT_EVENT_TYPE.clicked,
+  DOCUMENT_EVENT_TYPE.downloaded,
+  DOCUMENT_EVENT_TYPE.failed,
+  DOCUMENT_EVENT_TYPE.bounced,
+]);
 
 export const CANONICAL_ENGAGEMENT_EVENT_TYPES = Object.freeze([
   ...SHARED_DOCUMENT_EVENT_TYPES,
@@ -70,7 +103,12 @@ export const DOCUMENT_EVENT_ACTOR = Object.freeze({
   SYSTEM: "system",
   USER: "user",
   RECIPIENT: "recipient",
+  CLIENT: "client",
   WEBHOOK: "webhook",
+  PAYMENT_GATEWAY: "payment_gateway",
+  EMAIL_PROVIDER: "email_provider",
+  AUTOMATION: "automation",
+  API: "api",
 });
 
 export const OPEN_DEDUPE_MS = 30 * 60 * 1000;
@@ -78,9 +116,23 @@ export const CLICK_DEDUPE_MS = 10 * 60 * 1000;
 
 export function normalizeDocumentEventSource(raw) {
   const key = String(raw || "").trim().toLowerCase();
-  if (key === DOCUMENT_EVENT_SOURCE.HUB || key === DOCUMENT_EVENT_SOURCE.INVOICE || key === DOCUMENT_EVENT_SOURCE.QUOTE) {
+  if (
+    key === DOCUMENT_EVENT_SOURCE.HUB ||
+    key === DOCUMENT_EVENT_SOURCE.INVOICE ||
+    key === DOCUMENT_EVENT_SOURCE.QUOTE ||
+    key === DOCUMENT_EVENT_SOURCE.PAYSLIP
+  ) {
     return key;
   }
+  return null;
+}
+
+export function documentEventSourceFromType(documentType) {
+  const key = String(documentType || "").trim().toLowerCase();
+  if (key === DOCUMENT_EVENT_SOURCE.QUOTE || key === "quotes") return DOCUMENT_EVENT_SOURCE.QUOTE;
+  if (key === DOCUMENT_EVENT_SOURCE.PAYSLIP || key === "payslips") return DOCUMENT_EVENT_SOURCE.PAYSLIP;
+  if (key === DOCUMENT_EVENT_SOURCE.HUB) return DOCUMENT_EVENT_SOURCE.HUB;
+  if (key === DOCUMENT_EVENT_SOURCE.INVOICE || key === "invoices") return DOCUMENT_EVENT_SOURCE.INVOICE;
   return null;
 }
 
@@ -96,6 +148,7 @@ export function allowedEventTypesForSource(sourceKind) {
   const source = normalizeDocumentEventSource(sourceKind);
   if (source === DOCUMENT_EVENT_SOURCE.QUOTE) return QUOTE_EVENT_TYPES;
   if (source === DOCUMENT_EVENT_SOURCE.INVOICE) return INVOICE_EVENT_TYPES;
+  if (source === DOCUMENT_EVENT_SOURCE.PAYSLIP) return PAYSLIP_EVENT_TYPES;
   return CANONICAL_ENGAGEMENT_EVENT_TYPES;
 }
 
@@ -114,7 +167,9 @@ export function assertEventAllowedForSource(sourceKind, eventType) {
   const error = new Error(
     source === DOCUMENT_EVENT_SOURCE.QUOTE
       ? "Quotes cannot record payment lifecycle events"
-      : "Invoices cannot record quote decision events"
+      : source === DOCUMENT_EVENT_SOURCE.PAYSLIP
+        ? "Payslips cannot record invoice or quote lifecycle events"
+        : "Invoices cannot record quote decision events"
   );
   error.code = "DOCUMENT_EVENT_TYPE_NOT_ALLOWED";
   throw error;
@@ -158,11 +213,22 @@ export function buildDocumentEventIdempotencyKey({
     const attempt = String(sendAttemptId || "").trim();
     return attempt ? `sent:${source}:${id}:${attempt}` : `sent:${source}:${id}`;
   }
+  if (type === DOCUMENT_EVENT_TYPE.delivered) {
+    const attempt = String(sendAttemptId || "").trim();
+    return attempt ? `delivered:${source}:${id}:${attempt}` : `delivered:${source}:${id}`;
+  }
+  if (type === DOCUMENT_EVENT_TYPE.failed || type === DOCUMENT_EVENT_TYPE.bounced) {
+    const attempt = String(sendAttemptId || channel || "").trim();
+    return attempt ? `${type}:${source}:${id}:${attempt}` : `${type}:${source}:${id}`;
+  }
   if (type === DOCUMENT_EVENT_TYPE.opened) {
     return `opened:${source}:${id}:${String(channel || "public")}:${bucketIso(at, OPEN_DEDUPE_MS)}`;
   }
   if (type === DOCUMENT_EVENT_TYPE.clicked) {
     return `clicked:${source}:${id}:${String(action || "cta")}:${bucketIso(at, CLICK_DEDUPE_MS)}`;
+  }
+  if (type === DOCUMENT_EVENT_TYPE.downloaded) {
+    return `downloaded:${source}:${id}:${String(channel || "secure")}:${bucketIso(at, CLICK_DEDUPE_MS)}`;
   }
   if (type === DOCUMENT_EVENT_TYPE.paid) {
     const ref = String(paymentIntentId || paymentId || "").trim();
@@ -190,6 +256,16 @@ export function buildDocumentEventIdempotencyKey({
   if (type === DOCUMENT_EVENT_TYPE.payment_intent) {
     const ref = String(paymentIntentId || "").trim();
     return ref ? `payment_intent:${source}:${id}:${ref}` : `payment_intent:${source}:${id}`;
+  }
+  if (
+    type === DOCUMENT_EVENT_TYPE.payment_processing ||
+    type === DOCUMENT_EVENT_TYPE.payment_failed ||
+    type === DOCUMENT_EVENT_TYPE.payment_cancelled ||
+    type === DOCUMENT_EVENT_TYPE.payment_refunded ||
+    type === DOCUMENT_EVENT_TYPE.payment_partially_refunded
+  ) {
+    const ref = String(paymentIntentId || "").trim();
+    return ref ? `${type}:${source}:${id}:${ref}` : `${type}:${source}:${id}`;
   }
   return `${type}:${source}:${id}`;
 }

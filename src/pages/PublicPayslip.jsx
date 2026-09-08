@@ -48,7 +48,9 @@ export default function PublicPayslip() {
 
                 setShareToken(token);
                 const viewerToken = getPublicPayslipViewerToken(token);
-                const payload = await fetchPublicPayslipPayload(token, viewerToken);
+                const payload = await fetchPublicPayslipPayload(token, viewerToken, {
+                    observe: 'opened',
+                });
 
                 const current = payload.payslip;
                 if (!current) {
@@ -93,7 +95,9 @@ export default function PublicPayslip() {
         try {
             const viewerToken = await verifyPublicPayslipEmail(shareToken, emailVerification);
             setPublicPayslipViewerToken(shareToken, viewerToken);
-            const payload = await fetchPublicPayslipPayload(shareToken, viewerToken);
+            const payload = await fetchPublicPayslipPayload(shareToken, viewerToken, {
+                observe: 'opened',
+            });
             const current = payload.payslip;
             if (!current || payload.requiresEmailVerification) {
                 setVerificationError('Verification failed. Please try again.');
@@ -215,6 +219,11 @@ export default function PublicPayslip() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6"
+                        onClick={() => {
+                            if (!shareToken) return;
+                            const viewerToken = getPublicPayslipViewerToken(shareToken);
+                            void fetchPublicPayslipPayload(shareToken, viewerToken, { observe: 'clicked' });
+                        }}
                     >
                         Download PDF
                     </a>

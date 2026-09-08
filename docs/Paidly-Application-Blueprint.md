@@ -286,7 +286,7 @@ organizations → memberships (employee_id)
 **Schema upgrade (`document_events`):**
 
 - `id`
-- `source_kind` (`hub` | `invoice` | `quote`) + `source_id` (commercial document UUID). Hub rows still use `document_id` → `documents`.
+- `source_kind` (`hub` | `invoice` | `quote` | `payslip`) + `source_id` (commercial document UUID). Hub rows still use `document_id` → `documents`.
 - `event_type` (document-type allowlisted; see below)
 - `occurred_at`
 - `actor_type` (system | recipient | user | webhook)
@@ -303,6 +303,8 @@ organizations → memberships (employee_id)
 
 **Conversion:** keep the quote; create a new draft invoice via `convert_quote_to_invoice`; record `accepted` + `converted_to_invoice` on the quote and `created` on the invoice. Do not auto-send the invoice.
 
+**Payslip events:** `created` · `sent` · `delivered` (provider confirmation only) · `opened` · `clicked` (`view_payslip`) · `downloaded`. Payslips must never record `paid`, `viewed_not_paid`, `due_soon`, `due_today`, `overdue`, `payment_intent`, `accepted`, or `rejected`. Payslip event payload must not store `net_pay`, tax amounts, bank details, or ID numbers. Payslip activity is an employee/payroll timeline, never the client relationship timeline.
+
 **This powers:**
 
 - Timeline (client and document history)
@@ -317,7 +319,7 @@ organizations → memberships (employee_id)
 - One observable event stream (`document_events`) that unifies communication and payment lifecycle telemetry.
 - Feature parity (e.g. quote send = invoice send) becomes **engine work**, not three copies.
 
-**Technical anchor today:** `Invoice` / `Quote` / `Payslip` entities + `InvoiceSendService`-style orchestration + `/api/send-email` + public share routes. **In code:** `src/document-engine/` exports `DOCUMENT_TYPES`, `normalizeDocumentType`, `parseRouteDocumentTypeStrict`, `getDocumentEntity`, `documentRef`. **PDF engine:** html2pdf (html2canvas + jsPDF) on A4 (`src/lib/documentPdf/`). Pagination is **Document → Page → Blocks → measured content**, not a fixed item count. Invoice and quote are adapters that emit the same block kinds (line item, totals+payment, notes, flowable terms); `paginateBlocks` packs by measured height so a long description moves as a whole row. Later kinds (delivery note, statement, receipt, PO) add blocks — they do not fork a second paginator. Capture waits for fonts/images/`data-paidly-doc-ready`. Do not recalculate financial totals in the renderer. **Roadmap:** grow this module (shared send/PDF adapters, shared status vocabulary) so new document kinds plug in, not fork.
+**Technical anchor today:** `Invoice` / `Quote` / `Payslip` entities + `InvoiceSendService`-style orchestration + `/api/send-email` + public share routes. **In code:** `src/document-engine/` exports `DOCUMENT_TYPES`, `generateDocumentPdf`, `sendDocument`, `observeDocument`, `createDocumentContext`. PDF adapters wrap the existing html2pdf generators (`generateInvoicePDF`, `generateQuotePDF`, `PayslipDocument`). Send uses the existing Resend path (`send-invoice-email` / `sendHtmlEmail`). Payslip email is a secure `/PublicPayslip?token=` link — never an unencrypted payroll PDF attachment and never `/view/` public invoice URLs. **PDF engine:** html2pdf (html2canvas + jsPDF) on A4 (`src/lib/documentPdf/`). Pagination is **Document → Page → Blocks → measured content**, not a fixed item count. Invoice and quote are adapters that emit the same block kinds (line item, totals+payment, notes, flowable terms); `paginateBlocks` packs by measured height so a long description moves as a whole row. Later kinds (delivery note, statement, receipt, PO) add blocks — they do not fork a second paginator. Capture waits for fonts/images/`data-paidly-doc-ready`. Do not recalculate financial totals in the renderer. Payslip PDFs render payroll snapshots; they do not recalculate pay.
 
 #### Critical addition: Payment Engine (POS + Documents + future → one capture path)
 
@@ -792,13 +794,16 @@ These three compound **retention**, **differentiation**, and the **business OS**
 
 ### 2. Client Timeline (inside client profile)
 
-A single **chronological timeline** on the client record, for example:
+A single **chronological relationship timeline** on the client record. It answers *what has happened with this client from the first interaction until today* — quotes, invoices, payments and attempts, reminders, communication, document views/clicks, notes, profile changes, and manual follow-ups.
 
-- **Invoice sent** (and viewed / paid where data exists)
-- **Quote sent / accepted / declined / expired**
-- **Payment received** (linked payment rows)
+**Data (aggregator, not a second activity SoR):**
 
-**Data:** join `invoices`, `quotes`, `payments`, and optionally `document_sends` / `message_logs` (and later tasks/notes) filtered by `client_id` + `org_id`, sorted by time.
+- `document_events` — immutable Observe log for quote/invoice lifecycle, reminders, and Payment Engine status (Ozow intents/failures/settlement)
+- `payments` / `payment_intents` — authoritative money; timeline events are idempotent overlays
+- `message_logs` — communication, de-duped against Observe `tracking_token`s
+- `client_notes` + `client_relationship_events` — internal notes (mutable) and CRM interactions / profile changes (append-only)
+
+**API:** `GET /api/company/timeline?client_id=` (existing Hobby `api/company` function). Notes/interactions: `/api/company/client-notes`, `/api/company/client-events`. Internal notes never appear on public invoice/quote links, the client portal, or PDFs.
 
 **Why it hits:** turns “contacts” into **relationship history**—high **retention** and a clear Paidly-only view most invoicing-only tools do not unify on one screen.
 

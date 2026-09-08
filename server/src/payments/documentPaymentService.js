@@ -317,7 +317,7 @@ export async function settleDocumentIntent(intent) {
     documentType: "invoice",
     eventType: DOCUMENT_EVENT_TYPE.paid,
     clientId: invoice.client_id || intent.client_id || null,
-    actorType: DOCUMENT_EVENT_ACTOR.WEBHOOK,
+    actorType: DOCUMENT_EVENT_ACTOR.PAYMENT_GATEWAY,
     paymentIntentId: intent.id,
     paymentId: inserted.payment?.id,
     metadata: {

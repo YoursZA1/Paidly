@@ -33,6 +33,10 @@ export const DOCUMENT_EVENT_TYPES = Object.freeze({
   signature_declined: "signature_declined",
   /** Approval-flow document submitted for review (draft → pending). */
   approval_requested: "approval_requested",
+  delivered: "delivered",
+  downloaded: "downloaded",
+  failed: "failed",
+  bounced: "bounced",
 });
 
 function sentTargetForType(docType) {
@@ -54,11 +58,11 @@ export function resolveLifecycleEventType(docType, fromStatus, toStatus) {
   if (docType === DOCUMENT_TYPES.quote && toStatus === QUOTE_STATUSES.accepted) {
     return DOCUMENT_EVENT_TYPES.accepted;
   }
-  if (
-    (docType === DOCUMENT_TYPES.invoice || docType === DOCUMENT_TYPES.payslip) &&
-    toStatus === INVOICE_STATUSES.paid
-  ) {
+  if (docType === DOCUMENT_TYPES.invoice && toStatus === INVOICE_STATUSES.paid) {
     return DOCUMENT_EVENT_TYPES.paid;
+  }
+  if (docType === DOCUMENT_TYPES.payslip) {
+    return null;
   }
   return DOCUMENT_EVENT_TYPES.status_changed;
 }

@@ -2,10 +2,13 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 import {
   DOCUMENT_EVENT_ACTOR,
   DOCUMENT_EVENT_SOURCE,
+  DOCUMENT_EVENT_TYPE,
   assertDocumentEventSource,
   assertEventAllowedForSource,
   buildDocumentEventIdempotencyKey,
+  documentEventSourceFromType,
 } from "../../../shared/documents/documentEvents.js";
+import { sanitizeDocumentEventMetadata } from "../../../shared/documents/documentEngine.js";
 
 function payloadFrom(metadata) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
@@ -24,7 +27,10 @@ export async function appendDocumentEvent(input = {}, client = supabaseAdmin) {
   }
 
   const occurredAt = input.occurredAt || input.occurred_at || new Date().toISOString();
-  const metadata = payloadFrom(input.metadata || input.payload);
+  const metadata = sanitizeDocumentEventMetadata(
+    sourceKind,
+    payloadFrom(input.metadata || input.payload)
+  );
   const idempotencyKey =
     input.idempotencyKey ||
     input.idempotency_key ||
@@ -54,7 +60,7 @@ export async function appendDocumentEvent(input = {}, client = supabaseAdmin) {
     payload: metadata,
     actor_user_id: input.actorUserId || input.actor_user_id || null,
     actor_type: input.actorType || input.actor_type || DOCUMENT_EVENT_ACTOR.SYSTEM,
-    client_id: input.clientId || input.client_id || null,
+    client_id: sourceKind === DOCUMENT_EVENT_SOURCE.PAYSLIP ? null : input.clientId || input.client_id || null,
     occurred_at: occurredAt,
     idempotency_key: idempotencyKey || null,
     payment_intent_id: input.paymentIntentId || input.payment_intent_id || null,
@@ -119,18 +125,48 @@ export async function recordPublicDocumentOpened({
   clientId = null,
   source = "public_page",
 } = {}, client = supabaseAdmin) {
-  if (!orgId || !sourceId) return { event: null, skipped: true };
-  return appendDocumentEventBestEffort(
+  return recordPublicDocumentInteraction(
     {
       orgId,
       sourceKind,
       sourceId,
-      documentType: sourceKind,
-      eventType: "opened",
       clientId,
+      eventType: DOCUMENT_EVENT_TYPE.opened,
+      source,
+    },
+    client
+  );
+}
+
+export async function recordPublicDocumentInteraction({
+  orgId,
+  sourceKind,
+  sourceId,
+  clientId = null,
+  eventType,
+  action = null,
+  source = "public_page",
+  metadata = {},
+} = {}, client = supabaseAdmin) {
+  if (!orgId || !sourceId || !eventType) return { event: null, skipped: true };
+  const kind = assertDocumentEventSource(sourceKind);
+  return appendDocumentEventBestEffort(
+    {
+      orgId,
+      sourceKind: kind,
+      sourceId,
+      documentType: kind,
+      eventType,
+      clientId: kind === DOCUMENT_EVENT_SOURCE.PAYSLIP ? null : clientId,
       actorType: DOCUMENT_EVENT_ACTOR.RECIPIENT,
       channel: source,
-      metadata: { source, channel: source },
+      action,
+      metadata: {
+        source,
+        channel: source,
+        action: action || null,
+        ...metadata,
+      },
     },
     client
   );
@@ -138,9 +174,8 @@ export async function recordPublicDocumentOpened({
 
 export async function appendEventFromMessageLog(log, eventType, extra = {}, client = supabaseAdmin) {
   if (!log?.org_id || !log?.document_id) return { event: null, skipped: true };
-  const sourceKind = String(log.document_type || "").toLowerCase() === "quote"
-    ? DOCUMENT_EVENT_SOURCE.QUOTE
-    : DOCUMENT_EVENT_SOURCE.INVOICE;
+  const sourceKind =
+    documentEventSourceFromType(log.document_type) || DOCUMENT_EVENT_SOURCE.INVOICE;
   return appendDocumentEventBestEffort(
     {
       orgId: log.org_id,
@@ -148,7 +183,7 @@ export async function appendEventFromMessageLog(log, eventType, extra = {}, clie
       sourceId: log.document_id,
       documentType: sourceKind,
       eventType,
-      clientId: log.client_id || null,
+      clientId: sourceKind === DOCUMENT_EVENT_SOURCE.PAYSLIP ? null : log.client_id || null,
       actorType: DOCUMENT_EVENT_ACTOR.RECIPIENT,
       channel: extra.channel || log.channel || "email",
       action: extra.action,

@@ -1089,6 +1089,17 @@ export function registerCompanyTeamRoutes(app) {
       handleWorkforceEmployees(req, res)
     );
   });
+  app.all("/api/company/timeline", (req, res) => {
+    import("./clients/clientTimelineRoutes.js").then(({ handleClientTimeline }) => handleClientTimeline(req, res));
+  });
+  app.all("/api/company/client-notes", (req, res) => {
+    import("./clients/clientTimelineRoutes.js").then(({ handleClientNotes }) => handleClientNotes(req, res));
+  });
+  app.all("/api/company/client-events", (req, res) => {
+    import("./clients/clientTimelineRoutes.js").then(({ handleClientRelationshipEvents }) =>
+      handleClientRelationshipEvents(req, res)
+    );
+  });
   // Legacy paths (bookmarks / older clients)
   app.post("/api/company/team/invite", handleCompanyTeamInvite);
   app.patch("/api/company/team/role", handleCompanyTeamRolePatch);

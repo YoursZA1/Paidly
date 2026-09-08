@@ -143,6 +143,7 @@ export async function loadPublicInvoiceBundle(supabase, shareToken) {
     const { data: c } = await supabase
       .from("clients")
       .select(
+        // Public payload only. Never internal_notes or client_notes.
         "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at"
       )
       .eq("id", invoice.client_id)

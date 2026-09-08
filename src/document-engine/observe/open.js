@@ -1,0 +1,1 @@
+export { observeDocumentOpened } from "./adapter";

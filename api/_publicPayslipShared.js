@@ -125,6 +125,34 @@ export async function loadPublicPayslipBundle(supabase, shareToken) {
   return { payslip };
 }
 
+async function recordPayslipObserve(supabase, payslip, req) {
+  if (!payslip?.org_id || !payslip?.id) return;
+  const observe = String(req?.query?.observe || req?.query?.event || "opened").toLowerCase();
+  const { recordPublicDocumentInteraction } = await import("../server/src/documents/documentEventService.js");
+  const { DOCUMENT_EVENT_SOURCE, DOCUMENT_EVENT_TYPE } = await import("../shared/documents/documentEvents.js");
+  const events = [];
+  if (observe === "clicked") events.push({ eventType: DOCUMENT_EVENT_TYPE.clicked, action: "view_payslip" });
+  else if (observe === "downloaded") {
+    events.push({ eventType: DOCUMENT_EVENT_TYPE.opened, action: null });
+    events.push({ eventType: DOCUMENT_EVENT_TYPE.downloaded, action: "download_payslip" });
+  } else {
+    events.push({ eventType: DOCUMENT_EVENT_TYPE.opened, action: null });
+  }
+  for (const item of events) {
+    await recordPublicDocumentInteraction(
+      {
+        orgId: payslip.org_id,
+        sourceKind: DOCUMENT_EVENT_SOURCE.PAYSLIP,
+        sourceId: payslip.id,
+        eventType: item.eventType,
+        action: item.action,
+        source: "payslip_secure_page",
+      },
+      supabase
+    );
+  }
+}
+
 export async function handlePublicPayslipGet(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -158,6 +186,7 @@ export async function handlePublicPayslipGet(req, res) {
     const sentTo = payslip.sent_to_email ? normalizeEmail(payslip.sent_to_email) : "";
 
     if (!sentTo) {
+      await recordPayslipObserve(supabase, payslip, req);
       return res.status(200).json({
         requiresEmailVerification: false,
         payslip,
@@ -171,6 +200,7 @@ export async function handlePublicPayslipGet(req, res) {
       viewer.email === sentTo;
 
     if (okViewer) {
+      await recordPayslipObserve(supabase, payslip, req);
       return res.status(200).json({
         requiresEmailVerification: false,
         payslip,

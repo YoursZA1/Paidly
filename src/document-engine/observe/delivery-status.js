@@ -1,0 +1,1 @@
+export { observeDeliveryStatus } from "./adapter";

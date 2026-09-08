@@ -14,9 +14,11 @@ async function parseJson(res) {
  * @param {string} shareToken - payslips.public_share_token (UUID)
  * @param {string|null} viewerToken
  */
-export async function fetchPublicPayslipPayload(shareToken, viewerToken = null) {
+export async function fetchPublicPayslipPayload(shareToken, viewerToken = null, options = {}) {
   const apiBase = getPublicApiBase();
-  const url = `${apiBase}/api/public-payslip?token=${encodeURIComponent(shareToken)}`;
+  const observe = String(options.observe || "").trim();
+  const observeQuery = observe ? `&observe=${encodeURIComponent(observe)}` : "";
+  const url = `${apiBase}/api/public-payslip?token=${encodeURIComponent(shareToken)}${observeQuery}`;
   const headers = {};
   if (viewerToken) {
     headers.Authorization = `Bearer ${viewerToken}`;

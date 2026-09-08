@@ -5,17 +5,17 @@
 
 import { Invoice, Quote, Client, BankingDetail, DocumentSend, MessageLog, User } from '@/api/entities';
 import { supabase } from '@/lib/supabaseClient';
-import { getStableSession, getStableSessionResult } from '@/core/auth/SessionCoordinator';
-import { generateQuotePDF } from '@/components/pdf/generateQuotePDF';
-import { generateInvoicePDF } from '@/components/pdf/generateInvoicePDF';
+import { generateInvoiceDocumentPdf } from '@/document-engine/pdf/invoice';
+import { generateQuoteDocumentPdf } from '@/document-engine/pdf/quote';
+import { dispatchDocumentEmail, userFacingDocumentSendError } from '@/document-engine/send/email';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
 import { generateInvoiceEmailHtml } from '@/utils/invoiceEmailHtml';
-import { getPublicApiBase } from '@/api/backendClient';
 import { createPageUrl } from '@/utils';
 import { retryOnAbort, isAbortError, retryOnTransientFetch } from '@/utils/retryOnAbort';
 import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from '@/lib/sessionTimeoutControls';
 import { isValidEmail } from '@/utils/inputSanitization';
+import { createDocumentContext } from '@/document-engine/core/documentContext';
 
 /**
  * Base URL for trackable links and email pixel (client: window.origin; server: pass explicitly).
@@ -87,6 +87,21 @@ export async function persistInvoiceTrackingLog(invoice, channel, recipient, tra
       document_type: 'invoice',
       document_id: invoice.id,
       client_id: invoice.client_id || null,
+      channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
+      recipient: recipient || null,
+      sent_at: sentAt || new Date().toISOString(),
+      tracking_token: trackingToken,
+    })
+  );
+}
+
+async function persistQuoteTrackingLog(quote, channel, recipient, trackingToken, sentAt) {
+  if (!trackingToken) return;
+  await retryOnTransientFetch(() =>
+    MessageLog.create({
+      document_type: 'quote',
+      document_id: quote.id,
+      client_id: quote.client_id || null,
       channel: channel === 'whatsapp' ? 'whatsapp' : 'email',
       recipient: recipient || null,
       sent_at: sentAt || new Date().toISOString(),
@@ -177,62 +192,13 @@ function pdfBlobToBase64(blob) {
   });
 }
 
-function redactSendErrorDetails(raw) {
-  const text = typeof raw === 'string' ? raw : raw == null ? '' : JSON.stringify(raw);
-  return text
-    .replace(/Bearer\s+\S+/gi, '[redacted]')
-    .replace(/re_[A-Za-z0-9_]+/g, '[redacted]')
-    .slice(0, 400);
-}
-
 function userFacingInvoiceSendError(raw, fallback) {
-  const s = redactSendErrorDetails(raw);
+  const s = typeof raw === 'string' ? raw : raw == null ? '' : String(raw?.message || raw);
   if (/no email|missing client email/i.test(s)) return 'Client has no email address.';
   if (/invalid email/i.test(s)) return 'Client email address is invalid.';
   if (/share token/i.test(s)) return 'Public invoice URL could not be generated. Please try again.';
   if (/pdf/i.test(s) && /fail|generat|read/i.test(s)) return 'Invoice PDF generation failed. Please try again.';
-  if (/not configured|misconfigured|RESEND/i.test(s)) {
-    return 'Email service is unavailable. Please try again later.';
-  }
-  if (/unauthorized|not signed in|logged in/i.test(s)) {
-    return 'You must be logged in to send emails.';
-  }
-  if (/too large|413/i.test(s)) {
-    return 'Invoice PDF is too large to email. Please try again or share a link.';
-  }
-  if (!s || s.trim().startsWith('{') || s.length > 180) {
-    return fallback || 'Invoice could not be sent. Please try again.';
-  }
-  return s;
-}
-
-async function readFetchBody(res) {
-  const text = await res.text().catch(() => '');
-  let json = null;
-  if (text) {
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = null;
-    }
-  }
-  return { text, json };
-}
-
-function assertProviderAccepted(res, body, label) {
-  const errorPayload = body.json?.error || body.json?.message || body.text;
-  if (!res.ok) {
-    throw new Error(userFacingInvoiceSendError(errorPayload, `${label} rejected the request.`));
-  }
-  if (body.json && body.json.success === false) {
-    throw new Error(userFacingInvoiceSendError(errorPayload, `${label} rejected the request.`));
-  }
-}
-
-function normalizeIdempotencyKey(raw) {
-  const key = String(raw || '').trim();
-  if (!key) return '';
-  return key.slice(0, 256);
+  return userFacingDocumentSendError(raw, fallback || 'Invoice could not be sent. Please try again.');
 }
 
 async function findMessageLogByTrackingToken(token) {
@@ -254,88 +220,27 @@ async function findMessageLogByTrackingToken(token) {
 /**
  * Canonical invoice email dispatch used by interactive send and the sync queue.
  * Primary: Supabase edge `send-invoice-email` (Resend). Fallback: POST /api/send-invoice.
- * Success requires HTTP 2xx and, when JSON is present, `success !== false`.
  */
-export async function dispatchInvoiceEmailViaCanonicalPath({
-  pdfBase64,
-  email,
-  subject,
-  html,
-  filename,
-  invoiceNum,
-  fromName,
-  clientName,
-  amountDue,
-  dueDate,
-  idempotencyKey,
-}) {
-  const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const supabaseUrl = String(rawSupabaseUrl).replace(/\.supabase\.com/gi, '.supabase.co').trim();
-  if (!supabaseUrl) throw new Error('Email service is unavailable. Please try again later.');
-
-  const sessionResult = await getStableSessionResult();
-  if (sessionResult?.error) throw sessionResult.error;
-  const accessToken =
-    sessionResult?.data?.session?.access_token || (await getStableSession())?.access_token;
-  if (!accessToken) throw new Error('You must be logged in to send emails.');
-
-  const idempotency = normalizeIdempotencyKey(idempotencyKey);
-
-  let primaryError = null;
+export async function dispatchInvoiceEmailViaCanonicalPath(payload) {
   try {
-    const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        pdfBase64,
-        email,
-        subject,
-        html,
-        filename,
-        ...(idempotency ? { idempotencyKey: idempotency } : {}),
-      }),
-    });
-    const body = await readFetchBody(sendRes);
-    assertProviderAccepted(sendRes, body, 'Email service');
-    return { channel: 'edge', provider: body.json || { success: true } };
-  } catch (edgeErr) {
-    primaryError = edgeErr;
-  }
-
-  const apiBase = getPublicApiBase() || '';
-  const fallbackRes = await fetch(`${apiBase}/api/send-invoice`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      base64PDF: pdfBase64,
-      clientEmail: email,
-      invoiceNum: String(invoiceNum || ''),
-      fromName: String(fromName || 'Paidly'),
-      clientName: String(clientName || 'there'),
-      amountDue: String(amountDue ?? ''),
-      dueDate: String(dueDate || ''),
-      ...(idempotency ? { idempotencyKey: idempotency } : {}),
-    }),
-  });
-  const fallbackBody = await readFetchBody(fallbackRes);
-  try {
-    assertProviderAccepted(fallbackRes, fallbackBody, 'Email service');
-  } catch (fallbackErr) {
-    const primaryMsg = primaryError?.message || 'Email service failed';
+    return await dispatchDocumentEmail(payload);
+  } catch (error) {
     throw new Error(
-      userFacingInvoiceSendError(
-        `${primaryMsg} | ${fallbackErr.message}`,
-        'Invoice could not be sent. Please try again.'
-      )
+      userFacingInvoiceSendError(error?.message || error, 'Invoice could not be sent. Please try again.')
     );
   }
-  return { channel: 'api', provider: fallbackBody.json || { success: true } };
+}
+
+function prepareQuoteTrackingLink(quote, trackingToken) {
+  const shareToken = quote?.public_share_token;
+  if (!shareToken) {
+    throw new Error('Quote has no share token. Generate a share link first.');
+  }
+  const token = trackingToken || crypto.randomUUID();
+  const origin = getTrackableBaseUrl();
+  const basePath = createPageUrl('PublicQuote');
+  const url = `${origin}${basePath}?token=${encodeURIComponent(shareToken)}&tracking=${encodeURIComponent(token)}`;
+  return { url, trackingToken: token };
 }
 
 /**
@@ -363,10 +268,10 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
 
   if (!html) {
     quoteForSend = await ensureQuotePublicShareToken(quote);
-    const recipient = client.email.trim();
-    const { url, trackingToken } = await createTrackableQuoteLink(quoteForSend, 'email', recipient);
+    const prepared = prepareQuoteTrackingLink(quoteForSend);
+    trackingToken = prepared.trackingToken;
     const pixelUrl = trackingToken ? getEmailOpenTrackingPixelUrl(trackingToken) : '';
-    const ctaHref = trackingToken && url ? getTrackedLinkUrl(trackingToken, url) : url;
+    const ctaHref = trackingToken && prepared.url ? getTrackedLinkUrl(trackingToken, prepared.url) : prepared.url;
     html = generateQuoteEmailHtml(quoteForSend, client, userData, ctaHref, pixelUrl);
   }
 
@@ -384,47 +289,49 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
     }
   }
 
-  const pdfBlob = await generateQuotePDF({
-    quote: quoteForPdf,
+  const quoteContext = createDocumentContext({
+    documentType: 'quote',
+    documentId: quoteForPdf.id,
+    businessId: quoteForPdf.org_id,
+    clientId: client?.id || quoteForPdf.client_id,
+    documentNumber: quoteForPdf.quote_number,
+    record: quoteForPdf,
     client,
     user: userData,
     bankingDetail: bankingRow,
   });
-  const pdfBase64 = await pdfBlobToBase64(pdfBlob);
-
-  const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const supabaseUrl = rawSupabaseUrl.replace(/\.supabase\.com/gi, '.supabase.co');
-  if (!supabaseUrl) throw new Error('Supabase URL is not configured.');
-
-  const session = await getStableSession();
-  const accessToken = session?.access_token;
-  if (!accessToken) throw new Error('You must be logged in to send emails.');
+  const artifact = await generateQuoteDocumentPdf(quoteContext);
+  const pdfBase64 = await pdfBlobToBase64(artifact.blob);
 
   const subject = `Quote #${quoteForSend.quote_number} from ${quoteForSend.owner_company_name || userData?.company_name || 'Us'}`;
-  const filename = `quote-${quoteForSend.quote_number || quoteForSend.id || 'quote'}.pdf`;
+  const filename = artifact.filename || `quote-${quoteForSend.quote_number || quoteForSend.id || 'quote'}.pdf`;
+  const sendAttemptId = trackingToken || quoteForSend.id;
 
-  const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      pdfBase64,
-      email: client.email.trim(),
-      subject,
-      html,
-      filename,
-    }),
+  await dispatchInvoiceEmailViaCanonicalPath({
+    pdfBase64,
+    email: client.email.trim(),
+    subject,
+    html,
+    filename,
+    invoiceNum: quoteForSend.quote_number || quoteForSend.id,
+    fromName: userData?.company_name || userData?.full_name || 'Paidly',
+    clientName: client?.name || 'there',
+    amountDue: '',
+    dueDate: quoteForSend.valid_until || '',
+    idempotencyKey: sendAttemptId,
   });
-  if (!sendRes.ok) {
-    let details = '';
+
+  if (trackingToken) {
     try {
-      details = await sendRes.text();
-    } catch {
-      details = '';
+      await persistQuoteTrackingLog(
+        { ...quoteForSend, client_id: client?.id || quoteForSend.client_id },
+        'email',
+        client.email.trim(),
+        trackingToken
+      );
+    } catch (e) {
+      console.warn('Failed to record quote message log after send:', e);
     }
-    throw new Error(details || 'Failed to send quote email.');
   }
 
   await recordDocumentSend('quote', quoteForSend.id, client.id, 'email');
@@ -434,7 +341,7 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
     documentType: 'quote',
     documentId: quoteForSend.id,
     clientId: client.id,
-    sendAttemptId: trackingToken || quoteForSend.id,
+    sendAttemptId,
     channel: 'email',
   });
 
@@ -528,19 +435,25 @@ export async function sendInvoicePdfEmailToClient(invoice, client, options = {})
         }
       }
 
-      let pdfBlob;
+      let artifact;
       try {
-        pdfBlob = await generateInvoicePDF({
-          invoice: invoiceForSend,
+        const invoiceContext = createDocumentContext({
+          documentType: 'invoice',
+          documentId: invoiceForSend.id,
+          businessId: invoiceForSend.org_id,
+          clientId: client?.id || invoiceForSend.client_id,
+          documentNumber: invoiceForSend.invoice_number || invoiceForSend.reference_number,
+          record: invoiceForSend,
           client,
           user: userData,
           bankingDetail: bankingRow,
         });
+        artifact = await generateInvoiceDocumentPdf(invoiceContext);
       } catch (pdfErr) {
         console.error('Invoice PDF generation failed:', pdfErr);
         throw new Error('Invoice PDF generation failed. Please try again.');
       }
-      const pdfBase64 = await pdfBlobToBase64(pdfBlob);
+      const pdfBase64 = await pdfBlobToBase64(artifact.blob);
       if (!pdfBase64) {
         throw new Error('Invoice PDF generation failed. Please try again.');
       }

@@ -135,10 +135,17 @@ export async function handleEmailTrack(req, res) {
           .eq("tracking_token", trimmed)
           .is("clicked_at", null);
         if (log) {
+          const docType = String(log.document_type || "").toLowerCase();
+          const action =
+            docType === "quote"
+              ? "primary_cta"
+              : docType === "payslip"
+                ? "view_payslip"
+                : "payment_cta";
           await appendEventFromMessageLog(
             log,
             DOCUMENT_EVENT_TYPE.clicked,
-            { channel: "email", source: "invoice_email", action: "primary_cta", metadata: { action: "primary_cta" } },
+            { channel: "email", source: "invoice_email", action, metadata: { action } },
             supabase
           );
         }

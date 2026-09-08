@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Client, Invoice, Quote, Payment } from "@/api/entities";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,6 @@ import IndustryBadge from "../components/clients/IndustryBadge";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
-import { buildClientTimelineEvents } from "@/services/ClientTimelineService";
 import ClientTimeline from "../components/clients/ClientTimeline";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -203,17 +202,6 @@ export default function ClientDetail() {
     }, 0);
 
     const userCurrency = user?.currency || client?.currency || "ZAR";
-
-    const timelineEvents = useMemo(
-        () =>
-            buildClientTimelineEvents({
-                invoices,
-                quotes,
-                payments,
-                currency: userCurrency,
-            }),
-        [invoices, quotes, payments, user?.currency, client?.currency]
-    );
 
     if (isLoading) {
         return (
@@ -419,7 +407,13 @@ export default function ClientDetail() {
                     transition={{ delay: 0.06 }}
                     className="mb-6"
                 >
-                    <ClientTimeline events={timelineEvents} />
+                    <ClientTimeline
+                        clientId={clientId}
+                        currency={userCurrency}
+                        invoices={invoices}
+                        quotes={quotes}
+                        payments={payments}
+                    />
                 </motion.div>
 
                 {/* Invoice History */}
