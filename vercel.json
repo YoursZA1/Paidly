@@ -101,6 +101,14 @@
       "destination": "/api/public-share?doc=quote&op=decide"
     },
     {
+      "source": "/api/public-leave",
+      "destination": "/api/public-share?doc=leave&op=get"
+    },
+    {
+      "source": "/api/public-leave/decide",
+      "destination": "/api/public-share?doc=leave&op=decide"
+    },
+    {
       "source": "/api/public-payslip",
       "destination": "/api/public-share?doc=payslip&op=get"
     },

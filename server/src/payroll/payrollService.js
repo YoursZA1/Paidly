@@ -184,6 +184,7 @@ export async function payrollOverview(orgId) {
     employees: profiles.filter((p) => p.payroll_status === "active" && p.employment_status !== "terminated").length,
     current_period: { label: monthLabel(now.year, now.month), ...bounds },
     current_run: current,
+    current_period_covered: Boolean(current?.finalized_at),
     runs: runs || [],
     pending_payroll: pendingCount || 0,
     completed_payroll: completedCount || 0,
@@ -222,13 +223,6 @@ export async function upsertPayrollProfile(orgId, actorId, payload) {
     org_id: orgId,
     membership_id: payload.membership_id,
     user_id: payload.user_id || null,
-    employee_number: payload.employee_number || null,
-    full_name: payload.full_name || null,
-    email: payload.email || null,
-    job_title: payload.job_title || null,
-    department: payload.department || null,
-    employment_status: payload.employment_status || "active",
-    employment_start_date: payload.employment_start_date || null,
     pay_frequency: payload.pay_frequency || "monthly",
     pay_type: payload.pay_type || "monthly_salary",
     base_salary: money(payload.base_salary),
@@ -657,7 +651,13 @@ export async function submitPayRunForApproval(orgId, actorId, runId) {
     err.status = 409;
     throw err;
   }
-  await supabaseAdmin.from("pay_runs").update({ status: "awaiting_approval" }).eq("id", runId);
+  const submitted = await supabaseAdmin
+    .from("pay_runs")
+    .update({ status: "awaiting_approval", submitted_by: actorId })
+    .eq("id", runId);
+  if (submitted.error && /submitted_by/i.test(submitted.error.message || "")) {
+    await supabaseAdmin.from("pay_runs").update({ status: "awaiting_approval" }).eq("id", runId);
+  }
   return getPayRun(orgId, runId);
 }
 
@@ -667,6 +667,25 @@ export async function approvePayRun(orgId, actorId, runId) {
     const err = new Error("This pay run is not ready for approval.");
     err.status = 409;
     throw err;
+  }
+  const selfApproved = run.created_by === actorId || run.submitted_by === actorId;
+  if (selfApproved) {
+    const { data: payrollAdmins } = await supabaseAdmin
+      .from("memberships")
+      .select("id, role, job_function")
+      .eq("org_id", orgId)
+      .in("role", ["admin", "owner", "manager"]);
+    const admins = (payrollAdmins || []).filter((row) => {
+      const role = String(row.role || "").toLowerCase();
+      const fn = String(row.job_function || "").toLowerCase();
+      return role === "admin" || role === "owner" || fn === "finance";
+    });
+    if (admins.length > 1) {
+      const err = new Error("A different payroll admin must approve this pay run.");
+      err.status = 409;
+      err.code = "PAYROLL_SOD";
+      throw err;
+    }
   }
   await supabaseAdmin
     .from("pay_runs")
@@ -679,7 +698,7 @@ export async function approvePayRun(orgId, actorId, runId) {
   await writePayrollAudit({
     orgId,
     actorId,
-    action: "PAY_RUN_APPROVED",
+    action: selfApproved ? "PAY_RUN_SELF_APPROVED" : "PAY_RUN_APPROVED",
     recordType: "pay_runs",
     recordId: runId,
   });
@@ -716,7 +735,34 @@ async function leaveSummaryForProfile(orgId, profileId) {
   });
 }
 
-export async function finalizePayRun(orgId, actorId, runId) {
+export async function validatePayRun(orgId, runId) {
+  const run = await getPayRun(orgId, runId);
+  const issues = [];
+  for (const item of run.items || []) {
+    if (!item.employee_name) issues.push({ employee: item.employee_number || item.id, message: "Missing employee name" });
+    if (!item.employee_number) issues.push({ employee: item.employee_name || item.id, message: "Missing employee number" });
+    if (Number(item.net_pay) < 0) issues.push({ employee: item.employee_name || item.id, message: "Negative net pay" });
+    if (Number(item.base_pay || item.base_salary_snapshot || 0) <= 0) {
+      issues.push({ employee: item.employee_name || item.id, message: "Base salary is zero" });
+    }
+  }
+  const { data: pendingLeave } = await supabaseAdmin
+    .from("leave_requests")
+    .select("id, employee_id, start_date, end_date")
+    .eq("org_id", orgId)
+    .eq("status", "pending")
+    .lte("start_date", run.period_end)
+    .gte("end_date", run.period_start);
+  return {
+    ok: issues.length === 0,
+    issues,
+    pending_leave_overlapping: pendingLeave || [],
+    item_count: (run.items || []).length,
+    status: run.status,
+  };
+}
+
+export async function finalizePayRun(orgId, actorId, runId, origin = "") {
   const run = await getPayRun(orgId, runId);
   if (run.status !== "approved") {
     const err = new Error("Approve the pay run before generating payslips.");
@@ -851,7 +897,16 @@ export async function finalizePayRun(orgId, actorId, runId) {
   } catch (err) {
     console.warn("[workforce] payroll processed event failed:", err?.message || err);
   }
-  return getPayRun(orgId, runId);
+
+  let sendResult = null;
+  try {
+    sendResult = await sendPayRunPayslips(orgId, actorId, runId, origin);
+  } catch (err) {
+    console.warn("[payroll] auto-send after finalize failed:", err?.message || err);
+    sendResult = { error: err?.message || String(err) };
+  }
+  const finalized = await getPayRun(orgId, runId);
+  return { ...finalized, payslip_delivery: sendResult };
 }
 
 export async function markPayRunPaid(orgId, actorId, runId) {

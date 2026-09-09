@@ -28,6 +28,7 @@ import {
   HelpCircle,
   Receipt,
   LogOut,
+  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,6 +43,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ToastAction } from "@/components/ui/toast";
 import ProductThumbnail from "@/components/inventory/ProductThumbnail";
 import { useQueryClient } from "@tanstack/react-query";
@@ -245,8 +252,8 @@ function CartLineList({ cart, currency, onQty }) {
   return (
     <ul className="divide-y divide-border">
       {cart.map((line) => (
-        <li key={line.product_id} className="flex items-center gap-3 px-4 py-3">
-          <div className="min-w-0 flex-1">
+        <li key={line.product_id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1 basis-[min(100%,10rem)]">
             <p className="truncate font-medium leading-tight">{line.name}</p>
             <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
               {formatCurrency(line.unit_price, currency)} × {line.quantity}
@@ -255,7 +262,7 @@ function CartLineList({ cart, currency, onQty }) {
               {formatCurrency(line.unit_price * line.quantity, currency)}
             </p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
             <Button
               type="button"
               size="icon"
@@ -1519,7 +1526,8 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
               className="h-11 min-h-11 touch-manipulation px-3"
               onClick={() => void openCloseShift()}
             >
-              Close shift
+              <span className="min-[400px]:hidden">Close</span>
+              <span className="hidden min-[400px]:inline">Close shift</span>
             </Button>
           ) : needsShift ? (
             <Button
@@ -1530,7 +1538,8 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
                 setStartShiftOpen(true);
               }}
             >
-              Open shift
+              <span className="min-[400px]:hidden">Open</span>
+              <span className="hidden min-[400px]:inline">Open shift</span>
             </Button>
           ) : (
             <Button type="button" variant="outline" className="h-11 min-h-11 px-3" disabled>
@@ -1553,7 +1562,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
             <Button
               type="button"
               variant="ghost"
-              className="h-11 min-h-11 px-2 text-muted-foreground sm:px-3"
+              className="hidden h-11 min-h-11 px-2 text-muted-foreground sm:inline-flex sm:px-3"
               onClick={() => setStaffManageOpen(true)}
               aria-label="Staff"
             >
@@ -1564,7 +1573,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
           <Button
             type="button"
             variant="ghost"
-            className="h-11 min-h-11 px-2 text-muted-foreground sm:px-3"
+            className="hidden h-11 min-h-11 px-2 text-muted-foreground sm:inline-flex sm:px-3"
             onClick={() => {
               setTodayOpen(true);
               void loadToday();
@@ -1578,12 +1587,43 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
             type="button"
             variant="ghost"
             size="icon"
-            className="size-11 text-muted-foreground"
+            className="hidden size-11 text-muted-foreground sm:inline-flex"
             aria-label="Help"
             onClick={() => setHelpOpen(true)}
           >
             <HelpCircle className="size-4" />
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-11 text-muted-foreground sm:hidden"
+                aria-label="More"
+              >
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canInvitePosStaff ? (
+                <DropdownMenuItem onSelect={() => setStaffManageOpen(true)}>
+                  <UserPlus className="mr-2 size-4" /> Staff
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                onSelect={() => {
+                  setTodayOpen(true);
+                  void loadToday();
+                }}
+              >
+                <Receipt className="mr-2 size-4" /> Orders
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setHelpOpen(true)}>
+                <HelpCircle className="mr-2 size-4" /> Help
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
       <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-1.5 md:hidden">
@@ -1691,7 +1731,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
               <button
                 type="button"
                 className={cn(
-                  "h-8 shrink-0 rounded-md px-2 text-[11px] font-semibold uppercase tracking-wide",
+                  "min-h-11 shrink-0 rounded-md px-3 text-[11px] font-semibold uppercase tracking-wide",
                   scanMode ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
                 )}
                 onClick={() => {
@@ -2001,12 +2041,35 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
                 <span className="text-sm text-muted-foreground">POS Customer</span>
                 <span className="truncate font-medium">{customerLabel}</span>
               </button>
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-semibold">Total</span>
-                <span className="font-display text-xl font-bold tabular-nums">
-                  {formatCurrency(cartTotal, currency)}
-                </span>
-              </div>
+              <dl className="space-y-1.5 text-sm">
+                {moneyRows.map((row) => (
+                  <div key={row.label} className="flex items-center justify-between gap-4">
+                    <dt className="text-muted-foreground">{row.label}</dt>
+                    <dd className="tabular-nums">
+                      {row.action === "discount" ? (
+                        <button
+                          type="button"
+                          className="min-h-11 rounded-input px-1 font-medium underline-offset-2 hover:underline"
+                          onClick={() => {
+                            setDiscountDraft(String(totals.discount_amount || 0));
+                            setDiscountOpen(true);
+                          }}
+                        >
+                          {formatCurrency(row.amount, currency)}
+                        </button>
+                      ) : (
+                        formatCurrency(row.amount, currency)
+                      )}
+                    </dd>
+                  </div>
+                ))}
+                <div className="mt-1 flex items-baseline justify-between gap-4 border-t border-border pt-2">
+                  <dt className="text-sm font-semibold">Total</dt>
+                  <dd className="font-display text-xl font-bold tabular-nums">
+                    {formatCurrency(cartTotal, currency)}
+                  </dd>
+                </div>
+              </dl>
               {orgId && heldCart && cart.length === 0 ? (
                 <Button type="button" variant="outline" className="h-11 w-full" onClick={resumeHeldCart}>
                   <Play className="size-4" />

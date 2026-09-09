@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, LogOut, Menu, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,7 +21,7 @@ function NavLink({ item, collapsed, pathname, onNavigate }) {
       to={item.path}
       onClick={onNavigate}
       className={cn(
-        "flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-colors",
+        "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-colors",
         collapsed && "justify-center px-0",
         isActive ? "bg-primary/10 text-primary" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
       )}
@@ -99,7 +99,7 @@ export default function AdminSidebar({ collapsed, setCollapsed, mobileOpen, setM
         ) : null}
         <button
           type="button"
-          className="ml-auto rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:hidden"
+          className="ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 md:hidden"
           onClick={() => setMobileOpen?.(false)}
           aria-label="Close menu"
         >
@@ -117,7 +117,7 @@ export default function AdminSidebar({ collapsed, setCollapsed, mobileOpen, setM
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.id)}
-                    className="mb-1 flex w-full items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400"
+                    className="mb-1 flex min-h-11 w-full items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400"
                   >
                     {group.label}
                     <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open ? "rotate-0" : "-rotate-90")} />
@@ -176,14 +176,6 @@ export default function AdminSidebar({ collapsed, setCollapsed, mobileOpen, setM
           <div className="relative h-full w-[260px]">{sidebar}</div>
         </div>
       ) : null}
-      <button
-        type="button"
-        className="fixed bottom-4 left-4 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg md:hidden"
-        onClick={() => setMobileOpen(true)}
-        aria-label="Open menu"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
     </>
   );
 }

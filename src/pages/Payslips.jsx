@@ -17,6 +17,7 @@ import { payslipListAdapter } from "@/services/documentListAdapters";
 import DocumentListPagination from "@/components/shared/DocumentListPagination";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
+import { payrollApi } from "@/services/PayrollApiService";
 
 export default function PayslipsPage() {
     const payslipsFromStore = useAppStore((s) => s.payslips);
@@ -32,12 +33,19 @@ export default function PayslipsPage() {
     const [isImporting, setIsImporting] = useState(false);
     const { hasPermission } = useCompanyContext();
     const canManagePayroll = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
+    const [periodCovered, setPeriodCovered] = useState(false);
     const payslipFileInputRef = useRef(null);
     const { toast } = useToast();
 
     useEffect(() => {
         loadData();
-    }, []);
+        if (canManagePayroll) {
+            payrollApi
+                .overview()
+                .then((data) => setPeriodCovered(Boolean(data?.current_period_covered)))
+                .catch(() => setPeriodCovered(false));
+        }
+    }, [canManagePayroll]);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -164,7 +172,7 @@ export default function PayslipsPage() {
                             className="hidden"
                             onChange={handleImportCsv}
                         />
-                        {canManagePayroll ? (
+                        {canManagePayroll && !periodCovered ? (
                         <Link to={createPageUrl("CreatePayslip")} className="order-first sm:order-none w-full sm:w-auto">
                             <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 h-11 sm:h-9 rounded-xl gap-2 touch-manipulation">
                                 <Plus className="w-4 h-4 shrink-0" />
@@ -224,8 +232,8 @@ export default function PayslipsPage() {
                             <EmptyState
                                 icon={<Receipt className="h-7 w-7 text-muted-foreground" />}
                                 title="No payslips yet"
-                                description={searchTerm ? "Try a different search." : "Create your first payslip to see it here."}
-                                action={!searchTerm && canManagePayroll && (
+                                description={searchTerm ? "Try a different search." : "Payslips are generated automatically when a pay run is finalized."}
+                                action={!searchTerm && canManagePayroll && !periodCovered && (
                                     <Link to={createPageUrl("CreatePayslip")}>
                                         <Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                                             <Plus className="-ml-1 mr-2 h-5 w-5" />

@@ -377,7 +377,7 @@ export default function Clients() {
                 type="button"
                 onClick={() => loadData(true)}
                 disabled={isRefetching || showLoadingSkeleton}
-                className="p-2 bg-muted rounded-xl active:scale-95 transition-all disabled:opacity-50 text-muted-foreground"
+                className="flex min-h-11 min-w-11 items-center justify-center bg-muted rounded-xl active:scale-95 transition-all disabled:opacity-50 text-muted-foreground"
                 aria-label="Refresh clients"
               >
                 <ArrowPathIcon
@@ -387,7 +387,7 @@ export default function Clients() {
               <button
                 type="button"
                 onClick={() => navigate(createPageUrl("EditClient"))}
-                className="p-2 bg-primary rounded-xl active:scale-95 shadow-lg shadow-primary/20 transition-all text-primary-foreground"
+                className="flex min-h-11 min-w-11 items-center justify-center bg-primary rounded-xl active:scale-95 shadow-lg shadow-primary/20 transition-all text-primary-foreground"
                 aria-label="Add client"
                 data-testid="clients-add"
               >
@@ -441,7 +441,9 @@ export default function Clients() {
                       client={client}
                       balance={balance}
                       userCurrency={userCurrency}
-                      onSelectClient={setActiveClient}
+                      onSelectClient={(c) =>
+                        navigate(`${createPageUrl("ClientDetail")}?id=${encodeURIComponent(c.id)}`)
+                      }
                       onCreateInvoice={(c) => navigate(createPageUrl("CreateInvoice") + "?client_id=" + encodeURIComponent(c.id))}
                     />
                   );
@@ -585,7 +587,7 @@ export default function Clients() {
       </aside>
 
       {/* 2. CLIENT DETAIL VIEW */}
-      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto min-h-0 p-4 lg:p-6">
+      <main className="hidden min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 lg:flex lg:flex-col lg:p-6">
         {!activeClient ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             {loadError && (

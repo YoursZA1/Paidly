@@ -53,7 +53,7 @@ export default function DashboardRevenueChart({
 }) {
   return (
     <div
-      className={`${compact ? "h-full min-h-[112px] w-full" : "h-[220px] w-full sm:h-[240px]"} ${onChartClick ? "cursor-pointer" : ""}`}
+      className={`${compact ? "h-full min-h-[148px] w-full" : "h-[220px] w-full sm:h-[240px]"} ${onChartClick ? "cursor-pointer" : ""}`}
       onClick={onChartClick || undefined}
     >
       <ResponsiveContainer width="100%" height="100%">
@@ -73,7 +73,7 @@ export default function DashboardRevenueChart({
             fontSize={11}
             tickLine={false}
             axisLine={false}
-            width={48}
+            width={compact ? 36 : 48}
             tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
           />
           <Tooltip

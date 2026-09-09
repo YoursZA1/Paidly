@@ -1332,7 +1332,7 @@ function CreateDocumentCore({ docType }) {
   }, [pdfExportPending, showPreview, docType, form.number, toast]);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="space-y-6 p-4 pb-28 sm:p-6 md:pb-6 max-w-7xl mx-auto">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <Button variant="outline" asChild className="gap-2 shrink-0">
@@ -1374,7 +1374,7 @@ function CreateDocumentCore({ docType }) {
             ) : null}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden flex-wrap gap-2 md:flex">
           {docType === "invoice" && draftStatusLabel ? (
             <span
               className={`self-center text-xs ${draftHasConflict ? "text-destructive font-medium" : "text-muted-foreground"}`}
@@ -1954,6 +1954,29 @@ function CreateDocumentCore({ docType }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <div className="fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-30 border-t border-border bg-background/95 px-3 py-2 md:hidden lg:bottom-0">
+        <div className={docType === "invoice" ? "grid grid-cols-3 gap-2" : "grid grid-cols-2 gap-2"}>
+          <Button variant="outline" className="min-h-11" onClick={() => setShowPreview(!showPreview)}>
+            {showPreview ? "Edit" : "Preview"}
+          </Button>
+          <Button className="min-h-11 gap-1" onClick={handleSave} disabled={saving || loadingClients}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save
+          </Button>
+          {docType === "invoice" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-11 gap-1"
+              onClick={handleSendInvoiceNow}
+              disabled={saving || loadingClients || prefillLoading}
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Send
+            </Button>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

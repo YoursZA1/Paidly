@@ -182,6 +182,7 @@ export async function provisionEmployeeWorkforce(orgId, employeeId) {
   const profile = await ensurePayrollProfile(employee);
   await ensureLeaveBalances(employee.org_id, profile);
   const attendance = await ensureAttendanceProfile(employee.org_id, employee, profile);
+  await ensureNotificationPrefs(employee);
   return {
     employee,
     payroll_profile: profile,
@@ -208,11 +209,20 @@ async function onPortalActivated(event) {
   });
 }
 
-async function onNotificationPrefsStub(event) {
-  await writeAudit(event, "notification_prefs.stub", {
-    membership_id: event.employee_id,
-    stub: true,
+async function ensureNotificationPrefs(employee) {
+  if (!employee?.id) return null;
+  const { data: existing } = await supabaseAdmin
+    .from("workforce_notification_prefs")
+    .select("employee_id")
+    .eq("employee_id", employee.id)
+    .maybeSingle();
+  if (existing?.employee_id) return existing;
+  const { error } = await supabaseAdmin.from("workforce_notification_prefs").insert({
+    employee_id: employee.id,
+    org_id: employee.org_id,
   });
+  if (error && !/duplicate|unique|does not exist|schema cache/i.test(error.message || "")) throw error;
+  return { employee_id: employee.id };
 }
 
 async function onEmployeeUpdated(event) {
@@ -250,15 +260,40 @@ async function onLeaveDecided(event) {
   });
 }
 
+async function onPayrollProcessed(event) {
+  await writeAudit(event, WORKFORCE_EVENT_TYPES.PAYROLL_PROCESSED, {
+    membership_id: event.employee_id,
+    needs_adjustment_run: Boolean(event.payload?.needs_adjustment_run),
+    leave_request_id: event.payload?.leave_request_id || null,
+    pay_run_ids: event.payload?.pay_run_ids || [],
+  });
+}
+
+async function onPayslipGenerated(event) {
+  await writeAudit(event, WORKFORCE_EVENT_TYPES.PAYSLIP_GENERATED, {
+    membership_id: event.employee_id,
+    payslip_id: event.payload?.payslip_id || null,
+  });
+}
+
+async function onLeaveApplied(event) {
+  await writeAudit(event, WORKFORCE_EVENT_TYPES.LEAVE_APPLIED, {
+    membership_id: event.employee_id,
+    leave_request_id: event.payload?.leave_request_id || null,
+  });
+}
+
 let registered = false;
 
 export function registerWorkforceSubscribers() {
   if (registered) return;
   registered = true;
   registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_CREATED, onEmployeeCreated);
-  registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_CREATED, onNotificationPrefsStub);
   registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_UPDATED, onEmployeeUpdated);
   registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_PORTAL_ACTIVATED, onPortalActivated);
   registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_LEAVE_APPROVED, onLeaveDecided);
   registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.EMPLOYEE_LEAVE_REJECTED, onLeaveDecided);
+  registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.LEAVE_APPLIED, onLeaveApplied);
+  registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.PAYROLL_PROCESSED, onPayrollProcessed);
+  registerWorkforceSubscriber(WORKFORCE_EVENT_TYPES.PAYSLIP_GENERATED, onPayslipGenerated);
 }

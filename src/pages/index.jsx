@@ -42,6 +42,10 @@ const Leave = lazy(() => import("./Leave"));
 const LeaveCalendar = lazy(() => import("./LeaveCalendar"));
 const CreatePayslip = lazy(() => import("./CreatePayslip"));
 const CreateLeaveRequest = lazy(() => import("./CreateLeaveRequest"));
+const Employees = lazy(() => import("./Employees"));
+const EmployeeProfile = lazy(() => import("./EmployeeProfile"));
+const ManagerPortal = lazy(() => import("./ManagerPortal"));
+const PublicLeaveApproval = lazy(() => import("./PublicLeaveApproval"));
 const CreateExpenseClaim = lazy(() => import("./CreateExpenseClaim"));
 const CreateTypedDocument = lazy(() => import("./CreateTypedDocument"));
 const EditPayslip = lazy(() => import("./EditPayslip"));
@@ -149,6 +153,8 @@ const AUTH_ROUTES = [
     { path: "/InvoicePDF", element: <InvoicePDF /> },
     { path: "/PublicQuote", element: <PublicQuote /> },
     { path: "/PublicPayslip", element: <PublicPayslip /> },
+    { path: "/leave-approval/:token", element: <PublicLeaveApproval /> },
+    { path: "/LeaveApproval/:token", element: <PublicLeaveApproval /> },
     { path: "/ClientPortal", element: <ClientPortal /> },
     { path: "/PrivacyPolicy", element: <PrivacyPolicy /> },
     { path: "/privacy-policy", element: <PrivacyPolicy /> },
@@ -286,6 +292,14 @@ const PAYSLIP_REPORT_ROUTES = [
     { path: "/mypayroll", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><MyPayroll /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Leave", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><Leave /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/leave", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><Leave /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/ManagerPortal", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.APPROVE_LEAVE}><ManagerPortal /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/manager-portal", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.APPROVE_LEAVE}><ManagerPortal /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/employees/:id", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><EmployeeProfile /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Employees/:id", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><EmployeeProfile /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/EmployeeProfile", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><EmployeeProfile /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/employeeprofile", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><EmployeeProfile /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/LeaveCalendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><LeaveCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/leavecalendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><LeaveCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Payslips", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><Payslips /></RequireCompanyPermissionRedirect></RequireAuth> },
@@ -514,9 +528,9 @@ const ADMIN_ROUTES = [
 
 
 function getPageName(pathname) {
-  // Remove leading slash and query params
-  const clean = pathname.replace(/^\//, "").split("?")[0];
-  // Capitalize first letter
+  const p = pathname || "";
+  if (/^\/employees\/[^/]+$/i.test(p)) return "EmployeeProfile";
+  const clean = p.replace(/^\//, "").split("?")[0];
   return clean.charAt(0).toUpperCase() + clean.slice(1) || "Dashboard";
 }
 
@@ -535,6 +549,8 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/publicinvoice$/i,
     /^\/publicquote$/i,
     /^\/publicpayslip$/i,
+    /^\/leave-approval(\/|$)/i,
+    /^\/leaveapproval(\/|$)/i,
     /^\/view\//i,
     /^\/clientportal$/i,
     /^\/invoicepdf$/i,

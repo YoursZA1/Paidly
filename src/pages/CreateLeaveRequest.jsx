@@ -36,6 +36,8 @@ export default function CreateLeaveRequestPage() {
   const [halfDay, setHalfDay] = useState(false);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     leaveApi
@@ -50,7 +52,7 @@ export default function CreateLeaveRequestPage() {
   }, [toast]);
 
   const selected = (me?.balances || []).find((b) => b.leave_type.id === leaveTypeId);
-  const workingDays = useMemo(() => {
+  const localWorkingDays = useMemo(() => {
     if (!startDate || !endDate) return 0;
     return countWorkingDays(startDate, endDate, {
       excludeWeekends: selected?.leave_type?.exclude_weekends !== false,
@@ -58,7 +60,34 @@ export default function CreateLeaveRequestPage() {
     });
   }, [startDate, endDate, halfDay, selected]);
 
-  const remaining = selected ? Math.round((selected.available - workingDays) * 100) / 100 : null;
+  useEffect(() => {
+    const typeId = parseUuid(leaveTypeId);
+    if (!typeId || !startDate || !endDate) {
+      setPreview(null);
+      setPreviewLoading(false);
+      return undefined;
+    }
+    setPreviewLoading(true);
+    const timer = setTimeout(() => {
+      leaveApi
+        .preview({
+          leave_type_id: typeId,
+          start_date: isoFromDate(startDate),
+          end_date: isoFromDate(endDate),
+          half_day: halfDay && startDate === endDate,
+        })
+        .then((data) => setPreview(data))
+        .catch(() => setPreview(null))
+        .finally(() => setPreviewLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [leaveTypeId, startDate, endDate, halfDay]);
+
+  const workingDays = preview?.workingDays ?? localWorkingDays;
+  const remaining =
+    preview?.remainingAfterApproval ??
+    (selected ? Math.round((selected.available - localWorkingDays) * 100) / 100 : null);
+  const currentBalance = preview?.available ?? selected?.available ?? null;
 
   const submit = async () => {
     const typeId = parseUuid(leaveTypeId);
@@ -175,9 +204,28 @@ export default function CreateLeaveRequestPage() {
                 <Textarea className="rounded-xl mt-1" value={reason} onChange={(e) => setReason(e.target.value)} />
               </div>
               <div className="rounded-xl border border-border bg-muted/40 p-4 text-sm space-y-1">
-                <p>You are requesting: <strong className="tabular-nums">{workingDays}</strong> working days</p>
-                <p>Available: <strong className="tabular-nums">{selected?.available ?? "—"}</strong> days</p>
-                <p>Remaining after approval: <strong className="tabular-nums">{remaining ?? "—"}</strong> days</p>
+                <p>
+                  Leave requested:{" "}
+                  <strong className="tabular-nums">{previewLoading ? "…" : workingDays}</strong> days
+                </p>
+                <p>
+                  Current balance:{" "}
+                  <strong className="tabular-nums">{currentBalance ?? "—"}</strong> days
+                </p>
+                <p>
+                  Balance after request:{" "}
+                  <strong className="tabular-nums">{previewLoading ? "…" : remaining ?? "—"}</strong> days
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Balance is not deducted until the request is approved.
+                </p>
+                {preview?.errors?.length ? (
+                  <ul className="text-xs text-destructive pt-1 space-y-0.5">
+                    {preview.errors.map((msg) => (
+                      <li key={msg}>{msg}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             </CardContent>
           </Card>

@@ -73,7 +73,7 @@ export default function AdminSystemHealthPage() {
               <div className="flex justify-between"><dt className="text-muted-foreground">Payments</dt><dd>{healthQuery.data.payments?.label || healthQuery.data.payments?.status || "—"}</dd></div>
             </dl>
           ) : null}
-          <div className="mt-4 grid grid-cols-5 gap-2 text-center text-xs">
+          <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-5">
             {["status401", "status403", "status404", "status429", "status5xx"].map((key) => (
               <div key={key} className="rounded-xl border border-border p-2">
                 <p className="text-muted-foreground">{key.replace("status", "")}</p>

@@ -413,12 +413,28 @@ export default async function handler(req, res) {
 
   try {
     if (job === "payment-reminders") {
+      // Workforce outbox retry is folded into this scheduled job (vercel.json crons:
+      // /api/cron/payment-reminders daily 08:00). Do not add a 6th cron or a 13th function.
       const batch = await runPaymentReminderBatch();
+      let workforceEvents = null;
+      try {
+        const { registerWorkforceSubscribers } = await import(
+          "../server/src/workforce/employeeProvisioning.js"
+        );
+        const { retryFailedWorkforceEvents } = await import(
+          "../server/src/workforce/workforceEvents.js"
+        );
+        registerWorkforceSubscribers();
+        workforceEvents = await retryFailedWorkforceEvents({ limit: 25 });
+      } catch (err) {
+        workforceEvents = { error: err?.message || String(err) };
+      }
       return res.status(200).json({
         ok: true,
         at: new Date().toISOString(),
         path: "payment-reminders",
         ...batch,
+        workforceEvents,
       });
     }
     if (job === "subscription-dunning") {
@@ -456,6 +472,19 @@ export default async function handler(req, res) {
       const { data, error } = await supabase.rpc("expire_all_overdue_trials");
       if (error) throw error;
       const pending = await expirePendingSubscriptions(supabase);
+      let workforceEvents = null;
+      try {
+        const { registerWorkforceSubscribers } = await import(
+          "../server/src/workforce/employeeProvisioning.js"
+        );
+        const { retryFailedWorkforceEvents } = await import(
+          "../server/src/workforce/workforceEvents.js"
+        );
+        registerWorkforceSubscribers();
+        workforceEvents = await retryFailedWorkforceEvents({ limit: 25 });
+      } catch (err) {
+        workforceEvents = { error: err?.message || String(err) };
+      }
       return res.status(200).json({
         ok: true,
         at: new Date().toISOString(),
@@ -463,6 +492,7 @@ export default async function handler(req, res) {
         mode: "batch",
         rows: Number(data || 0),
         pendingExpiry: pending,
+        workforceEvents,
       });
     }
     if (job === "workforce-events") {

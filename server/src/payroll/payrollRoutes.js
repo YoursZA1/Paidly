@@ -11,6 +11,7 @@ import {
   submitPayRunForApproval,
   approvePayRun,
   finalizePayRun,
+  validatePayRun,
   markPayRunPaid,
   cancelPayRun,
   sendPayRunPayslips,
@@ -122,7 +123,17 @@ export async function handlePayrollRoute(req, res, resolved) {
     if (route === "run-cancel") {
       return handle(res, () => cancelPayRun(gate.membership.companyId, gate.user.id, id));
     }
+    if (route === "run-finalize") {
+      return handle(res, () => finalizePayRun(gate.membership.companyId, gate.user.id, id, originFromReq(req)));
+    }
     return handle(res, () => runActions[route](gate.membership.companyId, gate.user.id, id));
+  }
+
+  if (route === "run-validate") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method !== "GET" && req.method !== "POST") return jsonError(res, 405, "Method not allowed");
+    return handle(res, () => validatePayRun(gate.membership.companyId, id));
   }
 
   if (route === "run-send") {
@@ -220,6 +231,7 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "run-cancel") return { route: "run-cancel", id: qid || segs[1] };
   if (segs[0] === "run-send") return { route: "run-send", id: qid || segs[1] };
   if (segs[0] === "run-refresh") return { route: "run-refresh", id: qid || segs[1] };
+  if (segs[0] === "run-validate") return { route: "run-validate", id: qid || segs[1] };
   if (segs[0] === "run-by-id") return { route: "run-by-id", id: qid || segs[1] };
   if (segs[0] === "runs" && segs.length === 1) return { route: "runs" };
   if (segs[0] === "runs" && segs[1] && segs[2] === "calculate") return { route: "run-calculate", id: segs[1] };
@@ -230,6 +242,7 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "runs" && segs[1] && segs[2] === "cancel") return { route: "run-cancel", id: segs[1] };
   if (segs[0] === "runs" && segs[1] && segs[2] === "send") return { route: "run-send", id: segs[1] };
   if (segs[0] === "runs" && segs[1] && segs[2] === "refresh") return { route: "run-refresh", id: segs[1] };
+  if (segs[0] === "runs" && segs[1] && segs[2] === "validate") return { route: "run-validate", id: segs[1] };
   if (segs[0] === "runs" && segs[1]) return { route: "run-by-id", id: segs[1] };
 
   if (req.query?.__payroll) {

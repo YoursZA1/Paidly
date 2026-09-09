@@ -26,7 +26,7 @@ export default function RevenueHeroChart({ chart = [], userCurrency }) {
   const fillId = `revenue-hero-fill-${useId().replace(/:/g, "")}`;
 
   return (
-    <div className="h-[108px] w-full sm:h-[120px] md:h-[128px]">
+    <div className="h-[120px] w-full md:h-[128px]">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chart} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
           <defs>

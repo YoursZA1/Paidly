@@ -897,9 +897,8 @@ body {
     .dashboard-scroll-area {
       padding-bottom: max(env(safe-area-inset-bottom), var(--spacing-section-mobile, 24px));
     }
-    /* Prevent horizontal scroll on app shell */
-    body { overflow-x: hidden; }
-    #root { overflow-x: hidden; }
+    /* Contain accidental overflow in the app root without clipping page-level scroll */
+    body, #root { max-width: 100%; }
     /* Minimum touch target 44px for tap areas (accessibility) */
     .touch-target-min {
       min-height: 44px;
@@ -989,8 +988,7 @@ body {
     min-width: 0;
     max-width: 1280px;
     margin-inline: auto;
-    padding-inline: 1rem;
-    overflow-x: clip;
+    padding-inline: 0;
   }
   .responsive-page-header {
     display: flex;
@@ -1005,10 +1003,10 @@ body {
     gap: 0.5rem;
   }
   .responsive-btn {
-    height: 36px;
-    min-height: 36px;
+    height: 44px;
+    min-height: 44px;
     padding-inline: 0.75rem;
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     line-height: 1;
   }
   .responsive-search {
@@ -1017,7 +1015,7 @@ body {
   }
   @media (min-width: 768px) {
     .responsive-page-shell {
-      padding-inline: 1.5rem;
+      padding-inline: 0;
     }
     .responsive-page-header {
       flex-direction: row;

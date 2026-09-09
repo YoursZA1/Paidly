@@ -25,9 +25,6 @@ import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
 import FastActivationOnboarding from "@/components/onboarding/FastActivationOnboarding";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
-import ConnectionStatusIndicator from "@/components/connection/ConnectionStatusIndicator.jsx";
-import SessionIndicator from "@/components/SessionIndicator";
-import SyncStatusIndicator from "@/components/sync/SyncStatusIndicator.jsx";
 import SyncStatus from "@/components/common/SyncStatus.jsx";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";
@@ -141,6 +138,9 @@ const PAGE_DISPLAY_NAMES = {
   CompanyWorkspace: "Company Workspace",
   DocumentDetail: "Document",
   CreateLeaveRequest: "Leave Request",
+  Employees: "Employees",
+  EmployeeProfile: "Employee",
+  ManagerPortal: "Manager portal",
   CreateExpenseClaim: "Expense Claim",
   CreateTypedDocument: "New Document",
   ViewDocument: "Document",
@@ -504,18 +504,31 @@ NavLink.propTypes = {
   mobile: PropTypes.bool
 };
 
-const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme, setTheme }) => {
-  const MAIN_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-quotes", "nav-services"]);
-  const managementIds = new Set([
-    "nav-clients", "nav-cashflow", "nav-reports", "nav-notes",
-    "nav-calendar", "nav-messages", "nav-settings"
-  ]);
-  const mainItems = items.filter((i) => i.id && MAIN_IDS.has(i.id));
-  let managementItems = items.filter((i) => i.id && managementIds.has(i.id));
-  const adminItems = items.filter((i) => i.id && i.id.startsWith("nav-admin-"));
-  if (adminItems.length > 0) {
-    managementItems = [...managementItems, ...adminItems];
+function groupMobileNavItems(items) {
+  const groups = [];
+  let current = { title: "Overview", items: [] };
+  groups.push(current);
+  const adminItems = [];
+  for (const item of items) {
+    if (item?.id?.startsWith("nav-admin-")) {
+      adminItems.push(item);
+      continue;
+    }
+    if (item.type === "section") {
+      if (current.title === item.title) continue;
+      current = { title: item.title, items: [] };
+      groups.push(current);
+      continue;
+    }
+    if (!item?.id) continue;
+    current.items.push(item);
   }
+  if (adminItems.length) groups.push({ title: "Administration", items: adminItems });
+  return groups.filter((group) => group.items.length > 0);
+}
+
+const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme, setTheme }) => {
+  const groups = groupMobileNavItems(items);
 
   /* Panel only — used inside Sheet drawer on mobile */
   return (
@@ -535,32 +548,20 @@ const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme,
         </div>
       </div>
 
-      {/* 2. NAVIGATION — grouped into Main & Management with muted headers; scrolls so footer stays visible */}
+      {/* 2. NAVIGATION — all sidebar groups, scrollable so footer stays visible */}
       <nav className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden -mx-1 space-y-8" aria-label="App navigation">
-        {mainItems.length > 0 && (
-          <div>
+        {groups.map((group) => (
+          <div key={group.title}>
             <p className="px-4 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-muted-foreground mb-3">
-              Main
+              {group.title}
             </p>
             <div className="space-y-1">
-              {mainItems.map((item) => (
+              {group.items.map((item) => (
                 <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile />
               ))}
             </div>
           </div>
-        )}
-        {managementItems.length > 0 && (
-          <div>
-            <p className="px-4 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-muted-foreground mb-3">
-              Management
-            </p>
-            <div className="space-y-1">
-              {managementItems.map((item) => (
-                <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile />
-              ))}
-            </div>
-          </div>
-        )}
+        ))}
       </nav>
 
       {/* 3. FOOTER — account (profile dropdown) then logout */}
@@ -1194,7 +1195,7 @@ export default function Layout({ children, currentPageName }) {
           className="relative z-20 safe-top bg-card/95 backdrop-blur-sm border-b border-border shadow-sm min-h-[56px]
             fixed top-0 left-0 right-0 h-14 z-40 lg:static lg:z-20 lg:h-14 lg:min-h-[56px] flex items-center justify-between gap-element sm:gap-3 app-gutter-x"
         >
-          {/* Mobile (< lg): Hamburger | Page title | Search + Bell + Status + Avatar */}
+          {/* Mobile (< lg): Menu | Paidly logo | Search | Notifications | Profile */}
           <div className="flex items-center gap-1.5 w-full lg:hidden">
             <button
               type="button"
@@ -1204,9 +1205,17 @@ export default function Layout({ children, currentPageName }) {
             >
               <Menu className="size-6 pointer-events-none" aria-hidden />
             </button>
-            <span className="flex-1 font-semibold text-foreground tracking-tight text-base truncate leading-none">
-              {PAGE_DISPLAY_NAMES[currentPageName] ?? "Paidly"}
-            </span>
+            <Link
+              to={createPageUrl("Dashboard")}
+              className="flex min-w-0 flex-1 items-center gap-2 touch-manipulation"
+              aria-label="Paidly home"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
+                <img src="/logo.svg" alt="" className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <span className="truncate font-display text-base font-black tracking-tight text-foreground">Paidly</span>
+              <span className="sr-only">{PAGE_DISPLAY_NAMES[currentPageName] ?? ""}</span>
+            </Link>
             {user && (
               <Button
                 type="button"
@@ -1219,13 +1228,7 @@ export default function Layout({ children, currentPageName }) {
                 <Search className="size-5" aria-hidden />
               </Button>
             )}
-            {user ? <BrandSwitcher compact className="max-w-[7.5rem] px-2" /> : null}
             {user && <NotificationBell />}
-            <div className="shrink-0 flex items-center gap-0.5">
-              <ConnectionStatusIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
-              <SessionIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
-              <SyncStatusIndicator className="max-w-[min(40vw,8rem)] sm:max-w-none" />
-            </div>
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1240,10 +1243,14 @@ export default function Layout({ children, currentPageName }) {
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 rounded-xl border border-border bg-card shadow-elevation-lg">
+                <DropdownMenuContent align="end" className="w-64 rounded-xl border border-border bg-card shadow-elevation-lg">
                   <div className="px-2 py-2">
                     <p className="text-sm font-semibold text-foreground">{user.company_name || "My Company"}</p>
                     <p className="text-xs text-muted-foreground">{user.full_name || user.email}</p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <div className="px-1 py-1" onPointerDown={(e) => e.stopPropagation()}>
+                    <BrandSwitcher compact className="w-full max-w-none justify-start" />
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => { navigate(createPageUrl("Settings")); setIsMobileMenuOpen(false); }} data-tour="settings-btn">

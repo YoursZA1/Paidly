@@ -10,7 +10,7 @@ export default function AdminRolesPage() {
       title="Roles & permissions"
       description="Live staff roles enforced server-side: Super Admin (admin), Operations (management), Sales, Support. Finance and Analytics are not separate database roles yet — they use this model."
     >
-      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+      <div className="overflow-x-auto rounded-2xl border border-border/80 bg-card shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted-foreground">

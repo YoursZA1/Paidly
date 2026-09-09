@@ -3,8 +3,6 @@ import { promiseWithTimeout } from "@/utils/fetchWithTimeout";
 import { listCompanyMembers } from "@/services/CompanyContextService";
 import {
   RECENT_LIMIT,
-  LEAVE_DOCUMENT_TYPE,
-  PENDING_LEAVE_STATUSES,
   NON_MEMBER_DOC_TYPES,
   postgrestInList,
   assembleSelfWorkspaceSummary,
@@ -73,22 +71,20 @@ export async function fetchSelfWorkspaceSummary({ userId, companyId } = {}) {
     ),
     runQuery(() =>
       supabase
-        .from("documents")
-        .select(DOCUMENT_FIELDS, { count: "exact" })
+        .from("leave_requests")
+        .select("id, status, start_date, end_date, working_days, created_at", { count: "exact" })
         .eq("org_id", companyId)
-        .eq("type", LEAVE_DOCUMENT_TYPE)
-        .or(ownerDocFilter)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(RECENT_LIMIT)
     ),
     runHeadCount(() =>
       supabase
-        .from("documents")
+        .from("leave_requests")
         .select("id", { count: "exact", head: true })
         .eq("org_id", companyId)
-        .eq("type", LEAVE_DOCUMENT_TYPE)
-        .in("status", [...PENDING_LEAVE_STATUSES])
-        .or(ownerDocFilter)
+        .eq("user_id", userId)
+        .eq("status", "pending")
     ),
     runQuery(() =>
       supabase
@@ -118,11 +114,10 @@ export async function fetchCompanyWorkspaceSummary(ctx) {
     listCompanyMembers(ctx).catch(() => []),
     runHeadCount(() =>
       supabase
-        .from("documents")
+        .from("leave_requests")
         .select("id", { count: "exact", head: true })
         .eq("org_id", companyId)
-        .eq("type", LEAVE_DOCUMENT_TYPE)
-        .in("status", [...PENDING_LEAVE_STATUSES])
+        .eq("status", "pending")
     ),
     runHeadCount(() =>
       supabase.from("payslips").select("id", { count: "exact", head: true }).eq("org_id", companyId)

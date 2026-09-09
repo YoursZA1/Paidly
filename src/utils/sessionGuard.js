@@ -21,6 +21,8 @@ const PUBLIC_PATH_PATTERNS = [
   /^\/publicinvoice/i,
   /^\/publicquote/i,
   /^\/publicpayslip/i,
+  /^\/leave-approval(\/|$)/i,
+  /^\/leaveapproval(\/|$)/i,
   /^\/view\//i,
   /^\/clientportal/i,
   /^\/invoicepdf/i,

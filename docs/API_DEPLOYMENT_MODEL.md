@@ -19,7 +19,7 @@ Hobby production is capped at **exactly 12** serverless functions (the current c
 
 **Client relationship timeline:** `GET /api/company/timeline`, `POST|PATCH|DELETE /api/company/client-notes`, `POST /api/company/client-events` — one extra segment on the existing `api/company` function. Do not add `api/timeline.js`. Payslip Observe events use `document_events.source_kind = payslip` on the same table and are excluded from this client feed.
 
-**Public share:** invoice, quote, payslip, OG, and email-track stay on `api/public-share.js`. Do not add `api/public-payslip.js`.
+**Public share:** invoice, quote, payslip, leave approval, OG, and email-track stay on `api/public-share.js`. Do not add `api/public-payslip.js` or `api/public-leave.js`. `/api/public-leave` and `/api/public-leave/decide` rewrite onto `public-share?doc=leave`.
 
 **Admin overview / directory:** `GET /api/admin/overview` and `GET /api/admin/directory` stay on `api/admin/[resource].js`. Do not add `api/admin-overview.js`.
 

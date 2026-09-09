@@ -80,7 +80,7 @@ export default async function handler(req, res) {
     if (!resolvedLeave) return res.status(404).json({ error: "Not found" });
     return handleLeaveRoute(req, res, resolvedLeave);
   }
-  if (pathHead === "employees" || resolveWorkforceRoute(req)) {
+  if (pathHead === "employees" || pathHead === "workforce-summary" || resolveWorkforceRoute(req)) {
     return handleWorkforceEmployees(req, res);
   }
   const timelineResolved = resolveClientTimelineRoute(req);

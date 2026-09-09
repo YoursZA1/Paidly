@@ -26,6 +26,7 @@ export default function CreatePayslip() {
     const lastDraftNoticeIdRef = useRef(null);
     const [employees, setEmployees] = useState([]);
     const [employeeUuid, setEmployeeUuid] = useState("");
+    const [periodCovered, setPeriodCovered] = useState(false);
     const [payslipData, setPayslipData] = useState({
         employee_name: "",
         employee_id: "",
@@ -152,7 +153,10 @@ export default function CreatePayslip() {
         const membershipId = parseUuid(employeeUuid);
         const start = payslipData.pay_period_start;
         const end = payslipData.pay_period_end;
-        if (!membershipId || !start || !end) return undefined;
+        if (!membershipId || !start || !end) {
+            setPeriodCovered(false);
+            return undefined;
+        }
         let cancelled = false;
         (async () => {
             try {
@@ -166,7 +170,13 @@ export default function CreatePayslip() {
                         pay_type: "monthly_salary",
                     },
                 });
-                if (cancelled || result?.source !== "pay_run_item") return;
+                if (cancelled) return;
+                if (result?.source === "pay_run_item" && result.locked) {
+                    setPeriodCovered(true);
+                    return;
+                }
+                setPeriodCovered(false);
+                if (result?.source !== "pay_run_item") return;
                 const allowances = (result.earnings || []).filter(
                     (line) => String(line.code || "").toUpperCase() !== "BASIC" && String(line.type || "") !== "basic"
                 );
@@ -184,6 +194,7 @@ export default function CreatePayslip() {
                     uif_deduction: Number(result.uif_deduction) || 0,
                 }));
             } catch {
+                if (!cancelled) setPeriodCovered(false);
                 /* standalone compose still uses the live preview */
             }
         })();
@@ -284,6 +295,14 @@ export default function CreatePayslip() {
     }, [calculatedPayroll]);
 
     const handleCreatePayslip = async () => {
+        if (periodCovered) {
+            toast({
+                title: "This period is already covered",
+                description: "Payslips for a finalized pay run cannot be recreated here. Open an adjustment run in Payroll if leave was approved after finalize.",
+                variant: "destructive",
+            });
+            return;
+        }
         try {
             const payslipNumber = buildPayslipNumber({
                 periodStart: payslipData.pay_period_start,
@@ -713,7 +732,12 @@ export default function CreatePayslip() {
                     </Card>
 
                     {/* Actions */}
-                    <div className="flex justify-end">
+                    <div className="flex flex-col items-end gap-2">
+                        {periodCovered ? (
+                            <p className="text-sm text-amber-800 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 w-full">
+                                This pay period is already covered by a finalized pay run. Use Payroll to open an adjustment run instead of creating a second payslip.
+                            </p>
+                        ) : null}
                         {draftStatusLabel ? (
                             <span
                                 className={`self-center mr-3 text-xs ${draftHasConflict ? "text-destructive font-medium" : "text-muted-foreground"}`}
@@ -727,7 +751,7 @@ export default function CreatePayslip() {
                             onClick={handleCreatePayslip}
                             size="lg"
                             className="bg-primary hover:bg-primary/90 disabled:bg-primary/50 disabled:cursor-not-allowed"
-                            disabled={!isFormValid}
+                            disabled={!isFormValid || periodCovered}
                         >
                             <Save className="w-4 h-4 mr-2" />
                             Create Payslip

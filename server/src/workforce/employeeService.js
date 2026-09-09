@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { normalizeCompanyRole, normalizeJobFunction, COMPANY_ROLES } from "../companyRouteAccess.js";
+import { normalizeCompanyRole, normalizeJobFunction, COMPANY_ROLES, membershipHasPermission, PERMISSIONS } from "../companyRouteAccess.js";
 import { isPosStaffInviteRequest, POS_JOB_FUNCTION } from "../../../shared/posStaffInvite.js";
 import { buildEmployeeNumber, nextEmployeeSequence } from "../../../shared/payroll/payslipNumber.js";
 import { companyInviteShareUrl } from "../companyInviteAppUrl.js";
@@ -14,8 +14,11 @@ import { provisionEmployeeWorkforce, registerWorkforceSubscribers } from "./empl
 import { johannesburgYmd } from "../../../shared/payroll/dates.js";
 import { computeLeaveBalance } from "../../../shared/leave/leaveMath.js";
 import { sanitizeEmployeeWritePayload, parseManagerMembershipId } from "../../../shared/workforce/employeeWrite.js";
+import { buildEmployeeProfile } from "../../../shared/workforce/employeeProfile.js";
+import { mergeEmployeeTimeline } from "../../../shared/workforce/employeeTimeline.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import { assertOwnEmployee, assertSameOrg } from "./workforceAuth.js";
+import { writeWorkforceAudit } from "./workforceAudit.js";
 
 registerWorkforceSubscribers();
 
@@ -32,23 +35,30 @@ async function nextOrgEmployeeNumber(orgId) {
   return buildEmployeeNumber(nextEmployeeSequence(used));
 }
 
-export async function listEmployees(orgId) {
-  try {
-    const { retryFailedWorkforceEvents } = await import("./workforceEvents.js");
-    await retryFailedWorkforceEvents({ limit: 10 });
-  } catch {
-    /* schema may not be applied yet */
-  }
-  const { data: members, error } = await supabaseAdmin
+export async function listEmployees(orgId, { actorMembershipId = null, canManagePayroll = false, managerScopeId = null } = {}) {
+  const expandedCols =
+    "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, employment_end_date, manager_membership_id, invited_email, invited_name, job_title, disabled_at, created_at";
+  const legacyCols =
+    "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, invited_email, disabled_at, created_at";
+  let membersQuery = await supabaseAdmin
     .from("memberships")
-    .select(
-      "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, invited_email, disabled_at, created_at"
-    )
+    .select(expandedCols)
     .eq("org_id", orgId)
     .order("created_at", { ascending: true });
+  if (membersQuery.error && /invited_name|job_title|employment_end_date|manager_membership_id|schema cache|column/i.test(membersQuery.error.message || "")) {
+    membersQuery = await supabaseAdmin
+      .from("memberships")
+      .select(legacyCols)
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: true });
+  }
+  const { data: members, error } = membersQuery;
   if (error) throw error;
+  const scoped = managerScopeId
+    ? (members || []).filter((m) => m.id === managerScopeId || m.manager_membership_id === managerScopeId)
+    : members || [];
 
-  const userIds = (members || []).map((m) => m.user_id).filter(Boolean);
+  const userIds = scoped.map((m) => m.user_id).filter(Boolean);
   const { data: profiles } = userIds.length
     ? await supabaseAdmin.from("profiles").select("id, full_name, email, phone, job_title, department").in("id", userIds)
     : { data: [] };
@@ -61,7 +71,7 @@ export async function listEmployees(orgId) {
     )
     .eq("org_id", orgId);
   const payrollByMembership = new Map((payrollRows || []).map((p) => [p.membership_id, p]));
-  const employeeIds = (members || []).map((m) => m.id).filter(Boolean);
+  const employeeIds = scoped.map((m) => m.id).filter(Boolean);
   const year = johannesburgYmd().year;
 
   let attendanceRows = [];
@@ -111,48 +121,39 @@ export async function listEmployees(orgId) {
     if (!row.membership_id) continue;
     payslipCountByEmployee.set(row.membership_id, (payslipCountByEmployee.get(row.membership_id) || 0) + 1);
   }
+  const memberById = new Map(scoped.map((m) => [m.id, m]));
 
-  return (members || []).map((m) => {
+  return scoped.map((m) => {
     const person = byUser.get(m.user_id);
     const payroll = payrollByMembership.get(m.id);
-    const email = person?.email || m.invited_email || payroll?.email || null;
-    const name = person?.full_name || payroll?.full_name || email || "Employee";
     const balances = leaveByEmployee.get(m.id) || [];
     const annual = balances.find((row) => String(row.leave_types?.code || "").toUpperCase() === "ANNUAL");
     const leaveDays = annual ? computeLeaveBalance(annual).available : null;
-    return {
-      id: m.id,
-      employee_id: m.id,
-      membership_id: m.id,
-      payroll_profile_id: payroll?.id || null,
-      user_id: m.user_id,
-      role: normalizeCompanyRole(m.role),
-      job_function: normalizeJobFunction(m.job_function),
-      employee_number: m.employee_number || payroll?.employee_number || null,
-      department: m.department || payroll?.department || person?.department || null,
-      job_title: payroll?.job_title || person?.job_title || null,
-      employment_status: m.employment_status || payroll?.employment_status || "active",
-      employment_start_date: m.employment_start_date || null,
-      email,
-      phone: person?.phone || null,
-      full_name: person?.full_name || payroll?.full_name || null,
-      base_salary: payroll?.base_salary ?? 0,
-      hourly_rate: payroll?.hourly_rate ?? 0,
-      daily_rate: payroll?.daily_rate ?? 0,
-      pay_type: payroll?.pay_type || "monthly_salary",
-      label: name,
-      payroll_status: payroll?.payroll_status || (payroll?.id ? "active" : "unprovisioned"),
-      attendance_status: attendanceByEmployee.get(m.id)?.status || (payroll?.id ? "active" : "unprovisioned"),
-      leave_available: leaveDays,
-      payslip_count: payslipCountByEmployee.get(m.id) || 0,
-      portal_status: m.user_id ? "active" : "invited",
-      disabled_at: m.disabled_at || null,
-    };
+    const managerMem = m.manager_membership_id ? memberById.get(m.manager_membership_id) : null;
+    const managerPerson = managerMem ? byUser.get(managerMem.user_id) : null;
+    const managerName =
+      managerPerson?.full_name || managerMem?.invited_name || managerMem?.invited_email || null;
+    return buildEmployeeProfile(
+      {
+        membership: {
+          ...m,
+          role: normalizeCompanyRole(m.role),
+          job_function: normalizeJobFunction(m.job_function),
+        },
+        profile: person,
+        payrollProfile: payroll,
+        attendance: attendanceByEmployee.get(m.id),
+        leaveAvailable: leaveDays,
+        payslipCount: payslipCountByEmployee.get(m.id) || 0,
+        manager: managerMem ? { id: managerMem.id, full_name: managerName, label: managerName } : null,
+      },
+      { actorMembershipId, canManagePayroll }
+    );
   });
 }
 
-export async function getEmployee(orgId, employeeId, { actorUserId, actorMembershipId, canViewTeam }) {
-  const rows = await listEmployees(orgId);
+export async function getEmployee(orgId, employeeId, { actorUserId, actorMembershipId, canViewTeam, canManagePayroll = false }) {
+  const rows = await listEmployees(orgId, { actorMembershipId, canManagePayroll });
   const row = rows.find((item) => item.id === employeeId);
   if (!row) {
     const err = new Error("Employee not found");
@@ -166,6 +167,109 @@ export async function getEmployee(orgId, employeeId, { actorUserId, actorMembers
     { canViewTeam }
   );
   return row;
+}
+
+function redactPayslipRow(row, canSeePay) {
+  if (canSeePay) {
+    return {
+      id: row.id,
+      payslip_number: row.payslip_number,
+      pay_period_start: row.pay_period_start,
+      pay_period_end: row.pay_period_end,
+      pay_date: row.pay_date,
+      net_pay: row.net_pay,
+      gross_pay: row.gross_pay,
+      locked: Boolean(row.locked || row.pay_run_id),
+    };
+  }
+  return {
+    id: row.id,
+    payslip_number: row.payslip_number,
+    pay_period_start: row.pay_period_start,
+    pay_period_end: row.pay_period_end,
+    pay_date: row.pay_date,
+    locked: Boolean(row.locked || row.pay_run_id),
+    compensation_redacted: true,
+  };
+}
+
+export async function getEmployeeProfile(orgId, employeeId, access) {
+  const employee = await getEmployee(orgId, employeeId, access);
+  const canSeePay = Boolean(access.canManagePayroll || employee.id === access.actorMembershipId);
+  const safe = (promise, fallback) =>
+    promise.then((res) => res).catch(() => fallback);
+
+  const [leaveRes, payslipRes, docRes, attendanceRes, auditRes, eventRes] = await Promise.all([
+    safe(
+      supabaseAdmin
+        .from("leave_requests")
+        .select("id, status, start_date, end_date, working_days, reason, leave_types(name, code, paid)")
+        .eq("org_id", orgId)
+        .eq("employee_id", employee.id)
+        .order("start_date", { ascending: false })
+        .limit(50),
+      { data: [] }
+    ),
+    safe(
+      supabaseAdmin
+        .from("payslips")
+        .select("id, payslip_number, pay_period_start, pay_period_end, pay_date, net_pay, gross_pay, locked, pay_run_id, membership_id")
+        .eq("org_id", orgId)
+        .eq("membership_id", employee.id)
+        .order("pay_period_start", { ascending: false })
+        .limit(50),
+      { data: [] }
+    ),
+    safe(
+      supabaseAdmin
+        .from("documents")
+        .select("id, type, title, status, created_at, membership_id")
+        .eq("org_id", orgId)
+        .eq("membership_id", employee.id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      { data: [] }
+    ),
+    safe(
+      supabaseAdmin
+        .from("attendance_profiles")
+        .select("employee_id, status, created_at, updated_at")
+        .eq("employee_id", employee.id)
+        .maybeSingle(),
+      { data: null }
+    ),
+    safe(
+      supabaseAdmin
+        .from("workforce_audit_logs")
+        .select("id, action, before_state, after_state, event_id, created_at")
+        .eq("org_id", orgId)
+        .eq("employee_id", employee.id)
+        .order("created_at", { ascending: false })
+        .limit(80),
+      { data: [] }
+    ),
+    safe(
+      supabaseAdmin
+        .from("workforce_events")
+        .select("id, event_type, payload, created_at")
+        .eq("org_id", orgId)
+        .eq("employee_id", employee.id)
+        .order("created_at", { ascending: false })
+        .limit(80),
+      { data: [] }
+    ),
+  ]);
+
+  return {
+    employee,
+    leave_requests: leaveRes.data || [],
+    payslips: (payslipRes.data || []).map((row) => redactPayslipRow(row, canSeePay)),
+    documents: docRes.data || [],
+    attendance: attendanceRes.data || { status: employee.attendance_status || "unprovisioned" },
+    audit: mergeEmployeeTimeline(auditRes.data || [], eventRes.data || [], {
+      canManagePayroll: canSeePay,
+    }),
+  };
 }
 
 async function persistPortalInvite({ orgId, email, role, jobFunction, actorId, membershipId, invitedName }) {
@@ -284,6 +388,8 @@ export async function createEmployee(orgId, actor, payload = {}) {
     department: String(safe.department || "").trim() || null,
     employment_status: "active",
     invited_email: email,
+    invited_name: fullName || null,
+    job_title: String(safe.job_title || safe.jobTitle || "").trim() || null,
     manager_membership_id: managerId || null,
   };
 
@@ -311,6 +417,13 @@ export async function createEmployee(orgId, actor, payload = {}) {
       });
       return { employee: await getEmployee(orgId, existingMem.id, { canViewTeam: true }), mode: "existing_member" };
     }
+  }
+  if (inserted.error && /invited_name|job_title/i.test(inserted.error.message || "")) {
+    delete membershipRow.invited_name;
+    delete membershipRow.job_title;
+    const retry = await supabaseAdmin.from("memberships").insert(membershipRow).select("id, user_id").maybeSingle();
+    inserted.error = retry.error;
+    inserted.data = retry.data;
   }
   if (inserted.error && /manager_membership_id/i.test(inserted.error.message || "")) {
     delete membershipRow.manager_membership_id;
@@ -451,6 +564,19 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
     if (error) throw error;
   }
 
+  const previousManager = existing.manager_membership_id || null;
+  const nextManager = patch.manager_membership_id !== undefined ? patch.manager_membership_id : previousManager;
+  if (patch.manager_membership_id !== undefined && previousManager !== nextManager) {
+    await writeWorkforceAudit({
+      orgId,
+      employeeId: id,
+      actorId: actor.userId,
+      action: "manager.changed",
+      before: { manager_membership_id: previousManager },
+      after: { manager_membership_id: nextManager },
+    });
+  }
+
   await emitWorkforceEvent({
     orgId,
     employeeId: id,
@@ -460,7 +586,91 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
     idempotencyKey: `membership:${id}:updated:${Date.now()}`,
   });
 
-  return getEmployee(orgId, id, { canViewTeam: true });
+  return getEmployee(orgId, id, {
+    actorUserId: actor.userId,
+    actorMembershipId: actor.id,
+    canViewTeam: true,
+    canManagePayroll: membershipHasPermission(actor, PERMISSIONS.MANAGE_PAYROLL),
+  });
+}
+
+export async function workforceSummary(orgId, { managerScopeId = null } = {}) {
+  const employees = await listEmployees(orgId, {
+    canManagePayroll: false,
+    managerScopeId,
+  });
+  const now = johannesburgYmd();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const ids = employees.map((row) => row.id).filter(Boolean);
+  let leaveCounts = { pending: 0, approved: 0, rejected: 0, upcoming: 0 };
+  if (ids.length) {
+    const { data: leaveRows } = await supabaseAdmin
+      .from("leave_requests")
+      .select("id, status, start_date, employee_id")
+      .eq("org_id", orgId)
+      .in("employee_id", ids);
+    const today = now.iso;
+    for (const row of leaveRows || []) {
+      const status = String(row.status || "").toLowerCase();
+      if (status === "pending") leaveCounts.pending += 1;
+      if (status === "approved") {
+        leaveCounts.approved += 1;
+        if (row.start_date && row.start_date >= today) leaveCounts.upcoming += 1;
+      }
+      if (status === "rejected") leaveCounts.rejected += 1;
+    }
+  }
+  const { data: runs } = await supabaseAdmin
+    .from("pay_runs")
+    .select("id, status, period_start, period_end, period_label, finalized_at")
+    .eq("org_id", orgId)
+    .order("period_start", { ascending: false })
+    .limit(12);
+  const current = (runs || [])[0] || null;
+  const { count: payslipsGenerated } = await supabaseAdmin
+    .from("payslips")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId);
+  let adjustmentSignals = [];
+  try {
+    const { data: adjEvents } = await supabaseAdmin
+      .from("workforce_events")
+      .select("id, employee_id, payload, created_at")
+      .eq("org_id", orgId)
+      .eq("event_type", WORKFORCE_EVENT_TYPES.PAYROLL_PROCESSED)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    adjustmentSignals = (adjEvents || []).filter((row) => row.payload?.needs_adjustment_run);
+  } catch {
+    adjustmentSignals = [];
+  }
+  return {
+    workforce: {
+      total: employees.length,
+      active: employees.filter((row) => row.employment_status === "active" && !row.disabled_at).length,
+      new_employees: employees.filter((row) => row.created_at && row.created_at >= thirtyDaysAgo).length,
+      pending_onboarding: employees.filter((row) => row.portal_status === "invited").length,
+      incomplete_profiles: employees.filter(
+        (row) => !row.department || !row.manager_membership_id || !row.employment_start_date
+      ).length,
+    },
+    leave: leaveCounts,
+    payroll: {
+      current_period: current
+        ? { label: current.period_label, start: current.period_start, end: current.period_end, status: current.status }
+        : null,
+      draft: (runs || []).filter((r) => r.status === "draft").length,
+      awaiting_review: (runs || []).filter((r) => r.status === "awaiting_approval" || r.status === "calculated").length,
+      finalized: (runs || []).filter((r) => r.finalized_at).length,
+      payslips_generated: payslipsGenerated || 0,
+      needs_adjustment_run: adjustmentSignals.length > 0,
+      adjustment_signals: adjustmentSignals.slice(0, 10).map((row) => ({
+        employee_id: row.employee_id,
+        leave_request_id: row.payload?.leave_request_id || null,
+        at: row.created_at,
+      })),
+    },
+  };
 }
 
 export async function emitEmployeeCreatedForMembership(orgId, membershipId, actorId) {

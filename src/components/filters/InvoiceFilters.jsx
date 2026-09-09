@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePersistedListFilters } from "@/hooks/usePersistedListFilters";
+import { useIsCompactLayout } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Filter, X, CalendarIcon, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import MobileFilterSheet from "@/components/ui/MobileFilterSheet";
 import {
   INVOICE_FILTER_OPTIONS,
   invoiceStatusesMatch,
@@ -42,6 +44,7 @@ const amountRanges = [
 
 export default function InvoiceFilters({ onFilterChange, clients = [], endSlot = null }) {
     const [showFilters, setShowFilters] = useState(false);
+    const isCompact = useIsCompactLayout();
     const { filters, updateFilter, clearFilters } = usePersistedListFilters(
         "invoices",
         DEFAULT_FILTERS
@@ -62,6 +65,96 @@ export default function InvoiceFilters({ onFilterChange, clients = [], endSlot =
         filters.dateTo
     ].filter(Boolean).length;
 
+    const filterFields = (
+                    <div className={cn(isCompact ? "space-y-4" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-xl border border-border")}>
+                    {/* Status Filter */}
+                    <div className="space-y-1">
+                        <Label htmlFor="invoice-filter-status" className="text-xs font-medium text-slate-600">Status</Label>
+                        <Select
+                            value={filters.status === 'all' ? 'all' : normalizeInvoiceStatus(filters.status)}
+                            onValueChange={(v) => updateFilter('status', v)}
+                        >
+                            <SelectTrigger id="invoice-filter-status" className="h-9 min-h-11 md:min-h-9">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {statusOptions.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Amount Range Filter */}
+                    <div className="space-y-1">
+                        <Label htmlFor="invoice-filter-amount" className="text-xs font-medium text-slate-600">Amount Range</Label>
+                        <Select value={filters.amountRange} onValueChange={(v) => updateFilter('amountRange', v)}>
+                            <SelectTrigger id="invoice-filter-amount" className="h-9 min-h-11 md:min-h-9">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {amountRanges.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Client Filter */}
+                    <div className="space-y-1">
+                        <Label htmlFor="invoice-filter-client" className="text-xs font-medium text-slate-600">Client</Label>
+                        <Select value={filters.clientId} onValueChange={(v) => updateFilter('clientId', v)}>
+                            <SelectTrigger id="invoice-filter-client" className="h-9 min-h-11 md:min-h-9">
+                                <SelectValue placeholder="All Clients" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Clients</SelectItem>
+                                {clients.map(client => (
+                                    <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Date Range */}
+                    <fieldset className="space-y-1 border-0 p-0 m-0 min-w-0">
+                        <legend className="text-xs font-medium text-slate-600">Date Range</legend>
+                        <div className="flex gap-2">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button type="button" variant="outline" size="sm" className="h-9 min-h-11 flex-1 justify-start text-left font-normal md:min-h-9" aria-label="Filter from date">
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {filters.dateFrom ? format(new Date(filters.dateFrom), 'MMM d') : 'From'}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                        mode="single"
+                                        selected={filters.dateFrom ? new Date(filters.dateFrom) : undefined}
+                                        onSelect={(date) => updateFilter('dateFrom', date?.toISOString())}
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button type="button" variant="outline" size="sm" className="h-9 min-h-11 flex-1 justify-start text-left font-normal md:min-h-9" aria-label="Filter to date">
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {filters.dateTo ? format(new Date(filters.dateTo), 'MMM d') : 'To'}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                        mode="single"
+                                        selected={filters.dateTo ? new Date(filters.dateTo) : undefined}
+                                        onSelect={(date) => updateFilter('dateTo', date?.toISOString())}
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    </fieldset>
+                </div>
+    );
+
     return (
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-3">
@@ -72,10 +165,23 @@ export default function InvoiceFilters({ onFilterChange, clients = [], endSlot =
                         value={filters.search}
                         onChange={(e) => updateFilter('search', e.target.value)}
                         placeholder="Search by invoice number, client name, or project..."
-                        className="pl-10 h-10 rounded-xl w-full"
+                        className="pl-10 h-10 min-h-11 rounded-xl w-full md:min-h-10"
                     />
                 </div>
 
+                {isCompact ? (
+                    <Button
+                        variant="outline"
+                        onClick={() => setShowFilters(true)}
+                        className="h-10 min-h-11 gap-2 rounded-xl"
+                    >
+                        <Filter className="w-4 h-4 shrink-0" />
+                        Filters
+                        {activeFilterCount > 0 && (
+                            <Badge className="bg-primary text-white ml-1 shrink-0">{activeFilterCount}</Badge>
+                        )}
+                    </Button>
+                ) : (
                 <div className="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-initial min-w-0">
                     {/* Sort By — full width on mobile for easy tap */}
                     <Select value={filters.sortBy} onValueChange={(v) => updateFilter('sortBy', v)}>
@@ -117,97 +223,35 @@ export default function InvoiceFilters({ onFilterChange, clients = [], endSlot =
                         </div>
                     ) : null}
                 </div>
+                )}
             </div>
 
-            {/* Filter Options */}
-            {showFilters && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-xl border border-border">
-                    {/* Status Filter */}
+            {isCompact ? (
+                <MobileFilterSheet
+                    open={showFilters}
+                    onOpenChange={setShowFilters}
+                    title="Invoice filters"
+                    onApply={() => setShowFilters(false)}
+                    onClear={clearFilters}
+                >
                     <div className="space-y-1">
-                        <Label htmlFor="invoice-filter-status" className="text-xs font-medium text-slate-600">Status</Label>
-                        <Select
-                            value={filters.status === 'all' ? 'all' : normalizeInvoiceStatus(filters.status)}
-                            onValueChange={(v) => updateFilter('status', v)}
-                        >
-                            <SelectTrigger id="invoice-filter-status" className="h-9">
+                        <Label className="text-xs font-medium text-slate-600">Sort</Label>
+                        <Select value={filters.sortBy} onValueChange={(v) => updateFilter('sortBy', v)}>
+                            <SelectTrigger className="min-h-11 rounded-xl">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {statusOptions.map(opt => (
-                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                ))}
+                                <SelectItem value="date_newest">Newest First</SelectItem>
+                                <SelectItem value="date_oldest">Oldest First</SelectItem>
+                                <SelectItem value="amount_highest">Highest Amount</SelectItem>
+                                <SelectItem value="amount_lowest">Lowest Amount</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
-
-                    {/* Amount Range Filter */}
-                    <div className="space-y-1">
-                        <Label htmlFor="invoice-filter-amount" className="text-xs font-medium text-slate-600">Amount Range</Label>
-                        <Select value={filters.amountRange} onValueChange={(v) => updateFilter('amountRange', v)}>
-                            <SelectTrigger id="invoice-filter-amount" className="h-9">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {amountRanges.map(opt => (
-                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Client Filter */}
-                    <div className="space-y-1">
-                        <Label htmlFor="invoice-filter-client" className="text-xs font-medium text-slate-600">Client</Label>
-                        <Select value={filters.clientId} onValueChange={(v) => updateFilter('clientId', v)}>
-                            <SelectTrigger id="invoice-filter-client" className="h-9">
-                                <SelectValue placeholder="All Clients" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Clients</SelectItem>
-                                {clients.map(client => (
-                                    <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Date Range */}
-                    <fieldset className="space-y-1 border-0 p-0 m-0 min-w-0">
-                        <legend className="text-xs font-medium text-slate-600">Date Range</legend>
-                        <div className="flex gap-2">
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button type="button" variant="outline" size="sm" className="h-9 flex-1 justify-start text-left font-normal" aria-label="Filter from date">
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {filters.dateFrom ? format(new Date(filters.dateFrom), 'MMM d') : 'From'}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                        mode="single"
-                                        selected={filters.dateFrom ? new Date(filters.dateFrom) : undefined}
-                                        onSelect={(date) => updateFilter('dateFrom', date?.toISOString())}
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button type="button" variant="outline" size="sm" className="h-9 flex-1 justify-start text-left font-normal" aria-label="Filter to date">
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {filters.dateTo ? format(new Date(filters.dateTo), 'MMM d') : 'To'}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                        mode="single"
-                                        selected={filters.dateTo ? new Date(filters.dateTo) : undefined}
-                                        onSelect={(date) => updateFilter('dateTo', date?.toISOString())}
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-                    </fieldset>
-                </div>
+                    {filterFields}
+                </MobileFilterSheet>
+            ) : (
+                showFilters ? filterFields : null
             )}
         </div>
     );

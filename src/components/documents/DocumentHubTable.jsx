@@ -75,6 +75,66 @@ function ValueCell({ row }) {
   );
 }
 
+function DocumentRowMenu({ row, onOpen, onAction }) {
+  const conversions = getConversionOptions(row.type).filter((opt) => {
+    if (row.type === DOCUMENT_TYPES.quote && opt.targetType === "invoice") {
+      return row.status === QUOTE_STATUSES.accepted;
+    }
+    return row.status !== "archived" && !row.archived_at;
+  });
+  const isArchived = Boolean(row.archived_at);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-11 w-11 min-h-11 min-w-11 md:h-8 md:w-8 md:min-h-8 md:min-w-8" aria-label="Document actions">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem onSelect={() => onOpen?.(row)} className="gap-2">
+          <ExternalLink className="h-4 w-4" /> Open
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onAction?.("duplicate", row)} className="gap-2">
+          <Copy className="h-4 w-4" /> Duplicate
+        </DropdownMenuItem>
+        {conversions.length ? (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="gap-2">
+              <ArrowRightLeft className="h-4 w-4" /> Convert
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {conversions.map((opt) => (
+                <DropdownMenuItem
+                  key={opt.targetType}
+                  onSelect={() => onAction?.("convert", { ...row, _convertTarget: opt.targetType })}
+                >
+                  {opt.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
+        <DropdownMenuSeparator />
+        {isArchived ? (
+          <DropdownMenuItem onSelect={() => onAction?.("unarchive", row)} className="gap-2">
+            <ArchiveRestore className="h-4 w-4" /> Restore
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onSelect={() => onAction?.("archive", row)} className="gap-2">
+            <Archive className="h-4 w-4" /> Archive
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          onSelect={() => onAction?.("delete", row)}
+          className="gap-2 text-destructive focus:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" /> Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export default function DocumentHubTable({
   rows = [],
   loading = false,
@@ -119,7 +179,36 @@ export default function DocumentHubTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
+    <>
+      <div className="space-y-3 md:hidden">
+        {rows.map((row) => (
+          <article key={row.id} className="flex items-stretch overflow-hidden rounded-2xl border border-border bg-card">
+            <button
+              type="button"
+              onClick={() => onOpen?.(row)}
+              className="flex min-h-11 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left touch-manipulation"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <DocumentTypeIcon type={row.type} className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-muted-foreground">{typeLabel(row.type)}</p>
+                <p className="truncate text-sm font-semibold">{row.title || row.document_number || "Untitled document"}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <StatusBadge status={row.status} archived={Boolean(row.archived_at)} />
+                  <span className="text-sm font-medium tabular-nums">
+                    <ValueCell row={row} />
+                  </span>
+                </div>
+              </div>
+            </button>
+            <div className="flex items-center border-l border-border px-1.5">
+              <DocumentRowMenu row={row} onOpen={onOpen} onAction={onAction} />
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-hidden rounded-xl border border-border bg-card md:block">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -143,12 +232,6 @@ export default function DocumentHubTable({
         </TableHeader>
         <TableBody>
           {rows.map((row) => {
-            const conversions = getConversionOptions(row.type).filter((opt) => {
-              if (row.type === DOCUMENT_TYPES.quote && opt.targetType === "invoice") {
-                return row.status === QUOTE_STATUSES.accepted;
-              }
-              return row.status !== "archived" && !row.archived_at;
-            });
             const isArchived = Boolean(row.archived_at);
             return (
               <TableRow key={row.id} className="group">
@@ -202,61 +285,15 @@ export default function DocumentHubTable({
                   <ValueCell row={row} />
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Document actions">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem onSelect={() => onOpen?.(row)} className="gap-2">
-                        <ExternalLink className="h-4 w-4" /> Open
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => onAction?.("duplicate", row)} className="gap-2">
-                        <Copy className="h-4 w-4" /> Duplicate
-                      </DropdownMenuItem>
-                      {conversions.length ? (
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger className="gap-2">
-                            <ArrowRightLeft className="h-4 w-4" /> Convert
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent>
-                            {conversions.map((opt) => (
-                              <DropdownMenuItem
-                                key={opt.targetType}
-                                onSelect={() => onAction?.("convert", { ...row, _convertTarget: opt.targetType })}
-                              >
-                                {opt.label}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                      ) : null}
-                      <DropdownMenuSeparator />
-                      {isArchived ? (
-                        <DropdownMenuItem onSelect={() => onAction?.("unarchive", row)} className="gap-2">
-                          <ArchiveRestore className="h-4 w-4" /> Restore
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem onSelect={() => onAction?.("archive", row)} className="gap-2">
-                          <Archive className="h-4 w-4" /> Archive
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        onSelect={() => onAction?.("delete", row)}
-                        className="gap-2 text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <DocumentRowMenu row={row} onOpen={onOpen} onAction={onAction} />
                 </TableCell>
               </TableRow>
             );
           })}
         </TableBody>
       </Table>
-    </div>
+      </div>
+    </>
   );
 }
 

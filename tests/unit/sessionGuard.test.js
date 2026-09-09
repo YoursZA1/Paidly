@@ -10,6 +10,11 @@ describe("isPathAllowedWithoutSession", () => {
     expect(isPathAllowedWithoutSession("/pos/invite/abc")).toBe(true);
   });
 
+  it("lets guests open the leave approval magic-link page", () => {
+    expect(isPathAllowedWithoutSession("/leave-approval/abc-token")).toBe(true);
+    expect(isPathAllowedWithoutSession("/LeaveApproval/abc-token")).toBe(true);
+  });
+
   it("still treats back-office routes as session-required", () => {
     expect(isPathAllowedWithoutSession("/Dashboard")).toBe(false);
     expect(isPathAllowedWithoutSession("/Invoices")).toBe(false);

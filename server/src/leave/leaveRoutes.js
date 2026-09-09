@@ -3,9 +3,11 @@ import { jsonError, requirePayrollPermission, PERMISSIONS } from "../payroll/pay
 import { membershipHasPermission } from "../companyRouteAccess.js";
 import { parseLeaveListFilters, scopedLeaveListFilters, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
+import { canOverrideLeave, canSeeOrgWorkforce } from "./leaveAuthz.js";
 import {
   myLeave,
   applyForLeave,
+  previewLeaveApplication,
   listLeaveRequests,
   decideLeaveRequest,
   cancelLeaveRequest,
@@ -14,7 +16,15 @@ import {
   upsertLeaveType,
   listLeaveTypes,
   listLeaveEmployees,
+  reportEmployeeIds,
 } from "./leaveService.js";
+
+function originFromReq(req) {
+  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  if (!host) return "";
+  return `${proto}://${host}`;
+}
 
 async function handle(res, fn) {
   try {
@@ -65,7 +75,16 @@ export async function handleLeaveRoute(req, res, resolved) {
     });
     if (!gate.ok) return gate.response;
     if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
-    return handle(res, () => applyForLeave(gate.membership.companyId, gate.user.id, body));
+    return handle(res, () => applyForLeave(gate.membership.companyId, gate.user.id, body, { origin: originFromReq(req) }));
+  }
+
+  if (route === "preview") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.VIEW_OWN_LEAVE, {
+      feature: "leave_management",
+    });
+    if (!gate.ok) return gate.response;
+    if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
+    return handle(res, () => previewLeaveApplication(gate.membership.companyId, gate.user.id, body));
   }
 
   if (route === "employees") {
@@ -74,7 +93,11 @@ export async function handleLeaveRoute(req, res, resolved) {
     });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
-    return handle(res, () => listLeaveEmployees(gate.membership.companyId));
+    return handle(res, () =>
+      listLeaveEmployees(gate.membership.companyId, {
+        managerScopeId: canSeeOrgWorkforce(gate.membership) ? null : gate.membership.id,
+      })
+    );
   }
 
   if (route === "requests") {
@@ -87,6 +110,9 @@ export async function handleLeaveRoute(req, res, resolved) {
       parseLeaveListFilters(req.query),
       membershipHasPermission(gate.membership, PERMISSIONS.VIEW_TEAM_LEAVE)
     );
+    if (!canSeeOrgWorkforce(gate.membership)) {
+      filters.manager_employee_ids = await reportEmployeeIds(gate.membership.companyId, gate.membership.id);
+    }
     return handle(res, () => listLeaveRequests(gate.membership.companyId, filters));
   }
 
@@ -102,6 +128,9 @@ export async function handleLeaveRoute(req, res, resolved) {
       decideLeaveRequest(gate.membership.companyId, gate.user.id, requestId, {
         approve: route === "approve",
         reason: body.reason,
+        comment: body.comment,
+        method: canOverrideLeave(gate.membership) ? "hr_override" : "portal",
+        actorMembership: gate.membership,
       })
     );
   }
@@ -114,7 +143,7 @@ export async function handleLeaveRoute(req, res, resolved) {
     if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
     const requestId = parseUuid(id);
     if (!requestId) return jsonError(res, 400, "Invalid leave request id.");
-    const asAdmin = own.membership.companyRole === "admin" || own.membership.companyRole === "manager";
+    const asAdmin = canOverrideLeave(own.membership);
     return handle(res, () =>
       cancelLeaveRequest(own.membership.companyId, own.user.id, requestId, { asAdmin })
     );
@@ -135,8 +164,15 @@ export async function handleLeaveRoute(req, res, resolved) {
     });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
+    const managerEmployeeIds = canSeeOrgWorkforce(gate.membership)
+      ? null
+      : await reportEmployeeIds(gate.membership.companyId, gate.membership.id);
     return handle(res, () =>
-      leaveCalendar(gate.membership.companyId, { start: req.query?.start, end: req.query?.end })
+      leaveCalendar(gate.membership.companyId, {
+        start: req.query?.start,
+        end: req.query?.end,
+        managerEmployeeIds,
+      })
     );
   }
 
@@ -155,6 +191,7 @@ export function resolveLeaveRoute(req) {
   if (segs[0] === "types") return { route: "types" };
   if (segs[0] === "me") return { route: "me" };
   if (segs[0] === "apply") return { route: "apply" };
+  if (segs[0] === "preview") return { route: "preview" };
   if (segs[0] === "employees") return { route: "employees" };
   if (segs[0] === "calendar") return { route: "calendar" };
   if (segs[0] === "adjust") return { route: "adjust" };

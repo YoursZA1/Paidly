@@ -7,6 +7,7 @@ import { Search, MoreHorizontal, UserPlus, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -15,6 +16,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet';
+import MobileListCard from '@/components/ui/MobileListCard';
 import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -117,6 +120,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
   const [bulkSuspendOpen, setBulkSuspendOpen] = useState(false);
   const [bulkSuspendIds, setBulkSuspendIds] = useState([]);
   const [usersPage, setUsersPage] = useState(0);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -469,18 +473,27 @@ export default function UsersPage({ staffOnly = false } = {}) {
       ) : null}
 
       <div className="mb-4 flex flex-col gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search name, email, company…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-card pl-10"
+              className="min-h-11 bg-card pl-10 md:min-h-10"
             />
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 gap-2 md:hidden"
+            onClick={() => setMobileFiltersOpen(true)}
+          >
+            <Filter className="h-4 w-4" />
+            Filters
+          </Button>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full bg-card sm:w-[150px]">
+            <SelectTrigger className="hidden w-full bg-card sm:w-[150px] md:flex">
               <Filter className="mr-2 h-4 w-4 shrink-0" />
               <SelectValue placeholder="Account status" />
             </SelectTrigger>
@@ -494,7 +507,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
           </Select>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden flex-wrap gap-2 md:flex">
           <Select value={confirmationFilter} onValueChange={setConfirmationFilter}>
             <SelectTrigger className="w-full min-w-[160px] flex-1 bg-card sm:max-w-[200px]">
               <SelectValue placeholder="Email confirmation" />
@@ -572,6 +585,63 @@ export default function UsersPage({ staffOnly = false } = {}) {
         </div>
       </div>
 
+      <MobileFilterSheet
+        open={mobileFiltersOpen}
+        onOpenChange={setMobileFiltersOpen}
+        title="User filters"
+        onApply={() => setMobileFiltersOpen(false)}
+        onClear={() => {
+          setStatusFilter('all');
+          setConfirmationFilter('all');
+          setPackageFilter('all');
+          setPlanSlugFilter('all');
+          setProfileFilter('all');
+          setRoleFilter('all');
+        }}
+      >
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Account status</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All account status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="paused">Paused</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Plan</Label>
+            <Select value={packageFilter} onValueChange={setPackageFilter}>
+              <SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any package</SelectItem>
+                <SelectItem value="none">No plan set</SelectItem>
+                <SelectItem value="starter">Starter</SelectItem>
+                <SelectItem value="business">Business</SelectItem>
+                <SelectItem value="growth">Growth</SelectItem>
+                <SelectItem value="enterprise">Enterprise</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Role</Label>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any role</SelectItem>
+                {uniqueRoles.map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </MobileFilterSheet>
+
       {selectedIds.size > 0 ? (
         <div className="mb-4 flex flex-col gap-3 rounded-xl border border-border bg-muted/40 p-4 sm:flex-row sm:flex-wrap sm:items-end">
           <p className="text-sm font-medium text-foreground sm:mr-2 sm:self-center">
@@ -633,7 +703,58 @@ export default function UsersPage({ staffOnly = false } = {}) {
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="overflow-x-auto">
+        <div className="space-y-3 p-3 md:hidden">
+          {pagedFiltered.map((u, rowIdx) => {
+            const rowId = adminRowPrimaryId(u);
+            const { primary } = adminUserNameEmailLines(u.full_name, u.email);
+            return (
+              <MobileListCard
+                key={stableDirectoryRowKey(u, rowIdx)}
+                title={primary}
+                subtitle={u.email || '—'}
+                meta={u.last_active_at ? `Last active ${format(new Date(u.last_active_at), 'dd MMM yyyy')}` : 'Last active —'}
+                status={<StatusBadge status={u.status} />}
+                value={<PlanBadge plan={u.plan || 'none'} />}
+                action={
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="min-h-11 min-w-11">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        disabled={!rowId}
+                        onClick={() => {
+                          setShowAddUser(false);
+                          setEditingUser(u);
+                        }}
+                      >
+                        View / Edit
+                      </DropdownMenuItem>
+                      {u.status === 'active' ? (
+                        <DropdownMenuItem disabled={!rowId} onClick={() => handleStatusChange(u, 'paused')}>
+                          Pause User
+                        </DropdownMenuItem>
+                      ) : null}
+                      {u.status === 'paused' ? (
+                        <DropdownMenuItem disabled={!rowId} onClick={() => handleStatusChange(u, 'active')}>
+                          Activate User
+                        </DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                }
+              />
+            );
+          })}
+          {filtered.length === 0 ? (
+            <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+              {isLoading ? 'Loading users...' : 'No users match your filters'}
+            </p>
+          ) : null}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">

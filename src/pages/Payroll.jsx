@@ -10,6 +10,7 @@ import { createPageUrl } from "@/utils";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { useAppStore } from "@/stores/useAppStore";
 import { payrollApi } from "@/services/PayrollApiService";
+import { workforceApi } from "@/services/WorkforceApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,11 +42,14 @@ export default function PayrollPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [needsAdjustment, setNeedsAdjustment] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
       setData(await payrollApi.overview());
+      const summary = await workforceApi.summary().catch(() => null);
+      setNeedsAdjustment(Boolean(summary?.payroll?.needs_adjustment_run));
     } catch (err) {
       toast({ title: "Could not load payroll", description: err.message, variant: "destructive" });
     } finally {
@@ -101,6 +105,11 @@ export default function PayrollPage() {
           </PageHeader>
         </PageTemplate.Header>
         <PageTemplate.Body>
+          {needsAdjustment ? (
+            <p className="mb-4 text-sm text-amber-900 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
+              Leave was approved after a finalized pay run. Create an adjustment run so unpaid leave is applied once through calculate — do not add a second leave deduction row.
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-6">
             <SummaryCard label="Employees" value={data?.employees ?? "—"} icon={Users} />
             <SummaryCard label="Gross payroll" value={money(data?.gross_payroll)} />

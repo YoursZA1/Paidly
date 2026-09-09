@@ -260,11 +260,11 @@ export default function SubscriptionsPage() {
             placeholder="Search users and subscriptions..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8 bg-card pl-9 text-sm"
+            className="h-11 bg-card pl-9 text-sm md:h-8"
           />
         </div>
         <Select value={planFilter} onValueChange={setPlanFilter}>
-          <SelectTrigger className="h-8 w-full bg-card text-xs sm:w-[150px]">
+          <SelectTrigger className="h-11 w-full bg-card text-xs sm:w-[150px] md:h-8">
             <SelectValue placeholder="Plan" />
           </SelectTrigger>
           <SelectContent>
@@ -277,7 +277,7 @@ export default function SubscriptionsPage() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-8 w-full bg-card text-xs sm:w-[150px]">
+          <SelectTrigger className="h-11 w-full bg-card text-xs sm:w-[150px] md:h-8">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -297,7 +297,28 @@ export default function SubscriptionsPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="overflow-x-auto">
+        <div className="space-y-3 p-3 md:hidden">
+          {pagedFiltered.map((sub) => (
+            <article key={sub._rowKey || sub.id} className="rounded-2xl border border-border bg-card p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{sub.user_name || '—'}</p>
+                  <p className="truncate text-xs text-muted-foreground">{sub.user_email}</p>
+                </div>
+                <StatusBadge status={sub.status} />
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                <PlanBadge plan={sub.plan} />
+                <span className="font-medium tabular-nums">
+                  {sub._isSynthetic
+                    ? `R ${PLAN_DEFAULT_AMOUNT[sub.plan] ?? PLAN_DEFAULT_AMOUNT[normalizePaidPackageKey(sub.plan)] ?? 0}`
+                    : `R ${Number(sub.amount ?? 0).toFixed(2)}`}
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">

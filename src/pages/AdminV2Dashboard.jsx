@@ -51,7 +51,7 @@ export default function AdminV2Dashboard() {
     <div>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
             {greetingForHour()}, {firstName}
           </h1>
           <p className="mt-1 text-sm text-slate-500">Platform overview for Paidly — not a customer account.</p>
@@ -61,46 +61,10 @@ export default function AdminV2Dashboard() {
       {isError ? <AdminErrorState message={error?.message} onRetry={() => refetch()} /> : null}
       {isLoading && !overview ? <AdminLoadingState rows={3} className="mb-6" /> : null}
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard title="Total users" value={kpis.totalUsers?.value ?? kpis.platformUsers?.value} change={kpis.totalUsers?.change} compareLabel={overview?.compareLabel} unavailable={kpis.totalUsers?.unavailable} unavailableReason={kpis.totalUsers?.unavailableReason} />
         <MetricCard title="Active businesses" value={kpis.activeBusinesses?.value} change={kpis.activeBusinesses?.change} compareLabel="new this period" unavailable={kpis.activeBusinesses?.unavailable} unavailableReason={kpis.activeBusinesses?.unavailableReason} />
         <MetricCard title="MRR" value={kpis.mrr?.value} isMoney unavailable={kpis.mrr?.unavailable} unavailableReason={kpis.mrr?.unavailableReason} />
-        <MetricCard title="Active subscriptions" value={kpis.activeSubscriptions?.value} unavailable={kpis.activeSubscriptions?.unavailable} unavailableReason={kpis.activeSubscriptions?.unavailableReason} />
-        <MetricCard title="Platform usage" value={kpis.platformUsage?.value} change={kpis.platformUsage?.change} compareLabel={overview?.compareLabel} unavailable={kpis.platformUsage?.unavailable} unavailableReason={kpis.platformUsage?.unavailableReason} />
-      </div>
-
-      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <RevenueBreakdown
-            revenue={overview?.revenue}
-            period={period}
-            onPeriodChange={setPeriod}
-            compareLabel={overview?.compareLabel}
-          />
-        </div>
-        <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">User & business growth</h2>
-          </div>
-          <dl className="mt-4 space-y-2 text-sm">
-            <div className="flex justify-between"><dt className="text-muted-foreground">New users</dt><dd className="tabular-nums">{growth.newUsers ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">New businesses</dt><dd className="tabular-nums">{growth.newBusinesses ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">On trial</dt><dd className="tabular-nums">{subscriptions.trial ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Cancelled this period</dt><dd className="tabular-nums">{growth.cancelled ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Trial conversion</dt><dd className="text-right text-xs text-muted-foreground">{growth.trialConversionReason || "—"}</dd></div>
-          </dl>
-          <Link to="/admin-v2/reports/platform" className="mt-4 inline-block text-xs font-medium text-primary hover:underline">
-            Open platform analytics →
-          </Link>
-        </section>
-      </div>
-
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard title="Invoices created" value={usage.invoices?.period} change={usage.invoices?.change} compareLabel={overview?.compareLabel} />
-        <MetricCard title="Quotes created" value={usage.quotes?.period} change={usage.quotes?.change} compareLabel={overview?.compareLabel} />
-        <MetricCard title="POS transactions" value={usage.pos?.period} />
-        <MetricCard title="SaaS payments" value={kpis.paymentsProcessed?.value} change={kpis.paymentsProcessed?.change} compareLabel={overview?.compareLabel} />
-        <MetricCard title="Workforce records" value={usage.workforce?.employees} />
       </div>
 
       <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -131,6 +95,42 @@ export default function AdminV2Dashboard() {
         <div className="xl:col-span-2">
           <AlertPanel items={overview?.attention || []} isLoading={isLoading && !overview} />
         </div>
+      </div>
+
+      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <RevenueBreakdown
+            revenue={overview?.revenue}
+            period={period}
+            onPeriodChange={setPeriod}
+            compareLabel={overview?.compareLabel}
+          />
+        </div>
+        <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">User & business growth</h2>
+          </div>
+          <dl className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between"><dt className="text-muted-foreground">New users</dt><dd className="tabular-nums">{growth.newUsers ?? "—"}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">New businesses</dt><dd className="tabular-nums">{growth.newBusinesses ?? "—"}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">On trial</dt><dd className="tabular-nums">{subscriptions.trial ?? "—"}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">Cancelled this period</dt><dd className="tabular-nums">{growth.cancelled ?? "—"}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">Trial conversion</dt><dd className="text-right text-xs text-muted-foreground">{growth.trialConversionReason || "—"}</dd></div>
+          </dl>
+          <Link to="/admin-v2/reports/platform" className="mt-4 inline-block text-xs font-medium text-primary hover:underline">
+            Open platform analytics →
+          </Link>
+        </section>
+      </div>
+
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <MetricCard title="Active subscriptions" value={kpis.activeSubscriptions?.value} unavailable={kpis.activeSubscriptions?.unavailable} unavailableReason={kpis.activeSubscriptions?.unavailableReason} />
+        <MetricCard title="Platform usage" value={kpis.platformUsage?.value} change={kpis.platformUsage?.change} compareLabel={overview?.compareLabel} unavailable={kpis.platformUsage?.unavailable} unavailableReason={kpis.platformUsage?.unavailableReason} />
+        <MetricCard title="Invoices created" value={usage.invoices?.period} change={usage.invoices?.change} compareLabel={overview?.compareLabel} />
+        <MetricCard title="Quotes created" value={usage.quotes?.period} change={usage.quotes?.change} compareLabel={overview?.compareLabel} />
+        <MetricCard title="POS transactions" value={usage.pos?.period} />
+        <MetricCard title="SaaS payments" value={kpis.paymentsProcessed?.value} change={kpis.paymentsProcessed?.change} compareLabel={overview?.compareLabel} />
+        <MetricCard title="Workforce records" value={usage.workforce?.employees} />
       </div>
 
       <div className="mb-5">

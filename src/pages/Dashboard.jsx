@@ -1158,35 +1158,35 @@ function DashboardMain() {
 
         {inventoryProductsState.length > 0 && (
           <div className="mb-8 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border pt-5 sm:grid-cols-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Low stock</p>
               <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{inventoryKpis.lowStockCount}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {inventoryKpis.lowStockCount === 0 ? "No low-stock items" : "At or below threshold"}
               </p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Out of stock</p>
               <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{inventoryKpis.outOfStockCount}</p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Inventory value</p>
-              <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{formatCurrency(inventoryKpis.inventoryValue, userCurrency)}</p>
+              <p className="currency-nums mt-1 break-words text-lg font-medium tabular-nums">{formatCurrency(inventoryKpis.inventoryValue, userCurrency)}</p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Outstanding POs</p>
               <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{inventoryKpis.outstandingPOs}</p>
             </div>
           </div>
         )}
 
-        {/* Mobile: Action buttons + Recent Transactions */}
+        {/* Mobile: quick actions only — transactions appear with the later card */}
         <div className="md:hidden space-y-4 mb-6">
           <div className="border-y border-border py-3">
             <div className="grid grid-cols-2 gap-2">
               <Button
                 size="sm"
-                className="dashboard-cta rounded-2xl"
+                className="dashboard-cta rounded-2xl min-h-11"
                 onClick={() => navigate(createPageUrl("CreateInvoice"))}
               >
                 <FileText className="w-4 h-4 shrink-0" />
@@ -1195,7 +1195,7 @@ function DashboardMain() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-2xl border-primary/40 text-primary"
+                className="rounded-2xl border-primary/40 text-primary min-h-11"
                 onClick={() => navigate(createPageUrl("CashFlow"))}
               >
                 <Receipt className="w-4 h-4 shrink-0" />
@@ -1205,7 +1205,7 @@ function DashboardMain() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="col-span-2 rounded-2xl dashboard-cta"
+                  className="col-span-2 rounded-2xl dashboard-cta min-h-11"
                   onClick={() => navigate(createPageUrl("POS"))}
                 >
                   <Store className="w-4 h-4 shrink-0" />
@@ -1213,50 +1213,6 @@ function DashboardMain() {
                 </Button>
               ) : null}
             </div>
-          </div>
-          {/* Recent Transactions — compact mobile list */}
-          <div className="dashboard-card">
-            <div className="border-b border-border px-4 py-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Recent transactions</h3>
-                {mergedTransactions.length > TRANSACTION_PREVIEW_ROWS ? (
-                  <span className="text-xs text-muted-foreground">Scroll for more</span>
-                ) : null}
-              </div>
-            </div>
-            {mergedTransactions.length === 0 ? (
-              <div className="py-8 px-4 text-center">
-                <p className="text-muted-foreground text-sm">No transactions yet.</p>
-                <p className="text-muted-foreground/80 text-xs mt-1">Paid invoices and expenses will appear here.</p>
-              </div>
-            ) : (
-              <div
-                className="max-h-[min(13.5rem,42vh)] overflow-y-auto overscroll-y-contain divide-y divide-border"
-                role="region"
-                aria-label="Recent transactions, scroll for more"
-              >
-                {mergedTransactions.map((tx) => {
-                  const isIncome = tx.type === 'income';
-                  const displayAmount = isIncome ? tx.amount : Math.abs(tx.amount);
-                  return (
-                    <div key={tx.id} className="px-4 py-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-medium text-foreground">{tx.label}</p>
-                        <p className="currency-nums shrink-0 text-sm font-medium tabular-nums text-foreground">
-                          {isIncome ? '+' : '-'}{formatCurrency(displayAmount, userCurrency)}
-                        </p>
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{isIncome ? 'Paid' : 'Expense'}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {mergedTransactions.length > 0 && (
-              <Link to={createPageUrl("Invoices")} className="block p-4 border-t border-border text-center">
-                <span className="text-sm font-medium text-primary">View all transactions</span>
-              </Link>
-            )}
           </div>
         </div>
 
@@ -1594,50 +1550,77 @@ function DashboardMain() {
                     </Button>
                   </div>
                 ) : (
-                  <div
-                    className="overflow-x-auto rounded-lg border border-border/50"
-                    role="region"
-                    aria-label={`${RECENT_INVOICES_PREVIEW_ROWS} most recent invoices`}
-                  >
-                    <table className="w-full min-w-[320px] text-left">
-                      <thead className="sticky top-0 z-[1] border-b border-border bg-muted/30 backdrop-blur-sm">
-                        <tr className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                          <th className="py-3 pr-4">Client</th>
-                          <th className="py-3 pr-4">Status</th>
-                          <th className="py-3 text-right">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {sortedRecentInvoices.map((invoice) => {
-                          const client = clients.find((c) => c.id === invoice.client_id);
-                          const statusClass = statusColors[normalizeInvoiceStatus(invoice.status)] || statusColors[invoice.status] || "bg-muted text-muted-foreground";
-                          return (
-                            <tr
-                              key={invoice.id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => setSelectedInvoiceId(invoice.id)}
-                              onKeyDown={(e) => e.key === "Enter" && setSelectedInvoiceId(invoice.id)}
-                              className="group hover:bg-muted/50 transition-colors cursor-pointer"
-                            >
-                              <td className="py-3 pr-4">
-                                <p className="font-semibold text-foreground text-sm">{client?.name || "Unknown"}</p>
-                                <p className="text-[10px] text-muted-foreground">{invoice.invoice_number || `#${invoice.id?.slice(0, 8)}`}</p>
-                              </td>
-                              <td className="py-3 pr-4">
-                                <span className={`text-xs font-medium ${statusClass}`}>
-                                  {getStatusLabel(invoice.status)}
-                                </span>
-                              </td>
-                              <td className="py-3 text-right font-medium text-foreground tabular-nums text-sm">
-                                {formatCurrency(invoice.total_amount, userCurrency)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  <>
+                    <div className="space-y-2 md:hidden">
+                      {sortedRecentInvoices.map((invoice) => {
+                        const client = clients.find((c) => c.id === invoice.client_id);
+                        const statusClass = statusColors[normalizeInvoiceStatus(invoice.status)] || statusColors[invoice.status] || "bg-muted text-muted-foreground";
+                        return (
+                          <button
+                            key={invoice.id}
+                            type="button"
+                            onClick={() => setSelectedInvoiceId(invoice.id)}
+                            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left touch-manipulation"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-foreground">{client?.name || "Unknown"}</p>
+                              <p className="truncate text-[10px] text-muted-foreground">{invoice.invoice_number || `#${invoice.id?.slice(0, 8)}`}</p>
+                              <span className={`mt-1 inline-block text-xs font-medium ${statusClass}`}>
+                                {getStatusLabel(invoice.status)}
+                              </span>
+                            </div>
+                            <p className="currency-nums shrink-0 text-sm font-medium tabular-nums">
+                              {formatCurrency(invoice.total_amount, userCurrency)}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div
+                      className="hidden overflow-x-auto rounded-lg border border-border/50 md:block"
+                      role="region"
+                      aria-label={`${RECENT_INVOICES_PREVIEW_ROWS} most recent invoices`}
+                    >
+                      <table className="w-full min-w-[320px] text-left">
+                        <thead className="sticky top-0 z-[1] border-b border-border bg-muted/30 backdrop-blur-sm">
+                          <tr className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                            <th className="py-3 pr-4">Client</th>
+                            <th className="py-3 pr-4">Status</th>
+                            <th className="py-3 text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {sortedRecentInvoices.map((invoice) => {
+                            const client = clients.find((c) => c.id === invoice.client_id);
+                            const statusClass = statusColors[normalizeInvoiceStatus(invoice.status)] || statusColors[invoice.status] || "bg-muted text-muted-foreground";
+                            return (
+                              <tr
+                                key={invoice.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setSelectedInvoiceId(invoice.id)}
+                                onKeyDown={(e) => e.key === "Enter" && setSelectedInvoiceId(invoice.id)}
+                                className="group hover:bg-muted/50 transition-colors cursor-pointer"
+                              >
+                                <td className="py-3 pr-4">
+                                  <p className="font-semibold text-foreground text-sm">{client?.name || "Unknown"}</p>
+                                  <p className="text-[10px] text-muted-foreground">{invoice.invoice_number || `#${invoice.id?.slice(0, 8)}`}</p>
+                                </td>
+                                <td className="py-3 pr-4">
+                                  <span className={`text-xs font-medium ${statusClass}`}>
+                                    {getStatusLabel(invoice.status)}
+                                  </span>
+                                </td>
+                                <td className="py-3 text-right font-medium text-foreground tabular-nums text-sm">
+                                  {formatCurrency(invoice.total_amount, userCurrency)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -1650,8 +1633,8 @@ function DashboardMain() {
             transition={{ delay: 0.3 }}
             className="space-y-6"
           >
-            {/* Transaction List — hidden on mobile (shown in mobile block above) */}
-            <div className="dashboard-card hidden md:block">
+            {/* Transaction List */}
+            <div className="dashboard-card">
               <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <h3 className="text-sm font-semibold text-foreground">Transactions</h3>

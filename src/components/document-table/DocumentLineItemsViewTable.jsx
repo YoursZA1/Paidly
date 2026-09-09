@@ -86,8 +86,44 @@ export default function DocumentLineItemsViewTable({
           <DocumentLineItemsEmptyState />
         </div>
       ) : (
+        <>
+          <div className="space-y-3 md:hidden">
+            {rows.map((item, index) => (
+              <article key={item.id || item.key || index} className="rounded-xl border border-border bg-card p-3">
+                <p className="text-sm font-medium leading-snug">{lineDescription(item)}</p>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <dt className="text-[11px] text-muted-foreground">Qty</dt>
+                    <dd className="tabular-nums">{Number(item.quantity) || 0}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] text-muted-foreground">Rate</dt>
+                    <dd className="tabular-nums">{formatCurrency(Number(item.unit_price) || 0, currency)}</dd>
+                  </div>
+                  {showTax ? (
+                    <div>
+                      <dt className="text-[11px] text-muted-foreground">Tax</dt>
+                      <dd>{lineTax(item) == null ? "—" : `${lineTax(item)}%`}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt className="text-[11px] text-muted-foreground">Total</dt>
+                    <dd className="font-medium tabular-nums">{formatCurrency(lineTotal(item), currency)}</dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+            <div className="space-y-1 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
+              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="tabular-nums">{formatCurrency(totals.subtotal, currency)}</span></div>
+              {totals.discountAmt > 0 ? (
+                <div className="flex justify-between text-muted-foreground"><span>Discount</span><span className="tabular-nums">−{formatCurrency(totals.discountAmt, currency)}</span></div>
+              ) : null}
+              <div className="flex justify-between text-muted-foreground"><span>Tax</span><span className="tabular-nums">{formatCurrency(totals.taxAmount, currency)}</span></div>
+              <div className="flex justify-between font-medium"><span>Total</span><span className="tabular-nums">{formatCurrency(totals.total, currency)}</span></div>
+            </div>
+          </div>
         <Table
-          containerClassName="max-h-[min(28rem,70vh)] overflow-auto rounded-xl border border-border/40"
+          containerClassName="hidden max-h-[min(28rem,70vh)] overflow-auto rounded-xl border border-border/40 md:block"
           className={cn("min-w-[36rem] border-separate border-spacing-0", density === "compact" && "text-sm")}
           role="grid"
           aria-label="Line items"
@@ -188,6 +224,7 @@ export default function DocumentLineItemsViewTable({
             </TableRow>
           </TableFooter>
         </Table>
+        </>
       )}
     </div>
   );

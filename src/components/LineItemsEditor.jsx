@@ -303,8 +303,97 @@ export default function LineItemsEditor({
           <DocumentLineItemsEmptyState onAdd={addRow} />
         </div>
       ) : (
+        <>
+          <div className="space-y-3 md:hidden">
+            {list.map((row, index) => (
+                <article key={index} className="space-y-3 rounded-xl border border-border bg-card p-3">
+                  <div className="space-y-1">
+                    <Label htmlFor={`${lineItemsBaseId}-m-desc-${index}`} className="text-[11px] text-muted-foreground">
+                      Description
+                    </Label>
+                    <Input
+                      id={`${lineItemsBaseId}-m-desc-${index}`}
+                      value={row.description}
+                      onChange={(e) => updateAt(index, { description: e.target.value })}
+                      placeholder="Item description"
+                      className="min-h-11"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`${lineItemsBaseId}-m-qty-${index}`} className="text-[11px] text-muted-foreground">Qty</Label>
+                      <Input
+                        id={`${lineItemsBaseId}-m-qty-${index}`}
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.01"
+                        value={row.quantity}
+                        onChange={(e) => updateAt(index, { quantity: parseFloat(e.target.value) || 0 })}
+                        className="min-h-11"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`${lineItemsBaseId}-m-rate-${index}`} className="text-[11px] text-muted-foreground">Rate</Label>
+                      <Input
+                        id={`${lineItemsBaseId}-m-rate-${index}`}
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.01"
+                        value={row.unit_price}
+                        onChange={(e) => updateAt(index, { unit_price: parseFloat(e.target.value) || 0 })}
+                        className="min-h-11"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground">Total</span>
+                    <span className="font-medium tabular-nums">{formatCurrency(Number(row.total) || 0, currency)}</span>
+                  </div>
+                  {showTax ? (
+                    <div className="space-y-1">
+                      <Label htmlFor={`${lineItemsBaseId}-m-tax-${index}`} className="text-[11px] text-muted-foreground">Tax %</Label>
+                      <Input
+                        id={`${lineItemsBaseId}-m-tax-${index}`}
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.01"
+                        value={row.item_tax_rate ?? row.tax_rate ?? ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          updateAt(index, { tax_rate: value, item_tax_rate: value });
+                        }}
+                        className="min-h-11"
+                      />
+                    </div>
+                  ) : null}
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" className="min-h-11 flex-1" onClick={() => duplicateRow(index)}>
+                      <Copy className="h-4 w-4" /> Duplicate
+                    </Button>
+                    <Button type="button" variant="outline" className="min-h-11 flex-1" onClick={() => removeRow(index)}>
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </Button>
+                  </div>
+                </article>
+            ))}
+            <div className="space-y-1 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
+              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="tabular-nums">{formatCurrency(totals.subtotal, currency)}</span></div>
+              {totals.discountAmt > 0 ? (
+                <div className="flex justify-between text-muted-foreground"><span>Discount</span><span className="tabular-nums">−{formatCurrency(totals.discountAmt, currency)}</span></div>
+              ) : null}
+              <div className="flex justify-between text-muted-foreground"><span>Tax</span><span className="tabular-nums">{formatCurrency(totals.taxAmount, currency)}</span></div>
+              <div className="flex justify-between font-medium"><span>Total</span><span className="tabular-nums">{formatCurrency(totals.total, currency)}</span></div>
+            </div>
+            <Button type="button" variant="outline" className="min-h-11 w-full gap-2" onClick={addRow}>
+              <Plus className="h-4 w-4" />
+              Add line
+            </Button>
+          </div>
         <Table
-          containerClassName="max-h-[min(28rem,70vh)] overflow-auto rounded-xl border border-border/40"
+          containerClassName="hidden max-h-[min(28rem,70vh)] overflow-auto rounded-xl border border-border/40 md:block"
           className={cn("min-w-[40rem] border-separate border-spacing-0", density === "compact" && "text-sm")}
           data-density={density}
           role="grid"
@@ -615,9 +704,10 @@ export default function LineItemsEditor({
             </TableRow>
           </TableFooter>
         </Table>
+        </>
       )}
       {showTable ? (
-        <Button type="button" variant="outline" size="sm" className="gap-2" onClick={addRow}>
+        <Button type="button" variant="outline" size="sm" className="hidden gap-2 md:inline-flex" onClick={addRow}>
           <Plus className="h-4 w-4" />
           Add line
         </Button>

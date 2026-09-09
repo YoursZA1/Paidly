@@ -13,6 +13,16 @@ function cellValue(row, column) {
   return raw;
 }
 
+function mobileColumns(columns = []) {
+  const preferred = ["title", "business", "plan", "status", "users", "amount", "user", "extra"];
+  const ranked = [...columns].sort((a, b) => {
+    const ai = preferred.indexOf(a.key);
+    const bi = preferred.indexOf(b.key);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  return ranked.slice(0, 6);
+}
+
 export default function AdminDataTable({
   columns = [],
   rows = [],
@@ -37,7 +47,7 @@ export default function AdminDataTable({
             <p className="text-sm font-medium">{row.title || row.business || row.id}</p>
             {row.subtitle ? <p className="text-xs text-muted-foreground">{row.subtitle}</p> : null}
             <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              {columns.slice(1, 5).map((col) => (
+              {mobileColumns(columns).map((col) => (
                 <div key={col.key}>
                   <dt className="text-muted-foreground">{col.label}</dt>
                   <dd className="mt-0.5">{cellValue(row, col)}</dd>

@@ -3,11 +3,17 @@ import { insertPayrollProfileRow } from "../payroll/payrollService.js";
 import { johannesburgYmd, leaveYearForDate, formatIsoDate } from "../../../shared/payroll/dates.js";
 import { countWorkingDays, computeLeaveBalance, yearToDateAccrual } from "../../../shared/leave/leaveMath.js";
 import { validateLeaveApplication } from "../../../shared/leave/validateLeave.js";
-import { leaveRequestEmployeeScope, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
+import { intersectEmployeeIdLists, leaveRequestEmployeeScope, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
 import { parseUuid, requireUuid } from "../../../shared/ids/uuid.js";
 import { canonicalEmployeeId } from "../../../shared/workforce/employeeIdentity.js";
 import { sendHtmlEmail } from "../sendInvoice.js";
 import { buildEmployeeNumber, nextEmployeeSequence } from "../../../shared/payroll/payslipNumber.js";
+import { canDecideLeave } from "./leaveAuthz.js";
+import {
+  issueLeaveApprovalToken,
+  invalidateLeaveApprovalTokens,
+} from "./leaveApprovalTokens.js";
+import { writeWorkforceAudit } from "../workforce/workforceAudit.js";
 
 const DEFAULT_LEAVE_TYPES = [
   { code: "ANNUAL", name: "Annual leave", paid: true, accrual_method: "monthly", days_per_year: 21, requires_approval: true, sort_order: 1 },
@@ -57,7 +63,7 @@ async function insertLeaveRow(table, row) {
 }
 
 const MEMBERSHIP_COLS =
-  "id, org_id, user_id, employee_number, department, employment_status, employment_start_date, invited_email, created_at";
+  "id, org_id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, manager_membership_id, invited_email, created_at";
 
 async function loadMembership(orgId, { employeeId, userId } = {}) {
   let q = supabaseAdmin.from("memberships").select(MEMBERSHIP_COLS).eq("org_id", orgId);
@@ -279,7 +285,7 @@ export async function myLeave(orgId, userId) {
   return { profile, balances, requests: requests || [] };
 }
 
-export async function applyForLeave(orgId, userId, body) {
+async function prepareLeaveApplication(orgId, userId, body) {
   await ensureLeaveTypes(orgId);
   const actorId = requireUuid(userId, "user id");
   const profile = await getOrCreateProfile(orgId, actorId);
@@ -321,6 +327,24 @@ export async function applyForLeave(orgId, userId, body) {
     unpaid: !leaveType.paid,
     overlapping: overlapping || [],
   });
+  return { actorId, profile, leaveType, year, balance, check };
+}
+
+export async function previewLeaveApplication(orgId, userId, body) {
+  const prepared = await prepareLeaveApplication(orgId, userId, body);
+  return {
+    workingDays: prepared.check.workingDays,
+    available: prepared.check.available,
+    remainingAfterApproval: prepared.check.remainingAfterApproval,
+    unpaid: !prepared.leaveType.paid,
+    leave_type: prepared.leaveType.name,
+    errors: prepared.check.errors,
+    ok: prepared.check.ok,
+  };
+}
+
+export async function applyForLeave(orgId, userId, body, { origin } = {}) {
+  const { actorId, profile, leaveType, year, balance, check } = await prepareLeaveApplication(orgId, userId, body);
   if (!check.ok) {
     const err = new Error(check.errors[0]);
     err.status = 400;
@@ -396,26 +420,133 @@ export async function applyForLeave(orgId, userId, body) {
   } catch (err) {
     console.warn("[workforce] leave applied event failed:", err?.message || err);
   }
-  await notifyUser(actorId, `Leave application submitted (${leaveType.name}, ${check.workingDays} day(s)).`);
+  await notifyUser(actorId, `Your leave request has been submitted and is awaiting approval.`);
+  await notifyManagerOfLeaveRequest({
+    orgId,
+    request,
+    profile,
+    leaveType,
+    check,
+    origin,
+  });
   return { request, preview: check };
 }
 
-export async function listLeaveEmployees(orgId) {
+async function loadManagerRecipients(orgId, employeeMembership) {
+  const recipients = [];
+  const managerId = employeeMembership?.manager_membership_id;
+  if (managerId) {
+    const { data: manager } = await supabaseAdmin
+      .from("memberships")
+      .select(MEMBERSHIP_COLS)
+      .eq("org_id", orgId)
+      .eq("id", managerId)
+      .maybeSingle();
+    if (manager) recipients.push(manager);
+  }
+  if (!recipients.length) {
+    const { data: hr } = await supabaseAdmin
+      .from("memberships")
+      .select(MEMBERSHIP_COLS)
+      .eq("org_id", orgId)
+      .in("role", ["admin", "owner", "manager"]);
+    for (const row of hr || []) {
+      const fn = String(row.job_function || "").toLowerCase();
+      const role = String(row.role || "").toLowerCase();
+      if (role === "admin" || role === "owner" || fn === "hr" || fn === "human_resources") {
+        recipients.push(row);
+      }
+    }
+  }
+  return recipients;
+}
+
+async function emailForMembership(membership) {
+  if (!membership) return null;
+  if (membership.user_id) {
+    const { data: person } = await supabaseAdmin
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", membership.user_id)
+      .maybeSingle();
+    if (person?.email) return { email: person.email, name: person.full_name || membership.invited_email };
+  }
+  if (membership.invited_email) return { email: membership.invited_email, name: membership.invited_email };
+  return null;
+}
+
+async function notifyManagerOfLeaveRequest({ orgId, request, profile, leaveType, check, origin }) {
+  const employeeId = employeeIdOfProfile(profile);
+  const employee = employeeId ? await loadMembership(orgId, { employeeId }) : null;
+  const employeeName = profile.full_name || employee?.invited_email || "An employee";
+  const recipients = await loadManagerRecipients(orgId, employee);
+  const base = String(origin || "").replace(/\/$/, "");
+  for (const manager of recipients) {
+    const contact = await emailForMembership(manager);
+    let approveUrl = base ? `${base}/leave-approval` : "";
+    try {
+      const issued = await issueLeaveApprovalToken({
+        orgId,
+        leaveRequestId: request.id,
+        approverMembershipId: manager.id,
+        startDate: request.start_date,
+      });
+      if (base && issued?.token) {
+        approveUrl = `${base}/leave-approval/${issued.token}`;
+      }
+    } catch (err) {
+      console.warn("[leave] approval token issue failed:", err?.message || err);
+    }
+    if (manager.user_id) {
+      await notifyUser(
+        manager.user_id,
+        `${employeeName} has requested leave (${leaveType.name}, ${check.workingDays} day(s)).`
+      );
+    }
+    if (contact?.email) {
+      const html = `
+        <p><strong>${escapeHtml(employeeName)}</strong> has requested leave.</p>
+        <p>Leave type: ${escapeHtml(leaveType.name)}<br/>
+        Dates: ${escapeHtml(request.start_date)} → ${escapeHtml(request.end_date)}<br/>
+        Duration: ${escapeHtml(String(check.workingDays))} working day(s)<br/>
+        Current balance: ${escapeHtml(String(check.available))} day(s)<br/>
+        Reason: ${escapeHtml(request.reason || "—")}</p>
+        <p>
+          <a href="${escapeHtml(approveUrl)}">View request</a> ·
+          <a href="${escapeHtml(approveUrl)}?action=approve">Approve</a> ·
+          <a href="${escapeHtml(approveUrl)}?action=decline">Decline</a>
+        </p>
+      `;
+      await sendHtmlEmail(contact.email, `${employeeName} has requested leave`, html, "Paidly");
+    }
+  }
+  await writeWorkforceAudit({
+    orgId,
+    employeeId,
+    action: "leave.applied",
+    after: { leave_request_id: request.id, managers: recipients.map((r) => r.id) },
+  });
+}
+
+export async function listLeaveEmployees(orgId, { managerScopeId = null } = {}) {
   const { data: members, error } = await supabaseAdmin
     .from("memberships")
     .select(MEMBERSHIP_COLS)
     .eq("org_id", orgId)
     .order("created_at", { ascending: true });
   if (error) throw mapLeaveDbError(error);
+  const scoped = managerScopeId
+    ? (members || []).filter((m) => m.id === managerScopeId || m.manager_membership_id === managerScopeId)
+    : members || [];
 
-  const userIds = (members || []).map((m) => m.user_id).filter(Boolean);
+  const userIds = scoped.map((m) => m.user_id).filter(Boolean);
   const { data: people } = userIds.length
     ? await supabaseAdmin.from("profiles").select("id, full_name, email, job_title, department").in("id", userIds)
     : { data: [] };
   const byUser = new Map((people || []).map((p) => [p.id, p]));
 
   const rows = [];
-  for (const membership of members || []) {
+  for (const membership of scoped) {
     const employeeId = canonicalEmployeeId({ id: membership.id, employee_id: membership.id });
     if (!employeeId) continue;
     let profile = null;
@@ -442,6 +573,7 @@ export async function listLeaveEmployees(orgId) {
       email: person?.email || membership.invited_email || profile?.email || null,
       department: membership.department || profile?.department || person?.department || null,
       job_title: profile?.job_title || person?.job_title || null,
+      manager_membership_id: parseUuid(membership.manager_membership_id),
       employment_status: membership.employment_status || profile?.employment_status || "active",
     });
   }
@@ -477,6 +609,20 @@ export async function listLeaveRequests(orgId, filters = {}) {
   const scope = leaveRequestEmployeeScope({ employeeId, profileId, userId });
   if (scope) q = q.eq(scope.column, scope.value);
   if (leaveTypeId) q = q.eq("leave_type_id", leaveTypeId);
+  const actorScope = Array.isArray(filters.manager_employee_ids)
+    ? filters.manager_employee_ids.filter(Boolean)
+    : null;
+  const managerFilter = parseUuid(filters.manager_id);
+  const reportScope = managerFilter ? await reportEmployeeIds(orgId, managerFilter) : null;
+  const scopedIds = intersectEmployeeIdLists(actorScope, reportScope);
+  if (scopedIds) {
+    if (!scopedIds.length) return [];
+    q = q.in("employee_id", scopedIds);
+  }
+  const from = String(filters.from || "").trim();
+  const to = String(filters.to || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) q = q.gte("end_date", from);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to)) q = q.lte("start_date", to);
   const { data, error } = await q.limit(500);
   if (error) {
     if (scope?.column === "employee_id" && /employee_id/i.test(error.message || "")) {
@@ -490,9 +636,10 @@ export async function listLeaveRequests(orgId, filters = {}) {
   return rows.filter((row) => String(row.payroll_profiles?.department || "").toLowerCase() === dept);
 }
 
-export async function decideLeaveRequest(orgId, actorId, requestId, { approve, reason }) {
+export async function decideLeaveRequest(orgId, actorId, requestId, options = {}) {
+  const { approve, reason, comment, method = "portal", actorMembership = null, decidedEmail = null, fromToken = false } = options;
   const id = requireUuid(requestId, "leave request id");
-  const actor = requireUuid(actorId, "user id");
+  const actor = actorId ? requireUuid(actorId, "user id") : null;
   const { data: request } = await supabaseAdmin
     .from("leave_requests")
     .select("*, leave_types(*), payroll_profiles(*)")
@@ -509,10 +656,27 @@ export async function decideLeaveRequest(orgId, actorId, requestId, { approve, r
     err.status = 409;
     throw err;
   }
-  if (!approve && !String(reason || "").trim()) {
+  if (!approve && !String(reason || comment || "").trim()) {
     const err = new Error("A rejection reason is required.");
     err.status = 400;
     throw err;
+  }
+
+  const employeeId = request.employee_id || request.payroll_profiles?.membership_id;
+  const employee = employeeId ? await loadMembership(orgId, { employeeId }) : null;
+  if (!fromToken) {
+    if (!actorMembership) {
+      const err = new Error("Not authorized to decide this leave request.");
+      err.status = 403;
+      throw err;
+    }
+    const gate = canDecideLeave(actorMembership, employee || { id: employeeId });
+    if (!gate.ok) {
+      const err = new Error(gate.message);
+      err.status = 403;
+      err.code = gate.code;
+      throw err;
+    }
   }
 
   const year = leaveYearForDate(request.start_date);
@@ -590,18 +754,50 @@ export async function decideLeaveRequest(orgId, actorId, requestId, { approve, r
     );
   }
 
-  const { data: updated, error } = await supabaseAdmin
+  let updated;
+  const firstUpdate = await supabaseAdmin
     .from("leave_requests")
     .update({
       status: approve ? "approved" : "rejected",
-      rejection_reason: approve ? null : String(reason).trim(),
+      rejection_reason: approve ? null : String(reason || comment || "").trim(),
+      manager_comment: String(comment || reason || "").trim() || null,
       decided_at: new Date().toISOString(),
       decided_by: actor,
+      approver_membership_id: actorMembership?.id || null,
+      approval_method: method,
+      decided_email: decidedEmail || null,
     })
     .eq("id", id)
     .select("*")
     .maybeSingle();
-  if (error) throw mapLeaveDbError(error);
+  if (
+    firstUpdate.error &&
+    /manager_comment|approver_membership_id|approval_method|decided_email/i.test(firstUpdate.error.message || "")
+  ) {
+    const retry = await supabaseAdmin
+      .from("leave_requests")
+      .update({
+        status: approve ? "approved" : "rejected",
+        rejection_reason: approve ? null : String(reason || comment || "").trim(),
+        decided_at: new Date().toISOString(),
+        decided_by: actor,
+      })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (retry.error) throw mapLeaveDbError(retry.error);
+    updated = retry.data;
+  } else if (firstUpdate.error) {
+    throw mapLeaveDbError(firstUpdate.error);
+  } else {
+    updated = firstUpdate.data;
+  }
+
+  try {
+    await invalidateLeaveApprovalTokens(id);
+  } catch (err) {
+    console.warn("[leave] token invalidate failed:", err?.message || err);
+  }
 
   await writePayrollAudit({
     orgId,
@@ -609,7 +805,15 @@ export async function decideLeaveRequest(orgId, actorId, requestId, { approve, r
     action: approve ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
     recordType: "leave_requests",
     recordId: id,
-    metadata: { reason: reason || null },
+    metadata: { reason: reason || comment || null, method },
+  });
+  await writeWorkforceAudit({
+    orgId,
+    employeeId,
+    actorId: actor,
+    action: approve ? "leave.approved" : "leave.rejected",
+    before: { status: "pending" },
+    after: { status: approve ? "approved" : "rejected", leave_request_id: id, method },
   });
   try {
     const { emitWorkforceEvent, WORKFORCE_EVENT_TYPES } = await import("../workforce/workforceEvents.js");
@@ -626,26 +830,60 @@ export async function decideLeaveRequest(orgId, actorId, requestId, { approve, r
       payload: { leave_request_id: id },
       idempotencyKey: `leave:${id}:${approve ? "approved" : "rejected"}`,
     });
+    if (approve && request.leave_types?.paid === false) {
+      const { data: finalizedRuns } = await supabaseAdmin
+        .from("pay_runs")
+        .select("id, period_start, period_end")
+        .eq("org_id", orgId)
+        .not("finalized_at", "is", null)
+        .lte("period_start", request.end_date)
+        .gte("period_end", request.start_date)
+        .limit(5);
+      if ((finalizedRuns || []).length) {
+        await emitWorkforceEvent({
+          orgId,
+          employeeId: membershipId,
+          eventType: WORKFORCE_EVENT_TYPES.PAYROLL_PROCESSED,
+          actorId: actor,
+          payload: {
+            leave_request_id: id,
+            needs_adjustment_run: true,
+            pay_run_ids: finalizedRuns.map((row) => row.id),
+          },
+          idempotencyKey: `leave:${id}:approved_after_finalize`,
+        });
+        await writeWorkforceAudit({
+          orgId,
+          employeeId: membershipId,
+          actorId: actor,
+          action: "leave.approved_after_finalize",
+          after: { leave_request_id: id, pay_run_ids: finalizedRuns.map((row) => row.id) },
+        });
+      }
+    }
   } catch (err) {
     console.warn("[workforce] leave event failed:", err?.message || err);
   }
 
   const typeName = request.leave_types?.name || "Leave";
+  const dateRange = `${request.start_date} → ${request.end_date}`;
   if (request.user_id) {
     await notifyUser(
       request.user_id,
       approve
-        ? `Your ${typeName} request was approved.`
-        : `Your ${typeName} request was rejected: ${String(reason).trim()}`
+        ? `Your leave request has been approved.`
+        : `Your leave request for ${dateRange} has been declined.`
     );
     const email = request.payroll_profiles?.email;
     if (email) {
       const html = approve
-        ? `<p>Your ${escapeHtml(typeName)} request (${escapeHtml(request.start_date)} → ${escapeHtml(request.end_date)}) was approved.</p>`
-        : `<p>Your ${escapeHtml(typeName)} request was rejected.</p><p>Reason: ${escapeHtml(reason)}</p>`;
+        ? `<p>Your leave request has been approved (${escapeHtml(typeName)}, ${escapeHtml(dateRange)}).</p>`
+        : `<p>Your leave request for ${escapeHtml(dateRange)} has been declined.</p>${
+            reason || comment ? `<p>${escapeHtml(reason || comment)}</p>` : ""
+          }`;
       await sendHtmlEmail(
         email,
-        approve ? `Leave approved — ${typeName}` : `Leave rejected — ${typeName}`,
+        approve ? "Your leave request has been approved." : "Your leave request has been declined.",
         html,
         "Paidly"
       );
@@ -732,6 +970,19 @@ export async function cancelLeaveRequest(orgId, actorId, requestId, { asAdmin = 
     recordType: "leave_requests",
     recordId: id,
   });
+  try {
+    await invalidateLeaveApprovalTokens(id);
+  } catch (err) {
+    console.warn("[leave] token invalidate failed:", err?.message || err);
+  }
+  await writeWorkforceAudit({
+    orgId,
+    employeeId: request.employee_id || request.payroll_profiles?.membership_id,
+    actorId: actor,
+    action: "leave.cancelled",
+    before: { status: request.status },
+    after: { status: "cancelled", leave_request_id: id, method: asAdmin ? "hr_override" : "self" },
+  });
   if (request.user_id) await notifyUser(request.user_id, "A leave request was cancelled.");
   return updated;
 }
@@ -813,20 +1064,38 @@ export async function adjustLeaveBalance(orgId, actorId, body) {
     recordId: balance.id,
     metadata: { days, reason: body.reason },
   });
+  await writeWorkforceAudit({
+    orgId,
+    employeeId: employeeIdOfProfile(profile),
+    actorId: actor,
+    action: "leave.adjusted",
+    after: {
+      days,
+      reason: String(body.reason).trim(),
+      leave_type_id: leaveType.id,
+      leave_year: year,
+      balance_after: computed.available,
+    },
+  });
   return { ...computed, leave_type: leaveType, profile };
 }
 
-export async function leaveCalendar(orgId, { start, end } = {}) {
+export async function leaveCalendar(orgId, { start, end, managerEmployeeIds = null } = {}) {
   const now = johannesburgYmd();
   const from = start || formatIsoDate(now.year, now.month, 1);
   const to = end || formatIsoDate(now.year, now.month, 28);
-  const { data, error } = await supabaseAdmin
+  let q = supabaseAdmin
     .from("leave_requests")
     .select("id, start_date, end_date, status, working_days, leave_types(name, code), payroll_profiles(full_name, employee_number, department)")
     .eq("org_id", orgId)
     .in("status", ["pending", "approved"])
     .lte("start_date", to)
     .gte("end_date", from);
+  if (Array.isArray(managerEmployeeIds)) {
+    if (!managerEmployeeIds.length) return [];
+    q = q.in("employee_id", managerEmployeeIds);
+  }
+  const { data, error } = await q;
   if (error) throw mapLeaveDbError(error);
   return (data || []).map((row) => ({
     id: row.id,
@@ -889,6 +1158,58 @@ export async function listLeaveTypes(orgId) {
     .order("sort_order", { ascending: true });
   if (error) throw mapLeaveDbError(error);
   return data || [];
+}
+
+export async function reportEmployeeIds(orgId, managerMembershipId) {
+  if (!managerMembershipId) return [];
+  const { data } = await supabaseAdmin
+    .from("memberships")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("manager_membership_id", managerMembershipId);
+  return (data || []).map((row) => row.id).filter(Boolean);
+}
+
+export async function getPublicLeaveApprovalPayload(tokenRow) {
+  const { publicLeaveApprovalView } = await import("../../../shared/workforce/leaveApprovalToken.js");
+  const { data: request } = await supabaseAdmin
+    .from("leave_requests")
+    .select("*, leave_types(name, paid), payroll_profiles(full_name, membership_id)")
+    .eq("id", tokenRow.leave_request_id)
+    .eq("org_id", tokenRow.org_id)
+    .maybeSingle();
+  if (!request) return null;
+  const year = leaveYearForDate(request.start_date);
+  const { data: balance } = await supabaseAdmin
+    .from("leave_balances")
+    .select("*")
+    .eq("payroll_profile_id", request.payroll_profile_id)
+    .eq("leave_type_id", request.leave_type_id)
+    .eq("leave_year", year)
+    .maybeSingle();
+  const available = balance ? computeLeaveBalance(balance).available : null;
+  const days = Number(request.working_days) || 0;
+  const { data: org } = await supabaseAdmin.from("organizations").select("*").eq("id", tokenRow.org_id).maybeSingle();
+  const companyName = org?.name || org?.company_name || org?.legal_name || "Paidly";
+  await writeWorkforceAudit({
+    orgId: tokenRow.org_id,
+    employeeId: request.employee_id || request.payroll_profiles?.membership_id,
+    action: "leave.approval_opened",
+    after: { leave_request_id: request.id },
+  });
+  return publicLeaveApprovalView({
+    employeeName: request.payroll_profiles?.full_name || "Employee",
+    leaveTypeName: request.leave_types?.name,
+    startDate: request.start_date,
+    endDate: request.end_date,
+    workingDays: days,
+    currentBalance: available,
+    remainingAfterApproval: available == null ? null : Math.round((available - days) * 100) / 100,
+    reason: request.reason,
+    companyName,
+    alreadyDecided: request.status !== "pending" || Boolean(tokenRow.used_at),
+    status: request.status,
+  });
 }
 
 function escapeHtml(value) {

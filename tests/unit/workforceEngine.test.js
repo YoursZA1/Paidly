@@ -12,8 +12,14 @@ import {
   sanitizeEmployeeWritePayload,
   scopedEmployeeListFilters,
 } from "../../shared/workforce/employeeWrite.js";
+import {
+  buildEmployeeProfile,
+  canSeeEmployeeCompensation,
+  redactEmployeeCompensation,
+} from "../../shared/workforce/employeeProfile.js";
 import { scopedLeaveListFilters } from "../../shared/leave/leaveIds.js";
 import { assertOwnEmployee, assertSameOrg } from "../../server/src/workforce/workforceAuth.js";
+import { mergeEmployeeTimeline, stripCompensationFromTimelineState } from "../../shared/workforce/employeeTimeline.js";
 import { invitePublicErrorMessage } from "../../shared/companyInviteMessages.js";
 
 describe("workforce permissions", () => {
@@ -80,6 +86,9 @@ describe("workforce routes", () => {
       route: "employees",
     });
     expect(resolveWorkforceRoute({ query: { path: ["invite"] }, url: "/api/company/invite" })).toBe(null);
+    expect(resolveWorkforceRoute({ query: { path: ["workforce-summary"] }, url: "/api/company/workforce-summary" })).toEqual({
+      route: "workforce-summary",
+    });
   });
 });
 
@@ -127,11 +136,113 @@ describe("workforce write sanitization and IDOR", () => {
   });
 });
 
+describe("employee compensation redaction", () => {
+  const salaryRow = {
+    id: "mem-1",
+    full_name: "Thabo Mavelele",
+    base_salary: 30000,
+    hourly_rate: 0,
+    daily_rate: 0,
+    pay_type: "monthly_salary",
+    banking: { account: "123" },
+  };
+
+  it("keeps compensation for payroll managers and the employee themselves", () => {
+    expect(canSeeEmployeeCompensation({ canManagePayroll: true, isSelf: false })).toBe(true);
+    expect(canSeeEmployeeCompensation({ canManagePayroll: false, isSelf: true })).toBe(true);
+    expect(canSeeEmployeeCompensation({ canManagePayroll: false, isSelf: false })).toBe(false);
+    expect(redactEmployeeCompensation(salaryRow, { canManagePayroll: true }).base_salary).toBe(30000);
+    expect(redactEmployeeCompensation(salaryRow, { isSelf: true }).base_salary).toBe(30000);
+  });
+
+  it("strips salary from team lists for managers without payroll", () => {
+    const redacted = redactEmployeeCompensation(salaryRow, { canManagePayroll: false, isSelf: false });
+    expect(redacted.base_salary).toBeUndefined();
+    expect(redacted.hourly_rate).toBeUndefined();
+    expect(redacted.daily_rate).toBeUndefined();
+    expect(redacted.pay_type).toBeUndefined();
+    expect(redacted.banking).toBeUndefined();
+    expect(redacted.compensation_redacted).toBe(true);
+    expect(redacted.full_name).toBe("Thabo Mavelele");
+  });
+
+  it("does not use payroll_profiles as the HR name source", () => {
+    const profile = buildEmployeeProfile(
+      {
+        membership: {
+          id: "11111111-1111-4111-8111-111111111111",
+          invited_email: "thabo@example.com",
+          invited_name: "Thabo Mavelele",
+          employee_number: "EMP-002",
+          department: "Ops",
+          employment_status: "active",
+        },
+        profile: null,
+        payrollProfile: {
+          id: "22222222-2222-4222-8222-222222222222",
+          full_name: "STALE PAYROLL NAME",
+          email: "stale@example.com",
+          department: "Wrong",
+          base_salary: 50000,
+          pay_type: "monthly_salary",
+        },
+      },
+      { canManagePayroll: false, actorMembershipId: "33333333-3333-4333-8333-333333333333" }
+    );
+    expect(profile.full_name).toBe("Thabo Mavelele");
+    expect(profile.email).toBe("thabo@example.com");
+    expect(profile.department).toBe("Ops");
+    expect(profile.base_salary).toBeUndefined();
+    expect(profile.compensation_redacted).toBe(true);
+  });
+});
+
 describe("workforce invite security copy", () => {
   it("rejects expired, reused, revoked, and wrong-org style accept errors", () => {
     expect(invitePublicErrorMessage("expired")).toMatch(/expired/i);
     expect(invitePublicErrorMessage("revoked")).toMatch(/revoked/i);
     expect(invitePublicErrorMessage("not_pending", "accepted")).toMatch(/already been accepted/i);
     expect(invitePublicErrorMessage("email_mismatch")).toMatch(/email/i);
+  });
+});
+
+describe("employee profile timeline merge", () => {
+  it("prefers audit rows and drops duplicate leave events", () => {
+    const merged = mergeEmployeeTimeline(
+      [
+        {
+          id: "a1",
+          action: "leave.approved",
+          after_state: { leave_request_id: "lr-1" },
+          created_at: "2026-09-02T10:00:00Z",
+        },
+      ],
+      [
+        {
+          id: "e1",
+          event_type: "employee.leave_approved",
+          payload: { leave_request_id: "lr-1" },
+          created_at: "2026-09-02T10:00:01Z",
+        },
+        {
+          id: "e2",
+          event_type: "leave.applied",
+          payload: { leave_request_id: "lr-2" },
+          created_at: "2026-09-01T09:00:00Z",
+        },
+      ]
+    );
+    expect(merged.map((row) => row.action)).toEqual(["leave.approved", "leave.applied"]);
+  });
+
+  it("strips salary from timeline state unless payroll may see it", () => {
+    expect(stripCompensationFromTimelineState({ leave_request_id: "x", base_salary: 50000 }).base_salary).toBeUndefined();
+    const merged = mergeEmployeeTimeline(
+      [{ id: "a1", action: "employee.updated", after_state: { base_salary: 1, department: "Ops" }, created_at: "2026-09-01T00:00:00Z" }],
+      [],
+      { canManagePayroll: false }
+    );
+    expect(merged[0].after.base_salary).toBeUndefined();
+    expect(merged[0].after.department).toBe("Ops");
   });
 });

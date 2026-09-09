@@ -6,7 +6,7 @@ import {
   parseUuid,
   requireUuid,
 } from "../../shared/ids/uuid.js";
-import { leaveRequestEmployeeScope, mapLeaveDbError, parseLeaveListFilters, scopedLeaveListFilters } from "../../shared/leave/leaveIds.js";
+import { leaveRequestEmployeeScope, mapLeaveDbError, parseLeaveListFilters, scopedLeaveListFilters, intersectEmployeeIdLists } from "../../shared/leave/leaveIds.js";
 import {
   canonicalEmployeeId,
   employeeOptionValue,
@@ -99,6 +99,9 @@ describe("leave list filters", () => {
       user_id: undefined,
       leave_type_id: undefined,
       department: "Ops",
+      manager_id: undefined,
+      from: undefined,
+      to: undefined,
     });
   });
 
@@ -115,6 +118,9 @@ describe("leave list filters", () => {
       user_id: undefined,
       leave_type_id: undefined,
       department: undefined,
+      manager_id: undefined,
+      from: undefined,
+      to: undefined,
     });
   });
 
@@ -133,7 +139,37 @@ describe("leave list filters", () => {
       user_id: undefined,
       leave_type_id: typeId,
       department: undefined,
+      manager_id: undefined,
+      from: undefined,
+      to: undefined,
     });
+  });
+
+  it("keeps manager and overlapping date filters", () => {
+    const managerId = "44444444-4444-4444-8444-444444444444";
+    expect(
+      parseLeaveListFilters({
+        manager_id: managerId,
+        from: "2026-09-01",
+        to: "2026-09-30",
+      })
+    ).toMatchObject({
+      manager_id: managerId,
+      from: "2026-09-01",
+      to: "2026-09-30",
+    });
+    expect(parseLeaveListFilters({ from: "not-a-date", to: "2026/09/01" })).toMatchObject({
+      from: undefined,
+      to: undefined,
+    });
+    expect(scopedLeaveListFilters({ manager_id: managerId, status: "pending" }, false).manager_id).toBeUndefined();
+  });
+
+  it("intersects employee id scopes", () => {
+    expect(intersectEmployeeIdLists(null, null)).toBeNull();
+    expect(intersectEmployeeIdLists(["a", "b"], null)).toEqual(["a", "b"]);
+    expect(intersectEmployeeIdLists(null, ["b"])).toEqual(["b"]);
+    expect(intersectEmployeeIdLists(["a", "b"], ["b", "c"])).toEqual(["b"]);
   });
 
   it("falls back to employee_id when the payroll profile lookup misses", () => {

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createPageUrl } from "@/utils";
 import { leaveApi } from "@/services/PayrollApiService";
+import { workforceApi } from "@/services/WorkforceApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,20 +42,36 @@ export default function LeaveManagementPage() {
   const userPlan = profile?.subscription_plan || profile?.plan || "starter";
   const { hasPermission } = useCompanyContext();
   const canManage = hasPermission(PERMISSIONS.MANAGE_LEAVE);
+  const canReassign = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
   const location = useLocation();
   const [requests, setRequests] = useState([]);
   const [types, setTypes] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [kpis, setKpis] = useState({ pending: 0, approved: 0, rejected: 0, upcoming: 0 });
   const [status, setStatus] = useState("pending");
   const [employeeId, setEmployeeId] = useState(
     () => parseUuid(new URLSearchParams(location.search).get("employee_id")) || ""
   );
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [department, setDepartment] = useState("");
+  const [managerId, setManagerId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [reassignId, setReassignId] = useState(null);
+  const [reassignManager, setReassignManager] = useState("");
   const [adjust, setAdjust] = useState({ employee_id: "", leave_type_id: "", days: "", reason: "" });
   const [typeForm, setTypeForm] = useState(EMPTY_TYPE);
+
+  const loadKpis = async () => {
+    try {
+      const summary = await workforceApi.summary();
+      setKpis(summary?.leave || { pending: 0, approved: 0, rejected: 0, upcoming: 0 });
+    } catch {
+      setKpis({ pending: 0, approved: 0, rejected: 0, upcoming: 0 });
+    }
+  };
 
   const load = async () => {
     try {
@@ -64,6 +81,9 @@ export default function LeaveManagementPage() {
           employee_id: parseUuid(employeeId) || undefined,
           leave_type_id: parseUuid(leaveTypeId) || undefined,
           department: department || undefined,
+          manager_id: parseUuid(managerId) || undefined,
+          from: fromDate || undefined,
+          to: toDate || undefined,
         }),
         leaveApi.types(),
         leaveApi.employees(),
@@ -78,10 +98,20 @@ export default function LeaveManagementPage() {
 
   useEffect(() => {
     load();
-  }, [status, employeeId, leaveTypeId, department]);
+  }, [status, employeeId, leaveTypeId, department, managerId, fromDate, toDate]);
+
+  useEffect(() => {
+    loadKpis();
+  }, []);
 
   const departments = useMemo(() => {
     return [...new Set((employees || []).map((row) => row.department).filter(Boolean))].sort();
+  }, [employees]);
+
+  const managers = useMemo(() => {
+    const byId = new Map((employees || []).map((row) => [row.id, row]));
+    const ids = new Set((employees || []).map((row) => row.manager_membership_id).filter(Boolean));
+    return [...ids].map((id) => byId.get(id)).filter(Boolean);
   }, [employees]);
 
   const decide = async (id, approve) => {
@@ -98,6 +128,7 @@ export default function LeaveManagementPage() {
       }
       toast({ title: approve ? "Leave approved" : "Leave rejected" });
       load();
+      loadKpis();
     } catch (err) {
       toast({ title: "Could not update request", description: err.message, variant: "destructive" });
     }
@@ -108,6 +139,7 @@ export default function LeaveManagementPage() {
       await leaveApi.cancel(id);
       toast({ title: "Leave cancelled" });
       load();
+      loadKpis();
     } catch (err) {
       toast({ title: "Could not cancel", description: err.message, variant: "destructive" });
     }
@@ -134,8 +166,24 @@ export default function LeaveManagementPage() {
       });
       toast({ title: "Balance adjusted" });
       setAdjust({ employee_id: "", leave_type_id: "", days: "", reason: "" });
+      loadKpis();
     } catch (err) {
       toast({ title: "Adjustment failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const reassignManagerFor = async (employeeMembershipId) => {
+    const nextManager = parseUuid(reassignManager);
+    try {
+      await workforceApi.update(employeeMembershipId, {
+        manager_membership_id: nextManager || null,
+      });
+      toast({ title: "Manager reassigned" });
+      setReassignId(null);
+      setReassignManager("");
+      load();
+    } catch (err) {
+      toast({ title: "Could not reassign manager", description: err.message, variant: "destructive" });
     }
   };
 
@@ -163,7 +211,10 @@ export default function LeaveManagementPage() {
             title="Leave management"
             description="Approve requests, configure types, and audit balances."
             icon={<CalendarOff className="h-4 w-4" />}
-            onRefresh={load}
+            onRefresh={() => {
+              load();
+              loadKpis();
+            }}
           >
             <Button asChild variant="outline" className="rounded-xl h-9">
               <Link to={createPageUrl("LeaveCalendar")}>Calendar</Link>
@@ -178,6 +229,32 @@ export default function LeaveManagementPage() {
               {canManage ? <TabsTrigger value="adjust">Adjustments</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="requests">
+              <div className="grid gap-2 sm:grid-cols-4 mb-4">
+                {[
+                  { key: "pending", label: "Pending", value: kpis.pending },
+                  { key: "approved", label: "Approved", value: kpis.approved },
+                  { key: "rejected", label: "Declined", value: kpis.rejected },
+                  { key: "upcoming", label: "Upcoming", value: kpis.upcoming },
+                ].map((card) => (
+                  <button
+                    key={card.key}
+                    type="button"
+                    className="rounded-xl border border-border bg-card px-4 py-3 text-left"
+                    onClick={() => {
+                      if (card.key === "upcoming") {
+                        setStatus("approved");
+                        setFromDate(new Date().toISOString().slice(0, 10));
+                        setToDate("");
+                      } else {
+                        setStatus(card.key);
+                      }
+                    }}
+                  >
+                    <p className="text-xs text-muted-foreground">{card.label}</p>
+                    <p className="text-xl font-semibold tabular-nums">{card.value}</p>
+                  </button>
+                ))}
+              </div>
               <div className="flex flex-wrap gap-2 mb-3">
                 {["pending", "approved", "rejected", "cancelled"].map((s) => (
                   <Button key={s} size="sm" variant={status === s ? "default" : "outline"} className="rounded-xl capitalize" onClick={() => setStatus(s)}>
@@ -185,7 +262,7 @@ export default function LeaveManagementPage() {
                   </Button>
                 ))}
               </div>
-              <div className="grid gap-2 sm:grid-cols-3 mb-4">
+              <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6 mb-4">
                 <EmployeeSelect
                   employees={employees}
                   value={employeeId}
@@ -212,6 +289,14 @@ export default function LeaveManagementPage() {
                     );
                   })}
                 </select>
+                <EmployeeSelect
+                  employees={managers.length ? managers : employees}
+                  value={managerId}
+                  onChange={setManagerId}
+                  emptyLabel="All managers"
+                />
+                <Input type="date" className="rounded-xl h-10" value={fromDate} onChange={(e) => setFromDate(e.target.value)} aria-label="From date" />
+                <Input type="date" className="rounded-xl h-10" value={toDate} onChange={(e) => setToDate(e.target.value)} aria-label="To date" />
               </div>
               <Card className="rounded-xl overflow-hidden">
                 <CardContent className="p-0 overflow-x-auto">
@@ -264,6 +349,29 @@ export default function LeaveManagementPage() {
                                       Confirm
                                     </Button>
                                   </div>
+                                ) : null}
+                                {canReassign && row.employee_id ? (
+                                  reassignId === row.id ? (
+                                    <div className="flex gap-2 w-full max-w-sm">
+                                      <EmployeeSelect
+                                        employees={employees.filter((emp) => emp.id !== row.employee_id)}
+                                        value={reassignManager}
+                                        onChange={setReassignManager}
+                                        emptyLabel="Unassigned"
+                                        className="h-9"
+                                      />
+                                      <Button size="sm" className="rounded-xl" onClick={() => reassignManagerFor(row.employee_id)}>
+                                        Save
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <Button size="sm" variant="ghost" className="rounded-xl" onClick={() => {
+                                      setReassignId(row.id);
+                                      setReassignManager("");
+                                    }}>
+                                      Reassign
+                                    </Button>
+                                  )
                                 ) : null}
                               </div>
                             ) : null}

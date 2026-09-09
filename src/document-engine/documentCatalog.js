@@ -68,7 +68,7 @@ export const DOCUMENT_TYPE_DEFS = Object.freeze([
   { key: "payslip", label: "Payslip", category: "hr", icon: "DollarSign", financial: true, flow: "financial", persistence: "commercial" },
   { key: "employment_contract", label: "Employment Contract", category: "hr", icon: "FileSignature", financial: false, flow: "signature" },
   { key: "offer_letter", label: "Offer Letter", category: "hr", icon: "Mail", financial: false, flow: "signature" },
-  { key: "leave_request", label: "Leave Request", category: "hr", icon: "CalendarOff", financial: false, flow: "approval" },
+  { key: "leave_request", label: "Leave Request", category: "hr", icon: "CalendarOff", financial: false, flow: "approval", createDisabled: true },
   { key: "performance_review", label: "Performance Review", category: "hr", icon: "Star", financial: false, flow: "approval" },
 
   // ── Operations ────────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ export function isFinancialType(key) {
 export function typesByCategory() {
   return DOCUMENT_CATEGORIES.map((cat) => ({
     ...cat,
-    types: DOCUMENT_TYPE_DEFS.filter((t) => t.category === cat.key),
+    types: DOCUMENT_TYPE_DEFS.filter((t) => t.category === cat.key && !t.createDisabled),
   }));
 }
 

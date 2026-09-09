@@ -23,7 +23,7 @@ function apiBase() {
   return import.meta.env.DEV ? "" : getBackendBaseUrl();
 }
 
-async function payrollRequest(path, { method = "GET", body } = {}) {
+export async function payrollRequest(path, { method = "GET", body } = {}) {
   const headers = await authHeaders();
   const res = await apiRequest(`${apiBase()}${path}`, {
     method,
@@ -72,6 +72,7 @@ export const payrollApi = {
   statutory: () => payrollRequest("/api/payroll/statutory"),
   saveStatutory: (payload) => payrollRequest("/api/payroll/statutory", { method: "POST", body: payload }),
   me: () => payrollRequest("/api/payroll/me"),
+  validateRun: (id) => payrollRequest(`/api/payroll/runs/${requireRecordUuid(id, "pay run id")}/validate`),
 };
 
 export const leaveApi = {
@@ -86,6 +87,14 @@ export const leaveApi = {
     }),
   employees: () => payrollRequest("/api/leave/employees"),
   me: () => payrollRequest("/api/leave/me"),
+  preview: (payload) =>
+    payrollRequest("/api/leave/preview", {
+      method: "POST",
+      body: {
+        ...payload,
+        leave_type_id: requireRecordUuid(payload?.leave_type_id, "leave type id"),
+      },
+    }),
   apply: (payload) =>
     payrollRequest("/api/leave/apply", {
       method: "POST",
@@ -106,6 +115,10 @@ export const leaveApi = {
     const leaveTypeId = parseUuid(params.leave_type_id);
     if (leaveTypeId) q.set("leave_type_id", leaveTypeId);
     if (params.department) q.set("department", params.department);
+    const managerId = parseUuid(params.manager_id);
+    if (managerId) q.set("manager_id", managerId);
+    if (params.from) q.set("from", String(params.from).slice(0, 10));
+    if (params.to) q.set("to", String(params.to).slice(0, 10));
     const qs = q.toString();
     return payrollRequest(`/api/leave/requests${qs ? `?${qs}` : ""}`);
   },

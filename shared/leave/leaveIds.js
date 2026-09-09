@@ -12,16 +12,12 @@ const LEAVE_STATUSES = new Set(["draft", "pending", "approved", "rejected", "can
  *   user_id?: string,
  *   leave_type_id?: string,
  *   department?: string,
+ *   manager_id?: string,
+ *   from?: string,
+ *   to?: string,
  * }} LeaveListFilters
  */
 
-/**
- * Parse leave list query params. Invalid UUIDs (including display names) are dropped
- * so PostgreSQL never sees them.
- *
- * @param {Record<string, unknown> | null | undefined} query
- * @returns {LeaveListFilters}
- */
 /**
  * Drop another employee's identifiers unless the actor can view team leave.
  * @param {LeaveListFilters} filters
@@ -34,9 +30,23 @@ export function scopedLeaveListFilters(filters = {}, canViewTeam) {
     payroll_profile_id: undefined,
     employee_id: undefined,
     user_id: undefined,
+    manager_id: undefined,
+    department: undefined,
   };
 }
 
+function parseIsoDateParam(value) {
+  const raw = firstQueryString(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
+}
+
+/**
+ * Parse leave list query params. Invalid UUIDs (including display names) are dropped
+ * so PostgreSQL never sees them.
+ *
+ * @param {Record<string, unknown> | null | undefined} query
+ * @returns {LeaveListFilters}
+ */
 export function parseLeaveListFilters(query = {}) {
   const statusRaw = firstQueryString(query.status).toLowerCase();
   const department = firstQueryString(query.department);
@@ -47,7 +57,24 @@ export function parseLeaveListFilters(query = {}) {
     user_id: parseUuid(query.user_id) || undefined,
     leave_type_id: parseUuid(query.leave_type_id) || undefined,
     department: department || undefined,
+    manager_id: parseUuid(query.manager_id) || undefined,
+    from: parseIsoDateParam(query.from),
+    to: parseIsoDateParam(query.to),
   };
+}
+
+/**
+ * Intersect two employee-id scopes. `null` means unconstrained.
+ * @param {string[] | null | undefined} a
+ * @param {string[] | null | undefined} b
+ * @returns {string[] | null}
+ */
+export function intersectEmployeeIdLists(a, b) {
+  if (!a && !b) return null;
+  if (!a) return [...b];
+  if (!b) return [...a];
+  const allow = new Set(a);
+  return b.filter((id) => allow.has(id));
 }
 
 /**

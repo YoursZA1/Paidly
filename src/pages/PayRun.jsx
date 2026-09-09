@@ -35,7 +35,7 @@ export default function PayRunPage() {
   const [run, setRun] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
-  const [breakdown, setBreakdown] = useState(null);
+  const [validation, setValidation] = useState(null);
 
   const load = async () => {
     if (!id) return;
@@ -114,6 +114,33 @@ export default function PayRunPage() {
             ) : null}
             {canCalculate ? (
               <Button
+                variant="outline"
+                className="rounded-xl h-9"
+                disabled={Boolean(busy)}
+                onClick={async () => {
+                  setBusy("validate");
+                  try {
+                    const result = await payrollApi.validateRun(id);
+                    setValidation(result);
+                    toast({
+                      title: result.ok ? "Pay run looks valid" : "Validation found issues",
+                      description: result.ok
+                        ? `${result.item_count} employee(s) ready.`
+                        : `${(result.issues || []).length} issue(s).`,
+                      variant: result.ok ? "default" : "destructive",
+                    });
+                  } catch (err) {
+                    toast({ title: "Could not validate", description: err.message, variant: "destructive" });
+                  } finally {
+                    setBusy("");
+                  }
+                }}
+              >
+                {busy === "validate" ? "Validating…" : "Validate"}
+              </Button>
+            ) : null}
+            {canCalculate ? (
+              <Button
                 className="rounded-xl h-9 bg-primary text-primary-foreground"
                 disabled={Boolean(busy)}
                 onClick={() => act("calc", () => payrollApi.calculateRun(id))}
@@ -150,6 +177,16 @@ export default function PayRunPage() {
           </PageHeader>
         </PageTemplate.Header>
         <PageTemplate.Body>
+          {validation && !validation.ok ? (
+            <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+              {(validation.issues || []).map((issue) => (
+                <p key={`${issue.employee}-${issue.message}`}>{issue.employee}: {issue.message}</p>
+              ))}
+              {(validation.pending_leave_overlapping || []).length ? (
+                <p className="mt-1">Pending leave overlaps this period — approve or decline before finalize.</p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-3 mb-6">
             <Card className="rounded-xl"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Gross</p><p className="text-xl font-semibold tabular-nums">{totals.gross}</p></CardContent></Card>
             <Card className="rounded-xl"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Deductions</p><p className="text-xl font-semibold tabular-nums">{totals.deductions}</p></CardContent></Card>

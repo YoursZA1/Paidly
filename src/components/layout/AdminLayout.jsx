@@ -19,8 +19,8 @@ export default function AdminLayout({ children }) {
         setMobileOpen={setMobileOpen}
       />
       <div className={cn("min-h-screen transition-all duration-300", collapsed ? "md:ml-[76px]" : "md:ml-[260px]")}>
-        <AdminHeader />
-        <main className="p-4 pb-20 lg:p-6">
+        <AdminHeader setMobileOpen={setMobileOpen} />
+        <main className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
