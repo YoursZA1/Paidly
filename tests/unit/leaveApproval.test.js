@@ -31,6 +31,16 @@ describe("leave approval authz", () => {
     expect(canOverrideLeave(manager)).toBe(false);
   });
 
+  it("maps memberships.role and job_function onto leave permission checks", () => {
+    const hrRow = { id: "hr-1", role: "manager", job_function: "hr" };
+    const adminRow = { id: "adm-1", role: "owner", job_function: "general" };
+    const missingFields = { id: "hr-1", org_id: "org-1" };
+    expect(canDecideLeave(hrRow, employee).ok).toBe(true);
+    expect(canDecideLeave(adminRow, employee).ok).toBe(true);
+    expect(canDecideLeave(missingFields, employee).ok).toBe(false);
+    expect(canSeeOrgWorkforce(hrRow)).toBe(true);
+  });
+
   it("blocks self-approval including admin", () => {
     expect(canDecideLeave(admin, { id: "adm-1", manager_membership_id: "x" }).code).toBe("SELF_APPROVAL");
     expect(canDecideLeave(hr, { id: "hr-1" }).ok).toBe(false);

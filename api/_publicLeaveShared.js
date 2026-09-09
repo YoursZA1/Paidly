@@ -4,6 +4,7 @@
  */
 import { consumeMemoryRateLimit } from "../server/src/rateLimit/consumeRateLimit.js";
 import { lookupLeaveApprovalToken, claimLeaveApprovalToken } from "../server/src/leave/leaveApprovalTokens.js";
+import { canDecideLeave, toLeaveActorMembership } from "../server/src/leave/leaveAuthz.js";
 import { decideLeaveRequest, getPublicLeaveApprovalPayload } from "../server/src/leave/leaveService.js";
 import { supabaseAdmin } from "../server/src/supabaseAdmin.js";
 import { writeWorkforceAudit } from "../server/src/workforce/workforceAudit.js";
@@ -88,6 +89,32 @@ export async function handlePublicLeaveDecide(req, res) {
     if (found.row.used_at) {
       return res.status(409).json({ error: "This approval link has already been used.", code: "ALREADY_USED" });
     }
+    const { data: manager } = await supabaseAdmin
+      .from("memberships")
+      .select("id, user_id, invited_email, org_id, role, job_function")
+      .eq("id", found.row.approver_membership_id)
+      .eq("org_id", found.row.org_id)
+      .maybeSingle();
+    const { data: leaveRequest } = await supabaseAdmin
+      .from("leave_requests")
+      .select("id, employee_id")
+      .eq("id", found.row.leave_request_id)
+      .eq("org_id", found.row.org_id)
+      .maybeSingle();
+    const employeeId = leaveRequest?.employee_id || null;
+    const { data: employee } = employeeId
+      ? await supabaseAdmin
+          .from("memberships")
+          .select("id, manager_membership_id")
+          .eq("id", employeeId)
+          .eq("org_id", found.row.org_id)
+          .maybeSingle()
+      : { data: null };
+    const actorMembership = toLeaveActorMembership(manager);
+    const gate = canDecideLeave(actorMembership, employee || { id: employeeId });
+    if (!gate.ok) {
+      return res.status(403).json({ error: gate.message, code: gate.code });
+    }
     const claimed = await claimLeaveApprovalToken({
       tokenId: found.row.id,
       decision: approve ? "approved" : "rejected",
@@ -96,11 +123,6 @@ export async function handlePublicLeaveDecide(req, res) {
     if (!claimed) {
       return res.status(409).json({ error: "This approval link has already been used.", code: "ALREADY_USED" });
     }
-    const { data: manager } = await supabaseAdmin
-      .from("memberships")
-      .select("id, user_id, invited_email, org_id")
-      .eq("id", found.row.approver_membership_id)
-      .maybeSingle();
     const contact = manager?.user_id
       ? (
           await supabaseAdmin.from("profiles").select("email").eq("id", manager.user_id).maybeSingle()
@@ -111,15 +133,15 @@ export async function handlePublicLeaveDecide(req, res) {
       reason: body.reason || body.comment,
       comment: body.comment,
       method: "email_link",
-      actorMembership: manager,
+      actorMembership,
       decidedEmail: contact || null,
-      fromToken: true,
     });
     await writeWorkforceAudit({
       orgId: found.row.org_id,
-      employeeId: found.row.approver_membership_id,
+      employeeId,
+      actorId: manager?.user_id || null,
       action: approve ? "leave.approved_via_link" : "leave.rejected_via_link",
-      after: { leave_request_id: found.row.leave_request_id },
+      after: { leave_request_id: found.row.leave_request_id, approver_membership_id: manager?.id || null },
     });
     return res.status(200).json({ ok: true, decision: approve ? "approved" : "rejected" });
   } catch (err) {

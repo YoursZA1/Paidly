@@ -637,7 +637,7 @@ export async function listLeaveRequests(orgId, filters = {}) {
 }
 
 export async function decideLeaveRequest(orgId, actorId, requestId, options = {}) {
-  const { approve, reason, comment, method = "portal", actorMembership = null, decidedEmail = null, fromToken = false } = options;
+  const { approve, reason, comment, method = "portal", actorMembership = null, decidedEmail = null } = options;
   const id = requireUuid(requestId, "leave request id");
   const actor = actorId ? requireUuid(actorId, "user id") : null;
   const { data: request } = await supabaseAdmin
@@ -664,19 +664,17 @@ export async function decideLeaveRequest(orgId, actorId, requestId, options = {}
 
   const employeeId = request.employee_id || request.payroll_profiles?.membership_id;
   const employee = employeeId ? await loadMembership(orgId, { employeeId }) : null;
-  if (!fromToken) {
-    if (!actorMembership) {
-      const err = new Error("Not authorized to decide this leave request.");
-      err.status = 403;
-      throw err;
-    }
-    const gate = canDecideLeave(actorMembership, employee || { id: employeeId });
-    if (!gate.ok) {
-      const err = new Error(gate.message);
-      err.status = 403;
-      err.code = gate.code;
-      throw err;
-    }
+  if (!actorMembership) {
+    const err = new Error("Not authorized to decide this leave request.");
+    err.status = 403;
+    throw err;
+  }
+  const gate = canDecideLeave(actorMembership, employee || { id: employeeId });
+  if (!gate.ok) {
+    const err = new Error(gate.message);
+    err.status = 403;
+    err.code = gate.code;
+    throw err;
   }
 
   const year = leaveYearForDate(request.start_date);

@@ -627,10 +627,22 @@ export async function workforceSummary(orgId, { managerScopeId = null } = {}) {
     .order("period_start", { ascending: false })
     .limit(12);
   const current = (runs || [])[0] || null;
-  const { count: payslipsGenerated } = await supabaseAdmin
-    .from("payslips")
-    .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId);
+  let payslipsGenerated = 0;
+  if (ids.length) {
+    let payslipCountQuery = supabaseAdmin
+      .from("payslips")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId);
+    if (managerScopeId) {
+      payslipCountQuery = payslipCountQuery.in("membership_id", ids);
+    }
+    const payslipCount = await payslipCountQuery;
+    if (payslipCount.error && /membership_id/i.test(payslipCount.error.message || "")) {
+      payslipsGenerated = employees.reduce((sum, row) => sum + (Number(row.payslip_count) || 0), 0);
+    } else {
+      payslipsGenerated = payslipCount.count || 0;
+    }
+  }
   let adjustmentSignals = [];
   try {
     const { data: adjEvents } = await supabaseAdmin
