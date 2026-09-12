@@ -54,7 +54,7 @@ async function loadCompanyAccessContextInner(userId) {
 
   const { data: membership, error } = await supabase
     .from("memberships")
-    .select("org_id, role, job_function, pos_register_id, created_at")
+    .select("id, org_id, role, job_function, pos_register_id, created_at")
     .eq("user_id", userId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -62,7 +62,7 @@ async function loadCompanyAccessContextInner(userId) {
   if (error && /pos_register_id/i.test(String(error.message || ""))) {
     const retry = await supabase
       .from("memberships")
-      .select("org_id, role, job_function, created_at")
+      .select("id, org_id, role, job_function, created_at")
       .eq("user_id", userId)
       .eq("org_id", orgId)
       .maybeSingle();
@@ -88,6 +88,7 @@ function finishCompanyAccessContext(userId, orgId, org, orgError, membership) {
   const ctx = buildCompanyAccessContext({
     userId,
     companyId: orgId,
+    membershipId: membership?.id || null,
     membershipRole,
     jobFunction: membership?.job_function,
     businessType: org?.business_type ?? null,

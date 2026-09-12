@@ -15,7 +15,12 @@ import { Payroll } from '@/api/entities';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import ManualShareModal from '../shared/ManualShareModal';
 
-export default function PayslipActions({ payslip, onActionSuccess }) {
+export default function PayslipActions({
+    payslip,
+    onActionSuccess,
+    canManagePayroll = false,
+    canSeeCompensation = false,
+}) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showManualShare, setShowManualShare] = useState(false);
@@ -90,25 +95,35 @@ export default function PayslipActions({ payslip, onActionSuccess }) {
                             View Payslip
                         </Link>
                     </DropdownMenuItem>
+                    {canManagePayroll ? (
                     <DropdownMenuItem asChild>
                         <Link to={createPageUrl(`EditPayslip?id=${payslip.id}`)}>
                             <Edit className="w-4 h-4 mr-2" />
                             Edit Payslip
                         </Link>
                     </DropdownMenuItem>
+                    ) : null}
+                    {canManagePayroll ? (
                     <DropdownMenuItem onClick={handleShare}>
                         <Mail className="w-4 h-4 mr-2" />
                         Share with Employee
                     </DropdownMenuItem>
+                    ) : null}
+                    {canSeeCompensation ? (
                     <DropdownMenuItem onClick={handleDownloadPDF}>
                         <Download className="w-4 h-4 mr-2" />
                         Download PDF
                     </DropdownMenuItem>
+                    ) : null}
+                    {canManagePayroll ? (
+                    <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
                         <Trash2 className="w-4 h-4 mr-2" />
                         Delete Payslip
                     </DropdownMenuItem>
+                    </>
+                    ) : null}
                 </DropdownMenuContent>
             </DropdownMenu>
 

@@ -101,7 +101,7 @@ const NotFoundPage = lazy(() =>
 
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
-import { RequireCompanyPermissionRedirect } from "@/components/auth/RequireCompanyPermission";
+import { RequireCompanyPermissionRedirect, RequireEmployeeProfileAccess } from "@/components/auth/RequireCompanyPermission";
 import RequireBusinessOwner from "@/components/auth/RequireBusinessOwner";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { isPosAccessPath } from "@shared/posStaffInvite.js";
@@ -296,17 +296,17 @@ const PAYSLIP_REPORT_ROUTES = [
     { path: "/manager-portal", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.APPROVE_LEAVE}><ManagerPortal /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/employees/:id", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><EmployeeProfile /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/Employees/:id", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><EmployeeProfile /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/EmployeeProfile", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><EmployeeProfile /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/employeeprofile", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><EmployeeProfile /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/employees/:id", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><RequireEmployeeProfileAccess><EmployeeProfile /></RequireEmployeeProfileAccess></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Employees/:id", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><RequireEmployeeProfileAccess><EmployeeProfile /></RequireEmployeeProfileAccess></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/EmployeeProfile", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><RequireEmployeeProfileAccess><EmployeeProfile /></RequireEmployeeProfileAccess></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/employeeprofile", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><RequireEmployeeProfileAccess><EmployeeProfile /></RequireEmployeeProfileAccess></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/LeaveCalendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><LeaveCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/leavecalendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><LeaveCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Payslips", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><Payslips /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/CreatePayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><CreatePayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/EditPayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><EditPayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/PayslipPDF", element: <RequireAuth><PayslipPDF /></RequireAuth> },
-    { path: "/ViewPayslip", element: <RequireAuth><ViewPayslip /></RequireAuth> },
+    { path: "/PayslipPDF", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><PayslipPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/ViewPayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><ViewPayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/ReportPDF", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><ReportPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/reportpdf", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><ReportPDF /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_COMPANY_REPORTS}><Reports /></RequireCompanyPermissionRedirect></RequireAuth> },

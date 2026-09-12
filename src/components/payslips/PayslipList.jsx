@@ -8,6 +8,22 @@ import { formatCurrency } from "@/components/CurrencySelector";
 import PayslipActions from "./PayslipActions";
 import PayslipStatusBadge from "./PayslipStatusBadge";
 import { createPageUrl } from "@/utils";
+import { canSeePayslipCompensation, isOwnPayslipRow } from "@shared/workforce/employeeProfile.js";
+
+function payslipCompensationAccess(payslip, { canManagePayroll, actorMembershipId, actorUserId }) {
+  const isOwn = isOwnPayslipRow(payslip, {
+    membershipId: actorMembershipId,
+    userId: actorUserId,
+  });
+  return canSeePayslipCompensation({ canManagePayroll, isOwn });
+}
+
+function netPayLabel(payslip, userCurrency, access) {
+  if (payslipCompensationAccess(payslip, access)) {
+    return formatCurrency(payslip.net_pay, userCurrency);
+  }
+  return "Hidden";
+}
 
 const ROW_HEIGHT = 64;
 const VIRTUAL_TABLE_MAX_HEIGHT = 480;
@@ -33,7 +49,15 @@ const PayslipRow = React.memo(function PayslipRow({
   virtualRow,
   userCurrency,
   onActionSuccess,
+  canManagePayroll,
+  actorMembershipId,
+  actorUserId,
 }) {
+  const canSeeCompensation = payslipCompensationAccess(payslip, {
+    canManagePayroll,
+    actorMembershipId,
+    actorUserId,
+  });
   return (
     <TableRow
       className="table-row border-0 absolute inset-x-0 w-full invoice-list-row"
@@ -53,7 +77,7 @@ const PayslipRow = React.memo(function PayslipRow({
         {payslip.position || "—"}
       </TableCell>
       <TableCell className="amount invoice-col-amount font-semibold text-foreground text-xs sm:text-sm whitespace-nowrap">
-        {formatCurrency(payslip.net_pay, userCurrency)}
+        {netPayLabel(payslip, userCurrency, { canManagePayroll, actorMembershipId, actorUserId })}
       </TableCell>
       <TableCell className="invoice-col-paid text-left text-muted-foreground text-xs sm:text-sm truncate" title={payPeriodLabel(payslip)}>
         {payPeriodLabel(payslip)}
@@ -66,7 +90,12 @@ const PayslipRow = React.memo(function PayslipRow({
       </TableCell>
       <TableCell className="invoice-col-actions text-center">
         <div className="flex justify-center">
-          <PayslipActions payslip={payslip} onActionSuccess={onActionSuccess} />
+          <PayslipActions
+            payslip={payslip}
+            onActionSuccess={onActionSuccess}
+            canManagePayroll={canManagePayroll}
+            canSeeCompensation={canSeeCompensation}
+          />
         </div>
       </TableCell>
     </TableRow>
@@ -77,9 +106,21 @@ const PayslipMobileCard = React.memo(function PayslipMobileCard({
   payslip,
   userCurrency,
   onActionSuccess,
+  canManagePayroll,
+  actorMembershipId,
+  actorUserId,
 }) {
   const payDate = safeFormatDate(payslip.pay_date);
-  const amountLabel = formatCurrency(payslip.net_pay, userCurrency);
+  const canSeeCompensation = payslipCompensationAccess(payslip, {
+    canManagePayroll,
+    actorMembershipId,
+    actorUserId,
+  });
+  const amountLabel = netPayLabel(payslip, userCurrency, {
+    canManagePayroll,
+    actorMembershipId,
+    actorUserId,
+  });
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden flex items-stretch gap-0 min-w-0">
       <Link
@@ -92,7 +133,9 @@ const PayslipMobileCard = React.memo(function PayslipMobileCard({
           <p className="text-[10px] text-muted-foreground/80">{payDate}</p>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="font-bold text-foreground text-sm currency-nums whitespace-nowrap">{amountLabel}</span>
+          <span className={`font-bold text-sm currency-nums whitespace-nowrap ${canSeeCompensation ? "text-foreground" : "text-muted-foreground"}`}>
+            {amountLabel}
+          </span>
           <span className="text-[10px] text-muted-foreground truncate max-w-[9rem] text-right">
             {payPeriodLabel(payslip)}
           </span>
@@ -100,7 +143,12 @@ const PayslipMobileCard = React.memo(function PayslipMobileCard({
         </div>
       </Link>
       <div className="flex items-center border-l border-border shrink-0" onClick={(e) => e.preventDefault()}>
-        <PayslipActions payslip={payslip} onActionSuccess={onActionSuccess} />
+        <PayslipActions
+          payslip={payslip}
+          onActionSuccess={onActionSuccess}
+          canManagePayroll={canManagePayroll}
+          canSeeCompensation={canSeeCompensation}
+        />
       </div>
     </div>
   );
@@ -111,6 +159,9 @@ const VirtualizedTableBody = React.memo(function VirtualizedTableBody({
   parentRef,
   userCurrency,
   onActionSuccess,
+  canManagePayroll,
+  actorMembershipId,
+  actorUserId,
 }) {
   const rowVirtualizer = useVirtualizer({
     count: payslips.length,
@@ -137,6 +188,9 @@ const VirtualizedTableBody = React.memo(function VirtualizedTableBody({
             virtualRow={virtualRow}
             userCurrency={userCurrency}
             onActionSuccess={onActionSuccess}
+            canManagePayroll={canManagePayroll}
+            actorMembershipId={actorMembershipId}
+            actorUserId={actorUserId}
           />
         );
       })}
@@ -144,7 +198,15 @@ const VirtualizedTableBody = React.memo(function VirtualizedTableBody({
   );
 });
 
-function PayslipList({ payslips, isLoading, userCurrency, onActionSuccess }) {
+function PayslipList({
+  payslips,
+  isLoading,
+  userCurrency,
+  onActionSuccess,
+  canManagePayroll = false,
+  actorMembershipId = null,
+  actorUserId = null,
+}) {
   const parentRef = useRef(null);
 
   const colgroup = (
@@ -188,6 +250,9 @@ function PayslipList({ payslips, isLoading, userCurrency, onActionSuccess }) {
               payslip={payslip}
               userCurrency={userCurrency}
               onActionSuccess={onActionSuccess}
+              canManagePayroll={canManagePayroll}
+              actorMembershipId={actorMembershipId}
+              actorUserId={actorUserId}
             />
           ))
         )}
@@ -270,6 +335,9 @@ function PayslipList({ payslips, isLoading, userCurrency, onActionSuccess }) {
                   parentRef={parentRef}
                   userCurrency={userCurrency}
                   onActionSuccess={onActionSuccess}
+                  canManagePayroll={canManagePayroll}
+                  actorMembershipId={actorMembershipId}
+                  actorUserId={actorUserId}
                 />
               </TableBody>
             </Table>

@@ -76,6 +76,8 @@ export {
     assertHubWritableType,
     hubWriteForbiddenMessage,
     leftoverHubCommercialMessage,
+    isLeftoverHubLeaveRequest,
+    leftoverHubLeaveMessage,
     postgrestExcludeCommercialHubTypes,
 } from "./documentSystemOfRecord";
 export {

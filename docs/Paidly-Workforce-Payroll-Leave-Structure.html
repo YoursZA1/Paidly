@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Paidly — Payroll, Payslip &amp; Leave Structure</title>
+  <style>
+    @page { margin: 16mm 14mm 18mm; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: 9.6pt; line-height: 1.45; color: #0f172a; margin: 0; padding: 0; }
+    h1 { font-size: 17pt; margin: 0 0 8px; color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 6px; }
+    h2 { font-size: 11.5pt; margin: 16px 0 6px; color: #1e3a5f; text-transform: uppercase; letter-spacing: 0.03em; page-break-after: avoid; }
+    h3 { font-size: 10.5pt; margin: 12px 0 4px; color: #334155; page-break-after: avoid; }
+    p { margin: 0 0 7px; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 8.5pt; page-break-inside: auto; }
+    th, td { border: 1px solid #cbd5e1; padding: 4px 6px; vertical-align: top; }
+    th { background: #f1f5f9; text-align: left; }
+    ul, ol { margin: 4px 0 8px 18px; padding: 0; }
+    li { margin-bottom: 3px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8pt; background: #f1f5f9; padding: 0 3px; border-radius: 2px; }
+    pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 7.8pt; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px; margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; page-break-inside: avoid; }
+    pre code { background: none; padding: 0; }
+    a { color: #1d4ed8; text-decoration: none; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 12px 0; }
+  </style>
+</head>
+<body>
+<h1>Paidly — Payroll, Payslip &amp; Leave Structure</h1>
+<p><strong>Workforce Core reference.</strong> One employee identity. Payroll calculates pay. Leave feeds unpaid days into that calculation. A payslip is the locked statement issued from a finalized pay run.</p>
+<p>Timezone for all calculations: <code>Africa/Johannesburg</code>. Statutory rates live in the database, not in React.</p>
+<hr />
+<h2>One Workforce Core</h2>
+<p>These three features are <strong>one system</strong>, not three products. Employee identity is <code>memberships.id</code>. Do not create a parallel <code>employees</code> table. UI labels such as <code>Name (EMP-002)</code> are display-only; foreign keys store the membership UUID.</p>
+<pre><code>organizations
+  → memberships.id                    (employee)
+      → payroll_profiles
+      → pay_runs → pay_run_items → payslips.membership_id
+      → leave_types / leave_balances / leave_requests / leave_transactions
+      → attendance_profiles           (1:1 stub)
+      → company_invites.membership_id (portal)</code></pre>
+<table><thead><tr>
+<th>Concept</th>
+<th>Persistence</th>
+</tr></thead><tbody>
+<tr>
+<td>Employee</td>
+<td><code>memberships.id</code></td>
+</tr>
+<tr>
+<td>Payslip</td>
+<td><code>payslips</code> (issued statement; generated from a pay run)</td>
+</tr>
+<tr>
+<td>Payroll run</td>
+<td><code>pay_runs</code> + <code>pay_run_items</code> + <code>payroll_profiles</code></td>
+</tr>
+<tr>
+<td>Leave ledger</td>
+<td><code>leave_types</code>, <code>leave_balances</code>, <code>leave_transactions</code>, <code>leave_requests</code></td>
+</tr>
+</tbody></table>
+<p><code>payslips.employee_id</code> remains the printed employee number. The UUID link is <code>payslips.membership_id</code>.</p>
+<hr />
+<h2>How they connect</h2>
+<pre><code>memberships.id (employee)
+        │
+        ├── payroll_profiles ──► pay_runs ──► pay_run_items
+        │                                          │
+        │                                          │ finalize copies item
+        │                                          ▼
+        │                                      payslips (locked)
+        │                                          │
+        │                                          ▼
+        │                              Document Engine PDF + email
+        │
+        ├── leave_balances
+        └── leave_requests ──► leave_transactions
+                    │
+                    └── approved unpaid days ──► calculatePayroll</code></pre>
+<p>Unpaid approved leave overlapping the pay period becomes a <strong>negative <code>UNPAID</code> earning</strong>. Paid leave does not change salary.</p>
+<hr />
+<h2>1. Payroll</h2>
+<p><strong>Job:</strong> Calculate and lock a period’s pay.</p>
+<h3>Tables</h3>
+<table><thead><tr>
+<th>Table</th>
+<th>Role</th>
+</tr></thead><tbody>
+<tr>
+<td><code>payroll_profiles</code></td>
+<td>Salary, pay type, tax IDs — derived from membership</td>
+</tr>
+<tr>
+<td><code>payroll_component_types</code></td>
+<td>Recurring earnings / deductions (allowance, pension, …)</td>
+</tr>
+<tr>
+<td><code>payroll_statutory_rules</code></td>
+<td>Versioned PAYE / UIF / etc. (platform + org override)</td>
+</tr>
+<tr>
+<td><code>pay_runs</code></td>
+<td>One period batch</td>
+</tr>
+<tr>
+<td><code>pay_run_items</code></td>
+<td>Per-employee snapshot (salary + unpaid-leave impact)</td>
+</tr>
+</tbody></table>
+<h3>Math — only in one place</h3>
+<p><code>shared/payroll/calculatePayroll.js</code> is the only payroll formula. Pure: no I/O, no browser clock.</p>
+<pre><code>basic  →  + earnings  →  − UNPAID  →  + overtime  =  gross
+gross  →  statutory (PAYE, UIF, …) + other deductions  =  net</code></pre>
+<ul>
+<li><strong>Basic</strong> from <code>monthly_salary</code> / <code>hourly × hours</code> / <code>daily × days</code></li>
+<li><strong>Unpaid</strong> = <code>basic × (unpaid_days / working_days_in_period)</code> via <code>shared/payroll/unpaidLeaveImpact.js</code></li>
+<li><strong>Statutory rules:</strong> <code>percent</code>, <code>capped_percent</code>, <code>fixed</code>, <code>tax_brackets</code></li>
+<li>Org rules override platform rules for the same code in the period window</li>
+<li>Pay-run items snapshot <code>base_salary</code> and unpaid-leave impact so later salary changes do not rewrite history</li>
+</ul>
+<h3>Pay-run lifecycle</h3>
+<pre><code>draft → processing → calculated → awaiting_approval → approved → (finalize) → paid
+                                                                         ↘ cancelled</code></pre>
+<p>Locked statuses (<code>approved</code>, <code>paid</code>) cannot be silently rewritten. Corrections use an <strong>adjustment pay run</strong>.</p>
+<table><thead><tr>
+<th>Step</th>
+<th>What happens</th>
+</tr></thead><tbody>
+<tr>
+<td>Create</td>
+<td>Open run for a period; <code>syncPayRunEmployees</code> adds new hires</td>
+</tr>
+<tr>
+<td>Calculate</td>
+<td>Loads profiles, recurring components, statutory rules, approved unpaid leave → writes item snapshots</td>
+</tr>
+<tr>
+<td>Submit / approve</td>
+<td>Separation of duties: a different payroll admin must approve if more than one exists</td>
+</tr>
+<tr>
+<td>Finalize</td>
+<td>Locked <code>payslips</code> rows copied from items; emails sent</td>
+</tr>
+<tr>
+<td>Paid</td>
+<td>Run + payslips marked paid</td>
+</tr>
+<tr>
+<td>Recalc after finalize</td>
+<td>Blocked. Create an adjustment run</td>
+</tr>
+</tbody></table>
+<h3>Server API</h3>
+<p><code>/api/payroll/*</code> rewrites onto <code>api/company</code> (Hobby function ceiling — no new serverless file).</p>
+<table><thead><tr>
+<th>Route</th>
+<th>Action</th>
+</tr></thead><tbody>
+<tr>
+<td><code>GET overview</code></td>
+<td>Payroll dashboard</td>
+</tr>
+<tr>
+<td><code>POST preview</code></td>
+<td>Dry-run <code>calculatePayroll</code></td>
+</tr>
+<tr>
+<td><code>GET/POST profiles</code></td>
+<td>Sync / upsert payroll profiles</td>
+</tr>
+<tr>
+<td><code>GET/POST runs</code></td>
+<td>List / create pay runs</td>
+</tr>
+<tr>
+<td><code>POST runs/:id/calculate</code></td>
+<td>Calculate items</td>
+</tr>
+<tr>
+<td><code>POST runs/:id/submit</code></td>
+<td>Send for approval</td>
+</tr>
+<tr>
+<td><code>POST runs/:id/approve</code></td>
+<td>Approve</td>
+</tr>
+<tr>
+<td><code>POST runs/:id/finalize</code></td>
+<td>Generate locked payslips + email</td>
+</tr>
+<tr>
+<td><code>POST runs/:id/paid</code></td>
+<td>Mark paid</td>
+</tr>
+<tr>
+<td><code>POST runs/:id/send</code></td>
+<td>Resend payslip emails</td>
+</tr>
+<tr>
+<td><code>GET/POST statutory</code></td>
+<td>List / upsert statutory rules</td>
+</tr>
+<tr>
+<td><code>GET me</code></td>
+<td>Employee self-service payslips</td>
+</tr>
+</tbody></table>
+<p>Code: <code>server/src/payroll/payrollRoutes.js</code> → <code>payrollService.js</code>. Client: <code>src/pages/Payroll.jsx</code>, <code>src/services/PayrollApiService.js</code>.</p>
+<hr />
+<h2>2. Payslip</h2>
+<p><strong>Job:</strong> Issued pay statement. Not the employee source of truth. Not a Documents Hub row.</p>
+<p>Do not dual-write payslips into <code>documents</code>. The Documents Hub is not a second store for commercial documents.</p>
+<h3>Canonical issue path (preferred)</h3>
+<pre><code>approved pay run
+  → finalizePayRun
+  → insert payslips (locked: true)
+  → link pay_run_items.payslip_id
+  → send email with /PublicPayslip?token=</code></pre>
+<p>The row copies the pay-run item: basic, overtime, allowances, statutory, net, <code>calculation_breakdown</code>, <code>leave_summary</code>.</p>
+<p>Email is a secure <code>/PublicPayslip?token=</code> link — <strong>never</strong> an unencrypted payroll PDF attachment and never a <code>/view/</code> public invoice URL.</p>
+<h3>Secondary path</h3>
+<p>Standalone compose (<code>CreatePayslip</code>) still exists for out-of-band drafts and <strong>must</strong> attach <code>membership_id</code>. It is not the normal issue path.</p>
+<h3>Document Engine (delivery only)</h3>
+<p>Same compose / send / PDF stack as invoices and quotes, <strong>different table</strong> (<code>payslips</code>):</p>
+<ul>
+<li>PDF: <code>PayslipDocument</code> / <code>src/document-engine/pdf/payslip.jsx</code></li>
+<li>Events: <code>created</code> · <code>sent</code> · <code>delivered</code> · <code>opened</code> · <code>clicked</code> (<code>view_payslip</code>) · <code>downloaded</code></li>
+<li>Payslips must <strong>never</strong> record <code>paid</code>, <code>viewed_not_paid</code>, <code>due_soon</code>, <code>due_today</code>, <code>overdue</code>, <code>payment_intent</code>, <code>accepted</code>, or <code>rejected</code></li>
+<li>Event payload must not store <code>net_pay</code>, tax amounts, bank details, or ID numbers</li>
+<li>Public view: token + email gate (<code>api/public-share</code> + <code>api/_publicPayslipShared.js</code>)</li>
+<li>Self-service match: <code>employee_user_id</code> <strong>or</strong> <code>membership_id</code> <strong>or</strong> employee email</li>
+</ul>
+<p>Locked payslips cannot be silently rewritten.</p>
+<hr />
+<h2>3. Leave</h2>
+<p><strong>Job:</strong> Working-day ledger + approval. Hub <code>leave_request</code> documents are leftovers — they are not this ledger.</p>
+<p>New applications go through <code>/api/leave</code>. HR leave (balances, accrual, approval) is canonical on <code>leave_requests</code> / <code>leave_balances</code> / <code>leave_transactions</code>.</p>
+<h3>Tables</h3>
+<table><thead><tr>
+<th>Table</th>
+<th>Role</th>
+</tr></thead><tbody>
+<tr>
+<td><code>leave_types</code></td>
+<td>Policy: ANNUAL, SICK, FAMILY, UNPAID, STUDY, MATERNITY, PARENTAL</td>
+</tr>
+<tr>
+<td><code>leave_balances</code></td>
+<td>Per employee × type × year: entitled, accrued, used, pending</td>
+</tr>
+<tr>
+<td><code>leave_requests</code></td>
+<td>Application + status</td>
+</tr>
+<tr>
+<td><code>leave_transactions</code></td>
+<td>Ledger (opening, accrual, hold, release, approved, adjustment)</td>
+</tr>
+<tr>
+<td><code>leave_approval_tokens</code></td>
+<td>Hashed single-use email decide links</td>
+</tr>
+</tbody></table>
+<p><strong>Available</strong> = <code>accrued − used − pending</code> (<code>computeLeaveBalance</code> in <code>shared/leave/leaveMath.js</code>).</p>
+<p>Entitled is policy allocation for the leave year — not a mutation target.</p>
+<h3>Request flow</h3>
+<pre><code>preview / apply
+  → validateLeaveApplication (working days, overlap, balance)
+  → status = pending
+  → paid types: pending_hold on the ledger
+  → email manager (or HR) via token
+       ↘ approve → pending_release + approved_leave (used ↑)
+       ↘ reject / cancel → pending_release only</code></pre>
+<ul>
+<li>Working days counted server-side (<code>countWorkingDays</code>; weekends excluded by default)</li>
+<li>Unpaid types skip the balance check and do not hold days</li>
+<li>Approver: assigned manager, or HR override</li>
+<li>Token page (<code>/api/public-leave</code> → <code>api/public-share</code>) cannot see payroll or other employees</li>
+<li>If unpaid leave is approved <strong>after</strong> a finalized run, a workforce event flags <code>needs_adjustment_run</code></li>
+</ul>
+<h3>Default leave types (seeded per org)</h3>
+<table><thead><tr>
+<th>Code</th>
+<th>Paid</th>
+<th>Accrual</th>
+</tr></thead><tbody>
+<tr>
+<td>ANNUAL</td>
+<td>yes</td>
+<td>monthly, 21 days</td>
+</tr>
+<tr>
+<td>SICK</td>
+<td>yes</td>
+<td>annual, 10</td>
+</tr>
+<tr>
+<td>FAMILY</td>
+<td>yes</td>
+<td>annual, 3</td>
+</tr>
+<tr>
+<td>UNPAID</td>
+<td><strong>no</strong></td>
+<td>none — this is the payroll hook</td>
+</tr>
+<tr>
+<td>STUDY</td>
+<td>yes</td>
+<td>annual, 5</td>
+</tr>
+<tr>
+<td>MATERNITY</td>
+<td>no</td>
+<td>none</td>
+</tr>
+<tr>
+<td>PARENTAL</td>
+<td>yes</td>
+<td>annual, 10</td>
+</tr>
+</tbody></table>
+<h3>Leave request statuses</h3>
+<p><code>draft</code> → <code>pending</code> → <code>approved</code> | <code>rejected</code> | <code>cancelled</code></p>
+<h3>Transaction kinds</h3>
+<p><code>opening</code> · <code>accrual</code> · <code>approved_leave</code> · <code>pending_hold</code> · <code>pending_release</code> · <code>adjustment</code> · <code>reversal</code></p>
+<h3>Server API</h3>
+<p><code>/api/leave/*</code> also rewrites onto <code>api/company</code>.</p>
+<table><thead><tr>
+<th>Route</th>
+<th>Action</th>
+</tr></thead><tbody>
+<tr>
+<td><code>GET/POST types</code></td>
+<td>List / upsert leave types</td>
+</tr>
+<tr>
+<td><code>GET me</code></td>
+<td>Own balances + requests</td>
+</tr>
+<tr>
+<td><code>POST preview</code></td>
+<td>Working days + remaining balance</td>
+</tr>
+<tr>
+<td><code>POST apply</code></td>
+<td>Submit request (holds pending days)</td>
+</tr>
+<tr>
+<td><code>GET requests</code></td>
+<td>Team / HR list (scoped)</td>
+</tr>
+<tr>
+<td><code>POST requests/:id/approve</code></td>
+<td>Approve</td>
+</tr>
+<tr>
+<td><code>POST requests/:id/reject</code></td>
+<td>Reject (reason required)</td>
+</tr>
+<tr>
+<td><code>POST requests/:id/cancel</code></td>
+<td>Cancel own (or HR override)</td>
+</tr>
+<tr>
+<td><code>POST adjust</code></td>
+<td>Manual balance adjustment</td>
+</tr>
+<tr>
+<td><code>GET calendar</code></td>
+<td>Team calendar</td>
+</tr>
+<tr>
+<td><code>GET employees</code></td>
+<td>Employees in leave scope</td>
+</tr>
+</tbody></table>
+<p>Code: <code>server/src/leave/leaveRoutes.js</code> → <code>leaveService.js</code>. Shared: <code>shared/leave/leaveMath.js</code>, <code>validateLeave.js</code>. Client: <code>src/pages/Leave.jsx</code>, <code>LeaveCalendar.jsx</code>, <code>MyPayroll.jsx</code>.</p>
+<p>Public decide: <code>api/_publicLeaveShared.js</code> via hashed token. The token page is scoped to that one request.</p>
+<hr />
+<h2>Surfaces (same rows, different roles)</h2>
+<table><thead><tr>
+<th>Who</th>
+<th>Pages</th>
+<th>Sees</th>
+</tr></thead><tbody>
+<tr>
+<td>Employee</td>
+<td><code>/MyPayroll</code>, apply leave</td>
+<td>Own payslips + own leave</td>
+</tr>
+<tr>
+<td>Manager</td>
+<td><code>/ManagerPortal</code></td>
+<td>Direct reports only, <strong>no salary</strong></td>
+</tr>
+<tr>
+<td>HR</td>
+<td><code>/Employees</code>, <code>/Leave</code>, <code>/Payroll</code></td>
+<td>Admin + leave</td>
+</tr>
+<tr>
+<td>Finance</td>
+<td><code>/Payroll</code></td>
+<td>Pay runs (manager + <code>job_function=finance</code>)</td>
+</tr>
+<tr>
+<td>Anyone with a token</td>
+<td><code>/PublicPayslip</code>, <code>/PublicLeaveApproval</code></td>
+<td>That token only</td>
+</tr>
+</tbody></table>
+<p>RBAC uses existing company permissions:</p>
+<ul>
+<li>Manager + <code>job_function=hr</code> → employee / leave admin</li>
+<li>Manager + <code>finance</code> → payroll</li>
+<li>POS-only staff cannot administer payroll or workforce</li>
+<li>Compensation is omitted from <code>/api/company/employees</code> unless <code>manage_payroll</code> or the row is the caller</li>
+</ul>
+<p>Settings → Team stays invites and roles. It is not a second employee directory.</p>
+<hr />
+<h2>Provisioning</h2>
+<p><code>provisionEmployeeWorkforce()</code> is idempotent. On <code>employee.created</code> it auto-creates:</p>
+<ul>
+<li>payroll profile</li>
+<li>leave balances (year-to-date accrual)</li>
+<li>attendance profile</li>
+<li><code>workforce_notification_prefs</code></li>
+<li>audit row</li>
+</ul>
+<p>Invite accept (<code>accept_company_invite_token</code>) links <code>company_invites.membership_id</code> onto the pre-created membership (<code>user_id</code> was null) and emits <code>employee.portal.activated</code>. POS till invites stay on the existing pass path and do not use that link.</p>
+<p>Open pay runs pick up new hires via <code>syncPayRunEmployees</code> (calculate + refresh).</p>
+<hr />
+<h2>Code map</h2>
+<table><thead><tr>
+<th>Layer</th>
+<th>Payroll</th>
+<th>Leave</th>
+<th>Payslip</th>
+</tr></thead><tbody>
+<tr>
+<td>Shared math</td>
+<td><code>shared/payroll/calculatePayroll.js</code></td>
+<td><code>shared/leave/leaveMath.js</code></td>
+<td><code>shared/payroll/payslipNumber.js</code></td>
+</tr>
+<tr>
+<td>Constants</td>
+<td><code>shared/payroll/constants.js</code></td>
+<td>same file (leave statuses)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Service</td>
+<td><code>server/src/payroll/payrollService.js</code></td>
+<td><code>server/src/leave/leaveService.js</code></td>
+<td>finalize + Document Engine</td>
+</tr>
+<tr>
+<td>Routes</td>
+<td><code>payrollRoutes.js</code></td>
+<td><code>leaveRoutes.js</code></td>
+<td>public-share + compose pages</td>
+</tr>
+<tr>
+<td>Authz</td>
+<td><code>payrollGate.js</code></td>
+<td><code>leaveAuthz.js</code></td>
+<td>self-service match on <code>payslips</code></td>
+</tr>
+<tr>
+<td>UI</td>
+<td><code>Payroll.jsx</code></td>
+<td><code>Leave.jsx</code>, <code>LeaveCalendar.jsx</code></td>
+<td><code>Payslips.jsx</code>, <code>PayslipDocument.jsx</code></td>
+</tr>
+<tr>
+<td>Employee</td>
+<td><code>MyPayroll.jsx</code></td>
+<td>apply from MyPayroll / Leave</td>
+<td>public token viewer</td>
+</tr>
+</tbody></table>
+<hr />
+<h2>Rules that keep this from forking</h2>
+<ol>
+<li><strong>One employee ID:</strong> <code>memberships.id</code>. Do not add an <code>employees</code> table.</li>
+<li><strong>One payroll formula:</strong> <code>calculatePayroll</code>. Statutory rates in <code>payroll_statutory_rules</code>.</li>
+<li><strong>Payslips are output</strong> of a pay run, not a second payroll system.</li>
+<li><strong>HR leave lives on the leave ledger</strong>, not Documents Hub.</li>
+<li><strong>Do not mark paid from a browser callback</strong>, and do not build a second payment stack for payroll.</li>
+<li>Finalized pay runs and locked payslips cannot be silently rewritten. Corrections use an adjustment pay run.</li>
+</ol>
+<p>A new payable module needs a <code>source_kind</code> + settlement adapter on the Payment Engine. It does not need its own payment system. Payroll / payslips / leave is the failure mode that rule exists to prevent.</p>
+</body>
+</html>

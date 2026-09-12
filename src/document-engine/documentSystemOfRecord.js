@@ -3,7 +3,9 @@
  *
  * One document type has one persistence table. Commercial documents stay on their
  * specialised production tables. The Documents Hub (`public.documents`) owns other
- * business documents (leave, expenses, contracts, and future generic types).
+ * business documents (expenses, contracts, and future generic types).
+ * HR leave (balances, approval, ledger) is canonical on `leave_requests`.
+ * Leftover hub `leave_request` rows stay visible; they are not the leave ledger.
  *
  * Do not dual-write invoices, quotes, payslips, or recurring invoices into `documents`.
  * The Document Engine (`src/document-engine/`) may share UI and helpers; it is not a
@@ -89,6 +91,9 @@ export function postgrestExcludeCommercialHubTypes() {
  * @returns {string}
  */
 export function hubWriteForbiddenMessage(raw) {
+  if (isLeftoverHubLeaveRequest(raw)) {
+    return "Leave requests are stored in the leave ledger, not the Documents Hub. Open Leave to apply or approve.";
+  }
   const type = normalizeCommercialDocumentType(raw);
   if (type === "invoice") {
     return "Invoices are stored in invoices, not the Documents Hub. Create them from Invoices or New Invoice.";
@@ -107,10 +112,11 @@ export function hubWriteForbiddenMessage(raw) {
 
 /**
  * Hub create/convert/template paths must call this before inserting into `documents`.
+ * Leftover hub leave rows stay readable; new writes are rejected.
  * @param {unknown} raw
  */
 export function assertHubWritableType(raw) {
-  if (isDocumentsHubExcludedType(raw)) {
+  if (isLeftoverHubLeaveRequest(raw) || isDocumentsHubExcludedType(raw)) {
     throw new Error(hubWriteForbiddenMessage(raw));
   }
 }
@@ -135,4 +141,13 @@ export function leftoverHubCommercialMessage(raw) {
     return "This hub record is a leftover recurring-invoice row. Live templates are on Recurring Invoices. Open that page, or remove this leftover hub record.";
   }
   return "This hub record uses a specialised commercial type. Open the specialised page, or remove this leftover hub record.";
+}
+
+/** Leftover hub leave rows — not the HR leave ledger. */
+export function isLeftoverHubLeaveRequest(raw) {
+  return String(raw ?? "").trim().toLowerCase() === "leave_request";
+}
+
+export function leftoverHubLeaveMessage() {
+  return "This hub record is a leftover leave request. Live leave is on the Leave page. Open Leave to apply or approve, or remove this leftover hub record.";
 }

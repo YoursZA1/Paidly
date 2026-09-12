@@ -8,14 +8,8 @@ export const LEAVE_TYPES = Object.freeze([
   { key: "study", label: "Study leave" },
 ]);
 
-/** Default balances shown until HR balances are wired to profiles. */
-export const DEFAULT_LEAVE_BALANCES = Object.freeze({
-  annual: 15,
-  sick: 10,
-  family: 3,
-  unpaid: null,
-  study: 5,
-});
+/** @deprecated Leftover hub fiction. Live balances come from `/api/leave`. */
+export const DEFAULT_LEAVE_BALANCES = Object.freeze({});
 
 const LEAVE_TYPE_LABELS = new Map(LEAVE_TYPES.map((t) => [t.key, t.label]));
 
@@ -26,8 +20,8 @@ export function leaveTypeLabel(key) {
 
 /** @param {Record<string, number | null> | undefined} balances @param {unknown} leaveType */
 export function leaveBalanceForType(balances, leaveType) {
-  const map = balances && typeof balances === "object" ? balances : DEFAULT_LEAVE_BALANCES;
-  const value = map[String(leaveType || "annual")];
+  if (!balances || typeof balances !== "object") return null;
+  const value = balances[String(leaveType || "annual")];
   return value == null ? null : Number(value);
 }
 

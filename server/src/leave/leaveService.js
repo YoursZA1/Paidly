@@ -3,9 +3,10 @@ import { insertPayrollProfileRow } from "../payroll/payrollService.js";
 import { johannesburgYmd, leaveYearForDate, formatIsoDate } from "../../../shared/payroll/dates.js";
 import { countWorkingDays, computeLeaveBalance, yearToDateAccrual } from "../../../shared/leave/leaveMath.js";
 import { validateLeaveApplication } from "../../../shared/leave/validateLeave.js";
-import { intersectEmployeeIdLists, leaveRequestEmployeeScope, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
+import { assertLeaveRowEmployeeId, intersectEmployeeIdLists, leaveRequestEmployeeScope, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
 import { parseUuid, requireUuid } from "../../../shared/ids/uuid.js";
 import { canonicalEmployeeId } from "../../../shared/workforce/employeeIdentity.js";
+import { throwIfMissingWorkforceColumn } from "../workforce/schemaGuard.js";
 import { sendHtmlEmail } from "../sendInvoice.js";
 import { buildEmployeeNumber, nextEmployeeSequence } from "../../../shared/payroll/payslipNumber.js";
 import { canDecideLeave } from "./leaveAuthz.js";
@@ -47,18 +48,20 @@ function employeeIdOfProfile(profile) {
 
 function withEmployeeId(row, profile) {
   const employeeId = employeeIdOfProfile(profile);
-  if (employeeId) row.employee_id = employeeId;
+  if (!employeeId) {
+    const err = new Error("Cannot write leave without a membership-linked payroll profile.");
+    err.status = 400;
+    throw err;
+  }
+  row.employee_id = employeeId;
   return row;
 }
 
 async function insertLeaveRow(table, row) {
+  assertLeaveRowEmployeeId(row, table);
   const first = await supabaseAdmin.from(table).insert(row).select("*").maybeSingle();
   if (!first.error) return first;
-  if (row.employee_id && /employee_id/i.test(first.error.message || "")) {
-    const rest = { ...row };
-    delete rest.employee_id;
-    return supabaseAdmin.from(table).insert(rest).select("*").maybeSingle();
-  }
+  throwIfMissingWorkforceColumn(first.error, "employee_id");
   return first;
 }
 

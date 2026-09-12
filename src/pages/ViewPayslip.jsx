@@ -7,6 +7,9 @@ import { createPageUrl } from '@/utils';
 import ManualShareModal from '@/components/shared/ManualShareModal';
 import PayslipDocument from '@/components/payslips/PayslipDocument';
 import { format, isValid, parseISO } from 'date-fns';
+import useCompanyContext from '@/hooks/useCompanyContext';
+import { PERMISSIONS } from '@/lib/companyPermissions';
+import { canSeePayslipCompensation, isOwnPayslipRow } from '@shared/workforce/employeeProfile.js';
 
 export default function ViewPayslip() {
     const location = useLocation();
@@ -14,8 +17,20 @@ export default function ViewPayslip() {
     const payslipId = new URLSearchParams(location.search).get('id');
     const [payslip, setPayslip] = useState(null);
     const [user, setUser] = useState(null);
+    const [loadError, setLoadError] = useState("");
     const [showManualShare, setShowManualShare] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
+    const { ctx, hasPermission, loading: companyLoading } = useCompanyContext();
+    const canManagePayroll = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
+    const isOwn = isOwnPayslipRow(payslip, {
+        membershipId: ctx?.membershipId,
+        userId: ctx?.userId,
+    });
+    const canSeePay = Boolean(
+        payslip &&
+        !companyLoading &&
+        canSeePayslipCompensation({ canManagePayroll, isOwn })
+    );
 
     useEffect(() => {
         if (payslipId) {
@@ -26,10 +41,18 @@ export default function ViewPayslip() {
     const loadPayslip = async () => {
         try {
             const [payslipData, userData] = await Promise.all([Payroll.get(payslipId), User.me()]);
+            if (!payslipData) {
+                setPayslip(null);
+                setLoadError("This payslip is not available.");
+                return;
+            }
+            setLoadError("");
             setPayslip(payslipData);
             setUser(userData);
         } catch (error) {
             console.error('Error loading payslip:', error);
+            setPayslip(null);
+            setLoadError("This payslip is not available.");
         }
     };
 
@@ -92,7 +115,7 @@ export default function ViewPayslip() {
                         </Button>
                         <div>
                             <h1 className="text-xl font-semibold text-foreground">
-                                {payslip ? `Payslip ${payslip.payslip_number}` : 'Loading...'}
+                                {payslip ? `Payslip ${payslip.payslip_number}` : loadError || 'Loading...'}
                             </h1>
                             <p className="text-sm text-muted-foreground">
                                 {payslip ? `${payslip.employee_name}` : ''}
@@ -100,18 +123,18 @@ export default function ViewPayslip() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {payslipId && (
-                            <>
-                                <Button variant="outline" onClick={handleShare}>
-                                    <Share2 className="w-4 h-4 mr-2" />
-                                    Share
-                                </Button>
-                                <Button onClick={handleDownloadPDF}>
-                                    <Download className="w-4 h-4 mr-2" />
-                                    Download PDF
-                                </Button>
-                            </>
-                        )}
+                        {payslipId && canSeePay && canManagePayroll ? (
+                            <Button variant="outline" onClick={handleShare}>
+                                <Share2 className="w-4 h-4 mr-2" />
+                                Share
+                            </Button>
+                        ) : null}
+                        {payslipId && canSeePay ? (
+                            <Button onClick={handleDownloadPDF}>
+                                <Download className="w-4 h-4 mr-2" />
+                                Download PDF
+                            </Button>
+                        ) : null}
                     </div>
                 </div>
             </div>
@@ -120,7 +143,15 @@ export default function ViewPayslip() {
             <div className="p-4">
                 <div className="max-w-7xl mx-auto">
                     <div className="bg-slate-100 rounded-lg border border-border p-3 sm:p-6">
-                        {payslip ? (
+                        {loadError ? (
+                            <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                                {loadError} You can only open your own payslip, or a team payslip if you administer payroll.
+                            </div>
+                        ) : payslip && !companyLoading && !canSeePay ? (
+                            <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
+                                Pay amounts on this payslip are visible only to payroll managers or the employee it belongs to.
+                            </div>
+                        ) : payslip && canSeePay ? (
                             <PayslipDocument
                                 payslip={payslip}
                                 user={user}

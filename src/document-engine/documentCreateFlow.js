@@ -95,5 +95,6 @@ export function specialisedListPath(typeKey) {
   if (commercial === "invoice" || commercial === "recurring_invoice") return createPageUrl("Invoices");
   if (commercial === "quote") return createPageUrl("Quotes");
   if (commercial === "payslip") return createPageUrl("Payslips");
+  if (String(typeKey || "").trim().toLowerCase() === "leave_request") return createPageUrl("Leave");
   return createPageUrl("Documents");
 }

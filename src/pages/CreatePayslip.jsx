@@ -18,6 +18,7 @@ import { payrollApi } from "@/services/PayrollApiService";
 import EmployeeSelect from "@/components/workforce/EmployeeSelect";
 import { parseUuid } from "@shared/ids/uuid.js";
 import { buildPayslipNumber } from "@shared/payroll/payslipNumber.js";
+import { requirePayslipMembershipId } from "@shared/payroll/payslipWriteGuard.js";
 
 export default function CreatePayslip() {
     const navigate = useNavigate();
@@ -89,7 +90,7 @@ export default function CreatePayslip() {
                                 if (!id) return null;
                                 return {
                                     id,
-                                    employee_id: id,
+                                    employee_id: p.employee_number || "",
                                     membership_id: id,
                                     payroll_profile_id: parseUuid(p.id),
                                     user_id: parseUuid(p.user_id),
@@ -120,7 +121,9 @@ export default function CreatePayslip() {
         const selectedId = parseUuid(id) || "";
         setEmployeeUuid(selectedId);
         const emp = employees.find(
-            (row) => parseUuid(row.id) === selectedId || parseUuid(row.employee_id) === selectedId
+            (row) =>
+                parseUuid(row.id) === selectedId ||
+                parseUuid(row.membership_id) === selectedId
         );
         if (!emp) {
             setPayslipData((prev) => ({
@@ -224,11 +227,13 @@ export default function CreatePayslip() {
             pay_period_start !== "" &&
             pay_period_end !== "" &&
             pay_date !== "" &&
-            parseFloat(basic_salary) > 0
+            parseFloat(basic_salary) > 0 &&
+            Boolean(calculatedPayroll) &&
+            !previewError
         );
-    }, [payslipData, employeeUuid]);
+    }, [payslipData, employeeUuid, calculatedPayroll, previewError]);
 
-    const { calculatedPayroll } = useServerPayrollPreview({
+    const { calculatedPayroll, previewError } = useServerPayrollPreview({
         basicSalary: payslipData.basic_salary,
         allowances: payslipData.allowances,
         overtimeHours: payslipData.overtime_hours,
@@ -311,16 +316,29 @@ export default function CreatePayslip() {
 
             let employee_user_id = null;
             const selected = employees.find(
-                (row) => parseUuid(row.id) === parseUuid(employeeUuid) || parseUuid(row.employee_id) === parseUuid(employeeUuid)
+                (row) =>
+                    parseUuid(row.id) === parseUuid(employeeUuid) ||
+                    parseUuid(row.membership_id) === parseUuid(employeeUuid)
             );
             employee_user_id = parseUuid(selected?.user_id);
+            let membershipId;
+            try {
+                membershipId = requirePayslipMembershipId({ membership_id: employeeUuid });
+            } catch (err) {
+                toast({
+                    title: "Select an employee",
+                    description: err?.message || "Payslips require a workforce membership UUID.",
+                    variant: "destructive",
+                });
+                return;
+            }
 
             await Payroll.create({
                 ...payslipData,
                 payslip_number: payslipNumber,
                 employee_user_id: employee_user_id || undefined,
                 payroll_profile_id: parseUuid(payslipData.payroll_profile_id) || undefined,
-                membership_id: parseUuid(employeeUuid) || undefined,
+                membership_id: membershipId,
                 pay_run_id: parseUuid(payslipData.pay_run_id) || undefined,
                 pay_run_item_id: parseUuid(payslipData.pay_run_item_id) || undefined,
                 gross_pay: grossPay,
@@ -733,6 +751,11 @@ export default function CreatePayslip() {
 
                     {/* Actions */}
                     <div className="flex flex-col items-end gap-2">
+                        {previewError ? (
+                            <p className="text-sm text-amber-800 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 w-full">
+                                {previewError}
+                            </p>
+                        ) : null}
                         {periodCovered ? (
                             <p className="text-sm text-amber-800 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 w-full">
                                 This pay period is already covered by a finalized pay run. Use Payroll to open an adjustment run instead of creating a second payslip.

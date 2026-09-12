@@ -9,7 +9,8 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
-import { payslipsToCsv, parsePayslipCsv, csvRowToPayslipPayload } from "@/utils/payslipCsvMapping";
+import { payslipsToCsv, parsePayslipCsv, csvRowToPayslipPayload, attachPayslipMembership } from "@/utils/payslipCsvMapping";
+import { listWorkforceEmployees } from "@/services/CompanyTeamService";
 import PayslipList from "../components/payslips/PayslipList";
 import { useAppStore } from "@/stores/useAppStore";
 import { useDocumentListController } from "@/hooks/useDocumentListController";
@@ -31,8 +32,9 @@ export default function PayslipsPage() {
     const [itemsPerPage, setItemsPerPage] = useState(25);
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
-    const { hasPermission } = useCompanyContext();
+    const { hasPermission, membershipId, ctx } = useCompanyContext();
     const canManagePayroll = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
+    const actorUserId = ctx?.userId || null;
     const [periodCovered, setPeriodCovered] = useState(false);
     const payslipFileInputRef = useRef(null);
     const { toast } = useToast();
@@ -104,15 +106,31 @@ export default function PayslipsPage() {
                     toast({ title: "Import failed", description: "CSV is empty or invalid.", variant: "destructive" });
                     return;
                 }
+                const roster = await listWorkforceEmployees().catch(() => []);
                 let created = 0;
+                let skipped = 0;
                 for (const row of rows) {
                     const payload = csvRowToPayslipPayload(headers, row);
-                    if (payload.employee_name) {
-                        await Payroll.create(payload);
-                        created++;
+                    if (!payload.employee_name) {
+                        skipped += 1;
+                        continue;
                     }
+                    const attached = attachPayslipMembership(payload, Array.isArray(roster) ? roster : []);
+                    if (!attached.ok) {
+                        skipped += 1;
+                        continue;
+                    }
+                    await Payroll.create(attached.payload);
+                    created++;
                 }
-                toast({ title: "Import complete", description: `${created} payslip(s) imported.`, variant: "default" });
+                toast({
+                    title: "Import complete",
+                    description:
+                        skipped > 0
+                            ? `${created} payslip(s) imported. ${skipped} skipped (missing workforce membership).`
+                            : `${created} payslip(s) imported.`,
+                    variant: "default",
+                });
                 loadData();
             } catch (err) {
                 toast({ title: "Import failed", description: err?.message || "Could not parse CSV.", variant: "destructive" });
@@ -186,6 +204,7 @@ export default function PayslipsPage() {
                             {isImporting ? "Importing…" : "Import CSV"}
                         </Button>
                         ) : null}
+                        {canManagePayroll ? (
                         <Button
                             variant="outline"
                             size="sm"
@@ -196,6 +215,7 @@ export default function PayslipsPage() {
                             <Download className="w-4 h-4 mr-2" />
                             {isExporting ? "Exporting…" : "Export CSV"}
                         </Button>
+                        ) : null}
                     </div>
                 </motion.div>
 
@@ -216,7 +236,15 @@ export default function PayslipsPage() {
                     </CardHeader>
                     <CardContent className="p-3 sm:p-4 md:p-6 overflow-hidden">
                         {isLoading ? (
-                            <PayslipList payslips={[]} isLoading userCurrency={userCurrency} onActionSuccess={loadData} />
+                            <PayslipList
+                                payslips={[]}
+                                isLoading
+                                userCurrency={userCurrency}
+                                onActionSuccess={loadData}
+                                canManagePayroll={canManagePayroll}
+                                actorMembershipId={membershipId}
+                                actorUserId={actorUserId}
+                            />
                         ) : loadError && filteredPayslips.length === 0 ? (
                             <EmptyState
                                 icon={<Receipt className="h-7 w-7 text-red-500" />}
@@ -249,6 +277,9 @@ export default function PayslipsPage() {
                                     isLoading={false}
                                     userCurrency={userCurrency}
                                     onActionSuccess={loadData}
+                                    canManagePayroll={canManagePayroll}
+                                    actorMembershipId={membershipId}
+                                    actorUserId={actorUserId}
                                 />
 
                                 <DocumentListPagination

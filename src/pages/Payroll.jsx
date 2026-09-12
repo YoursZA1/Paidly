@@ -10,10 +10,11 @@ import { createPageUrl } from "@/utils";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { useAppStore } from "@/stores/useAppStore";
 import { payrollApi } from "@/services/PayrollApiService";
-import { workforceApi } from "@/services/WorkforceApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
+import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
+import { uncoveredPayRunIds } from "@shared/payroll/adjustmentRun.js";
 
 const STATUS_LABEL = {
   draft: "Draft",
@@ -42,14 +43,12 @@ export default function PayrollPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [needsAdjustment, setNeedsAdjustment] = useState(false);
+  const [creatingAdjustment, setCreatingAdjustment] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
       setData(await payrollApi.overview());
-      const summary = await workforceApi.summary().catch(() => null);
-      setNeedsAdjustment(Boolean(summary?.payroll?.needs_adjustment_run));
     } catch (err) {
       toast({ title: "Could not load payroll", description: err.message, variant: "destructive" });
     } finally {
@@ -74,8 +73,32 @@ export default function PayrollPage() {
     }
   };
 
+  const createAdjustment = async (originalPayRunId) => {
+    if (!originalPayRunId) return;
+    setCreatingAdjustment(true);
+    try {
+      const original = (data?.runs || []).find((row) => row.id === originalPayRunId);
+      const run = await payrollApi.createRun({
+        run_type: "adjustment",
+        original_pay_run_id: originalPayRunId,
+        period_start: original?.period_start,
+        period_end: original?.period_end,
+        period_label: original?.period_label ? `${original.period_label} adjustment` : undefined,
+        frequency: original?.frequency,
+      });
+      toast({ title: "Adjustment run created", description: run.period_label });
+      navigate(createPageUrl(`PayRun?id=${run.id}`));
+    } catch (err) {
+      toast({ title: "Could not create adjustment run", description: err.message, variant: "destructive" });
+    } finally {
+      setCreatingAdjustment(false);
+    }
+  };
+
   const run = data?.current_run;
   const money = (n) => formatCurrency(Number(n || 0), currency);
+  const needsAdjustment = Boolean(data?.needs_adjustment_run);
+  const flaggedRunIds = new Set(uncoveredPayRunIds(data?.adjustment_signals || []));
 
   return (
     <FeatureGate feature="payroll" userPlan={userPlan}>
@@ -106,9 +129,12 @@ export default function PayrollPage() {
         </PageTemplate.Header>
         <PageTemplate.Body>
           {needsAdjustment ? (
-            <p className="mb-4 text-sm text-amber-900 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-              Leave was approved after a finalized pay run. Create an adjustment run so unpaid leave is applied once through calculate — do not add a second leave deduction row.
-            </p>
+            <AdjustmentRunBanner
+              signals={data?.adjustment_signals || []}
+              runs={data?.runs || []}
+              creating={creatingAdjustment}
+              onCreateAdjustment={createAdjustment}
+            />
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-6">
             <SummaryCard label="Employees" value={data?.employees ?? "—"} icon={Users} />
@@ -180,9 +206,19 @@ export default function PayrollPage() {
                       <td className="px-4 py-2.5 tabular-nums">{money(row.deductions_total)}</td>
                       <td className="px-4 py-2.5 tabular-nums">{money(row.net_total)}</td>
                       <td className="px-4 py-2.5">
-                        <Badge variant="outline" className={statusClass(row.status)}>
-                          {STATUS_LABEL[row.status] || row.status}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className={statusClass(row.status)}>
+                            {STATUS_LABEL[row.status] || row.status}
+                          </Badge>
+                          {row.run_type === "adjustment" ? (
+                            <Badge variant="outline">Adjustment</Badge>
+                          ) : null}
+                          {flaggedRunIds.has(row.id) ? (
+                            <Badge variant="outline" className="bg-amber-500/15 text-amber-800 border-amber-500/20">
+                              Needs adjustment
+                            </Badge>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}

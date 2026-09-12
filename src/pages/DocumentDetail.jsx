@@ -10,10 +10,6 @@ import DocumentPdfPreviewModal from "@/components/documents/DocumentPdfPreviewMo
 import DocumentSendModal from "@/components/documents/DocumentSendModal";
 import DocumentSignatureModal from "@/components/documents/DocumentSignatureModal";
 import DocumentPdfTemplate from "@/components/documents/DocumentPdfTemplate";
-import LeaveRequestFields, {
-  leaveFormStateFromMetadata,
-  leaveMetadataFromForm,
-} from "@/components/documents/LeaveRequestFields";
 import ExpenseClaimFields, {
   expenseClaimFormStateFromMetadata,
   expenseClaimMetadataFromForm,
@@ -38,7 +34,9 @@ import { Client } from "@/api/entities";
 import { DOCUMENT_TYPES } from "@/document-engine/documentTypes";
 import {
   leftoverHubCommercialMessage,
+  leftoverHubLeaveMessage,
   isDocumentsHubExcludedType,
+  isLeftoverHubLeaveRequest,
 } from "@/document-engine/documentSystemOfRecord";
 import { specialisedListPath } from "@/document-engine/documentCreateFlow";
 import {
@@ -246,10 +244,6 @@ export default function DocumentDetailPage() {
   const [discount, setDiscount] = useState("0");
   const [documentCurrency, setDocumentCurrency] = useState("ZAR");
   const [lines, setLines] = useState([]);
-  const [leaveType, setLeaveType] = useState("annual");
-  const [leaveDateRange, setLeaveDateRange] = useState({ from: undefined, to: undefined });
-  const [leaveReason, setLeaveReason] = useState("");
-  const [leaveBalances, setLeaveBalances] = useState({});
   const [expenseLines, setExpenseLines] = useState(() => [emptyExpenseLine()]);
   const [expenseReimbursement, setExpenseReimbursement] = useState("bank_transfer");
   const [expenseNotes, setExpenseNotes] = useState("");
@@ -314,13 +308,6 @@ export default function DocumentDetailPage() {
         setDocumentCurrency(row.currency || "ZAR");
         setLines((row.document_items || []).map(lineFromRow));
         setPaymentSummary(row.payment_summary || null);
-        if (row.type === "leave_request") {
-          const leaveForm = leaveFormStateFromMetadata(row.metadata);
-          setLeaveType(leaveForm.leaveType);
-          setLeaveDateRange(leaveForm.dateRange);
-          setLeaveReason(leaveForm.reason || row.body || "");
-          setLeaveBalances(leaveForm.balances);
-        }
         if (row.type === "expense_claim") {
           const claimForm = expenseClaimFormStateFromMetadata(row.metadata);
           setExpenseLines(claimForm.lines);
@@ -550,11 +537,7 @@ export default function DocumentDetailPage() {
         client_id: doc.client_id,
       };
       if (isLeaveRequest) {
-        patch.body = leaveReason.trim() || null;
-        patch.metadata = {
-          ...(typeof doc.metadata === "object" && doc.metadata ? doc.metadata : {}),
-          ...leaveMetadataFromForm({ leaveType, dateRange: leaveDateRange, reason: leaveReason, balances: leaveBalances }),
-        };
+        throw new Error("Leave requests cannot be edited in the Documents Hub. Open Leave to apply or approve.");
       }
       if (isExpenseClaim) {
         patch.body = expenseNotes.trim() || null;
@@ -919,6 +902,74 @@ export default function DocumentDetailPage() {
     );
   }
 
+  if (isLeftoverHubLeaveRequest(doc.type)) {
+    return (
+      <PageTemplate>
+        <Card className="mx-auto max-w-lg">
+          <CardHeader>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5" aria-hidden />
+            </div>
+            <CardTitle>Not the leave ledger</CardTitle>
+            <CardDescription>{leftoverHubLeaveMessage()}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {doc.title?.trim() || doc.document_number || "Untitled leave request"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link to={createPageUrl("Leave")}>Open Leave</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to={createPageUrl("CreateLeaveRequest")}>Apply for leave</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to={createPageUrl("Documents")}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to documents
+                </Link>
+              </Button>
+              {doc.archived_at ? (
+                <Button variant="outline" type="button" disabled={saving} onClick={handleArchiveToggle}>
+                  Restore leftover
+                </Button>
+              ) : (
+                <Button variant="outline" type="button" disabled={saving} onClick={handleArchiveToggle}>
+                  Archive leftover
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                type="button"
+                className="text-destructive"
+                disabled={saving}
+                onClick={() => setLeftoverDeleteOpen(true)}
+              >
+                Remove leftover
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        <AlertDialog open={leftoverDeleteOpen} onOpenChange={setLeftoverDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove leftover hub record?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This deletes the leftover Documents Hub row only. It does not delete leave ledger
+                requests, balances, or transactions.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRemoveLeftover}>Remove leftover</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </PageTemplate>
+    );
+  }
+
   if (isDocumentsHubExcludedType(doc.type)) {
     const listHref = specialisedListPath(doc.type);
     const typeName = typeLabel(doc.type);
@@ -1257,17 +1308,7 @@ export default function DocumentDetailPage() {
                 </div>
 
                 {/* ── Specialised field editors ── */}
-                {isLeaveRequest ? (
-                  <LeaveRequestFields
-                    leaveType={leaveType}
-                    onLeaveTypeChange={setLeaveType}
-                    dateRange={leaveDateRange}
-                    onDateRangeChange={setLeaveDateRange}
-                    reason={leaveReason}
-                    onReasonChange={setLeaveReason}
-                    balances={leaveBalances}
-                  />
-                ) : isExpenseClaim ? (
+                {isExpenseClaim ? (
                   <ExpenseClaimFields
                     lines={expenseLines}
                     onLinesChange={setExpenseLines}

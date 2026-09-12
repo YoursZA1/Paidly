@@ -18,7 +18,9 @@ import { buildEmployeeProfile } from "../../../shared/workforce/employeeProfile.
 import { mergeEmployeeTimeline } from "../../../shared/workforce/employeeTimeline.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import { assertOwnEmployee, assertSameOrg } from "./workforceAuth.js";
+import { throwIfMissingWorkforceColumn } from "./schemaGuard.js";
 import { writeWorkforceAudit } from "./workforceAudit.js";
+import { loadOutstandingAdjustmentSignals } from "./adjustmentSignals.js";
 
 registerWorkforceSubscribers();
 
@@ -307,18 +309,10 @@ async function persistPortalInvite({ orgId, email, role, jobFunction, actorId, m
       };
     }
   }
-  if (error && /membership_id/i.test(error.message || "")) {
-    delete row.membership_id;
-    const retry = await supabaseAdmin.from("company_invites").insert(row).select("id").maybeSingle();
-    if (retry.error) throw retry.error;
-    return {
-      id: retry.data?.id,
-      token,
-      expiresAt,
-      inviteLink: companyInviteShareUrl(token),
-    };
+  if (error) {
+    throwIfMissingWorkforceColumn(error, "membership_id");
+    throw error;
   }
-  if (error) throw error;
   return {
     id: data?.id,
     token,
@@ -637,25 +631,13 @@ export async function workforceSummary(orgId, { managerScopeId = null } = {}) {
       payslipCountQuery = payslipCountQuery.in("membership_id", ids);
     }
     const payslipCount = await payslipCountQuery;
-    if (payslipCount.error && /membership_id/i.test(payslipCount.error.message || "")) {
-      payslipsGenerated = employees.reduce((sum, row) => sum + (Number(row.payslip_count) || 0), 0);
-    } else {
-      payslipsGenerated = payslipCount.count || 0;
+    if (payslipCount.error) {
+      throwIfMissingWorkforceColumn(payslipCount.error, "membership_id");
+      throw payslipCount.error;
     }
+    payslipsGenerated = payslipCount.count || 0;
   }
-  let adjustmentSignals = [];
-  try {
-    const { data: adjEvents } = await supabaseAdmin
-      .from("workforce_events")
-      .select("id, employee_id, payload, created_at")
-      .eq("org_id", orgId)
-      .eq("event_type", WORKFORCE_EVENT_TYPES.PAYROLL_PROCESSED)
-      .order("created_at", { ascending: false })
-      .limit(25);
-    adjustmentSignals = (adjEvents || []).filter((row) => row.payload?.needs_adjustment_run);
-  } catch {
-    adjustmentSignals = [];
-  }
+  const adjustment = await loadOutstandingAdjustmentSignals(orgId);
   return {
     workforce: {
       total: employees.length,
@@ -675,12 +657,8 @@ export async function workforceSummary(orgId, { managerScopeId = null } = {}) {
       awaiting_review: (runs || []).filter((r) => r.status === "awaiting_approval" || r.status === "calculated").length,
       finalized: (runs || []).filter((r) => r.finalized_at).length,
       payslips_generated: payslipsGenerated || 0,
-      needs_adjustment_run: adjustmentSignals.length > 0,
-      adjustment_signals: adjustmentSignals.slice(0, 10).map((row) => ({
-        employee_id: row.employee_id,
-        leave_request_id: row.payload?.leave_request_id || null,
-        at: row.created_at,
-      })),
+      needs_adjustment_run: adjustment.needs_adjustment_run,
+      adjustment_signals: adjustment.signals,
     },
   };
 }

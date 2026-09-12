@@ -6,6 +6,7 @@
  * payroll_profiles is compensation only — never the HR source of truth.
  */
 
+import { parseUuid } from "../ids/uuid.js";
 import { canonicalEmployeeId, formatEmployeeLabel, payrollProfileIdOf } from "./employeeIdentity.js";
 
 export const COMPENSATION_FIELDS = Object.freeze([
@@ -25,6 +26,28 @@ export const COMPENSATION_FIELDS = Object.freeze([
  */
 export function canSeeEmployeeCompensation(opts = {}) {
   return Boolean(opts.canManagePayroll || opts.isSelf);
+}
+
+/**
+ * Payslip compensation is visible to payroll admins or the employee on that row.
+ * Managers with team-summary access do not see another person's net pay.
+ *
+ * @param {Record<string, unknown> | null | undefined} payslip
+ * @param {{ membershipId?: unknown, userId?: unknown }} [actor]
+ */
+export function isOwnPayslipRow(payslip, actor = {}) {
+  const membershipId = parseUuid(actor.membershipId);
+  const userId = parseUuid(actor.userId);
+  if (membershipId && parseUuid(payslip?.membership_id) === membershipId) return true;
+  if (userId && parseUuid(payslip?.employee_user_id) === userId) return true;
+  return false;
+}
+
+/**
+ * @param {{ canManagePayroll?: boolean, isOwn?: boolean }} [opts]
+ */
+export function canSeePayslipCompensation(opts = {}) {
+  return Boolean(opts.canManagePayroll || opts.isOwn);
 }
 
 /**

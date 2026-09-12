@@ -15,6 +15,7 @@ import { useAutoDraft } from "@/hooks/useAutoDraft";
 import { useServerPayrollPreview } from "@/hooks/useServerPayrollPreview";
 import { useToast } from "@/components/ui/use-toast";
 import { parseUuid } from "@shared/ids/uuid.js";
+import { requirePayslipMembershipId } from "@shared/payroll/payslipWriteGuard.js";
 
 export default function EditPayslip() {
     const navigate = useNavigate();
@@ -130,7 +131,7 @@ export default function EditPayslip() {
         }));
     };
 
-    const { calculatedPayroll } = useServerPayrollPreview({
+    const { calculatedPayroll, previewError } = useServerPayrollPreview({
         basicSalary: payslipData?.basic_salary,
         allowances: payslipData?.allowances || [],
         overtimeHours: payslipData?.overtime_hours,
@@ -157,6 +158,14 @@ export default function EditPayslip() {
     const isLocked = Boolean(payslipData?.locked || payslipData?.finalized_at || payslipData?.pay_run_item_id);
 
     const handleUpdatePayslip = async () => {
+        if (!isLocked && (previewError || !calculatedPayroll)) {
+            toast({
+                title: "Payroll preview unavailable",
+                description: previewError || "Statutory amounts must come from the server before this draft can be saved.",
+                variant: "destructive",
+            });
+            return;
+        }
         if (isLocked) {
             toast({
                 title: "This payslip is locked",
@@ -167,10 +176,21 @@ export default function EditPayslip() {
         }
         try {
             const { id: _id, created_date: _createdDate, updated_date: _updatedDate, created_by: _createdBy, ...updateData } = payslipData;
-            
+            let membershipId;
+            try {
+                membershipId = requirePayslipMembershipId(payslipData);
+            } catch (err) {
+                toast({
+                    title: "Employee membership missing",
+                    description: err?.message || "This draft cannot be saved without a workforce membership UUID.",
+                    variant: "destructive",
+                });
+                return;
+            }
+
             await Payroll.update(payslipId, {
                 ...updateData,
-                membership_id: parseUuid(payslipData.membership_id) || undefined,
+                membership_id: membershipId,
                 payroll_profile_id: parseUuid(payslipData.payroll_profile_id) || undefined,
                 gross_pay: grossPay,
                 tax_deduction: payeDeduction,
@@ -523,7 +543,12 @@ export default function EditPayslip() {
                     </Card>
 
                     {/* Actions */}
-                    <div className="flex justify-end">
+                    <div className="flex flex-col items-end gap-2">
+                        {previewError && !isLocked ? (
+                            <p className="text-sm text-amber-800 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 w-full">
+                                {previewError}
+                            </p>
+                        ) : null}
                         {draftStatusLabel ? (
                             <span
                                 className={`self-center mr-3 text-xs ${draftHasConflict ? "text-destructive font-medium" : "text-muted-foreground"}`}
@@ -533,7 +558,7 @@ export default function EditPayslip() {
                                 {draftSavedAtLabel ? ` · ${draftSavedAtLabel}` : ""}
                             </span>
                         ) : null}
-                        <Button onClick={handleUpdatePayslip} size="lg" className="bg-primary hover:bg-primary/90" disabled={isLocked}>
+                        <Button onClick={handleUpdatePayslip} size="lg" className="bg-primary hover:bg-primary/90" disabled={isLocked || Boolean(previewError) || !calculatedPayroll}>
                             <Save className="w-4 h-4 mr-2" />
                             {isLocked ? "Locked" : "Update Payslip"}
                         </Button>

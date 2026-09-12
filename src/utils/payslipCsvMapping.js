@@ -2,13 +2,22 @@
  * Payslip CSV mapping for Payslip_export.csv compatibility.
  * Matches table columns and user activity (created_by_id, created_at, updated_at)
  * for capture, storage, and import/export. allowances and other_deductions stored as JSON in CSV.
+ *
+ * `employee_id` is the printed employee number. The workforce UUID is `membership_id`.
  */
+
+import { parseUuid } from "@shared/ids/uuid.js";
+import {
+  canonicalEmployeeId,
+  printedEmployeeNumber,
+} from "@shared/workforce/employeeIdentity.js";
 
 /** CSV column headers matching Payslip_export.csv */
 export const PAYSLIP_CSV_HEADERS = [
   "payslip_number",
   "employee_name",
   "employee_id",
+  "membership_id",
   "employee_email",
   "employee_phone",
   "position",
@@ -86,7 +95,8 @@ export function payslipToCsvRow(payslip) {
   return [
     payslip.payslip_number ?? "",
     payslip.employee_name ?? "",
-    payslip.employee_id ?? "",
+    printedEmployeeNumber(payslip) || payslip.employee_id || "",
+    canonicalEmployeeId(payslip) || payslip.membership_id || "",
     payslip.employee_email ?? "",
     payslip.employee_phone ?? "",
     payslip.position ?? "",
@@ -144,7 +154,11 @@ export function csvRowToPayslipPayload(headers, values) {
   const payload = {
     payslip_number: (row.payslip_number || "").trim() || undefined,
     employee_name: (row.employee_name || "").trim() || undefined,
-    employee_id: (row.employee_id || "").trim() || undefined,
+    employee_id: printedEmployeeNumber({
+      employee_id: (row.employee_id || "").trim() || undefined,
+      employee_number: (row.employee_number || "").trim() || undefined,
+    }) || undefined,
+    membership_id: parseUuid(row.membership_id) || undefined,
     employee_email: (row.employee_email || "").trim() || undefined,
     employee_phone: (row.employee_phone || "").trim() || undefined,
     position: (row.position || "").trim() || undefined,
@@ -167,6 +181,47 @@ export function csvRowToPayslipPayload(headers, values) {
     status,
   };
   return payload;
+}
+
+/**
+ * Attach `membership_id` from an explicit CSV column or a workforce roster.
+ * Never stores a display label or printed number as the UUID.
+ *
+ * @param {Record<string, unknown>} payload
+ * @param {Array<Record<string, unknown>>} roster
+ * @returns {{ ok: true, payload: Record<string, unknown> } | { ok: false, reason: string }}
+ */
+export function attachPayslipMembership(payload, roster = []) {
+  const next = { ...payload };
+  const printed = printedEmployeeNumber(next);
+  if (printed) next.employee_id = printed;
+
+  const explicit = parseUuid(next.membership_id);
+  if (explicit) {
+    next.membership_id = explicit;
+    return { ok: true, payload: next };
+  }
+
+  const email = String(next.employee_email || "").trim().toLowerCase();
+  for (const row of roster) {
+    const id = canonicalEmployeeId(row);
+    if (!id) continue;
+    const rowNumber = printedEmployeeNumber(row);
+    const rowEmail = String(row.email || "").trim().toLowerCase();
+    if (printed && rowNumber && printed.toUpperCase() === rowNumber.toUpperCase()) {
+      next.membership_id = id;
+      return { ok: true, payload: next };
+    }
+    if (email && rowEmail && email === rowEmail) {
+      next.membership_id = id;
+      return { ok: true, payload: next };
+    }
+  }
+
+  return {
+    ok: false,
+    reason: "Each imported payslip must resolve to a workforce membership UUID.",
+  };
 }
 
 /**

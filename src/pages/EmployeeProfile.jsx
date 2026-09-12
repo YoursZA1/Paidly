@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { workforceApi } from "@/services/WorkforceApiService";
 import { parseUuid } from "@shared/ids/uuid.js";
 import useCompanyContext from "@/hooks/useCompanyContext";
-import { PERMISSIONS } from "@/lib/companyPermissions";
+import { canViewEmployeeProfile, PERMISSIONS } from "@/lib/companyPermissions";
 import EmployeeSelect from "@/components/workforce/EmployeeSelect";
 import { createPageUrl } from "@/utils";
 
@@ -22,35 +22,50 @@ function employeeIdFromRoute(params, search) {
 
 export default function EmployeeProfile() {
   const { toast } = useToast();
-  const { hasPermission } = useCompanyContext();
+  const { ctx, hasPermission, loading: companyLoading } = useCompanyContext();
   const params = useParams();
   const location = useLocation();
   const id = employeeIdFromRoute(params, location.search);
+  const canOpenProfile = canViewEmployeeProfile(ctx, id);
   const canReassign = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
   const [bundle, setBundle] = useState(null);
   const [roster, setRoster] = useState([]);
   const [managerId, setManagerId] = useState("");
   const [savingManager, setSavingManager] = useState(false);
+  const [restricted, setRestricted] = useState(false);
 
   const employee = bundle?.employee || null;
   const canSeePay = Boolean(employee && !employee.compensation_redacted);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || companyLoading) return;
+    if (!canOpenProfile) {
+      setBundle(null);
+      setRestricted(true);
+      return;
+    }
+    setRestricted(false);
     workforceApi
       .profile(id)
       .then((data) => {
         setBundle(data);
         setManagerId(parseUuid(data?.employee?.manager_membership_id) || "");
       })
-      .catch((err) => toast({ variant: "destructive", title: "Could not load profile", description: err.message }));
+      .catch((err) => {
+        if (err?.status === 403) {
+          setBundle(null);
+          setRestricted(true);
+          return;
+        }
+        toast({ variant: "destructive", title: "Could not load profile", description: err.message });
+      });
     if (canReassign) {
       workforceApi
         .list()
         .then((rows) => setRoster(Array.isArray(rows) ? rows : rows?.data || []))
         .catch(() => setRoster([]));
     }
-  }, [id, toast, canReassign]);
+  }, [id, toast, canReassign, companyLoading, canOpenProfile]);
 
   const saveManager = async () => {
     if (!id) return;
@@ -80,6 +95,12 @@ export default function EmployeeProfile() {
       </PageTemplate.Header>
       <PageTemplate.Body>
         {!id ? <p className="text-sm text-muted-foreground">Missing employee id.</p> : null}
+        {id && companyLoading ? <p className="text-sm text-muted-foreground">Loading profile…</p> : null}
+        {id && !companyLoading && restricted ? (
+          <p className="text-sm text-muted-foreground">
+            You can only open your own profile, unless you have team access.
+          </p>
+        ) : null}
         {employee ? (
           <Tabs defaultValue="overview">
             <TabsList className="mb-4 flex-wrap h-auto">

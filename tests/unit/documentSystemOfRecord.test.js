@@ -39,7 +39,8 @@ describe("document system of record", () => {
     expect(isDocumentsHubExcludedType("quote")).toBe(true);
     expect(isDocumentsHubExcludedType("payslip")).toBe(true);
     expect(() => assertHubWritableType("invoice")).toThrow(/invoices/i);
-    expect(() => assertHubWritableType("leave_request")).not.toThrow();
+    expect(() => assertHubWritableType("leave_request")).toThrow(/leave ledger/i);
+    expect(hubWriteForbiddenMessage("leave_request")).toMatch(/Leave/i);
     expect(hubWriteForbiddenMessage("quote")).toMatch(/quotes/i);
   });
 

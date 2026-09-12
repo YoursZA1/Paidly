@@ -79,9 +79,8 @@ export function intersectEmployeeIdLists(a, b) {
 
 /**
  * Scope leave_requests to one person.
- * Prefer payroll_profile_id when the lookup succeeded (covers pre-backfill rows).
- * Fall back to employee_id (memberships.id) when the profile is missing so
- * requests that already store the canonical UUID are not dropped.
+ * Prefer employee_id (memberships.id). Fall back to payroll_profile_id for
+ * pre-backfill rows, then user_id.
  *
  * @param {{
  *   employeeId?: string | null,
@@ -91,13 +90,29 @@ export function intersectEmployeeIdLists(a, b) {
  * @returns {{ column: "payroll_profile_id" | "employee_id" | "user_id", value: string } | null}
  */
 export function leaveRequestEmployeeScope({ employeeId, profileId, userId } = {}) {
-  const profile = parseUuid(profileId);
-  if (profile) return { column: "payroll_profile_id", value: profile };
   const employee = parseUuid(employeeId);
   if (employee) return { column: "employee_id", value: employee };
+  const profile = parseUuid(profileId);
+  if (profile) return { column: "payroll_profile_id", value: profile };
   const user = parseUuid(userId);
   if (user) return { column: "user_id", value: user };
   return null;
+}
+
+/**
+ * Leave ledger writes must stamp memberships.id. Never strip it on retry.
+ *
+ * @param {Record<string, unknown> | null | undefined} row
+ * @param {string} [table]
+ */
+export function assertLeaveRowEmployeeId(row, table = "leave") {
+  if (parseUuid(row?.employee_id)) return row;
+  /** @type {Error & { status?: number }} */
+  const err = new Error(
+    `Cannot write ${table} without employee_id (memberships.id UUID).`
+  );
+  err.status = 400;
+  throw err;
 }
 
 /**

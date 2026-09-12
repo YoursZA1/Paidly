@@ -14,6 +14,7 @@ import { payrollApi } from "@/services/PayrollApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
+import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
 
 const STATUS_LABEL = {
   draft: "Draft",
@@ -36,6 +37,8 @@ export default function PayRunPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [validation, setValidation] = useState(null);
+  const [breakdown, setBreakdown] = useState(null);
+  const [creatingAdjustment, setCreatingAdjustment] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -91,7 +94,13 @@ export default function PayRunPage() {
         <PageTemplate.Header>
           <PageHeader
             title={run?.period_label || "Pay run"}
-            description={run ? `${run.employee_count} employees · ${STATUS_LABEL[run.status] || run.status}` : "Loading…"}
+            description={
+              run
+                ? `${run.employee_count} employees · ${STATUS_LABEL[run.status] || run.status}${
+                    run.run_type === "adjustment" ? " · Adjustment" : ""
+                  }`
+                : "Loading…"
+            }
             icon={<Wallet className="h-4 w-4" />}
             onRefresh={load}
             isRefreshing={loading}
@@ -177,6 +186,32 @@ export default function PayRunPage() {
           </PageHeader>
         </PageTemplate.Header>
         <PageTemplate.Body>
+          {run?.needs_adjustment_run && run.finalized_at ? (
+            <AdjustmentRunBanner
+              signals={[{ pay_run_ids: [run.id] }]}
+              runs={[run]}
+              creating={creatingAdjustment}
+              onCreateAdjustment={async () => {
+                setCreatingAdjustment(true);
+                try {
+                  const next = await payrollApi.createRun({
+                    run_type: "adjustment",
+                    original_pay_run_id: run.id,
+                    period_start: run.period_start,
+                    period_end: run.period_end,
+                    period_label: run.period_label ? `${run.period_label} adjustment` : undefined,
+                    frequency: run.frequency,
+                  });
+                  toast({ title: "Adjustment run created", description: next.period_label });
+                  navigate(createPageUrl(`PayRun?id=${next.id}`));
+                } catch (err) {
+                  toast({ title: "Could not create adjustment run", description: err.message, variant: "destructive" });
+                } finally {
+                  setCreatingAdjustment(false);
+                }
+              }}
+            />
+          ) : null}
           {validation && !validation.ok ? (
             <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
               {(validation.issues || []).map((issue) => (

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { payrollApi } from "@/services/PayrollApiService";
-import { calculateFullPayroll } from "@/components/payroll/PayeTaxCalculator";
 
 /**
- * Server-canonical payroll preview with a local gross fallback if the API is unavailable.
+ * Server-canonical payroll preview. Fail closed if `/api/payroll/preview` is unavailable
+ * so the UI never persists PAYE/UIF calculated with empty statutory rules.
  */
 export function useServerPayrollPreview({
   basicSalary,
@@ -73,10 +73,8 @@ export function useServerPayrollPreview({
         });
       } catch (err) {
         if (cancelled) return;
-        setError(err?.message || "Preview unavailable");
-        setServer(
-          calculateFullPayroll(basic, parsedAllowances, otH, otR, Number(medicalAid) || 0, Number(pensionFund) || 0, [])
-        );
+        setError(err?.message || "Payroll preview unavailable. Statutory amounts cannot be calculated offline.");
+        setServer(null);
       }
     }, 280);
     return () => {

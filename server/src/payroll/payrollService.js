@@ -7,7 +7,11 @@ import { johannesburgYmd, monthBounds, monthLabel } from "../../../shared/payrol
 import { countWorkingDays } from "../../../shared/leave/leaveMath.js";
 import { PAY_RUN_STATUSES } from "../../../shared/payroll/constants.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
+import { payRunNeedsAdjustment } from "../../../shared/payroll/adjustmentRun.js";
+import { requirePayslipMembershipId } from "../../../shared/payroll/payslipWriteGuard.js";
 import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/documentSendAdapter.js";
+import { loadOutstandingAdjustmentSignals } from "../workforce/adjustmentSignals.js";
+import { throwIfMissingWorkforceColumn } from "../workforce/schemaGuard.js";
 
 const DEFAULT_COMPONENTS = [
   { kind: "earning", code: "ALLOWANCE", name: "Allowance", taxable: true, recurring: true },
@@ -179,6 +183,7 @@ export async function payrollOverview(orgId) {
     .select("id", { count: "exact", head: true })
     .eq("org_id", orgId)
     .eq("status", "paid");
+  const adjustment = await loadOutstandingAdjustmentSignals(orgId);
 
   return {
     employees: profiles.filter((p) => p.payroll_status === "active" && p.employment_status !== "terminated").length,
@@ -191,6 +196,8 @@ export async function payrollOverview(orgId) {
     gross_payroll: money(current?.gross_total),
     total_deductions: money(current?.deductions_total),
     total_net: money(current?.net_total),
+    needs_adjustment_run: adjustment.needs_adjustment_run,
+    adjustment_signals: adjustment.signals,
   };
 }
 
@@ -433,18 +440,35 @@ async function unpaidLeaveRequestsByProfile(orgId, periodStart, periodEnd, profi
 }
 
 export async function createPayRun(orgId, actorId, body) {
-  const period = periodFromBody(body);
-  const frequency = String(body.frequency || "monthly");
-  const runType = String(body.run_type || "regular");
+  const input = { ...body };
+  const originalId = parseUuid(input.original_pay_run_id);
+  if (originalId && (!input.period_start || !input.period_end)) {
+    const { data: original } = await supabaseAdmin
+      .from("pay_runs")
+      .select("period_start, period_end, period_label, frequency, pay_date")
+      .eq("id", originalId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (original) {
+      input.period_start = input.period_start || original.period_start;
+      input.period_end = input.period_end || original.period_end;
+      input.period_label = input.period_label || `${original.period_label} adjustment`;
+      input.frequency = input.frequency || original.frequency;
+      input.pay_date = input.pay_date || original.pay_date;
+    }
+  }
+  const period = periodFromBody(input);
+  const frequency = String(input.frequency || "monthly");
+  const runType = String(input.run_type || "regular");
   const insert = {
     org_id: orgId,
     period_label: period.label,
     period_start: period.start,
     period_end: period.end,
-    pay_date: body.pay_date || period.end,
+    pay_date: input.pay_date || period.end,
     frequency,
     run_type: runType,
-    original_pay_run_id: body.original_pay_run_id || null,
+    original_pay_run_id: originalId,
     status: "draft",
     created_by: actorId,
   };
@@ -506,7 +530,12 @@ export async function getPayRun(orgId, runId) {
     .select("*")
     .eq("pay_run_id", runId)
     .order("employee_name", { ascending: true });
-  return { ...run, items: items || [] };
+  const adjustment = await loadOutstandingAdjustmentSignals(orgId);
+  return {
+    ...run,
+    items: items || [],
+    needs_adjustment_run: payRunNeedsAdjustment(run.id, adjustment.signals),
+  };
 }
 
 export async function calculatePayRun(orgId, actorId, runId, body = {}) {
@@ -611,13 +640,12 @@ export async function calculatePayRun(orgId, actorId, runId, body = {}) {
       unpaid_leave_amount: result.unpaid_leave_amount,
     };
     const { error } = await supabaseAdmin.from("pay_run_items").update(snapshotUpdate).eq("id", item.id);
-    if (error && /base_salary_snapshot|unpaid_leave/i.test(error.message || "")) {
-      delete snapshotUpdate.base_salary_snapshot;
-      delete snapshotUpdate.unpaid_leave_days;
-      delete snapshotUpdate.unpaid_leave_amount;
-      const retry = await supabaseAdmin.from("pay_run_items").update(snapshotUpdate).eq("id", item.id);
-      if (retry.error) throw retry.error;
-    } else if (error) {
+    if (error) {
+      throwIfMissingWorkforceColumn(error, [
+        "base_salary_snapshot",
+        "unpaid_leave_days",
+        "unpaid_leave_amount",
+      ]);
       throw error;
     }
   }
@@ -797,12 +825,15 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
     });
     const leaveSummary = await leaveSummaryForProfile(orgId, item.payroll_profile_id);
     const token = crypto.randomUUID();
+    const membershipId = requirePayslipMembershipId({
+      membership_id: item.membership_id || profile?.membership_id,
+    });
     const payslipRow = {
       org_id: orgId,
       pay_run_id: run.id,
       pay_run_item_id: item.id,
       payroll_profile_id: item.payroll_profile_id,
-      membership_id: item.membership_id || profile?.membership_id || null,
+      membership_id: membershipId,
       payslip_number: number,
       employee_name: item.employee_name,
       employee_id: item.employee_number,
@@ -834,14 +865,11 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
       created_by_id: actorId,
       user_id: actorId,
     };
-    let { data: payslip, error } = await supabaseAdmin.from("payslips").insert(payslipRow).select("id").maybeSingle();
-    if (error && payslipRow.membership_id && /membership_id/i.test(error.message || "")) {
-      delete payslipRow.membership_id;
-      const retry = await supabaseAdmin.from("payslips").insert(payslipRow).select("id").maybeSingle();
-      payslip = retry.data;
-      error = retry.error;
+    const { data: payslip, error } = await supabaseAdmin.from("payslips").insert(payslipRow).select("id").maybeSingle();
+    if (error) {
+      throwIfMissingWorkforceColumn(error, "membership_id");
+      throw error;
     }
-    if (error) throw error;
     await recordPayslipCreatedEvent({ orgId, payslipId: payslip.id });
     await supabaseAdmin
       .from("pay_run_items")

@@ -8,6 +8,9 @@ import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
 import { isAbortError } from '@/utils/retryOnAbort';
 import PayslipDocument from '@/components/payslips/PayslipDocument';
+import useCompanyContext from '@/hooks/useCompanyContext';
+import { PERMISSIONS } from '@/lib/companyPermissions';
+import { canSeePayslipCompensation, isOwnPayslipRow } from '@shared/workforce/employeeProfile.js';
 
 export default function PayslipPDF() {
     const location = useLocation();
@@ -21,6 +24,14 @@ export default function PayslipPDF() {
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const printRef = useRef(null);
+    const { ctx, hasPermission, loading: companyLoading } = useCompanyContext();
+    const canManagePayroll = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
+    const isPublicTokenView = Boolean(shareToken);
+    const isOwn = isOwnPayslipRow(payslip, {
+        membershipId: ctx?.membershipId,
+        userId: ctx?.userId,
+    });
+    const canSeePay = isPublicTokenView || canSeePayslipCompensation({ canManagePayroll, isOwn });
 
     useEffect(() => {
         if (shareToken) {
@@ -35,13 +46,13 @@ export default function PayslipPDF() {
     }, [payslipId, shareToken]);
 
     useEffect(() => {
-        if (autoDownload && !isLoading && payslip) {
+        if (autoDownload && !isLoading && payslip && (isPublicTokenView || (!companyLoading && canSeePay))) {
             const timer = setTimeout(() => {
                 void handleDownloadPDF();
             }, 600);
             return () => clearTimeout(timer);
         }
-    }, [autoDownload, isLoading, payslip]);
+    }, [autoDownload, isLoading, payslip, isPublicTokenView, companyLoading, canSeePay]);
 
     const loadPublicPayslipByToken = async (token, expectedId) => {
         setIsLoading(true);
@@ -103,8 +114,16 @@ export default function PayslipPDF() {
         return isValid(date) ? format(date, 'MMMM d, yyyy') : 'N/A';
     };
 
-    if (isLoading) {
+    if (isLoading || (!isPublicTokenView && companyLoading)) {
         return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    }
+
+    if (!isPublicTokenView && payslip && !canSeePay) {
+        return (
+            <div className="flex items-center justify-center min-h-screen p-4 text-center text-muted-foreground">
+                Pay amounts on this payslip are visible only to payroll managers or the employee it belongs to.
+            </div>
+        );
     }
 
     if (!payslip || !user) {

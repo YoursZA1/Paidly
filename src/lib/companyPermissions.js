@@ -4,6 +4,7 @@ import {
   POS_ONLY_PERMISSIONS,
 } from "@shared/posStaffInvite.js";
 import { jobFunctionExtraPermissions } from "@shared/workforcePermissions.js";
+import { parseUuid } from "@shared/ids/uuid.js";
 
 /**
  * Company (org) permission system — permissions-based RBAC for tenant dashboards.
@@ -178,6 +179,7 @@ export function membershipHasPermission(membership, permission) {
  *   userId: string,
  *   companyId: string,
  *   orgId: string,
+ *   membershipId?: string | null,
  *   companyRole: CompanyRole,
  *   jobFunction: string,
  *   permissions: Set<string>,
@@ -186,10 +188,8 @@ export function membershipHasPermission(membership, permission) {
  * }} CompanyAccessContext
  */
 
-/** Document types employees may create (leave/expense); admins manage the full catalog. */
-export const EMPLOYEE_CREATABLE_DOCUMENT_TYPES = Object.freeze(
-  new Set(["leave_request", "expense_claim"])
-);
+/** Document types employees may create in the Documents Hub. Leave uses `/api/leave`. */
+export const EMPLOYEE_CREATABLE_DOCUMENT_TYPES = Object.freeze(new Set(["expense_claim"]));
 
 /**
  * @param {{ userId: string, companyId: string, companyRole?: string, membershipRole?: string, jobFunction?: string }} input
@@ -221,6 +221,7 @@ export function normalizeJobFunction(raw) {
 export function buildCompanyAccessContext({
   userId,
   companyId,
+  membershipId,
   companyRole,
   membershipRole,
   jobFunction,
@@ -239,6 +240,7 @@ export function buildCompanyAccessContext({
     userId,
     companyId,
     orgId: companyId,
+    membershipId: parseUuid(membershipId),
     companyRole: role,
     jobFunction: normalizeJobFunction(jobFunction),
     posRegisterId: posRegisterId || null,
@@ -272,7 +274,6 @@ export function canCreateDocumentType(ctx, typeKey) {
   if (!ctx?.companyId || ctx.isOrgOwner) return true;
   if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_DOCUMENTS)) return true;
   if (!EMPLOYEE_CREATABLE_DOCUMENT_TYPES.has(key)) return false;
-  if (key === "leave_request") return hasCompanyPermission(ctx, PERMISSIONS.VIEW_OWN_LEAVE);
   return hasCompanyPermission(ctx, PERMISSIONS.VIEW_OWN_DOCUMENTS);
 }
 
@@ -284,7 +285,7 @@ export function canCreateDocumentType(ctx, typeKey) {
 export function canApproveDocument(ctx, docType, docOwnerUserId) {
   if (!ctx) return false;
   const type = String(docType || "").trim().toLowerCase();
-  const isHrApproval = type === "leave_request" || type === "expense_claim";
+  const isHrApproval = type === "expense_claim";
   if (!isHrApproval) {
     return hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_DOCUMENTS);
   }
@@ -312,6 +313,14 @@ export function canViewEmployee(ctx, targetUserId) {
     return hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_MEMBERS);
   }
   return false;
+}
+
+/** Employee Profile URLs use `memberships.id`, not auth user id. */
+export function canViewEmployeeProfile(ctx, employeeMembershipId) {
+  const target = parseUuid(employeeMembershipId);
+  if (!ctx || !target) return false;
+  if (parseUuid(ctx.membershipId) === target) return true;
+  return hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_MEMBERS);
 }
 
 export function canManageEmployees(ctx) {

@@ -85,6 +85,14 @@ async function loadOrgOwnerBranding(supabase, orgId) {
   };
 }
 
+/**
+ * Public payslips always require token + email. Prefer the emailed address,
+ * then the employee email. Never return a full payslip from the token alone.
+ */
+export function publicPayslipGateEmail(payslip) {
+  return normalizeEmail(payslip?.sent_to_email) || normalizeEmail(payslip?.employee_email) || "";
+}
+
 function buildTeaserPayslip(row, branding) {
   return {
     id: row.id,
@@ -183,21 +191,14 @@ export async function handlePublicPayslipGet(req, res) {
     }
 
     const { payslip } = bundle;
-    const sentTo = payslip.sent_to_email ? normalizeEmail(payslip.sent_to_email) : "";
-
-    if (!sentTo) {
-      await recordPayslipObserve(supabase, payslip, req);
-      return res.status(200).json({
-        requiresEmailVerification: false,
-        payslip,
-      });
-    }
+    const gateEmail = publicPayslipGateEmail(payslip);
 
     const viewer = verifyPublicPayslipViewerToken(bearerTokenFromReq(req));
     const okViewer =
+      Boolean(gateEmail) &&
       viewer &&
       viewer.shareToken.toLowerCase() === shareToken.toLowerCase() &&
-      viewer.email === sentTo;
+      viewer.email === gateEmail;
 
     if (okViewer) {
       await recordPayslipObserve(supabase, payslip, req);
@@ -216,7 +217,7 @@ export async function handlePublicPayslipGet(req, res) {
 
     return res.status(200).json({
       requiresEmailVerification: true,
-      sentToEmailHint: maskEmail(payslip.sent_to_email),
+      sentToEmailHint: gateEmail ? maskEmail(gateEmail) : "",
       payslip: buildTeaserPayslip(payslip, branding),
     });
   } catch (e) {
@@ -272,13 +273,13 @@ export async function handlePublicPayslipVerify(req, res) {
       return res.status(bundle.status === 404 ? 404 : 400).json({ error: bundle.error });
     }
 
-    const sentTo = bundle.payslip.sent_to_email
-      ? normalizeEmail(bundle.payslip.sent_to_email)
-      : "";
-    if (!sentTo) {
-      return res.status(400).json({ error: "This payslip does not require email verification" });
+    const gateEmail = publicPayslipGateEmail(bundle.payslip);
+    if (!gateEmail) {
+      return res.status(403).json({
+        error: "This payslip cannot be opened on a public link until it has been emailed to the employee.",
+      });
     }
-    if (email !== sentTo) {
+    if (email !== gateEmail) {
       return res.status(403).json({ error: "Email does not match our records" });
     }
 

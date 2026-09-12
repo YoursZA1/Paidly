@@ -36,6 +36,7 @@ import {
   isLegacyDiscountLine,
   toCommercialItemRow,
 } from "@/document-engine/documentTotals";
+import { requirePayslipMembershipId } from "@shared/payroll/payslipWriteGuard.js";
 import {
   fromStoredCommercialLineItem,
   COMMERCIAL_LINE_ITEM_WRITE_TIERS,
@@ -920,7 +921,7 @@ export class EntityManager {
         'recurring_invoices': ['org_id', 'status'],
         'packages': ['name', 'price'],
         'invoice_views': ['org_id', 'invoice_id'],
-        'payslips': ['org_id', 'employee_name'],
+        'payslips': ['org_id', 'employee_name', 'membership_id'],
         'expenses': ['org_id', 'amount', 'date'],
         'tasks': ['org_id', 'title'],
         'suppliers': ['org_id', 'name'],
@@ -1102,6 +1103,7 @@ export class EntityManager {
         'created_by_id', 'created_at', 'updated_at', 'is_sample'
       ];
       if (supabaseTable === 'payslips') {
+        supabaseData.membership_id = requirePayslipMembershipId(supabaseData);
         if (typeof supabaseData.allowances === 'string') {
           try { supabaseData.allowances = JSON.parse(supabaseData.allowances); } catch { supabaseData.allowances = []; }
         }
@@ -1556,6 +1558,9 @@ export class EntityManager {
         'is_sample', 'updated_at'
       ];
       if (supabaseTable === 'payslips') {
+        if (Object.prototype.hasOwnProperty.call(updateData, "membership_id")) {
+          updateData.membership_id = requirePayslipMembershipId(updateData);
+        }
         if (typeof updateData.allowances === 'string') {
           try { updateData.allowances = JSON.parse(updateData.allowances); } catch { updateData.allowances = []; }
         }

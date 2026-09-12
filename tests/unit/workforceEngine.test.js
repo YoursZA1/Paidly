@@ -15,8 +15,15 @@ import {
 import {
   buildEmployeeProfile,
   canSeeEmployeeCompensation,
+  canSeePayslipCompensation,
+  isOwnPayslipRow,
   redactEmployeeCompensation,
 } from "../../shared/workforce/employeeProfile.js";
+import {
+  buildCompanyAccessContext,
+  canCreateDocumentType,
+  canViewEmployeeProfile,
+} from "../../src/lib/companyPermissions.js";
 import { scopedLeaveListFilters } from "../../shared/leave/leaveIds.js";
 import { assertOwnEmployee, assertSameOrg } from "../../server/src/workforce/workforceAuth.js";
 import { mergeEmployeeTimeline, stripCompensationFromTimelineState } from "../../shared/workforce/employeeTimeline.js";
@@ -153,6 +160,51 @@ describe("employee compensation redaction", () => {
     expect(canSeeEmployeeCompensation({ canManagePayroll: false, isSelf: false })).toBe(false);
     expect(redactEmployeeCompensation(salaryRow, { canManagePayroll: true }).base_salary).toBe(30000);
     expect(redactEmployeeCompensation(salaryRow, { isSelf: true }).base_salary).toBe(30000);
+  });
+
+  it("treats a payslip as own only via membership_id or employee_user_id", () => {
+    const membershipId = "11111111-1111-4111-8111-111111111111";
+    const userId = "22222222-2222-4222-8222-222222222222";
+    const creatorId = "33333333-3333-4333-8333-333333333333";
+    const payslip = {
+      membership_id: membershipId,
+      employee_user_id: userId,
+      user_id: creatorId,
+      employee_id: "EMP-002",
+      net_pay: 18181.82,
+    };
+    expect(isOwnPayslipRow(payslip, { membershipId })).toBe(true);
+    expect(isOwnPayslipRow(payslip, { userId })).toBe(true);
+    expect(isOwnPayslipRow(payslip, { userId: creatorId })).toBe(false);
+    expect(isOwnPayslipRow(payslip, { membershipId: creatorId })).toBe(false);
+    expect(canSeePayslipCompensation({ canManagePayroll: true, isOwn: false })).toBe(true);
+    expect(canSeePayslipCompensation({ canManagePayroll: false, isOwn: true })).toBe(true);
+    expect(canSeePayslipCompensation({ canManagePayroll: false, isOwn: false })).toBe(false);
+  });
+
+  it("opens employee profile URLs by membership id, not auth user id", () => {
+    const ownMembership = "11111111-1111-4111-8111-111111111111";
+    const otherMembership = "22222222-2222-4222-8222-222222222222";
+    const userId = "33333333-3333-4333-8333-333333333333";
+    const companyId = "44444444-4444-4444-8444-444444444444";
+    const employeeCtx = buildCompanyAccessContext({
+      userId,
+      companyId,
+      membershipId: ownMembership,
+      membershipRole: "employee",
+    });
+    const managerCtx = buildCompanyAccessContext({
+      userId,
+      companyId,
+      membershipId: ownMembership,
+      membershipRole: "manager",
+    });
+    expect(canViewEmployeeProfile(employeeCtx, ownMembership)).toBe(true);
+    expect(canViewEmployeeProfile(employeeCtx, otherMembership)).toBe(false);
+    expect(canViewEmployeeProfile(employeeCtx, userId)).toBe(false);
+    expect(canViewEmployeeProfile(managerCtx, otherMembership)).toBe(true);
+    expect(canCreateDocumentType(employeeCtx, "leave_request")).toBe(false);
+    expect(canCreateDocumentType(employeeCtx, "expense_claim")).toBe(true);
   });
 
   it("strips salary from team lists for managers without payroll", () => {
