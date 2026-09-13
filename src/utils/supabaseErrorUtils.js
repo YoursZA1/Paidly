@@ -3,10 +3,18 @@
  * Use for all async operations involving Supabase (auth, storage, database).
  */
 
+import { isIntegerBindError } from "@shared/admin/adminPlatformDirectory.js";
 import { isAbortError } from "@/utils/retryOnAbort";
 
 /** User-visible copy when an operation was cancelled (navigation, Strict Mode teardown, timeout, duplicate in-flight). */
 export const SUPABASE_ABORT_USER_MESSAGE = "The request was interrupted. Please try again.";
+
+/**
+ * Postgres 22P02 when a decimal such as 1.25 is written to an integer column
+ * (invoice_items.quantity after 20260317211130). Do not truncate the value.
+ */
+export const INTEGER_QUANTITY_BIND_USER_MESSAGE =
+  "Decimal quantities such as 1.25 are valid. This save failed because the database still expects a whole number. Apply the latest Paidly database update, then tap Retry on Sync issue.";
 
 /** Shown when GoTrue / Supabase Auth blocks sign-up or confirmation emails (per-email or project limits). */
 export const AUTH_SIGNUP_EMAIL_RATE_LIMIT_MESSAGE =
@@ -91,6 +99,9 @@ export function getSupabaseErrorMessage(error, fallback = "Something went wrong"
     if (/email rate limit exceeded|over_email_send_rate/i.test(s.toLowerCase())) {
       return AUTH_SIGNUP_EMAIL_RATE_LIMIT_MESSAGE;
     }
+    if (isIntegerBindError(s)) {
+      return INTEGER_QUANTITY_BIND_USER_MESSAGE;
+    }
     return s;
   }
   const raw =
@@ -114,6 +125,9 @@ export function getSupabaseErrorMessage(error, fallback = "Something went wrong"
         "VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in Vercel for Production, then redeploy. " +
         "If the project was paused, resume it in the Supabase dashboard."
       );
+    }
+    if (isIntegerBindError(error) || isIntegerBindError(msg)) {
+      return INTEGER_QUANTITY_BIND_USER_MESSAGE;
     }
     return msg;
   }

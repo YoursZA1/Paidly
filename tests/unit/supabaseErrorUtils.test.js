@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   getSupabaseErrorMessage,
+  INTEGER_QUANTITY_BIND_USER_MESSAGE,
   SUPABASE_ABORT_USER_MESSAGE,
   throwIfSupabaseError,
   withSupabaseErrorHandling,
@@ -45,6 +46,16 @@ describe("getSupabaseErrorMessage", () => {
 
   it("trims whitespace from message", () => {
     expect(getSupabaseErrorMessage({ message: "  trimmed  " })).toBe("trimmed");
+  });
+
+  it("does not leak Postgres integer-bind text for decimal quantities", () => {
+    const pg = { code: "22P02", message: 'invalid input syntax for type integer: "1.25"' };
+    expect(getSupabaseErrorMessage(pg)).toBe(INTEGER_QUANTITY_BIND_USER_MESSAGE);
+    expect(getSupabaseErrorMessage('invalid input syntax for type integer: "1.25"')).toBe(
+      INTEGER_QUANTITY_BIND_USER_MESSAGE
+    );
+    expect(INTEGER_QUANTITY_BIND_USER_MESSAGE).not.toMatch(/\b1\b(?!\.25)/);
+    expect(INTEGER_QUANTITY_BIND_USER_MESSAGE).toContain("1.25");
   });
 });
 

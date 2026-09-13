@@ -109,6 +109,22 @@ describe("toPersistableCommercialLineItem", () => {
     expectRichFields(write);
   });
 
+  it("keeps fractional quantity 1.25 and does not truncate to 1", () => {
+    const persisted = toPersistableCommercialLineItem({
+      service_name: "Consulting",
+      quantity: 1.25,
+      unit_price: 800,
+    });
+    expect(persisted.quantity).toBe(1.25);
+    const write = projectCommercialLineItemWrite(
+      persisted,
+      "invoice_id",
+      "inv-1",
+      COMMERCIAL_LINE_ITEM_CORE_COLUMNS
+    );
+    expect(write.quantity).toBe(1.25);
+  });
+
   it("projects older write tiers without catalog columns", () => {
     const persisted = toPersistableCommercialLineItem(RICH_LINE);
     const core = projectCommercialLineItemWrite(persisted, "invoice_id", "inv-1", COMMERCIAL_LINE_ITEM_CORE_COLUMNS);
