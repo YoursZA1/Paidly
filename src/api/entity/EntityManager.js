@@ -54,6 +54,19 @@ import {
   normalizeQuoteStatus,
   QUOTE_STATUS,
 } from "@shared/commercial/documentStatuses.js";
+import { asWholeDays } from "@/utils/wholeDays.js";
+
+/** Integer day columns must not receive 1.25 — that is the invoice quantity bind error. */
+function applyWholeDayFields(row) {
+  if (!row || typeof row !== "object") return;
+  if (Object.prototype.hasOwnProperty.call(row, "lead_time_days")) {
+    row.lead_time_days = asWholeDays(row.lead_time_days);
+  }
+  if (Object.prototype.hasOwnProperty.call(row, "payment_terms_days")) {
+    const n = asWholeDays(row.payment_terms_days);
+    if (n != null) row.payment_terms_days = n;
+  }
+}
 
 /**
  * Maps app-shape line items to `invoice_items` / `quote_items` rows for a given parent.
@@ -969,6 +982,7 @@ export class EntityManager {
         Object.keys(supabaseData).forEach(key => {
           if (!CLIENT_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
         });
+        applyWholeDayFields(supabaseData);
       }
 
       const BANKING_DETAIL_INSERT_COLUMNS = [
@@ -1209,6 +1223,7 @@ export class EntityManager {
         Object.keys(supabaseData).forEach(key => {
           if (!SUPPLIER_INSERT_COLUMNS.includes(key)) delete supabaseData[key];
         });
+        applyWholeDayFields(supabaseData);
       }
 
       const PURCHASE_ORDER_INSERT_COLUMNS = [
@@ -1453,6 +1468,7 @@ export class EntityManager {
         Object.keys(updateData).forEach(key => {
           if (!CLIENT_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
+        applyWholeDayFields(updateData);
       }
       const BANKING_DETAIL_UPDATE_COLUMNS = [
         'bank_name', 'account_name', 'account_number', 'routing_number', 'swift_code',
@@ -1649,6 +1665,7 @@ export class EntityManager {
         Object.keys(updateData).forEach(key => {
           if (!SUPPLIER_UPDATE_COLUMNS.includes(key)) delete updateData[key];
         });
+        applyWholeDayFields(updateData);
       }
 
       const PURCHASE_ORDER_UPDATE_COLUMNS = [

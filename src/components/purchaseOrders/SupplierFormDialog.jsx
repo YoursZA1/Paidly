@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { asWholeDays } from "@/utils/wholeDays.js";
 
 const EMPTY_SUPPLIER = {
   name: "",
@@ -39,7 +40,7 @@ export default function SupplierFormDialog({ open, onOpenChange, supplier, onSav
     onSave({
       ...formData,
       name,
-      lead_time_days: formData.lead_time_days === "" ? null : Number(formData.lead_time_days),
+      lead_time_days: asWholeDays(formData.lead_time_days),
     });
   };
 
@@ -111,6 +112,7 @@ export default function SupplierFormDialog({ open, onOpenChange, supplier, onSav
                 id="supplier-lead-time"
                 type="number"
                 min="0"
+                step="1"
                 value={formData.lead_time_days ?? ""}
                 onChange={(e) => setFormData({ ...formData, lead_time_days: e.target.value })}
               />
