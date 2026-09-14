@@ -9,6 +9,7 @@ import {
   MARKETING_TRIAL_FOOTER,
   formatMarketingZar,
 } from "@shared/planMarketing.js";
+import AnimatedMarketingPrice from "@/components/AnimatedMarketingPrice";
 
 export default function Pricing() {
   const [cycle, setCycle] = useState("monthly");
@@ -57,6 +58,11 @@ export default function Pricing() {
         return {
           family: fam,
           name: copy.name,
+          priceAmount: copy.contactSales
+            ? null
+            : cycle === "annual"
+              ? copy.annualPriceZar
+              : copy.monthlyPriceZar,
           priceLabel: copy.contactSales
             ? "Custom"
             : formatMarketingZar(cycle === "annual" ? copy.annualPriceZar : copy.monthlyPriceZar, {
@@ -94,6 +100,7 @@ export default function Pricing() {
       return {
         family: fam,
         name: copy.name || entry.name || fam,
+        priceAmount: contactSales ? null : Number(row?.amount),
         priceLabel: contactSales ? "Custom" : formatMarketingZar(row?.amount, { grouped: cycle === "annual" }),
         period: contactSales ? "" : cycle === "annual" ? "/yr" : "/mo",
         description: copy.description || entry.description || "",
@@ -203,7 +210,13 @@ export default function Pricing() {
               <p className="mt-1 text-sm text-zinc-500">{plan.description}</p>
 
               <p className="mt-7 flex items-baseline gap-1">
-                <span className="text-4xl font-bold tracking-tight text-white">{plan.priceLabel}</span>
+                <span className="text-4xl font-bold tracking-tight text-white">
+                  {plan.contactSales || !Number.isFinite(Number(plan.priceAmount)) ? (
+                    plan.priceLabel
+                  ) : (
+                    <AnimatedMarketingPrice amount={plan.priceAmount} grouped={cycle === "annual"} />
+                  )}
+                </span>
                 {plan.period ? <span className="text-sm text-zinc-500">{plan.period}</span> : null}
               </p>
 

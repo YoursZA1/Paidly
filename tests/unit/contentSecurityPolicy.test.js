@@ -44,6 +44,7 @@ describe("production Content-Security-Policy", () => {
     expect(policy).not.toMatch(/connect-src\s+\*/);
     expect(policy).not.toContain("ipapi.co");
     expect(policy).not.toContain("unsafe-hashes");
+    expect(policy).not.toContain("vercel.com");
   });
 
   it("Express CSP matches the PayFast form-action and connect-src hosts", () => {
