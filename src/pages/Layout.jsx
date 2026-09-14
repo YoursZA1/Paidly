@@ -52,6 +52,8 @@ import useOnboardingRole from "@/hooks/useOnboardingRole";
 import usePostAuthHomeRedirect from "@/hooks/usePostAuthHomeRedirect";
 import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
+import { hasCompanyPermission } from "@/lib/companyPermissions";
+import { getWorkforceNavChildren, WORKFORCE_NAV_ID } from "@/lib/workforceNav";
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
@@ -79,12 +81,10 @@ import {
   TrendingUp,
   Activity,
   Briefcase,
-  Receipt,
   Layers,
   ShoppingCart,
   Store,
-  Wallet,
-  CalendarOff
+  Contact,
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -141,6 +141,7 @@ const PAGE_DISPLAY_NAMES = {
   Employees: "Employees",
   EmployeeProfile: "Employee",
   ManagerPortal: "Manager portal",
+  Workforce: "Workforce",
   CreateExpenseClaim: "Expense Claim",
   CreateTypedDocument: "New Document",
   ViewDocument: "Document",
@@ -233,31 +234,17 @@ const allNavigationItems = [
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-purchase-orders",
   },
+  { type: "section", title: "People", id: "nav-section-people" },
+  {
+    title: "Workforce",
+    url: createPageUrl("Workforce"),
+    icon: Contact,
+    feature: null,
+    roles: MAIN_APP_NAV_ROLES,
+    id: "nav-workforce",
+    children: [],
+  },
   { type: "section", title: "Finance", id: "nav-section-finance" },
-  {
-    title: "Payroll",
-    url: createPageUrl("Payroll"),
-    icon: Wallet,
-    feature: null,
-    roles: MAIN_APP_NAV_ROLES,
-    id: "nav-payroll",
-  },
-  {
-    title: "Payslips",
-    url: createPageUrl("MyPayroll"),
-    icon: Receipt,
-    feature: null,
-    roles: MAIN_APP_NAV_ROLES,
-    id: "nav-payslips",
-  },
-  {
-    title: "Leave",
-    url: createPageUrl("Leave"),
-    icon: CalendarOff,
-    feature: null,
-    roles: MAIN_APP_NAV_ROLES,
-    id: "nav-leave",
-  },
   {
     title: "Cash Flow",
     url: createPageUrl("CashFlow"),
@@ -352,8 +339,20 @@ const PRIMARY_NAV_PREFETCH_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-
 
 const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   const location = useLocation();
-  const [open, setOpen] = useState(false);
+  const childActive =
+    Array.isArray(item?.children) &&
+    item.children.some((child) => {
+      const path = String(child?.url || "").split("?")[0];
+      if (!path) return false;
+      return location.pathname === path || (path !== "/" && location.pathname.startsWith(`${path}/`));
+    });
+  const workforceSectionActive =
+    item?.id === WORKFORCE_NAV_ID && location.pathname.toLowerCase().startsWith("/workforce");
+  const [open, setOpen] = useState(Boolean(childActive || workforceSectionActive));
   const isCollapsedRail = collapsed && !mobile;
+  useEffect(() => {
+    if (childActive || workforceSectionActive) setOpen(true);
+  }, [childActive, workforceSectionActive]);
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -376,7 +375,7 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   }
 
   // If the item has children, render a parent nav item with dropdown
-  if (item.children && Array.isArray(item.children)) {
+  if (item.children && Array.isArray(item.children) && item.children.length > 0) {
     const isCollapsedRailParent = collapsed && !mobile;
     const buttonEl = (
       <button
@@ -733,6 +732,20 @@ export default function Layout({ children, currentPageName }) {
 
   const navigationItems = useMemo(() => {
     let items = getNavigationItems(planForNavFeatures, user?.role);
+    items = items.map((item) => {
+      if (item.id !== WORKFORCE_NAV_ID) return item;
+      const has = (permission) =>
+        companyCtx ? hasCompanyPermission(companyCtx, permission) : true;
+      return {
+        ...item,
+        children: getWorkforceNavChildren(has).map((child) => ({
+          ...child,
+          hasAccess: true,
+          hasRoleAccess: true,
+          roles: MAIN_APP_NAV_ROLES,
+        })),
+      };
+    });
     if (companyCtx) {
       items = filterNavigationForCompanyRole(items, {
         companyRole: companyCtx.companyRole,

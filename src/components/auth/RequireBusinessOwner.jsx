@@ -15,7 +15,7 @@ export default function RequireBusinessOwner({ children, redirectTo }) {
   if (!showBusinessDashboard) {
     return (
       <Navigate
-        to={redirectTo || createPageUrl("employee-dashboard")}
+        to={redirectTo || createPageUrl("Workforce")}
         replace
       />
     );

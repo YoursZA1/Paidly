@@ -19,7 +19,7 @@ function addDays(iso, n) {
   return formatIsoDate(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate());
 }
 
-export default function LeaveCalendarPage() {
+export default function LeaveCalendarPage({ embedded = false }) {
   const { toast } = useToast();
   const { profile } = useAuth();
   const userPlan = profile?.subscription_plan || profile?.plan || "starter";
@@ -98,7 +98,8 @@ export default function LeaveCalendarPage() {
 
   return (
     <FeatureGate feature="leave_management" userPlan={userPlan}>
-      <PageTemplate>
+      <PageTemplate embedded={embedded}>
+        {embedded ? null : (
         <PageTemplate.Header>
           <PageHeader
             title="Leave calendar"
@@ -110,6 +111,7 @@ export default function LeaveCalendarPage() {
             </Button>
           </PageHeader>
         </PageTemplate.Header>
+        )}
         <PageTemplate.Body>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <Button variant="outline" size="icon" className="rounded-xl" onClick={prev}><ChevronLeft className="h-4 w-4" /></Button>

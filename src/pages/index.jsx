@@ -45,6 +45,9 @@ const CreateLeaveRequest = lazy(() => import("./CreateLeaveRequest"));
 const Employees = lazy(() => import("./Employees"));
 const EmployeeProfile = lazy(() => import("./EmployeeProfile"));
 const ManagerPortal = lazy(() => import("./ManagerPortal"));
+const Workforce = lazy(() => import("./Workforce"));
+const WorkforceAttendance = lazy(() => import("./WorkforceAttendance"));
+const WorkforceReports = lazy(() => import("./WorkforceReports"));
 const PublicLeaveApproval = lazy(() => import("./PublicLeaveApproval"));
 const CreateExpenseClaim = lazy(() => import("./CreateExpenseClaim"));
 const CreateTypedDocument = lazy(() => import("./CreateTypedDocument"));
@@ -101,7 +104,7 @@ const NotFoundPage = lazy(() =>
 
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
-import { RequireCompanyPermissionRedirect, RequireEmployeeProfileAccess } from "@/components/auth/RequireCompanyPermission";
+import RequireCompanyPermission, { RequireCompanyPermissionRedirect, RequireEmployeeProfileAccess } from "@/components/auth/RequireCompanyPermission";
 import RequireBusinessOwner from "@/components/auth/RequireBusinessOwner";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { isPosAccessPath } from "@shared/posStaffInvite.js";
@@ -196,8 +199,8 @@ const MAIN_ROUTES = [
     { path: "/", element: <Home /> },
     { path: "/Dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
     { path: "/dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
-    { path: "/employee-dashboard", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
-    { path: "/EmployeeDashboard", element: <RequireAuth><CompanyWorkspace /></RequireAuth> },
+    { path: "/employee-dashboard", element: <RequireAuth><Navigate to="/Workforce" replace /></RequireAuth> },
+    { path: "/EmployeeDashboard", element: <RequireAuth><Navigate to="/Workforce" replace /></RequireAuth> },
     { path: "/Clients", element: ownerRoute(<Clients />) },
     { path: "/clients", element: ownerRoute(<Clients />) },
     { path: "/Settings", element: <RequireAuth><Settings /></RequireAuth> },
@@ -292,8 +295,20 @@ const PAYSLIP_REPORT_ROUTES = [
     { path: "/mypayroll", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><MyPayroll /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Leave", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><Leave /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/leave", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><Leave /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/ManagerPortal", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.APPROVE_LEAVE}><ManagerPortal /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/manager-portal", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.APPROVE_LEAVE}><ManagerPortal /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/ManagerPortal", element: <RequireAuth><Navigate to="/Workforce/manager" replace /></RequireAuth> },
+    { path: "/manager-portal", element: <RequireAuth><Navigate to="/Workforce/manager" replace /></RequireAuth> },
+    { path: "/Workforce", element: <RequireAuth><Workforce /></RequireAuth> },
+    { path: "/workforce", element: <RequireAuth><Workforce /></RequireAuth> },
+    { path: "/Workforce/payroll", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><Payroll /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/workforce/payroll", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><Payroll /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Workforce/manager", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.APPROVE_LEAVE}><ManagerPortal /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/workforce/manager", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.APPROVE_LEAVE}><ManagerPortal /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Workforce/employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/workforce/employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Workforce/attendance", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><WorkforceAttendance /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/workforce/attendance", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><WorkforceAttendance /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Workforce/reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><WorkforceReports /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/workforce/reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><WorkforceReports /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/employees/:id", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><RequireEmployeeProfileAccess><EmployeeProfile /></RequireEmployeeProfileAccess></RequireCompanyPermissionRedirect></RequireAuth> },
@@ -302,7 +317,8 @@ const PAYSLIP_REPORT_ROUTES = [
     { path: "/employeeprofile", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><RequireEmployeeProfileAccess><EmployeeProfile /></RequireEmployeeProfileAccess></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/LeaveCalendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><LeaveCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/leavecalendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_LEAVE}><LeaveCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/Payslips", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><Payslips /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Payslips", element: <RequireAuth><RequireCompanyPermission permission={PERMISSIONS.MANAGE_PAYROLL} redirectTo="/MyPayroll"><Payslips /></RequireCompanyPermission></RequireAuth> },
+    { path: "/payslips", element: <RequireAuth><RequireCompanyPermission permission={PERMISSIONS.MANAGE_PAYROLL} redirectTo="/MyPayroll"><Payslips /></RequireCompanyPermission></RequireAuth> },
     { path: "/CreatePayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><CreatePayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/EditPayslip", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.MANAGE_PAYROLL}><EditPayslip /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/PayslipPDF", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PAYSLIPS}><PayslipPDF /></RequireCompanyPermissionRedirect></RequireAuth> },

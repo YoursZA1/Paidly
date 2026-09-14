@@ -15,7 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
 
-export default function MyPayrollPage() {
+export default function MyPayrollPage({ embedded = false }) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { profile } = useAuth();
@@ -44,10 +44,7 @@ export default function MyPayrollPage() {
   const latest = payroll?.payslips?.[0];
   const money = (n) => formatCurrency(Number(n || 0), currency);
 
-  return (
-    <FeatureGate feature="payroll" userPlan={userPlan}>
-      <PageTemplate>
-        <PageTemplate.Header>
+  const header = (
           <PageHeader
             title="My Payroll"
             description="Your salary summary, payslips, and leave."
@@ -60,8 +57,9 @@ export default function MyPayrollPage() {
               </Link>
             </Button>
           </PageHeader>
-        </PageTemplate.Header>
-        <PageTemplate.Body>
+  );
+
+  const tabs = (
           <Tabs value={tab} onValueChange={(v) => { setTab(v); navigate(createPageUrl(`MyPayroll?tab=${v}`), { replace: true }); }}>
             <TabsList className="mb-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -202,8 +200,21 @@ export default function MyPayrollPage() {
               </Card>
             </TabsContent>
           </Tabs>
-        </PageTemplate.Body>
-      </PageTemplate>
+  );
+
+  return (
+    <FeatureGate feature="payroll" userPlan={userPlan}>
+      {embedded ? (
+        <div className="space-y-4">
+          {header}
+          {tabs}
+        </div>
+      ) : (
+        <PageTemplate>
+          <PageTemplate.Header>{header}</PageTemplate.Header>
+          <PageTemplate.Body>{tabs}</PageTemplate.Body>
+        </PageTemplate>
+      )}
     </FeatureGate>
   );
 }

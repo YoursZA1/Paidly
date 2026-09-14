@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Receipt, Download, Upload } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
@@ -19,8 +19,18 @@ import DocumentListPagination from "@/components/shared/DocumentListPagination";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { payrollApi } from "@/services/PayrollApiService";
+import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 
 export default function PayslipsPage() {
+    const { loading: companyLoading, hasPermission } = useCompanyContext();
+    if (companyLoading) return <AuthBootstrapShell />;
+    if (!hasPermission(PERMISSIONS.MANAGE_PAYROLL)) {
+        return <Navigate to={createPageUrl("MyPayroll")} replace />;
+    }
+    return <PayslipsMain />;
+}
+
+function PayslipsMain() {
     const payslipsFromStore = useAppStore((s) => s.payslips);
     const setPayslipsInStore = useAppStore((s) => s.setPayslips);
     const userProfile = useAppStore((s) => s.userProfile);

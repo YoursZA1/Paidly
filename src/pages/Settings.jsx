@@ -1831,7 +1831,7 @@ function PosIntegrationsTab() {
 const SETTINGS_TABS = [
     { value: "account", label: "My Account", icon: UserIcon, permission: PERMISSIONS.VIEW_OWN_PROFILE },
     { value: "profile", label: "Company Profile", icon: SettingsIcon, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
-    { value: "brands", label: "Brands", icon: Building2, permission: PERMISSIONS.VIEW_OWN_PROFILE },
+    { value: "brands", label: "Brands", icon: Building2, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "team", label: "Team Members", icon: Users, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
     { value: "company-team", label: "Company Team", icon: Building2, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
     { value: "currency", label: "Currency", icon: DollarSign, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },

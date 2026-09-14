@@ -315,12 +315,30 @@ export function canViewEmployee(ctx, targetUserId) {
   return false;
 }
 
+/** @param {CompanyAccessContext | null | undefined} ctx */
+export function canSeeOrgWorkforce(ctx) {
+  if (!ctx) return false;
+  if (ctx.isOrgOwner || ctx.companyRole === COMPANY_ROLES.ADMIN) return true;
+  return (
+    hasCompanyPermission(ctx, PERMISSIONS.MANAGE_EMPLOYEES) ||
+    hasCompanyPermission(ctx, PERMISSIONS.MANAGE_PAYROLL) ||
+    hasCompanyPermission(ctx, PERMISSIONS.MANAGE_LEAVE)
+  );
+}
+
 /** Employee Profile URLs use `memberships.id`, not auth user id. */
-export function canViewEmployeeProfile(ctx, employeeMembershipId) {
+export function canViewEmployeeProfile(ctx, employeeMembershipId, extras = {}) {
   const target = parseUuid(employeeMembershipId);
   if (!ctx || !target) return false;
   if (parseUuid(ctx.membershipId) === target) return true;
-  return hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_MEMBERS);
+  if (!hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_MEMBERS)) return false;
+  if (canSeeOrgWorkforce(ctx)) return true;
+  const reportsTo = parseUuid(extras.managerMembershipId);
+  if (reportsTo && reportsTo === parseUuid(ctx.membershipId)) return true;
+  if (Array.isArray(extras.knownMembershipIds)) {
+    return extras.knownMembershipIds.some((id) => parseUuid(id) === target);
+  }
+  return false;
 }
 
 export function canManageEmployees(ctx) {

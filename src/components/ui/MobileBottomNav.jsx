@@ -13,6 +13,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { createPageUrl, triggerHaptic } from "@/utils";
 import useCompanyContext from "@/hooks/useCompanyContext";
+import { resolveWorkforceHomePath } from "@/lib/workforceExperience.js";
 
 /**
  * Rule 7 — Simple navigation: one primary row only (max ~5 targets).
@@ -35,14 +36,22 @@ const PINNED_NAV_PATHS = new Set([
   createPageUrl("Clients").split("?")[0].toLowerCase(),
   createPageUrl("Payslips").split("?")[0].toLowerCase(),
   createPageUrl("Documents").split("?")[0].toLowerCase(),
+  createPageUrl("Workforce").split("?")[0].toLowerCase(),
+  createPageUrl("Workforce/manager").split("?")[0].toLowerCase(),
+  createPageUrl("Workforce/payroll").split("?")[0].toLowerCase(),
+  createPageUrl("MyPayroll").split("?")[0].toLowerCase(),
 ]);
 
 function MobileBottomNav({ onOpenMenu }) {
   const location = useLocation();
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
-  const { companyId, showBusinessDashboard } = useCompanyContext();
+  const { companyId, showBusinessDashboard, ctx } = useCompanyContext();
   const isCompanyMemberNav = Boolean(companyId) && !showBusinessDashboard;
   const activeSpeedDial = isCompanyMemberNav ? employeeSpeedDialActions : speedDialActions;
+  const memberHomeUrl = resolveWorkforceHomePath(ctx);
+  const homeUrl = isCompanyMemberNav ? memberHomeUrl : createPageUrl("Dashboard");
+  const secondaryUrl = isCompanyMemberNav ? createPageUrl("Workforce") : createPageUrl("Invoices");
+  const secondaryLabel = isCompanyMemberNav ? "Workforce" : "Invoices";
 
   useEffect(() => {
     setSpeedDialOpen(false);
@@ -65,34 +74,35 @@ function MobileBottomNav({ onOpenMenu }) {
         <div className="flex justify-between items-center max-w-layout-narrow mx-auto w-full gap-0.5 sm:gap-1">
           {/* Home */}
           <Link
-            to={createPageUrl("Dashboard")}
+            to={homeUrl}
             onClick={() => handlePress()}
             className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
-              isActive(createPageUrl("Dashboard")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+              isActive(homeUrl) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
             }`}
             aria-label="Home"
-            aria-current={isActive(createPageUrl("Dashboard")) ? "page" : undefined}
+            aria-current={isActive(homeUrl) ? "page" : undefined}
           >
             <HomeIcon className="w-6 h-6 shrink-0" />
             <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">Home</span>
           </Link>
-          {/* Invoices (owners) / My Payslips (employees) */}
           <Link
-            to={isCompanyMemberNav ? createPageUrl("MyPayroll") : createPageUrl("Invoices")}
+            to={secondaryUrl}
             onClick={() => handlePress()}
             className={`flex flex-col items-center gap-0.5 touch-manipulation min-h-[48px] min-w-[52px] justify-center rounded-2xl px-1 py-1 transition-colors active:scale-[0.97] ${
-              isActive(isCompanyMemberNav ? createPageUrl("MyPayroll") : createPageUrl("Invoices")) ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+              isActive(secondaryUrl) || (isCompanyMemberNav && location.pathname.toLowerCase().startsWith("/workforce"))
+                ? "text-primary bg-primary/10"
+                : "text-muted-foreground hover:text-foreground"
             }`}
-            aria-label={isCompanyMemberNav ? "My Payroll" : "Invoices"}
-            aria-current={isActive(isCompanyMemberNav ? createPageUrl("MyPayroll") : createPageUrl("Invoices")) ? "page" : undefined}
+            aria-label={secondaryLabel}
+            aria-current={isActive(secondaryUrl) ? "page" : undefined}
           >
             {isCompanyMemberNav ? (
-              <BanknotesIcon className="w-6 h-6 shrink-0" />
+              <UserGroupIcon className="w-6 h-6 shrink-0" />
             ) : (
               <DocumentTextIcon className="w-6 h-6 shrink-0" />
             )}
             <span className="text-[11px] font-semibold uppercase tracking-wide sm:text-xs">
-              {isCompanyMemberNav ? "Payslips" : "Invoices"}
+              {secondaryLabel}
             </span>
           </Link>
 

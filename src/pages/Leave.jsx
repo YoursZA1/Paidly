@@ -36,7 +36,7 @@ const EMPTY_TYPE = {
 
 const selectClass = "w-full h-10 rounded-xl border border-border bg-background px-3 text-sm";
 
-export default function LeaveManagementPage() {
+export default function LeaveManagementPage({ embedded = false }) {
   const { toast } = useToast();
   const { profile } = useAuth();
   const userPlan = profile?.subscription_plan || profile?.plan || "starter";
@@ -205,7 +205,8 @@ export default function LeaveManagementPage() {
 
   return (
     <FeatureGate feature="leave_management" userPlan={userPlan}>
-      <PageTemplate>
+      <PageTemplate embedded={embedded}>
+        {embedded ? null : (
         <PageTemplate.Header>
           <PageHeader
             title="Leave management"
@@ -221,12 +222,13 @@ export default function LeaveManagementPage() {
             </Button>
           </PageHeader>
         </PageTemplate.Header>
+        )}
         <PageTemplate.Body>
           <Tabs defaultValue="requests">
             <TabsList className="mb-4">
               <TabsTrigger value="requests">Requests</TabsTrigger>
-              <TabsTrigger value="types">Leave types</TabsTrigger>
-              {canManage ? <TabsTrigger value="adjust">Adjustments</TabsTrigger> : null}
+              {!embedded ? <TabsTrigger value="types">Leave types</TabsTrigger> : null}
+              {canManage && !embedded ? <TabsTrigger value="adjust">Adjustments</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="requests">
               <div className="grid gap-2 sm:grid-cols-4 mb-4">

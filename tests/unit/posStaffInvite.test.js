@@ -73,8 +73,9 @@ describe("POS-only staff invite", () => {
       companyId: "o1",
     });
     expect(filtered.map((row) => row.id)).toContain("nav-dashboard");
-    expect(filtered.map((row) => row.id)).toContain("nav-pos");
+    expect(filtered.map((row) => row.id)).not.toContain("nav-pos");
     expect(filtered.map((row) => row.id)).not.toContain("nav-invoices");
+    expect(filtered.map((row) => row.id)).not.toContain("nav-settings");
   });
 
   it("builds a dedicated /pos/invite/:token link", () => {
@@ -138,7 +139,7 @@ describe("POS-only staff invite", () => {
         jobFunction: "pos",
         isOrgOwner: false,
       })
-    ).toBe(createPageUrl("Dashboard"));
+    ).toBe(createPageUrl("Workforce"));
   });
 
   it("returns to /pos or a till URL after sign-in instead of the employee dashboard", () => {
@@ -146,6 +147,6 @@ describe("POS-only staff invite", () => {
     const employee = { role: "user", companyRole: "employee", companyId: "o1" };
     expect(resolvePostLoginPath(employee, "/pos")).toBe("/pos");
     expect(resolvePostLoginPath(employee, `/pos/till/${tillId}`)).toBe(`/pos/till/${tillId}`);
-    expect(resolvePostLoginPath(employee, "/Dashboard")).toBe(createPageUrl("employee-dashboard"));
+    expect(resolvePostLoginPath(employee, "/Dashboard")).toBe(createPageUrl("Workforce"));
   });
 });

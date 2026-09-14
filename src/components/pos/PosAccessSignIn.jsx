@@ -64,7 +64,7 @@ export default function PosAccessSignIn({
       await login({ email: normalizedEmail, password });
       clearLoginFailures(normalizedEmail);
       patchAuthSession({ loading: false });
-      if (completePostAuthNavigation({ navigate, fromPath: returnPath })) return;
+      if (await completePostAuthNavigation({ navigate, fromPath: returnPath })) return;
     } catch (err) {
       recordLoginFailure(normalizedEmail);
       setError(

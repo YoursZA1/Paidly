@@ -77,9 +77,12 @@ export function RequireEmployeeProfileAccess({ children }) {
     return children;
   }
 
-  if (!canViewEmployeeProfile(ctx, target)) {
-    return <Navigate to={createPageUrl("Dashboard")} replace />;
+  if (
+    canViewEmployeeProfile(ctx, target) ||
+    hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_MEMBERS)
+  ) {
+    return children;
   }
 
-  return children;
+  return <Navigate to={createPageUrl("Dashboard")} replace />;
 }

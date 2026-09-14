@@ -79,7 +79,7 @@ export default function LandingLoginModal({ open, onOpenChange }) {
       clearLoginFailures(normalizedEmail);
       patchAuthSession({ loading: false });
       onOpenChange(false);
-      if (completePostAuthNavigation({ navigate, fromPath: from })) return;
+      if (await completePostAuthNavigation({ navigate, fromPath: from })) return;
     } catch (err) {
       recordLoginFailure(normalizedEmail);
       if (

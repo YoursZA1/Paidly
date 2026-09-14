@@ -72,7 +72,7 @@ describe("POS staff permissions", () => {
     }
   });
 
-  it("shows the POS nav item only when the member has pos_access", () => {
+  it("hides POS from the employee sidebar; POS-only staff keep the till item", () => {
     const items = [
       { id: "nav-dashboard", title: "Dashboard" },
       { id: "nav-pos", title: "POS" },
@@ -83,7 +83,14 @@ describe("POS staff permissions", () => {
       userId: "u1",
       companyId: "o1",
     });
-    expect(employee.map((row) => row.id)).toContain("nav-pos");
+    expect(employee.map((row) => row.id)).not.toContain("nav-pos");
     expect(employee.map((row) => row.id)).not.toContain("nav-invoices");
+    const cashier = filterNavigationForCompanyRole(items, {
+      companyRole: "employee",
+      jobFunction: "pos",
+      userId: "u1",
+      companyId: "o1",
+    });
+    expect(cashier.map((row) => row.id)).toEqual(["nav-pos"]);
   });
 });

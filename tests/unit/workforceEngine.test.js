@@ -202,7 +202,21 @@ describe("employee compensation redaction", () => {
     expect(canViewEmployeeProfile(employeeCtx, ownMembership)).toBe(true);
     expect(canViewEmployeeProfile(employeeCtx, otherMembership)).toBe(false);
     expect(canViewEmployeeProfile(employeeCtx, userId)).toBe(false);
-    expect(canViewEmployeeProfile(managerCtx, otherMembership)).toBe(true);
+    expect(canViewEmployeeProfile(managerCtx, otherMembership)).toBe(false);
+    expect(
+      canViewEmployeeProfile(managerCtx, otherMembership, { managerMembershipId: ownMembership })
+    ).toBe(true);
+    const hrCtx = buildCompanyAccessContext({
+      userId,
+      companyId,
+      membershipId: ownMembership,
+      membershipRole: "manager",
+      jobFunction: "hr",
+    });
+    expect(canViewEmployeeProfile(hrCtx, otherMembership)).toBe(true);
+    expect(
+      canViewEmployeeProfile(managerCtx, otherMembership, { knownMembershipIds: [otherMembership] })
+    ).toBe(true);
     expect(canCreateDocumentType(employeeCtx, "leave_request")).toBe(false);
     expect(canCreateDocumentType(employeeCtx, "expense_claim")).toBe(true);
   });

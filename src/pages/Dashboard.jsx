@@ -59,7 +59,6 @@ import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useDashboardInvoicesQuery, useDashboardPayslipsQuery } from "@/hooks/useDashboardDocumentsQuery";
 import { useDashboardRevenueSourcesQuery } from "@/hooks/useDashboardRevenueSourcesQuery";
 import DashboardRevenueWidget from "@/components/dashboard/DashboardRevenueWidget";
-import CompanyMemberDashboard from "@/components/dashboard/CompanyMemberDashboard";
 import DashboardSubscriptionBanner from "@/components/dashboard/DashboardSubscriptionBanner";
 import FinancialSummary from "@/components/dashboard/FinancialSummary";
 import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
@@ -104,7 +103,7 @@ export default function Dashboard() {
   const { companyId, loading: companyCtxLoading, showBusinessDashboard } = useCompanyContext();
 
   if (!isAdmin && !companyCtxLoading && companyId && !showBusinessDashboard) {
-    return <CompanyMemberDashboard />;
+    return <Navigate to={createPageUrl("Workforce")} replace />;
   }
 
   return <DashboardMain />;

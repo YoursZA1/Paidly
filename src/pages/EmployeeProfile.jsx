@@ -26,8 +26,6 @@ export default function EmployeeProfile() {
   const params = useParams();
   const location = useLocation();
   const id = employeeIdFromRoute(params, location.search);
-  const canOpenProfile = canViewEmployeeProfile(ctx, id);
-  const canReassign = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
   const [bundle, setBundle] = useState(null);
   const [roster, setRoster] = useState([]);
   const [managerId, setManagerId] = useState("");
@@ -35,6 +33,10 @@ export default function EmployeeProfile() {
   const [restricted, setRestricted] = useState(false);
 
   const employee = bundle?.employee || null;
+  const canOpenProfile =
+    canViewEmployeeProfile(ctx, id, { managerMembershipId: employee?.manager_membership_id }) ||
+    hasPermission(PERMISSIONS.VIEW_TEAM_MEMBERS);
+  const canReassign = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
   const canSeePay = Boolean(employee && !employee.compensation_redacted);
 
   useEffect(() => {
@@ -105,13 +107,14 @@ export default function EmployeeProfile() {
           <Tabs defaultValue="overview">
             <TabsList className="mb-4 flex-wrap h-auto">
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="personal">Personal</TabsTrigger>
               <TabsTrigger value="employment">Employment</TabsTrigger>
               <TabsTrigger value="compensation">Compensation</TabsTrigger>
               <TabsTrigger value="leave">Leave</TabsTrigger>
               <TabsTrigger value="payslips">Payslips</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="attendance">Attendance</TabsTrigger>
-              <TabsTrigger value="audit">Audit</TabsTrigger>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview">
@@ -128,6 +131,20 @@ export default function EmployeeProfile() {
                   <p>
                     Status: <Badge variant="outline">{employee.employment_status}</Badge> · Portal {employee.portal_status}
                   </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="personal">
+              <Card className="rounded-xl">
+                <CardHeader>
+                  <CardTitle className="text-base">Personal</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm space-y-2">
+                  <p>Name: {employee.full_name || employee.label || "—"}</p>
+                  <p>Email: {employee.email || employee.invited_email || "—"}</p>
+                  <p>Phone: {employee.phone || "—"}</p>
+                  <p>Employee number: {employee.employee_number || "—"}</p>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -274,10 +291,10 @@ export default function EmployeeProfile() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="audit">
+            <TabsContent value="activity">
               <Card className="rounded-xl">
                 <CardHeader>
-                  <CardTitle className="text-base">Audit</CardTitle>
+                  <CardTitle className="text-base">Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {(bundle.audit || []).length === 0 ? (

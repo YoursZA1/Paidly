@@ -12,7 +12,6 @@ import {
   ClipboardList,
   Wallet,
   PlusCircle,
-  Store,
 } from "lucide-react";
 
 /**
@@ -33,16 +32,6 @@ import {
 
 /** @type {CompanyNavItem[]} */
 export const COMPANY_WORKSPACE_NAV = [
-  {
-    id: "company-nav-pos",
-    title: "POS",
-    description: "Open the till to take a sale.",
-    url: createPageUrl("POS"),
-    icon: Store,
-    requiredPermission: PERMISSIONS.POS_ACCESS,
-    requiredFeature: "pos",
-    section: "Me",
-  },
   {
     id: "company-nav-my-payslips",
     title: "My Payroll",
@@ -101,7 +90,7 @@ export const COMPANY_WORKSPACE_NAV = [
     id: "company-nav-profile",
     title: "My Profile",
     description: "Update your profile and preferences.",
-    url: createPageUrl("Settings"),
+    url: `${createPageUrl("Settings")}?tab=account`,
     icon: User,
     requiredPermission: PERMISSIONS.VIEW_OWN_PROFILE,
     section: "Me",
@@ -112,14 +101,14 @@ export const COMPANY_WORKSPACE_NAV = [
     description: "People in your company.",
     url: createPageUrl("Employees"),
     icon: Users,
-    requiredPermission: PERMISSIONS.VIEW_TEAM_MEMBERS,
+    requiredPermission: PERMISSIONS.MANAGE_EMPLOYEES,
     section: "Team",
   },
   {
     id: "company-nav-manager-portal",
     title: "Manager portal",
     description: "Approve leave for your direct reports.",
-    url: createPageUrl("ManagerPortal"),
+    url: createPageUrl("Workforce/manager"),
     icon: ClipboardList,
     requiredPermission: PERMISSIONS.APPROVE_LEAVE,
     hideWhenPermission: PERMISSIONS.MANAGE_LEAVE,
@@ -183,9 +172,9 @@ export const COMPANY_WORKSPACE_NAV = [
   },
   {
     id: "company-nav-reports",
-    title: "Company Reports",
-    description: "Financial and HR reports for your company.",
-    url: createPageUrl("Reports"),
+    title: "Workforce reports",
+    description: "Headcount and leave activity for your scope.",
+    url: createPageUrl("Workforce/reports"),
     icon: BarChart2,
     requiredPermission: PERMISSIONS.VIEW_COMPANY_REPORTS,
     section: "Company",

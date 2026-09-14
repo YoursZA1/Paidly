@@ -1,31 +1,70 @@
 import { PERMISSIONS, hasCompanyPermission, buildCompanyAccessContext } from "@/lib/companyPermissions";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
+import { WORKFORCE_NAV_ID } from "@/lib/workforceNav.js";
 
-/** Nav item ids visible to each company role (admin sees full app nav). */
+/** Nav item ids visible to invited company members (org owners stay unfiltered). */
 const EMPLOYEE_NAV_IDS = new Set([
   "nav-dashboard",
-  "nav-payslips",
+  WORKFORCE_NAV_ID,
   "nav-documents",
-  "nav-settings",
 ]);
 
 const MANAGER_EXTRA_NAV_IDS = new Set([
-  "nav-reports",
-  "nav-team-members",
   "nav-messages",
   "nav-calendar",
 ]);
 
+function keepNavItem(item, allowed) {
+  if (!item) return false;
+  if (item.type === "section") return true;
+  if (!item.id) return true;
+  if (item.id.startsWith("nav-admin-")) return false;
+  if (item.id === "nav-team-members") return false;
+  if (item.id === WORKFORCE_NAV_ID) return allowed.has(WORKFORCE_NAV_ID);
+  return allowed.has(item.id);
+}
+
+function filterNavTree(items, allowed) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      if (!keepNavItem(item, allowed)) return null;
+      if (!Array.isArray(item.children) || !item.children.length) return item;
+      if (item.id === WORKFORCE_NAV_ID) {
+        const children = item.children.filter(
+          (child) => child && (!child.id || child.id.startsWith("nav-workforce-"))
+        );
+        return children.length ? { ...item, children } : { ...item, children: undefined };
+      }
+      const children = filterNavTree(item.children, allowed);
+      if (!children.length) {
+        return { ...item, children: undefined };
+      }
+      return { ...item, children };
+    })
+    .filter(Boolean);
+}
+
+function dropEmptySections(items) {
+  return items.filter((item, index) => {
+    if (item.type !== "section") return true;
+    const rest = items.slice(index + 1);
+    const nextSection = rest.findIndex((row) => row.type === "section");
+    const block = nextSection === -1 ? rest : rest.slice(0, nextSection);
+    return block.some((row) => row.type !== "section");
+  });
+}
+
 /**
  * Filter primary sidebar items for company RBAC.
- * @param {Array<{ id?: string, type?: string }>} items
- * @param {{ companyRole?: string, userId?: string, companyId?: string } | null} membership
+ * Recurses into children so Workforce nested items survive.
+ * @param {Array<{ id?: string, type?: string, children?: object[] }>} items
+ * @param {{ companyRole?: string, userId?: string, companyId?: string, isOrgOwner?: boolean, jobFunction?: string } | null} membership
  */
 export function filterNavigationForCompanyRole(items, membership) {
   if (!membership?.companyRole) {
     return items;
   }
-  // Org owners keep full solo-business navigation (invoices, clients, cash flow, etc.).
   if (membership.isOrgOwner) {
     return items;
   }
@@ -38,40 +77,20 @@ export function filterNavigationForCompanyRole(items, membership) {
   });
 
   if (isPosOnlyStaff({ ...membership, jobFunction: ctx.jobFunction })) {
-    return items.filter((item) => item.type === "section" || item.id === "nav-pos");
+    return dropEmptySections(items.filter((item) => item.type === "section" || item.id === "nav-pos"));
   }
 
   const allowed = new Set(EMPLOYEE_NAV_IDS);
 
-  if (hasCompanyPermission(ctx, PERMISSIONS.POS_ACCESS)) {
-    allowed.add("nav-pos");
-  }
-
   if (membership.companyRole === "manager" || membership.companyRole === "admin") {
     for (const id of MANAGER_EXTRA_NAV_IDS) allowed.add(id);
-    if (hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_LEAVE)) {
-      allowed.add("nav-documents");
-      allowed.add("nav-leave");
-    }
   }
 
   if (membership.companyRole === "admin") {
-    if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_PAYROLL)) {
-      allowed.add("nav-payslips");
-      allowed.add("nav-payroll");
-    }
-    if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_LEAVE)) {
-      allowed.add("nav-leave");
-    }
     if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
       allowed.add("nav-settings");
     }
   }
 
-  return items.filter((item) => {
-    if (item.type === "section") return true;
-    if (!item.id) return true;
-    if (item.id.startsWith("nav-admin-")) return false;
-    return allowed.has(item.id);
-  });
+  return dropEmptySections(filterNavTree(items, allowed));
 }

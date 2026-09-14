@@ -7,6 +7,15 @@ import {
 } from "@/lib/appOrigin";
 import { normalizeCompanyRole, COMPANY_ROLES } from "@/lib/companyPermissions";
 import { isPosAccessPath, isPosOnlyStaff } from "@shared/posStaffInvite.js";
+import { isWorkforceGenericHomePath, resolveWorkforceHomePath } from "@/lib/workforceExperience.js";
+import { loadCompanyAccessContext } from "@/services/CompanyContextService.js";
+
+function fallbackOrHome(fallbackPath, home) {
+  if (!fallbackPath || isWorkforceGenericHomePath(fallbackPath) || fallbackPath.startsWith("/admin")) {
+    return home;
+  }
+  return fallbackPath;
+}
 
 /**
  * Resolve home route from company membership (post-auth, does not touch login/signup).
@@ -14,14 +23,7 @@ import { isPosAccessPath, isPosOnlyStaff } from "@shared/posStaffInvite.js";
  */
 export function resolveCompanyHomePath(companyCtx) {
   if (!companyCtx?.companyId) return createPageUrl("Dashboard");
-  if (isPosOnlyStaff(companyCtx)) return createPageUrl("POS");
-  if (companyCtx.isOrgOwner || companyCtx.companyRole === COMPANY_ROLES.ADMIN) {
-    return createPageUrl("Dashboard");
-  }
-  if (companyCtx.companyRole === COMPANY_ROLES.MANAGER) {
-    return createPageUrl("Dashboard");
-  }
-  return createPageUrl("employee-dashboard");
+  return resolveWorkforceHomePath(companyCtx);
 }
 
 /**
@@ -39,15 +41,13 @@ export function resolvePostLoginPath(userLike, fallbackPath, companyCtx = null) 
   }
 
   if (companyCtx?.companyId) {
-    const home = resolveCompanyHomePath(companyCtx);
-    const safeFallback =
-      fallbackPath?.startsWith("/admin") ? home : fallbackPath;
-    return safeFallback || home;
+    return fallbackOrHome(fallbackPath, resolveCompanyHomePath(companyCtx));
   }
 
   const companyRole = normalizeCompanyRole(userLike?.companyRole || userLike?.membershipRole);
   if (companyRole === COMPANY_ROLES.EMPLOYEE && userLike?.companyId) {
-    return createPageUrl("employee-dashboard");
+    if (isPosOnlyStaff(userLike)) return createPageUrl("POS");
+    return fallbackOrHome(fallbackPath, createPageUrl("Workforce"));
   }
 
   const safeFallback =
@@ -57,17 +57,25 @@ export function resolvePostLoginPath(userLike, fallbackPath, companyCtx = null) 
 
 /**
  * After email/password login succeeds: same-origin navigate or full redirect when split-host.
- * @param {{ navigate: (path: string, opts?: object) => void, fromPath?: string }} opts
- * @returns {boolean} true if a full-page redirect was started (caller should return)
+ * @param {{ navigate: (path: string, opts?: object) => void, fromPath?: string, companyCtx?: import('@/lib/companyPermissions').CompanyAccessContext | null }} opts
+ * @returns {Promise<boolean>} true if a full-page redirect was started (caller should return)
  */
-export function completePostAuthNavigation({ navigate, fromPath }) {
+export async function completePostAuthNavigation({ navigate, fromPath, companyCtx = null }) {
   if (shouldRedirectToAppAfterAuth()) {
     window.location.replace(getAppDashboardUrl());
     return true;
   }
 
   const authUser = useAuthSessionStore.getState().user;
-  const destination = resolvePostLoginPath(authUser, fromPath);
+  let ctx = companyCtx;
+  if (!ctx?.companyId && authUser?.id) {
+    try {
+      ctx = await loadCompanyAccessContext(authUser.id);
+    } catch {
+      ctx = null;
+    }
+  }
+  const destination = resolvePostLoginPath(authUser, fromPath, ctx);
   navigate(destination, { replace: true });
   return false;
 }
