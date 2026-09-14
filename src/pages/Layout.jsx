@@ -53,7 +53,8 @@ import usePostAuthHomeRedirect from "@/hooks/usePostAuthHomeRedirect";
 import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
 import { hasCompanyPermission } from "@/lib/companyPermissions";
-import { getWorkforceNavChildren, WORKFORCE_NAV_ID } from "@/lib/workforceNav";
+import { getWorkforceNavChildren, isWorkforceSectionPath, WORKFORCE_NAV_ID } from "@/lib/workforceNav";
+import { canSeeWorkforceNav, resolveWorkforceExperience } from "@/lib/workforceExperience.js";
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
@@ -347,7 +348,7 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
       return location.pathname === path || (path !== "/" && location.pathname.startsWith(`${path}/`));
     });
   const workforceSectionActive =
-    item?.id === WORKFORCE_NAV_ID && location.pathname.toLowerCase().startsWith("/workforce");
+    item?.id === WORKFORCE_NAV_ID && isWorkforceSectionPath(location.pathname);
   const [open, setOpen] = useState(Boolean(childActive || workforceSectionActive));
   const isCollapsedRail = collapsed && !mobile;
   useEffect(() => {
@@ -732,13 +733,17 @@ export default function Layout({ children, currentPageName }) {
 
   const navigationItems = useMemo(() => {
     let items = getNavigationItems(planForNavFeatures, user?.role);
+    const experience = resolveWorkforceExperience(companyCtx);
     items = items.map((item) => {
       if (item.id !== WORKFORCE_NAV_ID) return item;
       const has = (permission) =>
         companyCtx ? hasCompanyPermission(companyCtx, permission) : true;
       return {
         ...item,
-        children: getWorkforceNavChildren(has).map((child) => ({
+        children: getWorkforceNavChildren(has, {
+          experience,
+          membershipId: companyCtx?.membershipId || null,
+        }).map((child) => ({
           ...child,
           hasAccess: true,
           hasRoleAccess: true,
@@ -746,6 +751,9 @@ export default function Layout({ children, currentPageName }) {
         })),
       };
     });
+    if (companyCtx && !canSeeWorkforceNav(companyCtx)) {
+      items = items.filter((item) => item.id !== WORKFORCE_NAV_ID);
+    }
     if (companyCtx) {
       items = filterNavigationForCompanyRole(items, {
         companyRole: companyCtx.companyRole,

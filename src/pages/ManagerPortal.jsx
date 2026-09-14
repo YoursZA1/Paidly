@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { ClipboardList } from "lucide-react";
 import PageTemplate from "@/components/layout/PageTemplate";
 import PageHeader from "@/components/dashboard/PageHeader";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 import useCompanyContext from "@/hooks/useCompanyContext";
@@ -12,14 +14,15 @@ import LeaveManagementPage from "@/pages/Leave";
 import LeaveCalendarPage from "@/pages/LeaveCalendar";
 import MyPayrollPage from "@/pages/MyPayroll";
 import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
+import { workforceApi } from "@/services/WorkforceApiService";
 
-const TABS = new Set(["team", "leave", "calendar", "me"]);
+const TABS = new Set(["overview", "team", "leave", "calendar", "me"]);
 
 export default function ManagerPortal() {
   const { loading, hasPermission } = useCompanyContext();
   const [params, setParams] = useSearchParams();
-  const requested = String(params.get("tab") || "team").toLowerCase();
-  const tab = TABS.has(requested) ? requested : "team";
+  const requested = String(params.get("tab") || "overview").toLowerCase();
+  const tab = TABS.has(requested) ? requested : "overview";
 
   if (loading) return <AuthBootstrapShell />;
 
@@ -47,11 +50,15 @@ export default function ManagerPortal() {
           }}
         >
           <TabsList className="mb-4 flex-wrap h-auto">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="team">Team</TabsTrigger>
             <TabsTrigger value="leave">Leave</TabsTrigger>
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="me">Me</TabsTrigger>
           </TabsList>
+          <TabsContent value="overview">
+            <ManagerOverview />
+          </TabsContent>
           <TabsContent value="team">
             <Employees embedded />
           </TabsContent>
@@ -67,5 +74,36 @@ export default function ManagerPortal() {
         </Tabs>
       </PageTemplate.Body>
     </PageTemplate>
+  );
+}
+
+function ManagerOverview() {
+  const [summary, setSummary] = useState(null);
+
+  useEffect(() => {
+    workforceApi
+      .summary()
+      .then(setSummary)
+      .catch(() => setSummary(null));
+  }, []);
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <Kpi label="Direct reports" value={summary?.workforce?.total ?? "—"} />
+      <Kpi label="Pending leave" value={summary?.leave?.pending ?? "—"} />
+      <Kpi label="On leave today" value={summary?.leave?.on_leave_today ?? "—"} />
+      <Kpi label="Upcoming leave" value={summary?.leave?.upcoming ?? "—"} />
+    </div>
+  );
+}
+
+function Kpi({ label, value }) {
+  return (
+    <Card className="rounded-xl">
+      <CardContent className="p-4">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xl font-semibold tabular-nums">{value}</p>
+      </CardContent>
+    </Card>
   );
 }

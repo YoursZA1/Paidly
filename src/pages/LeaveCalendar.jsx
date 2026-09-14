@@ -95,6 +95,7 @@ export default function LeaveCalendarPage({ embedded = false }) {
   };
 
   const weekDays = view === "week" ? eachIsoDateInclusive(start, end) : [];
+  const listEvents = [...events].sort((a, b) => String(a.start_date || "").localeCompare(String(b.start_date || "")));
 
   return (
     <FeatureGate feature="leave_management" userPlan={userPlan}>
@@ -121,9 +122,42 @@ export default function LeaveCalendarPage({ embedded = false }) {
             <div className="flex items-center gap-2">
               <Button size="sm" variant={view === "month" ? "default" : "outline"} className="rounded-xl" onClick={() => setView("month")}>Month</Button>
               <Button size="sm" variant={view === "week" ? "default" : "outline"} className="rounded-xl" onClick={() => setView("week")}>Week</Button>
+              <Button size="sm" variant={view === "list" ? "default" : "outline"} className="rounded-xl" onClick={() => setView("list")}>List</Button>
               <Button variant="outline" size="icon" className="rounded-xl" onClick={next}><ChevronRight className="h-4 w-4" /></Button>
             </div>
           </div>
+          {view === "list" ? (
+            <Card className="rounded-xl">
+              <CardContent className="p-0 overflow-x-auto">
+                {listEvents.length === 0 ? (
+                  <p className="p-6 text-sm text-muted-foreground">No leave in this period.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-border bg-muted/40 text-left text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-2 font-medium">Employee</th>
+                        <th className="px-4 py-2 font-medium">Type</th>
+                        <th className="px-4 py-2 font-medium">Dates</th>
+                        <th className="px-4 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {listEvents.map((ev) => (
+                        <tr key={ev.id} className="border-b border-border/70 last:border-0">
+                          <td className="px-4 py-2.5">{ev.employee}</td>
+                          <td className="px-4 py-2.5">{ev.leave_code || ev.leave_type || "Leave"}</td>
+                          <td className="px-4 py-2.5">{ev.start_date} → {ev.end_date}</td>
+                          <td className="px-4 py-2.5">
+                            <Badge variant="outline">{ev.status}</Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
           <div className="grid grid-cols-7 gap-px rounded-xl overflow-hidden border border-border bg-border">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
               <div key={d} className="bg-muted/60 px-2 py-1 text-xs font-medium text-muted-foreground">{d}</div>
@@ -149,6 +183,7 @@ export default function LeaveCalendarPage({ embedded = false }) {
               );
             })}
           </div>
+          )}
         </PageTemplate.Body>
       </PageTemplate>
     </FeatureGate>

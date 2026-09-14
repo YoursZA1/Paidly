@@ -10,7 +10,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { workforceApi, employeeProfilePath } from "@/services/WorkforceApiService";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
-import { filterWorkforceDirectory } from "@/lib/workforceDirectory.js";
+import {
+  filterWorkforceDirectory,
+  leaveStatusLabel,
+  sortWorkforceDirectory,
+} from "@/lib/workforceDirectory.js";
 import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
 
 const selectClass = "h-10 rounded-xl border border-border bg-background px-3 text-sm";
@@ -26,6 +30,9 @@ export default function Employees({ embedded = false }) {
   const [department, setDepartment] = useState("");
   const [status, setStatus] = useState("");
   const [managerId, setManagerId] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [leaveStatus, setLeaveStatus] = useState("");
+  const [sort, setSort] = useState("name");
 
   useEffect(() => {
     workforceApi
@@ -47,6 +54,10 @@ export default function Employees({ embedded = false }) {
     () => [...new Set(rows.map((row) => row.employment_status).filter(Boolean))].sort(),
     [rows]
   );
+  const jobTitles = useMemo(
+    () => [...new Set(rows.map((row) => row.job_title).filter(Boolean))].sort(),
+    [rows]
+  );
   const managers = useMemo(() => {
     const byId = new Map();
     for (const row of rows) {
@@ -58,10 +69,17 @@ export default function Employees({ embedded = false }) {
     return [...byId.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [rows]);
 
-  const filtered = useMemo(
-    () => filterWorkforceDirectory(rows, { search, department, status, managerId }),
-    [rows, search, department, status, managerId]
-  );
+  const filtered = useMemo(() => {
+    const next = filterWorkforceDirectory(rows, {
+      search,
+      department,
+      status,
+      managerId,
+      jobTitle,
+      leaveStatus,
+    });
+    return sortWorkforceDirectory(next, sort);
+  }, [rows, search, department, status, managerId, jobTitle, leaveStatus, sort]);
 
   const table = (
     <>
@@ -91,6 +109,12 @@ export default function Employees({ embedded = false }) {
             <option key={dept} value={dept}>{dept}</option>
           ))}
         </select>
+        <select className={selectClass} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)}>
+          <option value="">All job titles</option>
+          {jobTitles.map((value) => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select>
         <select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
           {statuses.map((value) => (
@@ -103,20 +127,39 @@ export default function Employees({ embedded = false }) {
             <option key={row.id} value={row.id}>{row.name}</option>
           ))}
         </select>
+        <select className={selectClass} value={leaveStatus} onChange={(e) => setLeaveStatus(e.target.value)}>
+          <option value="">All leave statuses</option>
+          <option value="on_leave">On leave</option>
+          <option value="pending">Pending leave</option>
+          <option value="upcoming">Upcoming leave</option>
+          <option value="none">None</option>
+        </select>
+        <select className={selectClass} value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="name">Sort by name</option>
+          <option value="number">Sort by number</option>
+          <option value="title">Sort by job title</option>
+          <option value="department">Sort by department</option>
+          <option value="start">Sort by start date</option>
+          <option value="status">Sort by status</option>
+        </select>
       </div>
       <Card className="rounded-xl">
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {loading ? (
             <p className="p-6 text-sm text-muted-foreground">Loading…</p>
           ) : filtered.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">No employees in your scope.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                   <th className="px-4 py-2">Employee</th>
+                  <th className="px-4 py-2">Number</th>
+                  <th className="px-4 py-2">Job title</th>
                   <th className="px-4 py-2">Department</th>
+                  <th className="px-4 py-2">Manager</th>
                   <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">Joined</th>
                   <th className="px-4 py-2">Leave</th>
                   {canPayroll ? <th className="px-4 py-2">Pay type</th> : null}
                 </tr>
@@ -126,15 +169,18 @@ export default function Employees({ embedded = false }) {
                   <tr key={row.id} className="border-b last:border-0">
                     <td className="px-4 py-2">
                       <Link className="underline" to={employeeProfilePath(row.id)}>
-                        {row.label || row.full_name}
+                        {row.full_name || row.label}
                       </Link>
-                      <p className="text-xs text-muted-foreground">{row.employee_number}</p>
                     </td>
+                    <td className="px-4 py-2 tabular-nums">{row.employee_number || "—"}</td>
+                    <td className="px-4 py-2">{row.job_title || "—"}</td>
                     <td className="px-4 py-2">{row.department || "—"}</td>
+                    <td className="px-4 py-2">{row.manager_name || "—"}</td>
                     <td className="px-4 py-2">
                       <Badge variant="outline">{row.employment_status}</Badge>
                     </td>
-                    <td className="px-4 py-2 tabular-nums">{row.leave_available ?? "—"}</td>
+                    <td className="px-4 py-2">{row.employment_start_date || "—"}</td>
+                    <td className="px-4 py-2">{leaveStatusLabel(row.leave_status)}</td>
                     {canPayroll ? <td className="px-4 py-2">{row.pay_type || "—"}</td> : null}
                   </tr>
                 ))}

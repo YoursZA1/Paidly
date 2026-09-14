@@ -1,14 +1,18 @@
 import { Link, useLocation } from "react-router-dom";
 import useCompanyContext from "@/hooks/useCompanyContext";
-import { getWorkforceNavChildren } from "@/lib/workforceNav.js";
+import { getWorkforceNavChildren, isWorkforceChildActive } from "@/lib/workforceNav.js";
+import { resolveWorkforceExperience } from "@/lib/workforceExperience.js";
 
 /**
  * Compact Workforce links for small screens when the nested sidebar is collapsed.
  */
 export default function WorkforceSubnav() {
   const location = useLocation();
-  const { hasPermission } = useCompanyContext();
-  const children = getWorkforceNavChildren(hasPermission);
+  const { hasPermission, ctx, membershipId } = useCompanyContext();
+  const children = getWorkforceNavChildren(hasPermission, {
+    experience: resolveWorkforceExperience(ctx),
+    membershipId,
+  });
 
   if (!children.length) return null;
 
@@ -18,10 +22,7 @@ export default function WorkforceSubnav() {
       aria-label="Workforce sections"
     >
       {children.map((child) => {
-        const path = String(child.url || "").split("?")[0];
-        const active =
-          location.pathname === path ||
-          (path !== "/" && location.pathname.startsWith(`${path}/`));
+        const active = isWorkforceChildActive(child.url, location.pathname, location.search);
         return (
           <Link
             key={child.id}

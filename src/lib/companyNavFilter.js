@@ -1,18 +1,11 @@
 import { PERMISSIONS, hasCompanyPermission, buildCompanyAccessContext } from "@/lib/companyPermissions";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 import { WORKFORCE_NAV_ID } from "@/lib/workforceNav.js";
-
-/** Nav item ids visible to invited company members (org owners stay unfiltered). */
-const EMPLOYEE_NAV_IDS = new Set([
-  "nav-dashboard",
-  WORKFORCE_NAV_ID,
-  "nav-documents",
-]);
-
-const MANAGER_EXTRA_NAV_IDS = new Set([
-  "nav-messages",
-  "nav-calendar",
-]);
+import {
+  WORKFORCE_EXPERIENCES,
+  canSeeWorkforceNav,
+  resolveWorkforceExperience,
+} from "@/lib/workforceExperience.js";
 
 function keepNavItem(item, allowed) {
   if (!item) return false;
@@ -80,16 +73,20 @@ export function filterNavigationForCompanyRole(items, membership) {
     return dropEmptySections(items.filter((item) => item.type === "section" || item.id === "nav-pos"));
   }
 
-  const allowed = new Set(EMPLOYEE_NAV_IDS);
+  const experience = resolveWorkforceExperience({
+    ...ctx,
+    companyId: membership.companyId,
+    isOrgOwner: membership.isOrgOwner,
+    jobFunction: membership.jobFunction || ctx.jobFunction,
+    companyRole: membership.companyRole,
+  });
 
-  if (membership.companyRole === "manager" || membership.companyRole === "admin") {
-    for (const id of MANAGER_EXTRA_NAV_IDS) allowed.add(id);
+  const allowed = new Set();
+  if (canSeeWorkforceNav(ctx) && experience !== WORKFORCE_EXPERIENCES.POS_ONLY) {
+    allowed.add(WORKFORCE_NAV_ID);
   }
-
-  if (membership.companyRole === "admin") {
-    if (hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
-      allowed.add("nav-settings");
-    }
+  if (experience === WORKFORCE_EXPERIENCES.HR && hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {
+    allowed.add("nav-settings");
   }
 
   return dropEmptySections(filterNavTree(items, allowed));

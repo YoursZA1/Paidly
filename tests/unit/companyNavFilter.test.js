@@ -16,6 +16,8 @@ const NAV = [
     ],
   },
   { id: "nav-documents", title: "Documents" },
+  { id: "nav-calendar", title: "Calendar" },
+  { id: "nav-messages", title: "Messages" },
   { type: "section", title: "Finance", id: "nav-section-finance" },
   { id: "nav-reports", title: "Reports" },
   { type: "section", title: "Settings", id: "nav-section-settings" },
@@ -33,16 +35,16 @@ describe("filterNavigationForCompanyRole", () => {
     expect(filtered).toEqual(NAV);
   });
 
-  it("gives employees Workforce children without Settings, POS, or invoices", () => {
+  it("gives employees Workforce only", () => {
     const filtered = filterNavigationForCompanyRole(NAV, {
       companyRole: "employee",
       userId: "u1",
       companyId: "o1",
     });
     const ids = filtered.map((row) => row.id);
-    expect(ids).toContain("nav-dashboard");
     expect(ids).toContain("nav-workforce");
-    expect(ids).toContain("nav-documents");
+    expect(ids).not.toContain("nav-dashboard");
+    expect(ids).not.toContain("nav-documents");
     expect(ids).not.toContain("nav-settings");
     expect(ids).not.toContain("nav-pos");
     expect(ids).not.toContain("nav-invoices");
@@ -53,14 +55,34 @@ describe("filterNavigationForCompanyRole", () => {
     ]);
   });
 
-  it("does not give line managers invoice Reports", () => {
+  it("gives line managers Workforce only, without calendar or messages", () => {
     const filtered = filterNavigationForCompanyRole(NAV, {
       companyRole: "manager",
       jobFunction: "general",
       userId: "u1",
       companyId: "o1",
     });
-    expect(filtered.map((row) => row.id)).not.toContain("nav-reports");
-    expect(filtered.map((row) => row.id)).not.toContain("nav-settings");
+    const ids = filtered.map((row) => row.id);
+    expect(ids).toContain("nav-workforce");
+    expect(ids).not.toContain("nav-dashboard");
+    expect(ids).not.toContain("nav-documents");
+    expect(ids).not.toContain("nav-calendar");
+    expect(ids).not.toContain("nav-messages");
+    expect(ids).not.toContain("nav-reports");
+    expect(ids).not.toContain("nav-settings");
+  });
+
+  it("gives HR admins Workforce and Settings", () => {
+    const filtered = filterNavigationForCompanyRole(NAV, {
+      companyRole: "admin",
+      isOrgOwner: false,
+      userId: "u1",
+      companyId: "o1",
+    });
+    const ids = filtered.map((row) => row.id);
+    expect(ids).toContain("nav-workforce");
+    expect(ids).toContain("nav-settings");
+    expect(ids).not.toContain("nav-invoices");
+    expect(ids).not.toContain("nav-dashboard");
   });
 });

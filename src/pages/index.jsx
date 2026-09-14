@@ -201,6 +201,7 @@ const MAIN_ROUTES = [
     { path: "/dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
     { path: "/employee-dashboard", element: <RequireAuth><Navigate to="/Workforce" replace /></RequireAuth> },
     { path: "/EmployeeDashboard", element: <RequireAuth><Navigate to="/Workforce" replace /></RequireAuth> },
+    { path: "/employee", element: <RequireAuth><Navigate to="/Workforce" replace /></RequireAuth> },
     { path: "/Clients", element: ownerRoute(<Clients />) },
     { path: "/clients", element: ownerRoute(<Clients />) },
     { path: "/Settings", element: <RequireAuth><Settings /></RequireAuth> },

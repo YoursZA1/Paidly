@@ -13,7 +13,7 @@ Hobby production is capped at **exactly 12** serverless functions (the current c
 
 **Current 12 functions:** `api/admin/[resource].js`, `api/auth/[route].js`, `api/client-portal/[path].js`, `api/company/[[...path]].js`, `api/cron.js`, `api/exchange-rates/[[...slug]].js`, `api/payfast-handler.js`, `api/payment-intents/[[...path]].js`, `api/pos/[[...path]].js`, `api/public-share.js`, `api/subscriptions/[[...path]].js`, `api/system.js`.
 
-**Nested catch-all paths:** Vercel Hobby only invokes `api/<name>/[[...path]].js` for **one** extra segment (`/api/pos/registers`). `/api/pos/oauth/status`, `/api/pos/sales/:id/audit`, and `/api/payment-intents/webhook/:provider` 404 at the platform unless `vercel.json` flattens them onto a one-segment alias (same pattern as `/api/company/team/invite` → `/api/company/invite`). Do not add another `api/*.js` file.
+**Nested catch-all paths:** Vercel Hobby only invokes `api/<name>/[[...path]].js` for **one** extra segment (`/api/pos/registers`). `/api/pos/oauth/status`, `/api/pos/sales/:id/audit`, `/api/payment-intents/webhook/:provider`, `/api/company/invites/:id/resend`, `/api/company/invites/:id`, and `/api/company/invite/validate` 404 at the platform unless `vercel.json` flattens them onto a one-segment alias (same pattern as `/api/company/team/invite` → `/api/company/invite`). Client resend/revoke/validate use `/api/company/invite-resend`, `/api/company/invite-by-id`, and `/api/company/invite-validate`. Do not add another `api/*.js` file.
 
 **Payroll / leave:** `/api/payroll/*` and `/api/leave/*` rewrite onto `api/company/[[...path]].js` (`/api/company/payroll`, `/api/company/leave`). Do not add `api/payroll` or `api/leave` function files.
 

@@ -65,14 +65,14 @@ describe("POS-only staff invite", () => {
     expect(filtered.map((row) => row.id)).toEqual(["nav-pos"]);
   });
 
-  it("keeps employee dashboard links when job function is not pos", () => {
+  it("gives employees Workforce only, not dashboard or POS", () => {
     const filtered = filterNavigationForCompanyRole(NAV, {
       companyRole: "employee",
       jobFunction: "general",
       userId: "u1",
       companyId: "o1",
     });
-    expect(filtered.map((row) => row.id)).toContain("nav-dashboard");
+    expect(filtered.map((row) => row.id)).not.toContain("nav-dashboard");
     expect(filtered.map((row) => row.id)).not.toContain("nav-pos");
     expect(filtered.map((row) => row.id)).not.toContain("nav-invoices");
     expect(filtered.map((row) => row.id)).not.toContain("nav-settings");

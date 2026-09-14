@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { filterWorkforceDirectory } from "@/lib/workforceDirectory.js";
+import { filterWorkforceDirectory, sortWorkforceDirectory } from "@/lib/workforceDirectory.js";
 import { buildCompanyAccessContext, canSeeOrgWorkforce, canViewEmployeeProfile } from "@/lib/companyPermissions.js";
 
 const own = "11111111-1111-4111-8111-111111111111";
@@ -13,26 +13,39 @@ describe("filterWorkforceDirectory", () => {
       label: "Thabo Mavelele (EMP-002)",
       full_name: "Thabo Mavelele",
       employee_number: "EMP-002",
+      job_title: "Cashier",
       department: "Ops",
       employment_status: "active",
       manager_membership_id: "mgr-1",
+      leave_status: "on_leave",
+      employment_start_date: "2026-01-01",
     },
     {
       id: other,
       label: "Amina Sale (EMP-003)",
       full_name: "Amina Sale",
       employee_number: "EMP-003",
+      job_title: "Bookkeeper",
       department: "Finance",
       employment_status: "terminated",
       manager_membership_id: "mgr-2",
+      leave_status: "none",
+      employment_start_date: "2025-06-01",
     },
   ];
 
-  it("filters by search, department, status, and manager", () => {
+  it("filters by search, department, status, manager, job title, and leave status", () => {
     expect(filterWorkforceDirectory(rows, { search: "thabo" }).map((row) => row.id)).toEqual([own]);
     expect(filterWorkforceDirectory(rows, { department: "Finance" }).map((row) => row.id)).toEqual([other]);
     expect(filterWorkforceDirectory(rows, { status: "active" }).map((row) => row.id)).toEqual([own]);
     expect(filterWorkforceDirectory(rows, { managerId: "mgr-2" }).map((row) => row.id)).toEqual([other]);
+    expect(filterWorkforceDirectory(rows, { jobTitle: "Cashier" }).map((row) => row.id)).toEqual([own]);
+    expect(filterWorkforceDirectory(rows, { leaveStatus: "on_leave" }).map((row) => row.id)).toEqual([own]);
+  });
+
+  it("sorts by name and start date", () => {
+    expect(sortWorkforceDirectory(rows, "name").map((row) => row.id)).toEqual([other, own]);
+    expect(sortWorkforceDirectory(rows, "start").map((row) => row.id)).toEqual([other, own]);
   });
 });
 

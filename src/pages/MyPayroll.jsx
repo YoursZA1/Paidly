@@ -11,20 +11,27 @@ import { createPageUrl } from "@/utils";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { useAppStore } from "@/stores/useAppStore";
 import { leaveApi, payrollApi } from "@/services/PayrollApiService";
+import { workforceApi } from "@/services/WorkforceApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
+import useCompanyContext from "@/hooks/useCompanyContext";
+import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 
-export default function MyPayrollPage({ embedded = false }) {
+export default function MyPayrollPage({ embedded = false, variant = "default" }) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { membershipId } = useCompanyContext();
+  const { profile: userProfile } = useUserProfileQuery();
   const userPlan = profile?.subscription_plan || profile?.plan || "starter";
-  const tabParam = new URLSearchParams(useLocation().search).get("tab") || "overview";
+  const tabParam = new URLSearchParams(useLocation().search).get("tab") || (variant === "portal" ? "overview" : "overview");
   const currency = useAppStore((s) => s.userProfile)?.currency || "ZAR";
   const [payroll, setPayroll] = useState(null);
   const [leave, setLeave] = useState(null);
+  const [selfProfile, setSelfProfile] = useState(null);
   const [tab, setTab] = useState(tabParam);
+  const isPortal = variant === "portal";
 
   const load = async () => {
     try {
@@ -41,21 +48,117 @@ export default function MyPayrollPage({ embedded = false }) {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!isPortal || !membershipId) return;
+    workforceApi
+      .get(membershipId)
+      .then(setSelfProfile)
+      .catch(() => setSelfProfile(null));
+  }, [isPortal, membershipId]);
+
   const latest = payroll?.payslips?.[0];
   const money = (n) => formatCurrency(Number(n || 0), currency);
+  const today = new Date().toISOString().slice(0, 10);
+  const upcomingLeave = (leave?.requests || [])
+    .filter((row) => String(row.status || "").toLowerCase() === "approved" && row.start_date >= today)
+    .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)))[0];
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const displayName =
+    selfProfile?.full_name ||
+    payroll?.profile?.full_name ||
+    userProfile?.full_name ||
+    "there";
+  const employeeNumber = selfProfile?.employee_number || payroll?.profile?.employee_number || "—";
+  const jobTitle = selfProfile?.job_title || payroll?.profile?.job_title || "—";
+  const department = selfProfile?.department || payroll?.profile?.department || "—";
 
-  const header = (
+  const applyButton = (
+            <Button asChild className="rounded-xl h-9 bg-primary text-primary-foreground">
+              <Link to={createPageUrl("CreateLeaveRequest")}>
+                <Plus className="h-4 w-4 mr-1" /> Apply for leave
+              </Link>
+            </Button>
+  );
+
+  const header = isPortal ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="mb-0.5 text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
+                  {greeting}
+                </p>
+                <h1 className="mb-1 font-display text-2xl font-bold leading-tight text-foreground">
+                  {displayName}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Employee No. {employeeNumber}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {jobTitle} · {department}
+                </p>
+              </div>
+              {applyButton}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card className="rounded-xl">
+                <CardHeader><CardTitle className="text-base">Leave balance</CardTitle></CardHeader>
+                <CardContent className="space-y-2">
+                  {(leave?.balances || []).slice(0, 4).map((b) => (
+                    <div key={b.leave_type.id} className="flex justify-between text-sm">
+                      <span>{b.leave_type.name}</span>
+                      <span className="tabular-nums font-medium">{b.available} days</span>
+                    </div>
+                  ))}
+                  {(leave?.balances || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No leave balances yet.</p>
+                  ) : null}
+                </CardContent>
+              </Card>
+              <Card className="rounded-xl">
+                <CardHeader><CardTitle className="text-base">Latest payslip</CardTitle></CardHeader>
+                <CardContent>
+                  {latest ? (
+                    <>
+                      <p className="text-2xl font-semibold tabular-nums">{money(latest.net_pay)}</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {latest.pay_period_start} → {latest.pay_period_end}
+                      </p>
+                      <Button asChild size="sm" variant="outline" className="rounded-xl mt-3">
+                        <Link to={createPageUrl(`ViewPayslip?id=${latest.id}`)}>View payslip</Link>
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No payslips yet.</p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="rounded-xl">
+                <CardHeader><CardTitle className="text-base">Upcoming</CardTitle></CardHeader>
+                <CardContent>
+                  {upcomingLeave ? (
+                    <>
+                      <p className="font-medium">{upcomingLeave.leave_types?.name || "Leave"}</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {upcomingLeave.start_date} – {upcomingLeave.end_date}
+                      </p>
+                      <Badge variant="outline" className="mt-2">{upcomingLeave.status}</Badge>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No upcoming leave.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+  ) : (
           <PageHeader
             title="My Payroll"
             description="Your salary summary, payslips, and leave."
             icon={<Wallet className="h-4 w-4" />}
             onRefresh={load}
           >
-            <Button asChild className="rounded-xl h-9 bg-primary text-primary-foreground">
-              <Link to={createPageUrl("CreateLeaveRequest")}>
-                <Plus className="h-4 w-4 mr-1" /> Apply for leave
-              </Link>
-            </Button>
+            {applyButton}
           </PageHeader>
   );
 
@@ -207,7 +310,7 @@ export default function MyPayrollPage({ embedded = false }) {
       {embedded ? (
         <div className="space-y-4">
           {header}
-          {tabs}
+          {isPortal ? null : tabs}
         </div>
       ) : (
         <PageTemplate>

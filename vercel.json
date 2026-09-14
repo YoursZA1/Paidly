@@ -129,6 +129,18 @@
       "destination": "/api/company/role"
     },
     {
+      "source": "/api/company/invite/validate",
+      "destination": "/api/company/invite-validate"
+    },
+    {
+      "source": "/api/company/invites/:id/resend",
+      "destination": "/api/company/invite-resend?id=:id"
+    },
+    {
+      "source": "/api/company/invites/:id",
+      "destination": "/api/company/invite-by-id?id=:id"
+    },
+    {
       "source": "/api/track-open",
       "destination": "/api/public-share?doc=email-track&mode=open"
     },

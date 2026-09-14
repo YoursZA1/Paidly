@@ -55,7 +55,7 @@ describe("resolveWorkforceExperience", () => {
   it("sends line managers to the manager portal, not the owner dashboard", () => {
     const manager = ctx({ companyRole: "manager", jobFunction: "general" });
     expect(resolveWorkforceExperience(manager)).toBe(WORKFORCE_EXPERIENCES.MANAGER);
-    expect(resolveWorkforceHomePath(manager)).toBe(createPageUrl("Workforce/manager"));
+    expect(resolveWorkforceHomePath(manager)).toBe(`${createPageUrl("Workforce/manager")}?tab=overview`);
     expect(resolveCompanyHomePath(manager)).not.toBe(createPageUrl("Dashboard"));
   });
 
@@ -70,7 +70,7 @@ describe("resolveWorkforceExperience", () => {
     const manager = ctx({ companyRole: "manager", jobFunction: "general" });
     const hr = ctx({ companyRole: "manager", jobFunction: "hr" });
     const finance = ctx({ companyRole: "manager", jobFunction: "finance" });
-    expect(resolvePostLoginPath({}, "/Dashboard", manager)).toBe(createPageUrl("Workforce/manager"));
+    expect(resolvePostLoginPath({}, "/Dashboard", manager)).toBe(`${createPageUrl("Workforce/manager")}?tab=overview`);
     expect(resolvePostLoginPath({}, "/Dashboard", hr)).toBe(createPageUrl("Workforce"));
     expect(resolvePostLoginPath({}, "/Dashboard", finance)).toBe(createPageUrl("Workforce/payroll"));
   });

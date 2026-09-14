@@ -639,8 +639,13 @@ async function rotateCompanyInvite(row, { posInvite, registerId } = {}) {
   if (registerId) patch.register_id = registerId;
 
   let { error: updateErr } = await supabaseAdmin.from("company_invites").update(patch).eq("id", row.id);
-  if (updateErr && /token_hash|email_sent_at/i.test(updateErr.message || "")) {
-    const { token_hash: _omitHash, email_sent_at: _omitSent, ...withoutOptional } = patch;
+  if (updateErr && /token_hash|email_sent_at|invite_code_hash/i.test(updateErr.message || "")) {
+    const {
+      token_hash: _omitHash,
+      email_sent_at: _omitSent,
+      invite_code_hash: _omitCode,
+      ...withoutOptional
+    } = patch;
     ({ error: updateErr } = await supabaseAdmin.from("company_invites").update(withoutOptional).eq("id", row.id));
   }
   if (updateErr) throw new Error(updateErr.message || "Could not refresh invite");
@@ -917,7 +922,7 @@ export async function handleCompanyInviteRevoke(req, res) {
     const gate = await requireCompanyAdmin(req, res);
     if (!gate.ok) return gate.response;
 
-    const inviteId = String(req.params?.id || req.query?.id || "").trim();
+    const inviteId = String(req.params?.id || req.query?.id || req.body?.id || "").trim();
     if (!inviteId) return jsonError(res, 400, "invite id is required");
 
     const { data: row, error: fetchErr } = await supabaseAdmin
@@ -964,7 +969,7 @@ export async function handleCompanyInviteResend(req, res) {
     const gate = await requireCompanyAdmin(req, res);
     if (!gate.ok) return gate.response;
 
-    const inviteId = String(req.params?.id || req.body?.id || "").trim();
+    const inviteId = String(req.params?.id || req.query?.id || req.body?.id || "").trim();
     if (!inviteId) return jsonError(res, 400, "invite id is required");
 
     const { data: row, error: fetchErr } = await supabaseAdmin
@@ -1079,9 +1084,12 @@ export async function handleCompanyInviteResend(req, res) {
 export function registerCompanyTeamRoutes(app) {
   app.post("/api/company/invite", handleCompanyTeamInvite);
   app.get("/api/company/invite/validate", handleCompanyInviteValidate);
+  app.get("/api/company/invite-validate", handleCompanyInviteValidate);
   app.get("/api/company/invites", handleCompanyInvitesList);
   app.delete("/api/company/invites/:id", handleCompanyInviteRevoke);
+  app.delete("/api/company/invite-by-id", handleCompanyInviteRevoke);
   app.post("/api/company/invites/:id/resend", handleCompanyInviteResend);
+  app.post("/api/company/invite-resend", handleCompanyInviteResend);
   app.patch("/api/company/role", handleCompanyTeamRolePatch);
   app.get("/api/company/context", handleCompanyContextGet);
   app.all("/api/company/employees", (req, res) => {

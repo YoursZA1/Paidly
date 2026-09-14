@@ -46,7 +46,7 @@ export function resolveWorkforceHomePath(ctx) {
     case WORKFORCE_EXPERIENCES.FINANCE:
       return createPageUrl("Workforce/payroll");
     case WORKFORCE_EXPERIENCES.MANAGER:
-      return createPageUrl("Workforce/manager");
+      return `${createPageUrl("Workforce/manager")}?tab=overview`;
     case WORKFORCE_EXPERIENCES.HR:
     case WORKFORCE_EXPERIENCES.EMPLOYEE:
       return createPageUrl("Workforce");

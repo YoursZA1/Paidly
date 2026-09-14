@@ -16,6 +16,7 @@ import { computeLeaveBalance } from "../../../shared/leave/leaveMath.js";
 import { sanitizeEmployeeWritePayload, parseManagerMembershipId } from "../../../shared/workforce/employeeWrite.js";
 import { buildEmployeeProfile } from "../../../shared/workforce/employeeProfile.js";
 import { mergeEmployeeTimeline } from "../../../shared/workforce/employeeTimeline.js";
+import { countEmployeesOnLeaveToday, deriveEmployeeLeaveStatus } from "../../../shared/workforce/leaveStatus.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import { assertOwnEmployee, assertSameOrg } from "./workforceAuth.js";
 import { throwIfMissingWorkforceColumn } from "./schemaGuard.js";
@@ -111,6 +112,19 @@ export async function listEmployees(orgId, { actorMembershipId = null, canManage
       payslipRows = [];
     }
   }
+  let leaveRequestRows = [];
+  if (employeeIds.length) {
+    try {
+      const requests = await supabaseAdmin
+        .from("leave_requests")
+        .select("employee_id, status, start_date, end_date")
+        .eq("org_id", orgId)
+        .in("employee_id", employeeIds);
+      leaveRequestRows = requests.data || [];
+    } catch {
+      leaveRequestRows = [];
+    }
+  }
   const attendanceByEmployee = new Map(attendanceRows.map((row) => [row.employee_id, row]));
   const leaveByEmployee = new Map();
   for (const row of leaveRows) {
@@ -123,6 +137,14 @@ export async function listEmployees(orgId, { actorMembershipId = null, canManage
     if (!row.membership_id) continue;
     payslipCountByEmployee.set(row.membership_id, (payslipCountByEmployee.get(row.membership_id) || 0) + 1);
   }
+  const leaveRequestsByEmployee = new Map();
+  for (const row of leaveRequestRows) {
+    if (!row.employee_id) continue;
+    const list = leaveRequestsByEmployee.get(row.employee_id) || [];
+    list.push(row);
+    leaveRequestsByEmployee.set(row.employee_id, list);
+  }
+  const todayIso = johannesburgYmd().iso;
   const memberById = new Map(scoped.map((m) => [m.id, m]));
 
   return scoped.map((m) => {
@@ -135,7 +157,7 @@ export async function listEmployees(orgId, { actorMembershipId = null, canManage
     const managerPerson = managerMem ? byUser.get(managerMem.user_id) : null;
     const managerName =
       managerPerson?.full_name || managerMem?.invited_name || managerMem?.invited_email || null;
-    return buildEmployeeProfile(
+    const profile = buildEmployeeProfile(
       {
         membership: {
           ...m,
@@ -151,6 +173,10 @@ export async function listEmployees(orgId, { actorMembershipId = null, canManage
       },
       { actorMembershipId, canManagePayroll }
     );
+    return {
+      ...profile,
+      leave_status: deriveEmployeeLeaveStatus(leaveRequestsByEmployee.get(m.id) || [], todayIso),
+    };
   });
 }
 
@@ -588,7 +614,7 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
   });
 }
 
-export async function workforceSummary(orgId, { managerScopeId = null } = {}) {
+export async function workforceSummary(orgId, { managerScopeId = null, includePendingInvites = false } = {}) {
   const employees = await listEmployees(orgId, {
     canManagePayroll: false,
     managerScopeId,
@@ -596,15 +622,17 @@ export async function workforceSummary(orgId, { managerScopeId = null } = {}) {
   const now = johannesburgYmd();
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const ids = employees.map((row) => row.id).filter(Boolean);
-  let leaveCounts = { pending: 0, approved: 0, rejected: 0, upcoming: 0 };
+  let leaveCounts = { pending: 0, approved: 0, rejected: 0, upcoming: 0, on_leave_today: 0 };
+  let leaveRows = [];
   if (ids.length) {
-    const { data: leaveRows } = await supabaseAdmin
+    const leaveQuery = await supabaseAdmin
       .from("leave_requests")
-      .select("id, status, start_date, employee_id")
+      .select("id, status, start_date, end_date, employee_id")
       .eq("org_id", orgId)
       .in("employee_id", ids);
+    leaveRows = leaveQuery.data || [];
     const today = now.iso;
-    for (const row of leaveRows || []) {
+    for (const row of leaveRows) {
       const status = String(row.status || "").toLowerCase();
       if (status === "pending") leaveCounts.pending += 1;
       if (status === "approved") {
@@ -613,6 +641,7 @@ export async function workforceSummary(orgId, { managerScopeId = null } = {}) {
       }
       if (status === "rejected") leaveCounts.rejected += 1;
     }
+    leaveCounts.on_leave_today = countEmployeesOnLeaveToday(leaveRows, today);
   }
   const { data: runs } = await supabaseAdmin
     .from("pay_runs")
@@ -638,12 +667,25 @@ export async function workforceSummary(orgId, { managerScopeId = null } = {}) {
     payslipsGenerated = payslipCount.count || 0;
   }
   const adjustment = await loadOutstandingAdjustmentSignals(orgId);
+  let pendingInvites = null;
+  if (includePendingInvites) {
+    const nowIso = new Date().toISOString();
+    const inviteCount = await supabaseAdmin
+      .from("company_invites")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("status", "pending")
+      .is("revoked_at", null)
+      .gte("expires_at", nowIso);
+    pendingInvites = inviteCount.error ? 0 : inviteCount.count || 0;
+  }
   return {
     workforce: {
       total: employees.length,
       active: employees.filter((row) => row.employment_status === "active" && !row.disabled_at).length,
       new_employees: employees.filter((row) => row.created_at && row.created_at >= thirtyDaysAgo).length,
       pending_onboarding: employees.filter((row) => row.portal_status === "invited").length,
+      pending_invites: pendingInvites,
       incomplete_profiles: employees.filter(
         (row) => !row.department || !row.manager_membership_id || !row.employment_start_date
       ).length,

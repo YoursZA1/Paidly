@@ -38,6 +38,7 @@ export default function EmployeeProfile() {
     hasPermission(PERMISSIONS.VIEW_TEAM_MEMBERS);
   const canReassign = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
   const canSeePay = Boolean(employee && !employee.compensation_redacted);
+  const canOpenPayrollTab = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
 
   useEffect(() => {
     if (!id || companyLoading) return;
@@ -109,7 +110,7 @@ export default function EmployeeProfile() {
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="personal">Personal</TabsTrigger>
               <TabsTrigger value="employment">Employment</TabsTrigger>
-              <TabsTrigger value="compensation">Compensation</TabsTrigger>
+              {canOpenPayrollTab ? <TabsTrigger value="payroll">Payroll</TabsTrigger> : null}
               <TabsTrigger value="leave">Leave</TabsTrigger>
               <TabsTrigger value="payslips">Payslips</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -183,23 +184,26 @@ export default function EmployeeProfile() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="compensation">
+            {canOpenPayrollTab ? (
+            <TabsContent value="payroll">
               <Card className="rounded-xl">
                 <CardHeader>
-                  <CardTitle className="text-base">Compensation</CardTitle>
+                  <CardTitle className="text-base">Payroll</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm space-y-2">
                   {canSeePay ? (
                     <>
                       <p>Pay type: {employee.pay_type || "—"}</p>
+                      <p>Pay frequency: {employee.pay_frequency || "—"}</p>
                       <p>Salary: {employee.base_salary ?? "—"}</p>
                     </>
                   ) : (
-                    <p className="text-muted-foreground">Salary is visible only to payroll managers or the employee.</p>
+                    <p className="text-muted-foreground">Salary is visible only to payroll managers.</p>
                   )}
                 </CardContent>
               </Card>
             </TabsContent>
+            ) : null}
 
             <TabsContent value="leave">
               <Card className="rounded-xl">

@@ -49,10 +49,10 @@ export async function listCompanyInvites(opts = {}) {
 
 export async function revokeCompanyInvite(inviteId) {
   const headers = await authHeaders();
-  const res = await apiRequest(`${apiBase()}/api/company/invites/${encodeURIComponent(inviteId)}`, {
-    method: "DELETE",
-    headers,
-  });
+  const res = await apiRequest(
+    `${apiBase()}/api/company/invite-by-id?id=${encodeURIComponent(inviteId)}`,
+    { method: "DELETE", headers }
+  );
   const raw = await res.text().catch(() => "");
   return parseApiJsonError(res, raw, "Could not revoke invite");
 }
@@ -60,7 +60,7 @@ export async function revokeCompanyInvite(inviteId) {
 export async function resendCompanyInvite(inviteId) {
   const headers = await authHeaders();
   const res = await apiRequest(
-    `${apiBase()}/api/company/invites/${encodeURIComponent(inviteId)}/resend`,
+    `${apiBase()}/api/company/invite-resend?id=${encodeURIComponent(inviteId)}`,
     { method: "POST", headers }
   );
   const raw = await res.text().catch(() => "");
@@ -81,7 +81,7 @@ export async function validatePublicInviteToken(token) {
   const code = String(token || "").trim();
   if (!code) throw new Error(invitePublicErrorMessage("missing_token"));
   const res = await fetch(
-    `${apiBase()}/api/company/invite/validate?token=${encodeURIComponent(code)}`
+    `${apiBase()}/api/company/invite-validate?token=${encodeURIComponent(code)}`
   );
   const raw = await res.text().catch(() => "");
   let json = {};

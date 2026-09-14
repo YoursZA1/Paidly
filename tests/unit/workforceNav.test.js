@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { buildCompanyAccessContext, PERMISSIONS } from "@/lib/companyPermissions";
 import { getWorkforceNavChildren } from "@/lib/workforceNav.js";
+import { resolveWorkforceExperience } from "@/lib/workforceExperience.js";
 
-function idsFor(partial) {
+function childrenFor(partial) {
   const ctx = buildCompanyAccessContext({
     userId: "u1",
     companyId: "o1",
+    membershipId: "11111111-1111-4111-8111-111111111111",
     ...partial,
   });
-  return getWorkforceNavChildren((permission) => ctx.permissions.has(permission)).map((row) => row.id);
+  return getWorkforceNavChildren((permission) => ctx.permissions.has(permission), {
+    experience: resolveWorkforceExperience(ctx),
+    membershipId: ctx.membershipId,
+  });
+}
+
+function idsFor(partial) {
+  return childrenFor(partial).map((row) => row.id);
 }
 
 describe("getWorkforceNavChildren", () => {
@@ -18,48 +27,62 @@ describe("getWorkforceNavChildren", () => {
     expect(ids).toContain("nav-workforce-leave");
     expect(ids).not.toContain("nav-workforce-payroll");
     expect(ids).not.toContain("nav-workforce-team");
-    const payslips = getWorkforceNavChildren((permission) =>
-      buildCompanyAccessContext({
-        userId: "u1",
-        companyId: "o1",
-        companyRole: "manager",
-        jobFunction: "hr",
-      }).permissions.has(permission)
-    ).find((row) => row.id === "nav-workforce-payslips");
+    const payslips = childrenFor({ companyRole: "manager", jobFunction: "hr" }).find(
+      (row) => row.id === "nav-workforce-payslips"
+    );
     expect(payslips?.url).toBe("/MyPayroll");
   });
 
-  it("gives finance managers payroll and team payslips", () => {
+  it("gives finance managers payroll and team payslips without HR directory", () => {
     const ids = idsFor({ companyRole: "manager", jobFunction: "finance" });
     expect(ids).toContain("nav-workforce-payroll");
     expect(ids).toContain("nav-workforce-payslips");
+    expect(ids).toContain("nav-workforce-reports");
     expect(ids).not.toContain("nav-workforce-employees");
+    expect(ids).not.toContain("nav-workforce-leave");
     expect(ids).not.toContain("nav-workforce-team");
   });
 
-  it("gives employees own leave/payslips and no employees directory", () => {
+  it("gives employees a self-service nav without HR children", () => {
     const ctx = buildCompanyAccessContext({
       userId: "u1",
       companyId: "o1",
+      membershipId: "11111111-1111-4111-8111-111111111111",
       companyRole: "employee",
       jobFunction: "general",
     });
-    const children = getWorkforceNavChildren((permission) => ctx.permissions.has(permission));
+    const children = childrenFor({ companyRole: "employee", jobFunction: "general" });
     const ids = children.map((row) => row.id);
+    expect(ids).toEqual([
+      "nav-workforce-overview",
+      "nav-workforce-leave",
+      "nav-workforce-payslips",
+      "nav-workforce-profile",
+    ]);
     expect(ids).not.toContain("nav-workforce-employees");
     expect(ids).not.toContain("nav-workforce-payroll");
     expect(ids).not.toContain("nav-workforce-settings");
+    expect(ids).not.toContain("nav-workforce-attendance");
+    expect(ids).not.toContain("nav-workforce-reports");
     const leave = children.find((row) => row.id === "nav-workforce-leave");
     expect(leave?.url).toContain("MyPayroll");
     const payslips = children.find((row) => row.id === "nav-workforce-payslips");
-    expect(payslips?.url).toBe("/MyPayroll");
+    expect(payslips?.url).toContain("MyPayroll");
     expect(ctx.permissions.has(PERMISSIONS.MANAGE_PAYROLL)).toBe(false);
   });
 
-  it("gives line managers a My team child, not payroll or the HR directory", () => {
+  it("gives line managers a portal-only nav", () => {
     const ids = idsFor({ companyRole: "manager", jobFunction: "general" });
-    expect(ids).toContain("nav-workforce-team");
+    expect(ids).toEqual([
+      "nav-workforce-overview",
+      "nav-workforce-team",
+      "nav-workforce-leave",
+      "nav-workforce-calendar",
+      "nav-workforce-me",
+    ]);
     expect(ids).not.toContain("nav-workforce-employees");
     expect(ids).not.toContain("nav-workforce-payroll");
+    expect(ids).not.toContain("nav-workforce-attendance");
+    expect(ids).not.toContain("nav-workforce-reports");
   });
 });

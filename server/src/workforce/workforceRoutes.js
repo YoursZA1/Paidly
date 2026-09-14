@@ -26,6 +26,7 @@ export async function handleWorkforceEmployees(req, res) {
     try {
       const data = await workforceSummary(gate.membership.companyId, {
         managerScopeId: managerScope(gate.membership),
+        includePendingInvites: membershipHasPermission(gate.membership, PERMISSIONS.MANAGE_EMPLOYEES),
       });
       return res.status(200).json({ ok: true, data });
     } catch (err) {
