@@ -58,6 +58,16 @@ export function resolvePosRoute(req) {
   const queryToken = firstQueryValue(query.token);
   const queryProvider = firstQueryValue(query.provider);
 
+  // vercel.json `/api/paidly/:path*` → `/api/pos/paidly?__paidly=:path*`.
+  // Vercel also copies the splat onto `path`, so `query.path` is "health", not "paidly".
+  const paidlyRewrite = normalizePosPathSegments(query.__paidly);
+  const requestPath = String(req.url || "").split("?")[0] || "";
+  if (paidlyRewrite.length > 0 || /\/api\/pos\/paidly$/i.test(requestPath)) {
+    if (paidlyRewrite.length > 0) return { route: "paidly", parts: paidlyRewrite };
+    const fromUrl = partsFromRequestUrl(req);
+    return { route: "paidly", parts: fromUrl[0] === "paidly" ? fromUrl.slice(1) : [] };
+  }
+
   let parts = normalizePosPathSegments(query.__pos);
   if (parts.length === 0) {
     parts = normalizePosPathSegments(query.path);

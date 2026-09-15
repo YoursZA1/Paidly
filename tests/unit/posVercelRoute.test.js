@@ -74,8 +74,14 @@ describe("resolvePosRoute", () => {
     ).toEqual({ route: "paidly", parts: ["health"] });
     expect(
       resolvePosRoute({
-        url: "/api/pos/paidly?__paidly=payment-intents/abc/cancel",
-        query: { path: "paidly", __paidly: "payment-intents/abc/cancel" },
+        url: "/api/pos/paidly?__paidly=health&path=health",
+        query: { path: "health", __paidly: "health" },
+      })
+    ).toEqual({ route: "paidly", parts: ["health"] });
+    expect(
+      resolvePosRoute({
+        url: "/api/pos/paidly?__paidly=payment-intents/abc/cancel&path=payment-intents/abc/cancel",
+        query: { path: "payment-intents/abc/cancel", __paidly: "payment-intents/abc/cancel" },
       })
     ).toEqual({ route: "paidly", parts: ["payment-intents", "abc", "cancel"] });
   });
