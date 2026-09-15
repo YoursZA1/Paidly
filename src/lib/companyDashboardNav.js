@@ -8,7 +8,6 @@ import {
   Users,
   FileText,
   BarChart2,
-  Settings,
   ClipboardList,
   Wallet,
   PlusCircle,
@@ -177,15 +176,6 @@ export const COMPANY_WORKSPACE_NAV = [
     url: createPageUrl("Workforce/reports"),
     icon: BarChart2,
     requiredPermission: PERMISSIONS.VIEW_COMPANY_REPORTS,
-    section: "Company",
-  },
-  {
-    id: "company-nav-settings",
-    title: "Company Settings",
-    description: "Manage company profile and policies.",
-    url: createPageUrl("Settings"),
-    icon: Settings,
-    requiredPermission: PERMISSIONS.MANAGE_COMPANY_SETTINGS,
     section: "Company",
   },
 ];

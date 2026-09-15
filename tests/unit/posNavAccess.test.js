@@ -142,6 +142,10 @@ describe("company workspace POS entry", () => {
     const items = filterCompanyWorkspaceNav(allow, { hasFeature: () => false });
     expect(items.map((row) => row.id)).toContain("company-nav-my-payslips");
   });
+
+  it("does not duplicate Settings inside the workspace cards", () => {
+    expect(COMPANY_WORKSPACE_NAV.some((item) => item.id === "company-nav-settings")).toBe(false);
+  });
 });
 
 describe("role filter then plan visibility", () => {

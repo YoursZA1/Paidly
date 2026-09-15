@@ -27,6 +27,7 @@ describe("getWorkforceNavChildren", () => {
     expect(ids).toContain("nav-workforce-leave");
     expect(ids).not.toContain("nav-workforce-payroll");
     expect(ids).not.toContain("nav-workforce-team");
+    expect(ids).not.toContain("nav-workforce-settings");
     const payslips = childrenFor({ companyRole: "manager", jobFunction: "hr" }).find(
       (row) => row.id === "nav-workforce-payslips"
     );
@@ -82,7 +83,14 @@ describe("getWorkforceNavChildren", () => {
     ]);
     expect(ids).not.toContain("nav-workforce-employees");
     expect(ids).not.toContain("nav-workforce-payroll");
+    expect(ids).not.toContain("nav-workforce-settings");
     expect(ids).not.toContain("nav-workforce-attendance");
     expect(ids).not.toContain("nav-workforce-reports");
+  });
+
+  it("keeps company Settings on the main sidebar, not nested under Workforce", () => {
+    const ids = idsFor({ companyRole: "admin" });
+    expect(ids).toContain("nav-workforce-employees");
+    expect(ids).not.toContain("nav-workforce-settings");
   });
 });

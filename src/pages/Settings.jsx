@@ -56,8 +56,6 @@ import PosIntegrationSettings from "@/components/settings/PosIntegrationSettings
 import PosRegistersSettings from "@/components/settings/PosRegistersSettings";
 import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
 import InstallPaidlyCard from "@/components/pwa/InstallPaidlyCard";
-import CompanyOverviewPanel from "@/components/dashboard/CompanyOverviewPanel";
-import RoleBasedDashboardPanel from "@/components/dashboard/RoleBasedDashboardPanel";
 import CompanyTeamMembersPanel from "@/components/company/CompanyTeamMembersPanel";
 import OrgBrandsSettings from "@/components/settings/OrgBrandsSettings";
 import useCompanyContext from "@/hooks/useCompanyContext";
@@ -1833,7 +1831,6 @@ const SETTINGS_TABS = [
     { value: "profile", label: "Company Profile", icon: SettingsIcon, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "brands", label: "Brands", icon: Building2, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "team", label: "Team Members", icon: Users, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
-    { value: "company-team", label: "Company Team", icon: Building2, permission: PERMISSIONS.VIEW_TEAM_MEMBERS },
     { value: "currency", label: "Currency", icon: DollarSign, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "payments", label: "Payment Methods", icon: CreditCard, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "integrations", label: "Integrations", icon: Plug, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
@@ -1860,13 +1857,6 @@ function SettingsTabPanels({ activeTab }) {
             return (
                 <SettingsCard title="Team Members" description="Invite teammates and manage who belongs to your company.">
                     <CompanyTeamMembersPanel />
-                </SettingsCard>
-            );
-        case "company-team":
-            return (
-                <SettingsCard title="Company Team" description="HR and team tools for your organization — role-based for each member.">
-                    <CompanyOverviewPanel />
-                    <RoleBasedDashboardPanel />
                 </SettingsCard>
             );
         case "currency":
@@ -1933,6 +1923,12 @@ export default function Settings() {
         if (raw === "security") {
             const next = new URLSearchParams(searchParams);
             next.set("tab", "account");
+            setSearchParams(next, { replace: true });
+            return;
+        }
+        if (raw === "company-team") {
+            const next = new URLSearchParams(searchParams);
+            next.set("tab", "team");
             setSearchParams(next, { replace: true });
             return;
         }

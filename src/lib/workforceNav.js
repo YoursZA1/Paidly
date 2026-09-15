@@ -5,7 +5,6 @@ import {
   ClipboardList,
   FileText,
   Receipt,
-  Settings,
   User,
   Users,
   Wallet,
@@ -108,15 +107,6 @@ function hrChildren(can) {
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS) || can(PERMISSIONS.MANAGE_PAYROLL)) {
     children.push(item("nav-workforce-reports", "Reports", createPageUrl("Workforce/reports"), BarChart2));
-  }
-  if (
-    can(PERMISSIONS.MANAGE_LEAVE) ||
-    can(PERMISSIONS.MANAGE_EMPLOYEES) ||
-    can(PERMISSIONS.MANAGE_COMPANY_SETTINGS)
-  ) {
-    children.push(
-      item("nav-workforce-settings", "Settings", `${createPageUrl("Settings")}?tab=team`, Settings)
-    );
   }
   return children;
 }
