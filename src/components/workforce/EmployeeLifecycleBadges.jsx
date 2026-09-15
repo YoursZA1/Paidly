@@ -29,3 +29,5 @@ export function EmployeeLifecycleBadges({ employee, compact = false }) {
     </div>
   );
 }
+
+export default EmployeeLifecycleBadges;
