@@ -60,6 +60,13 @@ describe("service worker runtime routes", () => {
     }
   });
 
+  it("serializes as a self-contained Workbox generateSW matcher", () => {
+    const source = Function.prototype.toString.call(isPaidlyApiRequest);
+    expect(source).toContain("pathname.startsWith");
+    expect(source).not.toMatch(/\bisSameOriginApiHost\b/);
+    expect(source).not.toMatch(/\bgetRuntimeOrigin\b/);
+  });
+
   it("matches Supabase and Sentry by host, not by path", () => {
     expect(isSupabaseRequest({ url: new URL("https://xyz.supabase.co/rest/v1/payslips") })).toBe(true);
     expect(isSupabaseRequest({ url: new URL("https://evil.example/rest/v1/payslips") })).toBe(false);

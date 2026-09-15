@@ -377,7 +377,7 @@ export function AuthProvider({ children }) {
       if (
         !shouldKeepHydratedUserOnSessionReadFailure({
           storeSession: stored,
-          storeUser,
+          storeUser: storedUser,
           error,
         })
       ) {

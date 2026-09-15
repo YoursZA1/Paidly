@@ -56,6 +56,7 @@ export default defineConfig(async ({ mode }) => {
             maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
             runtimeCaching: [
               {
+                // Self-contained matcher — Workbox generateSW stringifies this function into sw.js.
                 urlPattern: isPaidlyApiRequest,
                 handler: 'NetworkOnly',
               },
