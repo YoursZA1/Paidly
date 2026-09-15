@@ -9,11 +9,23 @@ const PRODUCTION_ORIGINS = new Set([
   "https://app.paidly.co.za",
 ]);
 
+function extraAllowedOrigins() {
+  const raw = `${process.env.PAIDLY_PAY_ORIGINS || ""},${process.env.PAIDLY_PAY_ORIGIN || ""}`;
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((origin) => origin && origin !== "*" && /^https?:\/\/[^/]+$/i.test(origin));
+}
+
 function isOriginAllowed(origin) {
   if (!origin || typeof origin !== "string") return false;
   if (PRODUCTION_ORIGINS.has(origin)) return true;
+  if (extraAllowedOrigins().includes(origin)) return true;
   const clientOrigin = process.env.CLIENT_ORIGIN || "";
-  const configured = clientOrigin.split(",").map((s) => s.trim()).filter(Boolean);
+  const configured = clientOrigin
+    .split(",")
+    .map((s) => s.trim())
+    .filter((value) => value && value !== "*");
   if (configured.includes(origin)) return true;
   // Allow localhost in non-production environments only
   if (

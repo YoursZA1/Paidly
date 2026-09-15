@@ -496,6 +496,27 @@ export async function handleNativePosCheckout(req, res, gate) {
     return jsonError(res, 422, "Unsupported POS payment method");
   }
 
+  const checkoutSnapshot = {
+    connection_id: connection.id,
+    register_id: register?.id || null,
+    session_id: session?.id || null,
+    items: built.lines,
+    subtotal: payable.subtotal,
+    discount_amount: payable.discount_amount,
+    tax_amount: payable.tax_amount,
+    tax_rate: payable.tax_rate,
+    payment_method: paymentMethod,
+    currency,
+    client_id: clientId,
+    company_id: companyId || null,
+    cashier_id: gate.user.id,
+    customer_name: body.customer_name ? String(body.customer_name).slice(0, 120) : null,
+    customer_email: body.customer_email ? String(body.customer_email).slice(0, 254) : null,
+    cashier_name: body.cashier_name ? String(body.cashier_name).slice(0, 120) : null,
+    brand_name: body.brand_name ? String(body.brand_name).slice(0, 120) : null,
+    idempotency_key: idempotencyKey,
+  };
+
   let intent;
   try {
     intent = await createCustomerPaymentIntent({
@@ -512,9 +533,11 @@ export async function handleNativePosCheckout(req, res, gate) {
         origin: "pos",
         settlement: isTillCashSettlement(rail) ? "till" : isCardTerminalSettlement(rail) ? "terminal" : "online",
         payment_method: paymentMethod,
+        paidly_pay_method: paymentMethod === "card" ? "tap_to_pay" : paymentMethod === "digital" ? "eft" : "cash",
         subtotal: payable.subtotal,
         discount_amount: payable.discount_amount,
         tax_amount: payable.tax_amount,
+        checkout: checkoutSnapshot,
       },
     });
   } catch (err) {
@@ -573,14 +596,20 @@ export async function handleNativePosCheckout(req, res, gate) {
   }
 
   if (!posSaleCompletesWhenPaid(intent)) {
-    const redirectUrl = charge.next_action?.redirect_url || intent.metadata?.next_action?.redirect_url;
-    if (redirectUrl && (charge.status === "requires_action" || intent.status === "requires_action")) {
+    const nextAction = charge.next_action || intent.metadata?.next_action;
+    const redirectUrl = nextAction?.redirect_url;
+    const terminalWait =
+      nextAction?.type === "tap_to_pay" ||
+      nextAction?.type === "qr" ||
+      nextAction?.type === "redirect" ||
+      Boolean(redirectUrl);
+    if (terminalWait && (charge.status === "requires_action" || intent.status === "requires_action")) {
       return res.status(202).json({
         ok: true,
         pending: true,
-        code: charge.code || "OZOW_REDIRECT",
+        code: charge.code || (redirectUrl ? "OZOW_REDIRECT" : "TERMINAL_ACTION_REQUIRED"),
         payment_intent: publicPaymentIntentView(intent),
-        next_action: charge.next_action || intent.metadata?.next_action || { type: "redirect", redirect_url: redirectUrl },
+        next_action: nextAction || { type: "redirect", redirect_url: redirectUrl },
       });
     }
     await recordPosAuditEvent(

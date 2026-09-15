@@ -39,6 +39,7 @@ import {
   handlePosAccessGet,
   handlePosAccessEnd,
 } from "./posInviteActivate.js";
+import { handlePaidlyPayApi } from "../paidlyPay/paidlyPayApi.js";
 
 /**
  * Mirror Vercel `api/pos/[[...path]].js` for Vite dev proxy (server/src/index.js).
@@ -101,4 +102,7 @@ export function registerPosRoutes(app) {
   app.post("/api/pos/oauth/square/start", handleSquareOAuthStart);
   app.get("/api/pos/oauth/callback/square", handleSquareOAuthCallback);
   app.post("/api/pos/oauth/yoco/connect", handleYocoConnect);
+
+  app.all("/api/paidly", handlePaidlyPayApi);
+  app.all("/api/paidly/*", handlePaidlyPayApi);
 }

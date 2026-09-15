@@ -376,6 +376,10 @@ export async function applyVerifiedProviderEvent({ intentId, nextStatus, externa
   if (applied.intent.source_kind === "document" && isConfirmedPaymentIntent(applied.intent.status)) {
     settlement = await settleDocumentIntent(applied.intent);
   }
+  if (applied.intent.source_kind === "pos" && isConfirmedPaymentIntent(applied.intent.status)) {
+    const { settlePosIntent } = await import("../paidlyPay/settlePosIntent.js");
+    settlement = await settlePosIntent(applied.intent);
+  }
 
   return { ...applied, settlement };
 }

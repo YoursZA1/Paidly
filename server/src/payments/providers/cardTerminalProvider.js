@@ -1,24 +1,35 @@
 import { CUSTOMER_PAYMENT_PROVIDERS } from "../paymentIntentContract.js";
+import { isMockPaymentsEnabled } from "../../../../shared/payments/paidlyPayContract.js";
 
 /**
- * Physical card-present terminal on the native till.
- * There is no Paidly card-machine SDK. Do not return `paid` from a cashier click.
- * External Yoco/Square hardware confirms through POS webhooks, not this provider.
+ * Physical card-present terminal on the native till / Paidly Pay.
+ * Never returns `paid` from a cashier click or mobile client flag.
+ * Paid is only applied after a verified webhook (`terminal_confirmed`).
  */
 export const cardTerminalProvider = {
   id: CUSTOMER_PAYMENT_PROVIDERS.CARD_TERMINAL,
   sourceKinds: ["pos"],
   kind: "terminal",
   isConfigured() {
-    return false;
+    return isMockPaymentsEnabled() || Boolean(String(process.env.POS_WEBHOOK_SECRET || "").trim());
   },
-  async createCharge() {
+  async createCharge(intent, chargeCtx = {}) {
+    const method = String(chargeCtx.paymentMethod || intent.metadata?.paidly_pay_method || intent.metadata?.payment_method || "card")
+      .trim()
+      .toLowerCase();
+    const qr = method === "qr";
+    const mock = isMockPaymentsEnabled();
     return {
       status: "requires_action",
-      code: "TERMINAL_NOT_CONNECTED",
-      error:
-        "No card terminal is connected to this till. The sale was not marked paid. Use Cash, Digital Payment (Ozow), or a connected Yoco/Square reader that confirms via webhook.",
-      next_action: null,
+      code: mock ? "MOCK_TERMINAL" : "TERMINAL_ACTION_REQUIRED",
+      error: mock
+        ? "Mock terminal is waiting for a signed webhook. The sale is not paid yet."
+        : "Present the card or QR on Paidly Pay. The sale is not paid until a verified webhook arrives.",
+      next_action: {
+        type: qr ? "qr" : "tap_to_pay",
+        display: qr ? "QR PAY" : "TAP CARD",
+        mock,
+      },
     };
   },
 };

@@ -1,5 +1,6 @@
 import { applyApiCors } from "../../server/src/auth/applyApiCors.js";
 import { normalizeRequestBody } from "../../server/src/validateBody.js";
+import { ensureJsonRequestBody } from "../../server/src/paidlyPay/paidlyPayHttp.js";
 import {
   handlePosSalesList,
   handlePosConnectionsList,
@@ -37,6 +38,7 @@ import {
   handlePosOAuthStatus,
 } from "../../server/src/pos/posOAuthRoutes.js";
 import { resolvePosRoute } from "../../server/src/pos/posVercelRoute.js";
+import { handlePaidlyPayApi } from "../../server/src/paidlyPay/paidlyPayApi.js";
 import {
   handlePosInviteActivate,
   handlePosAccessGet,
@@ -46,11 +48,23 @@ import {
 /**
  * Vercel: one extra segment reaches this file (`/api/pos/registers`).
  * Nested URLs are rewritten in vercel.json (same pattern as /api/company/team/*).
+ * bodyParser is off so Paidly Pay HMAC can hash the original bytes.
  */
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 export default async function handler(req, res) {
+  await ensureJsonRequestBody(req);
   const resolved = resolvePosRoute(req);
   if (!resolved) return res.status(404).json({ error: "Not found" });
+
+  if (resolved.route === "paidly") {
+    req.paidlyParts = resolved.parts || [];
+    return handlePaidlyPayApi(req, res);
+  }
 
   if (resolved.route === "webhook") {
     req.params = { ...(req.params || {}), token: resolved.token };

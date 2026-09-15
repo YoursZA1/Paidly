@@ -65,6 +65,21 @@ describe("resolvePosRoute", () => {
     ).toEqual({ route: "oauth-status" });
   });
 
+  it("routes Paidly Pay through the existing POS function", () => {
+    expect(
+      resolvePosRoute({
+        url: "/api/pos/paidly?__paidly=health",
+        query: { path: "paidly", __paidly: "health" },
+      })
+    ).toEqual({ route: "paidly", parts: ["health"] });
+    expect(
+      resolvePosRoute({
+        url: "/api/pos/paidly?__paidly=payment-intents/abc/cancel",
+        query: { path: "paidly", __paidly: "payment-intents/abc/cancel" },
+      })
+    ).toEqual({ route: "paidly", parts: ["payment-intents", "abc", "cancel"] });
+  });
+
   it("does not treat the dummy route segment as a POS resource", () => {
     expect(resolvePosRoute(req({ path: "route", url: "/api/pos/route" }))).toBeNull();
   });

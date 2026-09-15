@@ -916,6 +916,7 @@ Ship these in parallel with **High impact next**—they reduce churn and make ev
 - `POST /api/pos/receipt/email` (till receipt email; not an invoice)
 - `POST /api/pos/invoice` (optional tax-invoice copy of a completed sale; paid; no invoice payments)
 - `GET|POST /api/pos/registers` · `PATCH|DELETE /api/pos/registers/:id` (till identity; org members list; settings managers write)
+- `/api/paidly/*` (Paidly Pay terminal bridge — rewritten onto `api/pos`; HMAC webhooks; does not add a 13th Hobby function). See `docs/paidly-pay-api.md`.
 - `POST /api/documents/:type/:id/events` (new internal endpoint) or service-only ingestion path for `document_events`
 - `POST /api/reminders/dispatch` (new internal endpoint used by cron workers)
 

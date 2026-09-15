@@ -74,6 +74,12 @@ export function resolvePosRoute(req) {
   const second = parts[1] || "";
   const third = parts[2] || "";
 
+  if (head === "paidly") {
+    const paidlyParts = normalizePosPathSegments(query.__paidly);
+    const rest = paidlyParts.length ? paidlyParts : parts.slice(1);
+    return { route: "paidly", parts: rest };
+  }
+
   if (head === "invite-activate") return { route: "invite-activate" };
   if (head === "access-end") return { route: "access-end" };
   if (head === "access") return { route: "access" };

@@ -976,6 +976,13 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         window.location.assign(result.next_action.redirect_url);
         return;
       }
+      if (result.pending) {
+        toast({
+          title: result.next_action?.display === "QR PAY" ? "Show QR on Paidly Pay" : "Tap card on Paidly Pay",
+          description: "The sale stays unpaid until Paidly verifies the provider webhook.",
+        });
+        return;
+      }
       const sale = result.sale;
       setCompletedSale(sale);
       setReceiptEmailTo(sale.customer_email || attachedCustomer?.email || "");

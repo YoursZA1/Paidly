@@ -84,4 +84,15 @@ describe("customer payment rails", () => {
       }
     }
   });
+
+  it("does not mark card-terminal paid from createCharge", async () => {
+    const charge = await cardTerminalProvider.createCharge({
+      id: "i3",
+      amount: 450,
+      metadata: { payment_method: "card" },
+    });
+    expect(charge.status).not.toBe("paid");
+    expect(charge.status).toBe("requires_action");
+    expect(charge.next_action.type).toBe("tap_to_pay");
+  });
 });

@@ -205,6 +205,10 @@
       "destination": "/api/pos/connection-by-id?id=:id"
     },
     {
+      "source": "/api/paidly/:path*",
+      "destination": "/api/pos/paidly?__paidly=:path*"
+    },
+    {
       "source": "/api/pos/:a/:b/:c*",
       "destination": "/api/pos/route?__pos=:a/:b/:c*"
     },

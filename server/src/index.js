@@ -539,7 +539,12 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: "15mb" }));
+app.use(express.json({
+  limit: "15mb",
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  },
+}));
 app.use(express.urlencoded({
   extended: false,
   verify: (req, res, buf) => {
