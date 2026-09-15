@@ -24,6 +24,8 @@ import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/docume
 import { loadOutstandingAdjustmentSignals } from "../workforce/adjustmentSignals.js";
 import { throwIfMissingWorkforceColumn } from "../workforce/schemaGuard.js";
 import { isPayrollParticipationActive } from "../../../shared/workforce/employeeLifecycle.js";
+import { validatePayRunItem } from "../../../shared/payroll/payRunValidation.js";
+import { canPublishPayslip, displayPayslipStatus, publishedPayslipWrite } from "../../../shared/payroll/payslipStatus.js";
 
 const DEFAULT_COMPONENTS = [
   { kind: "earning", code: "ALLOWANCE", name: "Allowance", taxable: true, recurring: true },
@@ -213,6 +215,10 @@ export async function payrollOverview(orgId) {
   };
 }
 
+function hasOwn(payload, key) {
+  return payload != null && Object.prototype.hasOwnProperty.call(payload, key);
+}
+
 export async function upsertPayrollProfile(orgId, actorId, payload) {
   const id = payload.id || null;
   if (payload.org_id && payload.org_id !== orgId) {
@@ -238,21 +244,28 @@ export async function upsertPayrollProfile(orgId, actorId, payload) {
       throw err;
     }
   }
-  const patch = {
-    org_id: orgId,
-    membership_id: payload.membership_id,
-    user_id: payload.user_id || null,
-    pay_frequency: payload.pay_frequency || "monthly",
-    pay_type: payload.pay_type || "monthly_salary",
-    base_salary: money(payload.base_salary),
-    hourly_rate: money(payload.hourly_rate),
-    daily_rate: money(payload.daily_rate),
-    banking: payload.banking && typeof payload.banking === "object" ? payload.banking : {},
-    tax_identifiers:
-      payload.tax_identifiers && typeof payload.tax_identifiers === "object" ? payload.tax_identifiers : {},
-    payroll_status: payload.payroll_status || "active",
-    notes: payload.notes || null,
-  };
+  const patch = { org_id: orgId };
+  if (hasOwn(payload, "membership_id")) patch.membership_id = payload.membership_id;
+  if (hasOwn(payload, "user_id")) patch.user_id = payload.user_id || null;
+  if (hasOwn(payload, "pay_frequency")) patch.pay_frequency = payload.pay_frequency || "monthly";
+  if (hasOwn(payload, "pay_type")) patch.pay_type = payload.pay_type || "monthly_salary";
+  if (hasOwn(payload, "base_salary")) patch.base_salary = money(payload.base_salary);
+  if (hasOwn(payload, "hourly_rate")) patch.hourly_rate = money(payload.hourly_rate);
+  if (hasOwn(payload, "daily_rate")) patch.daily_rate = money(payload.daily_rate);
+  if (hasOwn(payload, "banking")) {
+    patch.banking = payload.banking && typeof payload.banking === "object" ? payload.banking : {};
+  }
+  if (hasOwn(payload, "tax_identifiers")) {
+    patch.tax_identifiers =
+      payload.tax_identifiers && typeof payload.tax_identifiers === "object" ? payload.tax_identifiers : {};
+  }
+  if (hasOwn(payload, "payroll_status")) patch.payroll_status = payload.payroll_status || "active";
+  if (hasOwn(payload, "notes")) patch.notes = payload.notes || null;
+  if (!id) {
+    if (!patch.pay_frequency) patch.pay_frequency = "monthly";
+    if (!patch.pay_type) patch.pay_type = "monthly_salary";
+    if (!patch.payroll_status) patch.payroll_status = "active";
+  }
   let row;
   if (id) {
     const { data, error } = await supabaseAdmin
@@ -852,13 +865,37 @@ async function leaveSummaryForProfile(orgId, profileId) {
 
 export async function validatePayRun(orgId, runId) {
   const run = await getPayRun(orgId, runId);
+  const membershipIds = [...new Set((run.items || []).map((item) => item.membership_id).filter(Boolean))];
+  const { data: liveRows } = membershipIds.length
+    ? await supabaseAdmin
+        .from("payroll_profiles")
+        .select("id, membership_id, base_salary, hourly_rate, daily_rate, pay_type, payroll_status, employment_status")
+        .eq("org_id", orgId)
+        .in("membership_id", membershipIds)
+    : { data: [] };
+  const liveByMembership = new Map((liveRows || []).map((row) => [row.membership_id, row]));
   const issues = [];
   for (const item of run.items || []) {
     if (!item.employee_name) issues.push({ employee: item.employee_number || item.id, message: "Missing employee name" });
     if (!item.employee_number) issues.push({ employee: item.employee_name || item.id, message: "Missing employee number" });
     if (Number(item.net_pay) < 0) issues.push({ employee: item.employee_name || item.id, message: "Negative net pay" });
-    if (Number(item.base_pay || item.base_salary_snapshot || 0) <= 0) {
-      issues.push({ employee: item.employee_name || item.id, message: "Base salary is zero" });
+    const live = liveByMembership.get(item.membership_id) || null;
+    const rateIssue = validatePayRunItem(
+      {
+        ...item,
+        full_name: item.employee_name,
+        employee_id: item.membership_id,
+      },
+      live
+    );
+    if (rateIssue?.blocking) {
+      issues.push({
+        employee: rateIssue.name,
+        membership_id: rateIssue.membership_id,
+        message: rateIssue.message,
+        setup_path: rateIssue.setup_path,
+        code: rateIssue.code,
+      });
     }
   }
   const { data: pendingLeave } = await supabaseAdmin
@@ -943,7 +980,7 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
       other_deductions: item.other_deductions || [],
       total_deductions: item.total_deductions,
       net_pay: item.net_pay,
-      status: "draft",
+      status: "published",
       public_share_token: token,
       calculation_breakdown: item.calculation,
       leave_summary: leaveSummary,
@@ -1135,6 +1172,109 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
     sent += 1;
   }
   return { sent, skipped, failed, total: (payslips || []).length };
+}
+
+export async function publishPayslip(orgId, actorId, payslipId) {
+  const id = parseUuid(payslipId);
+  if (!id) {
+    const err = new Error("Payslip id is required");
+    err.status = 400;
+    throw err;
+  }
+  const { data: slip, error } = await supabaseAdmin
+    .from("payslips")
+    .select("id, status, locked, pay_run_id, membership_id, payslip_number")
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!slip?.id) {
+    const err = new Error("Payslip not found");
+    err.status = 404;
+    throw err;
+  }
+  const current = displayPayslipStatus(slip);
+  if (current === "sent" || current === "paid" || current === "published") {
+    return { ...slip, status: current };
+  }
+  if (!canPublishPayslip(slip) && !slip.locked && !slip.pay_run_id) {
+    const err = new Error("Only issued payslips can be published");
+    err.status = 409;
+    throw err;
+  }
+  const write = publishedPayslipWrite();
+  const { data, error: updateError } = await supabaseAdmin
+    .from("payslips")
+    .update(write)
+    .eq("id", slip.id)
+    .eq("org_id", orgId)
+    .select("id, status, locked, pay_run_id, membership_id, payslip_number")
+    .maybeSingle();
+  if (updateError) throw updateError;
+  await writePayrollAudit({
+    orgId,
+    actorId,
+    action: "PAYSLIP_PUBLISHED",
+    recordType: "payslips",
+    recordId: slip.id,
+  });
+  return data;
+}
+
+export async function sendEmployeePayslip(orgId, actorId, payslipId, origin = "") {
+  const id = parseUuid(payslipId);
+  if (!id) {
+    const err = new Error("Payslip id is required");
+    err.status = 400;
+    throw err;
+  }
+  const { data: slip, error } = await supabaseAdmin
+    .from("payslips")
+    .select("id, employee_name, employee_email, employee_user_id, public_share_token, payslip_number, status, sent_to_email, pay_run_id, pay_period_start, pay_period_end")
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!slip?.id) {
+    const err = new Error("Payslip not found");
+    err.status = 404;
+    throw err;
+  }
+  const to = slip.employee_email;
+  if (!to) {
+    const err = new Error("This employee has no email on the payslip");
+    err.status = 409;
+    throw err;
+  }
+  const token = slip.public_share_token || crypto.randomUUID();
+  if (!slip.public_share_token) {
+    await supabaseAdmin.from("payslips").update({ public_share_token: token }).eq("id", slip.id);
+  }
+  const periodLabel = [slip.pay_period_start, slip.pay_period_end].filter(Boolean).join(" → ");
+  const base = String(origin || "").replace(/\/$/, "") || "https://www.paidly.co.za";
+  await sendPayslipEmail({
+    to,
+    employeeName: slip.employee_name,
+    periodLabel,
+    payslipNumber: slip.payslip_number,
+    shareToken: token,
+    origin: base,
+    orgId,
+    payslipId: slip.id,
+    sendAttempt: `${slip.id}:profile:${Date.now()}`,
+  });
+  await supabaseAdmin.from("payslips").update({ sent_to_email: to, status: "sent" }).eq("id", slip.id);
+  await writePayrollAudit({
+    orgId,
+    actorId,
+    action: "PAYSLIP_SENT",
+    recordType: "payslips",
+    recordId: slip.id,
+  });
+  if (slip.employee_user_id) {
+    await notifyUser(slip.employee_user_id, `Your Paidly payslip for ${periodLabel} has been emailed.`);
+  }
+  return { sent: 1, id: slip.id };
 }
 
 export async function listStatutoryRules(orgId) {

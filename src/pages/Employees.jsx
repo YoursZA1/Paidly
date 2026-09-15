@@ -10,18 +10,15 @@ import { useToast } from "@/components/ui/use-toast";
 import { workforceApi, employeeProfilePath } from "@/services/WorkforceApiService";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
-import {
-  filterWorkforceDirectory,
-  leaveStatusLabel,
-  sortWorkforceDirectory,
-} from "@/lib/workforceDirectory.js";
+import { leaveStatusLabel } from "@/lib/workforceDirectory.js";
 import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
 import EmployeeSelect from "@/components/workforce/EmployeeSelect";
 import EmployeeLifecycleBadges from "@/components/workforce/EmployeeLifecycleBadges.jsx";
 import EmployeeDirectoryActions from "@/components/workforce/EmployeeDirectoryActions.jsx";
-import { eligibleManagersFromRoster } from "@shared/workforce/employeeLifecycle.js";
+import { attentionReasonLabel } from "@shared/workforce/employeeLifecycle.js";
 
 const selectClass = "h-10 rounded-xl border border-border bg-background px-3 text-sm";
+const PAGE_SIZE = 50;
 
 export default function Employees({ embedded = false }) {
   const { toast } = useToast();
@@ -29,8 +26,12 @@ export default function Employees({ embedded = false }) {
   const canPayroll = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
   const canManage = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
   const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [facets, setFacets] = useState({ departments: [], job_titles: [], managers: [] });
+  const [eligibleManagers, setEligibleManagers] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
   const [status, setStatus] = useState("active");
@@ -39,14 +40,41 @@ export default function Employees({ embedded = false }) {
   const [leaveStatus, setLeaveStatus] = useState("");
   const [attention, setAttention] = useState(false);
   const [sort, setSort] = useState("name");
+  const [page, setPage] = useState(0);
   const [bulkFrom, setBulkFrom] = useState("");
   const [bulkTo, setBulkTo] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
 
+  useEffect(() => {
+    const handle = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [search, department, status, managerId, jobTitle, leaveStatus, attention, sort]);
+
   const load = () => {
+    setLoading(true);
     workforceApi
-      .list()
-      .then((data) => setRows(Array.isArray(data) ? data : data?.data || []))
+      .list({
+        q: search,
+        department,
+        status,
+        managerId,
+        jobTitle,
+        leaveStatus,
+        attention,
+        sort,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      })
+      .then((data) => {
+        setRows(data.items || []);
+        setTotal(data.total || 0);
+        if (data.facets) setFacets(data.facets);
+        if (data.eligible_managers) setEligibleManagers(data.eligible_managers);
+      })
       .catch((err) => toast({ variant: "destructive", title: "Could not load employees", description: err.message }))
       .finally(() => setLoading(false));
     workforceApi
@@ -58,7 +86,7 @@ export default function Employees({ embedded = false }) {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast]);
+  }, [search, department, status, managerId, jobTitle, leaveStatus, attention, sort, page, toast]);
 
   const replaceRow = (updated) => {
     if (!updated?.id) {
@@ -69,37 +97,9 @@ export default function Employees({ embedded = false }) {
     load();
   };
 
-  const departments = useMemo(
-    () => [...new Set(rows.map((row) => row.department).filter(Boolean))].sort(),
-    [rows]
-  );
-  const jobTitles = useMemo(
-    () => [...new Set(rows.map((row) => row.job_title).filter(Boolean))].sort(),
-    [rows]
-  );
-  const managers = useMemo(() => {
-    const byId = new Map();
-    for (const row of rows) {
-      if (!row.manager_membership_id) continue;
-      if (!byId.has(row.manager_membership_id)) {
-        byId.set(row.manager_membership_id, row.manager_name || "Manager");
-      }
-    }
-    return [...byId.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows]);
-
-  const filtered = useMemo(() => {
-    const next = filterWorkforceDirectory(rows, {
-      search,
-      department,
-      status,
-      managerId,
-      jobTitle,
-      leaveStatus,
-      attention,
-    });
-    return sortWorkforceDirectory(next, sort);
-  }, [rows, search, department, status, managerId, jobTitle, leaveStatus, attention, sort]);
+  const departments = facets.departments || [];
+  const jobTitles = facets.job_titles || [];
+  const managers = facets.managers || [];
 
   const inactiveManagerGroups = useMemo(() => {
     const byId = new Map();
@@ -115,8 +115,6 @@ export default function Employees({ embedded = false }) {
     }
     return [...byId.values()];
   }, [rows]);
-
-  const eligibleManagers = useMemo(() => eligibleManagersFromRoster(rows), [rows]);
 
   const runBulkReassign = async () => {
     if (!bulkFrom || !bulkTo) return;
@@ -183,8 +181,8 @@ export default function Employees({ embedded = false }) {
         <Input
           className="rounded-xl h-10"
           placeholder="Search name or number"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
         />
         <select className={selectClass} value={department} onChange={(e) => setDepartment(e.target.value)}>
           <option value="">All departments</option>
@@ -235,7 +233,7 @@ export default function Employees({ embedded = false }) {
         <CardContent className="p-0 overflow-x-auto">
           {loading ? (
             <p className="p-6 text-sm text-muted-foreground">Loading…</p>
-          ) : filtered.length === 0 ? (
+          ) : rows.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">No employees in your scope.</p>
           ) : (
             <table className="w-full min-w-[860px] text-sm">
@@ -254,7 +252,7 @@ export default function Employees({ embedded = false }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
+                {rows.map((row) => (
                   <tr key={row.id} className="border-b last:border-0">
                     <td className="px-4 py-2">
                       <Link className="underline" to={employeeProfilePath(row.id)}>
@@ -267,6 +265,11 @@ export default function Employees({ embedded = false }) {
                     <td className="px-4 py-2">{row.manager_name || "—"}</td>
                     <td className="px-4 py-2">
                       <EmployeeLifecycleBadges employee={row} compact />
+                      {(row.attention_reasons || []).includes("incomplete_pay_rate") && canPayroll ? (
+                        <Link className="block text-xs underline mt-1" to={employeeProfilePath(row.id, "payroll")}>
+                          {attentionReasonLabel("incomplete_pay_rate")}
+                        </Link>
+                      ) : null}
                     </td>
                     <td className="px-4 py-2">{row.employment_start_date || "—"}</td>
                     <td className="px-4 py-2">{leaveStatusLabel(row.leave_status)}</td>
@@ -274,7 +277,7 @@ export default function Employees({ embedded = false }) {
                     <td className="px-4 py-2 text-right">
                       <EmployeeDirectoryActions
                         employee={row}
-                        roster={rows}
+                        roster={eligibleManagers}
                         departments={departments}
                         canManage={canManage}
                         onUpdated={replaceRow}
@@ -285,6 +288,21 @@ export default function Employees({ embedded = false }) {
               </tbody>
             </table>
           )}
+          {total > PAGE_SIZE ? (
+            <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground">
+              <span>
+                {page * PAGE_SIZE + 1}–{Math.min(total, (page + 1) * PAGE_SIZE)} of {total}
+              </span>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="rounded-xl" disabled={page === 0} onClick={() => setPage((n) => Math.max(0, n - 1))}>
+                  Previous
+                </Button>
+                <Button size="sm" variant="outline" className="rounded-xl" disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage((n) => n + 1)}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </>

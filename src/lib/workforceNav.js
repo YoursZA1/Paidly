@@ -3,6 +3,7 @@ import {
   CalendarDays,
   CalendarOff,
   ClipboardList,
+  FileText,
   Receipt,
   Settings,
   User,
@@ -96,6 +97,9 @@ function hrChildren(can) {
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     children.push(item("nav-workforce-attendance", "Attendance", createPageUrl("Workforce/attendance"), ClipboardList));
+  }
+  if (can(PERMISSIONS.VIEW_OWN_DOCUMENTS) || can(PERMISSIONS.MANAGE_EMPLOYEES)) {
+    children.push(item("nav-workforce-documents", "Documents", createPageUrl("Documents"), FileText));
   }
   if (can(PERMISSIONS.MANAGE_PAYROLL)) {
     children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("Payslips"), Receipt));

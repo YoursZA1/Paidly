@@ -2,7 +2,7 @@ import { normalizeRequestBody } from "../validateBody.js";
 import { membershipHasPermission, PERMISSIONS } from "../companyRouteAccess.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import { sanitizeEmployeeWritePayload } from "../../../shared/workforce/employeeWrite.js";
-import { createEmployee, getEmployee, getEmployeeProfile, listEmployees, reassignManagerReports, updateEmployee, workforceSummary } from "./employeeService.js";
+import { createEmployee, getEmployee, getEmployeeProfile, listEmployees, listEligibleManagers, reassignManagerReports, updateEmployee, workforceSummary } from "./employeeService.js";
 import { requireWorkforcePermission } from "./workforceAuth.js";
 import { canSeeOrgWorkforce } from "../leave/leaveAuthz.js";
 
@@ -48,10 +48,13 @@ export async function handleWorkforceEmployees(req, res) {
       const includeProfile =
         String(req.query?.include || "").toLowerCase() === "profile" ||
         String(req.query?.timeline || "") === "1";
-      const data = includeProfile
-        ? await getEmployeeProfile(gate.membership.companyId, employeeId, access)
+      const sections = String(req.query?.sections || req.query?.include || "").toLowerCase();
+      const data = includeProfile || (sections && sections !== "profile")
+        ? await getEmployeeProfile(gate.membership.companyId, employeeId, access, {
+            sections: includeProfile ? "profile" : sections,
+          })
         : await getEmployee(gate.membership.companyId, employeeId, access);
-      const profileEmployee = includeProfile ? data.employee : data;
+      const profileEmployee = data?.employee || data;
       if (
         managerScope(gate.membership) &&
         profileEmployee.id !== gate.membership.id &&
@@ -69,10 +72,29 @@ export async function handleWorkforceEmployees(req, res) {
     const gate = await requireWorkforcePermission(req, res, PERMISSIONS.VIEW_TEAM_MEMBERS);
     if (!gate.ok) return gate.response;
     try {
+      if (String(req.query?.eligible_managers || "") === "1") {
+        const data = await listEligibleManagers(gate.membership.companyId, {
+          excludeId: parseUuid(req.query?.exclude_id) || null,
+          managerScopeId: managerScope(gate.membership),
+        });
+        return res.status(200).json({ ok: true, data });
+      }
       const data = await listEmployees(gate.membership.companyId, {
         actorMembershipId: gate.membership.id,
         canManagePayroll: membershipHasPermission(gate.membership, PERMISSIONS.MANAGE_PAYROLL),
         managerScopeId: managerScope(gate.membership),
+        q: req.query?.q || req.query?.search || "",
+        department: req.query?.department || "",
+        status: req.query?.status || "",
+        managerId: req.query?.manager_id || req.query?.managerId || "",
+        jobTitle: req.query?.job_title || req.query?.jobTitle || "",
+        leaveStatus: req.query?.leave_status || req.query?.leaveStatus || "",
+        attention: req.query?.attention === "1" || req.query?.attention === "true",
+        sort: req.query?.sort || "name",
+        limit: req.query?.limit,
+        offset: req.query?.offset,
+        includeAttendance: req.query?.include === "attendance" || String(req.query?.include || "").includes("attendance"),
+        includeLeaveStatus: req.query?.include !== "none",
       });
       return res.status(200).json({ ok: true, data });
     } catch (err) {

@@ -73,6 +73,16 @@ export const payrollApi = {
   saveStatutory: (payload) => payrollRequest("/api/payroll/statutory", { method: "POST", body: payload }),
   me: () => payrollRequest("/api/payroll/me"),
   validateRun: (id) => payrollRequest(`/api/payroll/runs/${requireRecordUuid(id, "pay run id")}/validate`),
+  publishPayslip: (id) =>
+    payrollRequest(`/api/payroll/payslips/${requireRecordUuid(id, "payslip id")}/publish`, {
+      method: "POST",
+      body: {},
+    }),
+  sendPayslip: (id) =>
+    payrollRequest(`/api/payroll/payslips/${requireRecordUuid(id, "payslip id")}/send`, {
+      method: "POST",
+      body: {},
+    }),
 };
 
 export const leaveApi = {

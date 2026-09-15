@@ -8,6 +8,8 @@
 
 import { parseUuid } from "../ids/uuid.js";
 import { canonicalEmployeeId, formatEmployeeLabel, payrollProfileIdOf } from "./employeeIdentity.js";
+import { annualLeaveEligibility } from "../leave/leaveEligibility.js";
+import { hasCompletePayRate, livePayRate } from "../payroll/payRate.js";
 import {
   employeeAttentionReasons,
   isWorkforceEmployeeActive,
@@ -19,6 +21,7 @@ export const COMPENSATION_FIELDS = Object.freeze([
   "base_salary",
   "hourly_rate",
   "daily_rate",
+  "live_pay_rate",
   "pay_type",
   "banking",
   "tax_identifiers",
@@ -154,9 +157,9 @@ export function buildEmployeeProfile(input, opts = {}) {
     full_name: String(profile?.full_name || membership.invited_name || "").trim() || null,
     invited_email: membership.invited_email || null,
     invited_name: membership.invited_name || null,
-    base_salary: payroll?.base_salary ?? 0,
-    hourly_rate: payroll?.hourly_rate ?? 0,
-    daily_rate: payroll?.daily_rate ?? 0,
+    base_salary: payroll?.base_salary ?? null,
+    hourly_rate: payroll?.hourly_rate ?? null,
+    daily_rate: payroll?.daily_rate ?? null,
     pay_type: payroll?.pay_type || "monthly_salary",
     pay_frequency: payroll?.pay_frequency || "monthly",
     payroll_status: payroll?.payroll_status || (payroll?.id ? "active" : "unprovisioned"),
@@ -176,6 +179,11 @@ export function buildEmployeeProfile(input, opts = {}) {
     manager_assignment: null,
     attention_reasons: [],
     needs_attention: false,
+    pay_rate_complete: hasCompletePayRate(payroll || {}),
+    live_pay_rate: livePayRate(payroll || {}),
+    leave_eligibility: annualLeaveEligibility({
+      employment_start_date: membership.employment_start_date,
+    }),
   };
   row.manager_assignment = managerAssignmentState(row);
   row.attention_reasons = employeeAttentionReasons(row);

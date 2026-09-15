@@ -3,6 +3,8 @@
  * Deactivate never deletes payslips, leave, documents, or manager history.
  */
 
+import { hasCompletePayRate } from "../payroll/payRate.js";
+
 export const INACTIVE_EMPLOYMENT_STATUSES = Object.freeze(["inactive", "terminated", "suspended"]);
 export const ACTIVE_EMPLOYMENT_STATUSES = Object.freeze(["active", "on_leave"]);
 
@@ -67,6 +69,7 @@ export function employeeAttentionReasons(row = {}) {
   if (active && !row.employment_start_date) reasons.push("missing_hr");
   const payrollStatus = String(row.payroll_status || "").toLowerCase();
   if (active && (!payrollStatus || payrollStatus === "unprovisioned")) reasons.push("missing_payroll");
+  else if (active && !hasCompletePayRate(row)) reasons.push("incomplete_pay_rate");
   return reasons;
 }
 
@@ -81,6 +84,7 @@ export function attentionReasonLabel(reason) {
     missing_department: "Missing department",
     missing_hr: "Missing HR information",
     missing_payroll: "Missing payroll profile",
+    incomplete_pay_rate: "Incomplete payroll — salary or rate is zero",
   };
   return labels[reason] || String(reason || "");
 }

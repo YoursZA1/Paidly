@@ -163,7 +163,9 @@ Same compose / send / PDF stack as invoices and quotes, **different table** (`pa
 - Failed public email verifies are audited (`PUBLIC_PAYSLIP_VERIFY_FAILED`). Unusual 24h open/download bursts notify payroll admins (same daily cron; no extra Vercel function).
 - Self-service match: `employee_user_id` **or** `membership_id` **or** employee email
 
-Locked payslips cannot be silently rewritten.
+Locked payslips cannot be silently rewritten. Finalize inserts `status=published` with `locked=true`. Historical locked rows stored as `draft` display as Published.
+
+Validate a pay run against live `payroll_profiles` rates (`shared/payroll/payRate.js`). A `base_salary` of 0 is incomplete payroll, not a missing employee. The blocking message links to `/employees/:id?tab=payroll`.
 
 ---
 
@@ -184,6 +186,8 @@ New applications go through `/api/leave`. HR leave (balances, accrual, approval)
 | `leave_approval_tokens` | Hashed single-use email decide links |
 
 **Available** = `accrued − used − pending` (`computeLeaveBalance` in `shared/leave/leaveMath.js`).
+
+Annual leave accrues from the employment start date (21 days per leave year, monthly). There is no 3-month waiting period.
 
 Entitled is policy allocation for the leave year — not a mutation target.
 

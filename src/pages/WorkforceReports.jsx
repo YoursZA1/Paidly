@@ -42,9 +42,13 @@ export default function WorkforceReports() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi label="Active workforce" value={summary?.workforce?.active ?? summary?.workforce?.total ?? 0} />
+            <Kpi label="Needs attention" value={summary?.workforce?.needs_attention ?? 0} />
+            <Kpi label="Incomplete payroll" value={summary?.workforce?.incomplete_payroll ?? 0} />
             <Kpi label="Pending leave" value={summary?.leave?.pending ?? 0} />
+            <Kpi label="On leave today" value={summary?.leave?.on_leave_today ?? 0} />
             <Kpi label="Upcoming leave" value={summary?.leave?.upcoming ?? 0} />
             <Kpi label="Payslips issued" value={summary?.payroll?.payslips_generated ?? 0} />
+            <Kpi label="Pay runs awaiting review" value={summary?.payroll?.awaiting_review ?? 0} />
           </div>
         )}
       </PageTemplate.Body>

@@ -11,7 +11,6 @@ import {
   workforceLifecycleLabel,
 } from "../../shared/workforce/employeeLifecycle.js";
 import { canDecideLeave } from "../../server/src/leave/leaveAuthz.js";
-import { isPayrollParticipationActive } from "../../shared/workforce/employeeLifecycle.js";
 
 describe("employee lifecycle", () => {
   it("treats disabled_at and inactive/terminated/suspended as inactive", () => {
@@ -47,6 +46,21 @@ describe("employee lifecycle", () => {
       expect.arrayContaining(["inactive_manager", "missing_department", "missing_payroll"])
     );
     expect(attentionReasonLabel("inactive_manager")).toMatch(/reassignment required/i);
+  });
+
+  it("flags a provisioned payroll profile with a zero salary as incomplete, not missing", () => {
+    const row = {
+      employment_status: "active",
+      manager_membership_id: "m1",
+      manager_active: true,
+      department: "Ops",
+      employment_start_date: "2026-01-01",
+      payroll_status: "active",
+      pay_type: "monthly_salary",
+      base_salary: 0,
+    };
+    expect(employeeAttentionReasons(row)).toEqual(["incomplete_pay_rate"]);
+    expect(attentionReasonLabel("incomplete_pay_rate")).toMatch(/zero/i);
   });
 
   it("keeps inactive employees out of new payroll participation", () => {

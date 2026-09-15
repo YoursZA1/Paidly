@@ -1,13 +1,66 @@
 import { payrollRequest } from "./PayrollApiService";
 import { parseUuid, requireUuid } from "@shared/ids/uuid.js";
 
+function listQuery(params = {}) {
+  const q = new URLSearchParams();
+  const entries = {
+    q: params.q || params.search,
+    department: params.department,
+    status: params.status,
+    manager_id: params.managerId || params.manager_id,
+    job_title: params.jobTitle || params.job_title,
+    leave_status: params.leaveStatus || params.leave_status,
+    attention: params.attention ? "1" : "",
+    sort: params.sort,
+    limit: params.limit,
+    offset: params.offset,
+    include: params.include,
+    eligible_managers: params.eligibleManagers ? "1" : "",
+    exclude_id: params.excludeId,
+  };
+  for (const [key, value] of Object.entries(entries)) {
+    if (value === undefined || value === null || value === "") continue;
+    q.set(key, String(value));
+  }
+  const qs = q.toString();
+  return qs ? `/api/company/employees?${qs}` : "/api/company/employees";
+}
+
+export function normalizeEmployeeList(data) {
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+      limit: data.length,
+      offset: 0,
+      facets: { departments: [], job_titles: [], managers: [] },
+      eligible_managers: [],
+    };
+  }
+  const items = data?.items || data?.data || [];
+  return {
+    items,
+    total: data?.total ?? items.length,
+    limit: data?.limit ?? items.length,
+    offset: data?.offset ?? 0,
+    facets: data?.facets || { departments: [], job_titles: [], managers: [] },
+    eligible_managers: data?.eligible_managers || [],
+  };
+}
+
 export const workforceApi = {
-  list: () => payrollRequest("/api/company/employees"),
+  list: async (params) => normalizeEmployeeList(await payrollRequest(listQuery(params))),
+  managers: (opts = {}) =>
+    payrollRequest(listQuery({ eligibleManagers: true, excludeId: opts.excludeId })),
   get: (id) =>
     payrollRequest(`/api/company/employees?id=${encodeURIComponent(requireUuid(id, "employee id"))}`),
   profile: (id) =>
     payrollRequest(
       `/api/company/employees?id=${encodeURIComponent(requireUuid(id, "employee id"))}&include=profile`
+    ),
+  sections: (id, sections) =>
+    payrollRequest(
+      `/api/company/employees?id=${encodeURIComponent(requireUuid(id, "employee id"))}&sections=${encodeURIComponent(sections)}`
     ),
   summary: () => payrollRequest("/api/company/workforce-summary"),
   update: (id, payload) =>
@@ -36,7 +89,8 @@ export const workforceApi = {
     }),
 };
 
-export function employeeProfilePath(id) {
+export function employeeProfilePath(id, tab) {
   const uuid = parseUuid(id);
-  return uuid ? `/employees/${uuid}` : "/Employees";
+  if (!uuid) return "/Employees";
+  return tab ? `/employees/${uuid}?tab=${encodeURIComponent(tab)}` : `/employees/${uuid}`;
 }

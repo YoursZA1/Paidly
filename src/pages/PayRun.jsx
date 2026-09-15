@@ -215,7 +215,17 @@ export default function PayRunPage() {
           {validation && !validation.ok ? (
             <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
               {(validation.issues || []).map((issue) => (
-                <p key={`${issue.employee}-${issue.message}`}>{issue.employee}: {issue.message}</p>
+                <p key={`${issue.employee}-${issue.message}`}>
+                  {issue.employee}: {issue.message}
+                  {issue.setup_path ? (
+                    <>
+                      {" "}
+                      <Link className="underline" to={issue.setup_path}>
+                        Complete Payroll Setup
+                      </Link>
+                    </>
+                  ) : null}
+                </p>
               ))}
               {(validation.pending_leave_overlapping || []).length ? (
                 <p className="mt-1">Pending leave overlaps this period — approve or decline before finalize.</p>

@@ -135,7 +135,7 @@ async function ensureLeaveBalances(orgId, profile) {
   }
 }
 
-async function ensureAttendanceProfile(orgId, employee, profile) {
+export async function ensureAttendanceProfile(orgId, employee, profile) {
   if (!employee?.id) return null;
   const { data: existing } = await supabaseAdmin
     .from("attendance_profiles")

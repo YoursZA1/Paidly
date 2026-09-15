@@ -86,7 +86,7 @@ const PayslipRow = React.memo(function PayslipRow({
         {safeFormatDate(payslip.pay_date)}
       </TableCell>
       <TableCell className="invoice-col-status text-center">
-        <PayslipStatusBadge status={payslip.status || "draft"} />
+        <PayslipStatusBadge payslip={payslip} status={payslip.status} />
       </TableCell>
       <TableCell className="invoice-col-actions text-center">
         <div className="flex justify-center">
@@ -139,7 +139,7 @@ const PayslipMobileCard = React.memo(function PayslipMobileCard({
           <span className="text-[10px] text-muted-foreground truncate max-w-[9rem] text-right">
             {payPeriodLabel(payslip)}
           </span>
-          <PayslipStatusBadge status={payslip.status || "draft"} />
+          <PayslipStatusBadge payslip={payslip} status={payslip.status} />
         </div>
       </Link>
       <div className="flex items-center border-l border-border shrink-0" onClick={(e) => e.preventDefault()}>

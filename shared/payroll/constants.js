@@ -72,6 +72,7 @@ export const PAYROLL_AUDIT_ACTIONS = Object.freeze([
   "ADJUSTMENT_RUN_NAG",
   "PAYSLIP_PUBLIC_ACCESS_ANOMALY",
   "PUBLIC_PAYSLIP_VERIFY_FAILED",
+  "PAYSLIP_PUBLISHED",
 ]);
 
 export const COMPONENT_KINDS = Object.freeze(["earning", "deduction"]);

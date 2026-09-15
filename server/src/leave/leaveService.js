@@ -546,21 +546,27 @@ export async function listLeaveEmployees(orgId, { managerScopeId = null } = {}) 
     : members || [];
 
   const userIds = scoped.map((m) => m.user_id).filter(Boolean);
-  const { data: people } = userIds.length
-    ? await supabaseAdmin.from("profiles").select("id, full_name, email, job_title, department").in("id", userIds)
-    : { data: [] };
+  const employeeIds = scoped.map((m) => m.id).filter(Boolean);
+  const [{ data: people }, { data: payrollRows }] = await Promise.all([
+    userIds.length
+      ? supabaseAdmin.from("profiles").select("id, full_name, email, job_title, department").in("id", userIds)
+      : Promise.resolve({ data: [] }),
+    employeeIds.length
+      ? supabaseAdmin
+          .from("payroll_profiles")
+          .select("id, membership_id, full_name, email, job_title, department, employee_number, employment_status")
+          .eq("org_id", orgId)
+          .in("membership_id", employeeIds)
+      : Promise.resolve({ data: [] }),
+  ]);
   const byUser = new Map((people || []).map((p) => [p.id, p]));
+  const payrollByMembership = new Map((payrollRows || []).map((p) => [p.membership_id, p]));
 
   const rows = [];
   for (const membership of scoped) {
     const employeeId = canonicalEmployeeId({ id: membership.id, employee_id: membership.id });
     if (!employeeId) continue;
-    let profile = null;
-    try {
-      profile = await getOrCreateProfileForMembership(orgId, membership);
-    } catch (err) {
-      console.warn("[leave] payroll profile provision skipped:", err?.message || err);
-    }
+    const profile = payrollByMembership.get(membership.id) || null;
     const person = byUser.get(membership.user_id);
     const name =
       person?.full_name ||
@@ -578,7 +584,7 @@ export async function listLeaveEmployees(orgId, { managerScopeId = null } = {}) 
       full_name: name,
       email: person?.email || membership.invited_email || profile?.email || null,
       department: membership.department || profile?.department || person?.department || null,
-      job_title: profile?.job_title || person?.job_title || null,
+      job_title: membership.job_title || profile?.job_title || person?.job_title || null,
       manager_membership_id: parseUuid(membership.manager_membership_id),
       employment_status: membership.employment_status || profile?.employment_status || "active",
       disabled_at: membership.disabled_at || null,

@@ -1,5 +1,6 @@
 import { normalizeRequestBody } from "../validateBody.js";
 import { jsonError, requirePayrollPermission, PERMISSIONS, supabaseAdmin } from "./payrollGate.js";
+import { displayPayslipStatus } from "../../../shared/payroll/payslipStatus.js";
 import {
   payrollOverview,
   syncPayrollProfiles,
@@ -18,6 +19,8 @@ import {
   syncPayRunEmployees,
   listStatutoryRules,
   upsertStatutoryRule,
+  publishPayslip,
+  sendEmployeePayslip,
 } from "./payrollService.js";
 
 function originFromReq(req) {
@@ -157,6 +160,20 @@ export async function handlePayrollRoute(req, res, resolved) {
     return jsonError(res, 405, "Method not allowed");
   }
 
+  if (route === "payslip-publish") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
+    return handle(res, () => publishPayslip(gate.membership.companyId, gate.user.id, id));
+  }
+
+  if (route === "payslip-send") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
+    return handle(res, () => sendEmployeePayslip(gate.membership.companyId, gate.user.id, id, originFromReq(req)));
+  }
+
   if (route === "me") {
     const gate = await requirePayrollPermission(req, res, PERMISSIONS.VIEW_OWN_PAYSLIPS, { feature: "payslips" });
     if (!gate.ok) return gate.response;
@@ -201,7 +218,13 @@ export async function handlePayrollRoute(req, res, resolved) {
         payslipQuery = payslipQuery.eq("employee_user_id", userId);
       }
       const { data: payslips } = await payslipQuery;
-      return { profile, payslips: payslips || [] };
+      return {
+        profile,
+        payslips: (payslips || []).map((row) => ({
+          ...row,
+          status: displayPayslipStatus(row),
+        })),
+      };
     });
   }
 
@@ -245,6 +268,8 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "runs" && segs[1] && segs[2] === "validate") return { route: "run-validate", id: segs[1] };
   if (segs[0] === "runs" && segs[1]) return { route: "run-by-id", id: segs[1] };
 
+  if (segs[0] === "payslips" && segs[1] && segs[2] === "publish") return { route: "payslip-publish", id: segs[1] };
+  if (segs[0] === "payslips" && segs[1] && segs[2] === "send") return { route: "payslip-send", id: segs[1] };
   if (req.query?.__payroll) {
     return resolvePayrollRoute({
       ...req,

@@ -277,6 +277,16 @@ body {
   color: #475569;
   border-color: color-mix(in srgb, var(--status-draft) 35%, white);
 }
+.status-pill.published {
+  background: color-mix(in srgb, hsl(var(--primary)) 14%, white);
+  color: hsl(var(--primary));
+  border-color: color-mix(in srgb, hsl(var(--primary)) 28%, white);
+}
+.dark .status-pill.published {
+  background: color-mix(in srgb, hsl(var(--primary)) 22%, #0f172a);
+  color: hsl(var(--primary));
+  border-color: color-mix(in srgb, hsl(var(--primary)) 40%, #334155);
+}
 .dark .status-pill.draft {
   background: color-mix(in srgb, var(--status-draft) 22%, #0f172a);
   color: #cbd5e1;

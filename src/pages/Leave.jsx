@@ -211,7 +211,7 @@ export default function LeaveManagementPage({ embedded = false }) {
         <PageTemplate.Header>
           <PageHeader
             title="Leave management"
-            description="Approve requests, configure types, and audit balances."
+            description="Approve requests, configure types, and audit balances. Annual leave accrues from the employment start date (21 days per leave year). There is no 3-month waiting period."
             icon={<CalendarOff className="h-4 w-4" />}
             onRefresh={() => {
               load();
