@@ -18,11 +18,26 @@ import { assertSameOrg } from "./workforceAuth.js";
 import { throwIfMissingWorkforceColumn } from "./schemaGuard.js";
 import { writeWorkforceAudit } from "./workforceAudit.js";
 import {
+  getEmployee,
+  getEmployeeProfile,
+  listEligibleManagers,
+  listEmployees,
+  workforceSummary,
+} from "./employeeListQuery.js";
+import {
   isEligibleWorkforceManager,
   isWorkforceEmployeeActive,
   lifecyclePatchForAction,
   normalizeEmploymentLifecycleAction,
 } from "../../../shared/workforce/employeeLifecycle.js";
+
+export {
+  getEmployee,
+  getEmployeeProfile,
+  listEligibleManagers,
+  listEmployees,
+  workforceSummary,
+};
 
 registerWorkforceSubscribers();
 
@@ -175,14 +190,6 @@ async function nextOrgEmployeeNumber(orgId) {
   const used = (data || []).map((row) => row.employee_number).filter(Boolean);
   return buildEmployeeNumber(nextEmployeeSequence(used));
 }
-
-export {
-  listEmployees,
-  getEmployee,
-  getEmployeeProfile,
-  workforceSummary,
-  listEligibleManagers,
-} from "./employeeListQuery.js";
 
 async function persistPortalInvite({ orgId, email, role, jobFunction, actorId, membershipId, invitedName }) {
   const token = crypto.randomBytes(32).toString("hex");
