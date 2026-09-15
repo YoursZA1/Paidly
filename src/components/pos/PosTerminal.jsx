@@ -354,6 +354,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   const receiptPdfRef = useRef(null);
   const scanDebounceRef = useRef(null);
   const lastSearchKeyAtRef = useRef(0);
+  const completeCheckoutRef = useRef(null);
   const [products, setProducts] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(null);
@@ -369,6 +370,8 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   const [customerOpen, setCustomerOpen] = useState(false);
   const [cashOpen, setCashOpen] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
+  const [cardRail, setCardRail] = useState(null);
+  const [cardWait, setCardWait] = useState(null);
   const [digitalOpen, setDigitalOpen] = useState(false);
   const [payMethodOpen, setPayMethodOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -419,8 +422,10 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     setCatalogLoading(true);
     setCatalogError(null);
     try {
-      const rows = await fetchPosCatalog({ registerId: activeRegister?.id || undefined });
+      const catalog = await fetchPosCatalog({ registerId: activeRegister?.id || undefined });
+      const rows = Array.isArray(catalog?.products) ? catalog.products : Array.isArray(catalog) ? catalog : [];
       setProducts(rows);
+      if (catalog?.card_rail) setCardRail(catalog.card_rail);
       const ids = new Set(rows.map((row) => row.id));
       setCart((prev) => prev.filter((line) => ids.has(line.product_id)));
     } catch (err) {
@@ -929,7 +934,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     );
   };
 
-  const completeCheckout = async ({ paymentMethod, amountTendered }) => {
+  const completeCheckout = async ({ paymentMethod, amountTendered, idempotencyKey } = {}) => {
     if (!canSell || submitting || cart.length === 0) return;
     if (!checkoutAllowed) {
       toast({
@@ -954,7 +959,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         company_id: activeRegister?.company_id || null,
         register_id: activeRegister?.id || null,
         currency,
-        idempotency_key: crypto.randomUUID(),
+        idempotency_key: idempotencyKey || crypto.randomUUID(),
         brand_name: tillBrandName,
         cashier_name: cashierName,
         customer_name: attachedCustomer?.name || undefined,
@@ -977,6 +982,17 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         return;
       }
       if (result.pending) {
+        if (paymentMethod === "card") {
+          setCardWait({
+            intentId: result.payment_intent?.id || null,
+            payload: checkoutPayload,
+            display: result.next_action?.display || "TAP CARD",
+            provider: result.next_action?.provider || cardRail?.id || "paidly_pay",
+            deviceName: result.next_action?.device_name || cardRail?.device_name || null,
+          });
+          setCardOpen(true);
+          return;
+        }
         toast({
           title: result.next_action?.display === "QR PAY" ? "Show QR on Paidly Pay" : "Tap card on Paidly Pay",
           description: "The sale stays unpaid until Paidly verifies the provider webhook.",
@@ -994,6 +1010,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       setCustomerOpen(false);
       setCashOpen(false);
       setCardOpen(false);
+      setCardWait(null);
       setDigitalOpen(false);
       setPayMethodOpen(false);
       setCartSheetOpen(false);
@@ -1016,6 +1033,37 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       setSubmitting(false);
     }
   };
+  completeCheckoutRef.current = completeCheckout;
+
+  useEffect(() => {
+    if (!cardOpen || !cardWait?.intentId) return undefined;
+    let cancelled = false;
+    let inFlight = false;
+    const tick = async () => {
+      if (inFlight || cancelled) return;
+      inFlight = true;
+      try {
+        const status = await fetchOrgPaymentIntent(cardWait.intentId);
+        if (cancelled) return;
+        if (status.payment_intent?.status === "paid") {
+          await completeCheckoutRef.current?.({
+            paymentMethod: "card",
+            idempotencyKey: cardWait.payload?.idempotency_key,
+          });
+        }
+      } catch {
+        /* keep waiting for the connected rail */
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(tick, 2500);
+    void tick();
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [cardOpen, cardWait]);
 
   useEffect(() => {
     const intentId = searchParams.get("intent");
@@ -1419,6 +1467,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     setPayMethodOpen(false);
     setCashOpen(false);
     setCardOpen(false);
+    setCardWait(null);
     setDigitalOpen(false);
   };
 
@@ -2179,12 +2228,17 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
             <Button
               type="button"
               variant="secondary"
-              className="h-14 min-h-11 text-base font-semibold uppercase tracking-wide touch-manipulation"
+              className="h-14 min-h-11 justify-between text-base font-semibold uppercase tracking-wide touch-manipulation"
               disabled={!checkoutAllowed}
               onClick={openCard}
             >
-              <CreditCard className="size-5" />
-              Card
+              <span className="inline-flex items-center gap-2">
+                <CreditCard className="size-5" />
+                Card
+              </span>
+              <span className="text-xs font-medium normal-case tracking-normal text-muted-foreground">
+                {cardRail?.device_name || cardRail?.label || "Paidly Pay"}
+              </span>
             </Button>
             <Button
               type="button"
@@ -2198,29 +2252,55 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cash is counted on this till. Card and EFT complete only after the real payment rail confirms — this
-            screen never marks a sale paid on tap.
+            Cash is counted on this till. Card uses the connected terminal ({cardRail?.label || "Paidly Pay"})
+            and EFT uses Ozow. This screen never marks a sale paid on tap.
           </p>
         </DialogContent>
       </Dialog>
 
       <Dialog
         open={cardOpen}
-        onOpenChange={setCardOpen}
+        onOpenChange={(open) => {
+          setCardOpen(open);
+          if (!open) setCardWait(null);
+        }}
       >
         <DialogContent className="max-w-md sm:rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Card</DialogTitle>
-            <DialogDescription>Waiting for card payment confirmation.</DialogDescription>
+            <DialogTitle>Card · {cardWait?.provider === "yoco" || cardRail?.id === "yoco" ? "Yoco" : cardWait?.provider === "square" || cardRail?.id === "square" ? "Square" : "Paidly Pay"}</DialogTitle>
+            <DialogDescription>
+              {cardWait
+                ? "Waiting for the connected terminal to confirm."
+                : "The connected payment provider will take this amount. The sale stays unpaid until it confirms."}
+            </DialogDescription>
           </DialogHeader>
           <p className="font-display text-4xl font-bold tabular-nums">{formatCurrency(cartTotal, currency)}</p>
           <p className="text-sm text-muted-foreground">
-            This till does not mark a card sale paid on tap. Connect a reader (Yoco / Square) in back-office
-            Integrations. The order stays unpaid until that rail confirms.
+            {cardWait
+              ? `${cardWait.display}${cardWait.deviceName ? ` · ${cardWait.deviceName}` : ""}. Stay on this till until the webhook lands.`
+              : cardRail?.action === "reader"
+                ? `${cardRail.label} is connected from POS Integrations. Take this amount on that reader. Paidly records the sale when the reader confirms.`
+                : `${cardRail?.device_name ? `${cardRail.device_name} · ` : ""}Paidly Pay is the card terminal for this till. Send the sale, then tap or scan on Paidly Pay.`}
           </p>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
-            {posOnlyStaff ? null : (
-              <Button type="button" className="h-12 min-h-11 w-full" asChild>
+            {cardWait ? (
+              <Button type="button" className="h-12 min-h-11 w-full" disabled>
+                <Loader2 className="size-5 animate-spin" />
+                Waiting for {cardWait.provider === "yoco" ? "Yoco" : cardWait.provider === "square" ? "Square" : "Paidly Pay"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="h-12 min-h-11 w-full"
+                disabled={submitting || !checkoutAllowed}
+                onClick={() => void completeCheckout({ paymentMethod: "card" })}
+              >
+                {submitting ? <Loader2 className="size-5 animate-spin" /> : <CreditCard className="size-5" />}
+                {cardRail?.action === "reader" ? `Send to ${cardRail.label}` : "Send to Paidly Pay"}
+              </Button>
+            )}
+            {posOnlyStaff || cardWait ? null : (
+              <Button type="button" variant="outline" className="h-12 min-h-11 w-full" asChild>
                 <Link to={`${createPageUrl("Settings")}?tab=integrations`}>POS settings</Link>
               </Button>
             )}

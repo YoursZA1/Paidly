@@ -95,4 +95,15 @@ describe("customer payment rails", () => {
     expect(charge.status).toBe("requires_action");
     expect(charge.next_action.type).toBe("tap_to_pay");
   });
+
+  it("names a connected Yoco reader on createCharge", async () => {
+    const charge = await cardTerminalProvider.createCharge(
+      { id: "i4", amount: 79, metadata: { payment_method: "card" } },
+      { cardRail: { id: "yoco", label: "Front desk Yoco" } }
+    );
+    expect(charge.status).toBe("requires_action");
+    expect(charge.next_action.type).toBe("reader");
+    expect(charge.next_action.display).toContain("Yoco");
+    expect(charge.next_action.provider).toBe("yoco");
+  });
 });

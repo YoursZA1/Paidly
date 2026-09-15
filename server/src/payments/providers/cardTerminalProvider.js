@@ -11,23 +11,31 @@ export const cardTerminalProvider = {
   sourceKinds: ["pos"],
   kind: "terminal",
   isConfigured() {
-    return isMockPaymentsEnabled() || Boolean(String(process.env.POS_WEBHOOK_SECRET || "").trim());
+    return true;
   },
   async createCharge(intent, chargeCtx = {}) {
+    const rail = chargeCtx.cardRail || intent.metadata?.card_rail || {};
+    const railId = String(rail.id || "paidly_pay").trim().toLowerCase();
+    const railLabel = String(rail.label || (railId === "yoco" ? "Yoco" : railId === "square" ? "Square" : "Paidly Pay")).trim();
     const method = String(chargeCtx.paymentMethod || intent.metadata?.paidly_pay_method || intent.metadata?.payment_method || "card")
       .trim()
       .toLowerCase();
     const qr = method === "qr";
     const mock = isMockPaymentsEnabled();
+    const reader = railId === "yoco" || railId === "square";
     return {
       status: "requires_action",
-      code: mock ? "MOCK_TERMINAL" : "TERMINAL_ACTION_REQUIRED",
+      code: mock ? "MOCK_TERMINAL" : reader ? "READER_ACTION_REQUIRED" : "TERMINAL_ACTION_REQUIRED",
       error: mock
         ? "Mock terminal is waiting for a signed webhook. The sale is not paid yet."
-        : "Present the card or QR on Paidly Pay. The sale is not paid until a verified webhook arrives.",
+        : reader
+          ? `Complete this amount on the connected ${railLabel} reader. The sale is not paid until that rail confirms.`
+          : "Present the card or QR on Paidly Pay. The sale is not paid until a verified webhook arrives.",
       next_action: {
-        type: qr ? "qr" : "tap_to_pay",
-        display: qr ? "QR PAY" : "TAP CARD",
+        type: reader ? "reader" : qr ? "qr" : "tap_to_pay",
+        display: reader ? `Complete on ${railLabel}` : qr ? "QR PAY" : "TAP CARD",
+        provider: railId,
+        device_name: rail.device_name || null,
         mock,
       },
     };

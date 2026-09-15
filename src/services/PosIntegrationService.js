@@ -144,7 +144,10 @@ export async function fetchPosCatalog({ registerId } = {}) {
   const res = await posServiceRequest(`${apiBase()}/api/pos/catalog${qs}`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load POS catalog");
-  return Array.isArray(json.products) ? json.products : [];
+  return {
+    products: Array.isArray(json.products) ? json.products : [],
+    card_rail: json.card_rail && typeof json.card_rail === "object" ? json.card_rail : null,
+  };
 }
 
 export async function listPosRegisters() {

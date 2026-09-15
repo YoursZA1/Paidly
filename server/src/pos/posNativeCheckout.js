@@ -43,6 +43,7 @@ import {
   posAuditSaleCreatedAndPayment,
 } from "./posAuditMath.js";
 import { isValidUuid } from "../inputValidation.js";
+import { resolveTillCardRail } from "./posCardRail.js";
 
 const CATALOG_SELECT =
   "id, org_id, name, sku, barcode, item_type, is_active, price, default_rate, unit_price, rate, stock_quantity, image_url, category, company_id";
@@ -360,10 +361,12 @@ export async function handleNativePosCatalog(req, res, gate) {
       registerCompanyId,
       enforceBrand: true,
     });
+    const cardRail = await resolveTillCardRail(gate.membership.orgId).catch(() => null);
     return res.status(200).json({
       products,
       register_id: register?.id || null,
       company_id: registerCompanyId,
+      card_rail: cardRail,
     });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Could not load catalog");
@@ -391,6 +394,7 @@ export async function handleNativePosCheckout(req, res, gate) {
   const idempotencyKey = String(body.idempotency_key || "").trim() || crypto.randomUUID();
   const clientId = body.client_id ? String(body.client_id).trim() : null;
   const registerIdFromBody = body.register_id ? String(body.register_id).trim() : null;
+  const cardRail = await resolveTillCardRail(gate.membership.orgId).catch(() => null);
 
   let connection;
   try {
@@ -515,6 +519,7 @@ export async function handleNativePosCheckout(req, res, gate) {
     cashier_name: body.cashier_name ? String(body.cashier_name).slice(0, 120) : null,
     brand_name: body.brand_name ? String(body.brand_name).slice(0, 120) : null,
     idempotency_key: idempotencyKey,
+    card_rail: cardRail,
   };
 
   let intent;
@@ -534,6 +539,7 @@ export async function handleNativePosCheckout(req, res, gate) {
         settlement: isTillCashSettlement(rail) ? "till" : isCardTerminalSettlement(rail) ? "terminal" : "online",
         payment_method: paymentMethod,
         paidly_pay_method: paymentMethod === "card" ? "tap_to_pay" : paymentMethod === "digital" ? "eft" : "cash",
+        card_rail: cardRail,
         subtotal: payable.subtotal,
         discount_amount: payable.discount_amount,
         tax_amount: payable.tax_amount,
@@ -587,6 +593,7 @@ export async function handleNativePosCheckout(req, res, gate) {
         : await confirmCustomerPaymentIntent(intent, {
             paymentMethod,
             amountTendered: body.amount_tendered,
+            cardRail,
           });
       intent = confirmed.intent;
       charge = confirmed.charge;
@@ -601,6 +608,7 @@ export async function handleNativePosCheckout(req, res, gate) {
     const terminalWait =
       nextAction?.type === "tap_to_pay" ||
       nextAction?.type === "qr" ||
+      nextAction?.type === "reader" ||
       nextAction?.type === "redirect" ||
       Boolean(redirectUrl);
     if (terminalWait && (charge.status === "requires_action" || intent.status === "requires_action")) {
