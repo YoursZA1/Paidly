@@ -101,6 +101,50 @@ describe("selectStatutoryRules", () => {
     );
     expect(selected).toHaveLength(0);
   });
+
+  it("uses the new version after the previous window is closed", () => {
+    const selected = selectStatutoryRules(
+      [
+        {
+          code: "UIF",
+          org_id: "org-1",
+          effective_from: "2025-01-01",
+          effective_to: "2026-08-31",
+          value: { rate: 0.01 },
+        },
+        {
+          code: "UIF",
+          org_id: "org-1",
+          effective_from: "2026-09-01",
+          effective_to: null,
+          value: { rate: 0.02 },
+        },
+      ],
+      "2026-09-15"
+    );
+    expect(selected).toHaveLength(1);
+    expect(selected[0].value.rate).toBe(0.02);
+    const prior = selectStatutoryRules(
+      [
+        {
+          code: "UIF",
+          org_id: "org-1",
+          effective_from: "2025-01-01",
+          effective_to: "2026-08-31",
+          value: { rate: 0.01 },
+        },
+        {
+          code: "UIF",
+          org_id: "org-1",
+          effective_from: "2026-09-01",
+          effective_to: null,
+          value: { rate: 0.02 },
+        },
+      ],
+      "2026-08-31"
+    );
+    expect(prior[0].value.rate).toBe(0.01);
+  });
 });
 
 describe("applyStatutoryRule", () => {

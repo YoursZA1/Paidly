@@ -133,6 +133,35 @@ export async function loadPublicPayslipBundle(supabase, shareToken) {
   return { payslip };
 }
 
+function clientIp(req) {
+  const forwarded = String(req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || req?.socket?.remoteAddress || "unknown";
+}
+
+async function recordFailedPayslipVerify(payslip, req, reason) {
+  try {
+    const { logSecurity } = await import("../server/src/securityMiddleware.js");
+    logSecurity("warn", "public_payslip_verify_failed", {
+      orgId: payslip?.org_id || null,
+      payslipId: payslip?.id || null,
+      reason,
+      ip: clientIp(req),
+    });
+    if (payslip?.org_id && payslip?.id) {
+      const { writePayrollAudit } = await import("../server/src/payroll/payrollGate.js");
+      await writePayrollAudit({
+        orgId: payslip.org_id,
+        action: "PUBLIC_PAYSLIP_VERIFY_FAILED",
+        recordType: "payslips",
+        recordId: payslip.id,
+        metadata: { reason, ip: clientIp(req) },
+      });
+    }
+  } catch (err) {
+    console.warn("[public-payslip/verify] audit failed:", err?.message || err);
+  }
+}
+
 async function recordPayslipObserve(supabase, payslip, req) {
   if (!payslip?.org_id || !payslip?.id) return;
   const observe = String(req?.query?.observe || req?.query?.event || "opened").toLowerCase();
@@ -155,6 +184,7 @@ async function recordPayslipObserve(supabase, payslip, req) {
         eventType: item.eventType,
         action: item.action,
         source: "payslip_secure_page",
+        metadata: { ip: clientIp(req) },
       },
       supabase
     );
@@ -275,11 +305,13 @@ export async function handlePublicPayslipVerify(req, res) {
 
     const gateEmail = publicPayslipGateEmail(bundle.payslip);
     if (!gateEmail) {
+      await recordFailedPayslipVerify(bundle.payslip, req, "not_emailed");
       return res.status(403).json({
         error: "This payslip cannot be opened on a public link until it has been emailed to the employee.",
       });
     }
     if (email !== gateEmail) {
+      await recordFailedPayslipVerify(bundle.payslip, req, "email_mismatch");
       return res.status(403).json({ error: "Email does not match our records" });
     }
 

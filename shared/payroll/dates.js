@@ -90,6 +90,15 @@ export function formatIsoDate(year, month, day) {
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** Add (or subtract) whole days on a YYYY-MM-DD civil date. */
+export function addDaysIso(iso, deltaDays) {
+  const parsed = parseIsoDate(iso);
+  if (!parsed) return null;
+  const dt = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day, 12, 0, 0));
+  dt.setUTCDate(dt.getUTCDate() + Number(deltaDays || 0));
+  return formatIsoDate(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+}
+
 export function compareIsoDate(a, b) {
   return String(a).localeCompare(String(b));
 }

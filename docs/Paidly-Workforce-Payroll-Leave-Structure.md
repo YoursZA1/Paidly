@@ -82,7 +82,9 @@ gross  →  statutory (PAYE, UIF, …) + other deductions  =  net
 - **Unpaid** = `basic × (unpaid_days / working_days_in_period)` via `shared/payroll/unpaidLeaveImpact.js`
 - **Statutory rules:** `percent`, `capped_percent`, `fixed`, `tax_brackets`
 - Org rules override platform rules for the same code in the period window
+- Org overrides are **append-only versions**. A new `effective_from` inserts a row and closes the previous open window (`effective_to`). Do not UPDATE `value` on an existing id.
 - Pay-run items snapshot `base_salary` and unpaid-leave impact so later salary changes do not rewrite history
+- Calculate claims the pay run (`claim_pay_run_for_calculate`) and commits snapshots (`commit_pay_run_calculate`) so overlapping leave approval cannot mix unpaid days. Math stays in `calculatePayroll.js`. Leave decide locks overlapping open runs first.
 
 ### Pay-run lifecycle
 
@@ -96,11 +98,11 @@ Locked statuses (`approved`, `paid`) cannot be silently rewritten. Corrections u
 | Step | What happens |
 |---|---|
 | Create | Open run for a period; `syncPayRunEmployees` adds new hires |
-| Calculate | Loads profiles, recurring components, statutory rules, approved unpaid leave → writes item snapshots |
+| Calculate | Claims the pay run, then writes item snapshots from `calculatePayroll`. Retries once if overlapping leave changed. |
 | Submit / approve | Separation of duties: a different payroll admin must approve if more than one exists |
 | Finalize | Locked `payslips` rows copied from items; emails sent |
 | Paid | Run + payslips marked paid |
-| Recalc after finalize | Blocked. Create an adjustment run |
+| Recalc after finalize | Blocked. Daily `payment-reminders` cron drafts outstanding adjustment runs and nags payroll admins after 24h. |
 
 ### Server API
 
@@ -118,7 +120,7 @@ Locked statuses (`approved`, `paid`) cannot be silently rewritten. Corrections u
 | `POST runs/:id/finalize` | Generate locked payslips + email |
 | `POST runs/:id/paid` | Mark paid |
 | `POST runs/:id/send` | Resend payslip emails |
-| `GET/POST statutory` | List / upsert statutory rules |
+| `GET/POST statutory` | List / insert a new statutory version (no in-place rate rewrite) |
 | `GET me` | Employee self-service payslips |
 
 Code: `server/src/payroll/payrollRoutes.js` → `payrollService.js`. Client: `src/pages/Payroll.jsx`, `src/services/PayrollApiService.js`.
@@ -158,6 +160,7 @@ Same compose / send / PDF stack as invoices and quotes, **different table** (`pa
 - Payslips must **never** record `paid`, `viewed_not_paid`, `due_soon`, `due_today`, `overdue`, `payment_intent`, `accepted`, or `rejected`
 - Event payload must not store `net_pay`, tax amounts, bank details, or ID numbers
 - Public view: token + email gate (`api/public-share` + `api/_publicPayslipShared.js`)
+- Failed public email verifies are audited (`PUBLIC_PAYSLIP_VERIFY_FAILED`). Unusual 24h open/download bursts notify payroll admins (same daily cron; no extra Vercel function).
 - Self-service match: `employee_user_id` **or** `membership_id` **or** employee email
 
 Locked payslips cannot be silently rewritten.
@@ -305,5 +308,6 @@ Open pay runs pick up new hires via `syncPayRunEmployees` (calculate + refresh).
 4. **HR leave lives on the leave ledger**, not Documents Hub.
 5. **Do not mark paid from a browser callback**, and do not build a second payment stack for payroll.
 6. Finalized pay runs and locked payslips cannot be silently rewritten. Corrections use an adjustment pay run.
+7. Statutory org rates are append-only versions. Calculate/leave overlap uses `FOR UPDATE` RPCs; math stays in JS.
 
 A new payable module needs a `source_kind` + settlement adapter on the Payment Engine. It does not need its own payment system. Payroll / payslips / leave is the failure mode that rule exists to prevent.

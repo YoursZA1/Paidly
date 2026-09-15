@@ -95,3 +95,53 @@ export async function notifyUser(userId, message) {
     console.warn("[payroll] notification insert failed:", err?.message || err);
   }
 }
+
+export async function listPayrollAdminRecipients(orgId) {
+  if (!orgId) return [];
+  const { data: members, error } = await supabaseAdmin
+    .from("memberships")
+    .select("id, org_id, user_id, role, job_function, employment_status")
+    .eq("org_id", orgId);
+  if (error) {
+    console.warn("[payroll] admin recipient lookup failed:", error.message);
+    return [];
+  }
+  const eligible = (members || []).filter(
+    (row) =>
+      String(row.employment_status || "active") !== "inactive" &&
+      membershipHasPermission(row, PERMISSIONS.MANAGE_PAYROLL) &&
+      row.user_id
+  );
+  const userIds = [...new Set(eligible.map((row) => row.user_id))];
+  if (!userIds.length) return [];
+  const { data: profiles } = await supabaseAdmin
+    .from("profiles")
+    .select("id, email, full_name")
+    .in("id", userIds);
+  const byId = new Map((profiles || []).map((row) => [row.id, row]));
+  return eligible.map((row) => ({
+    membershipId: row.id,
+    userId: row.user_id,
+    email: byId.get(row.user_id)?.email || null,
+    name: byId.get(row.user_id)?.full_name || null,
+  }));
+}
+
+export async function notifyPayrollAdmins(orgId, message, { emailSubject, emailHtml } = {}) {
+  const recipients = await listPayrollAdminRecipients(orgId);
+  const seen = new Set();
+  for (const person of recipients) {
+    if (!person.userId || seen.has(person.userId)) continue;
+    seen.add(person.userId);
+    await notifyUser(person.userId, message);
+    if (emailSubject && emailHtml && person.email) {
+      try {
+        const { sendHtmlEmail } = await import("../sendInvoice.js");
+        await sendHtmlEmail(person.email, emailSubject, emailHtml, "Paidly");
+      } catch (err) {
+        console.warn("[payroll] admin email failed:", err?.message || err);
+      }
+    }
+  }
+  return recipients.length;
+}

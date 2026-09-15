@@ -8,7 +8,18 @@ import { countWorkingDays } from "../../../shared/leave/leaveMath.js";
 import { PAY_RUN_STATUSES } from "../../../shared/payroll/constants.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import { payRunNeedsAdjustment } from "../../../shared/payroll/adjustmentRun.js";
+import {
+  leaveRowsByProfile,
+  restoreStatusAfterFailedCalculate,
+  shouldRetryCalculateWithoutReclaim,
+} from "../../../shared/payroll/payRunLock.js";
+import {
+  assertAppendOnlyStatutoryPayload,
+  statutoryVersionRow,
+  supersedeEffectiveTo,
+} from "../../../shared/payroll/statutoryVersion.js";
 import { requirePayslipMembershipId } from "../../../shared/payroll/payslipWriteGuard.js";
+import { claimPayRunForCalculate, commitPayRunCalculate } from "./payRunLockRpc.js";
 import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/documentSendAdapter.js";
 import { loadOutstandingAdjustmentSignals } from "../workforce/adjustmentSignals.js";
 import { throwIfMissingWorkforceColumn } from "../workforce/schemaGuard.js";
@@ -535,6 +546,67 @@ export async function getPayRun(orgId, runId) {
   };
 }
 
+function buildPayRunItemSnapshot(item, profile, over, result) {
+  return {
+    id: item.id,
+    employee_number: profile.employee_number || item.employee_number,
+    employee_name: profile.full_name || item.employee_name,
+    membership_id: profile.membership_id || item.membership_id,
+    status: "calculated",
+    base_pay: result.basic,
+    overtime_hours: over.overtime_hours ?? item.overtime_hours,
+    overtime_rate: over.overtime_rate ?? item.overtime_rate,
+    overtime_amount: result.overtime_pay,
+    earnings: result.earnings,
+    deductions: result.other_deductions,
+    gross_pay: result.gross_pay,
+    taxable_income: result.taxable_income,
+    statutory_deductions: result.statutory_deductions,
+    other_deductions: result.other_deductions,
+    total_deductions: result.total_deductions,
+    net_pay: result.net_pay,
+    calculation: {
+      ...result.breakdown,
+      profile_snapshot: {
+        membership_id: profile.membership_id,
+        base_salary: profile.base_salary,
+        pay_frequency: profile.pay_frequency,
+        pay_type: profile.pay_type,
+        tax_identifiers: profile.tax_identifiers || {},
+      },
+    },
+    warnings: result.warnings,
+    base_salary_snapshot: money(profile.base_salary),
+    unpaid_leave_days: result.unpaid_leave_days,
+    unpaid_leave_amount: result.unpaid_leave_amount,
+  };
+}
+
+async function writePayRunItemSnapshots(snapshots) {
+  for (const snapshotUpdate of snapshots) {
+    const { id, ...rest } = snapshotUpdate;
+    const { error } = await supabaseAdmin.from("pay_run_items").update(rest).eq("id", id);
+    if (error) {
+      throwIfMissingWorkforceColumn(error, [
+        "base_salary_snapshot",
+        "unpaid_leave_days",
+        "unpaid_leave_amount",
+      ]);
+      throw error;
+    }
+  }
+}
+
+async function releasePayRunCalculateClaim(orgId, runId, previousStatus, calculatedAt) {
+  const restore = restoreStatusAfterFailedCalculate(previousStatus, calculatedAt);
+  await supabaseAdmin
+    .from("pay_runs")
+    .update({ status: restore })
+    .eq("id", runId)
+    .eq("org_id", orgId)
+    .eq("status", "processing");
+}
+
 export async function calculatePayRun(orgId, actorId, runId, body = {}) {
   const run = await syncPayRunEmployees(orgId, runId);
   if (run.status === "cancelled" || run.status === "paid") {
@@ -547,8 +619,41 @@ export async function calculatePayRun(orgId, actorId, runId, body = {}) {
     err.status = 409;
     throw err;
   }
-  await supabaseAdmin.from("pay_runs").update({ status: "processing" }).eq("id", runId);
 
+  const previousStatus = run.status;
+  const claim = await claimPayRunForCalculate(orgId, runId);
+  if (claim.fallback) {
+    await supabaseAdmin.from("pay_runs").update({ status: "processing" }).eq("id", runId);
+  }
+
+  try {
+    let leaveSnapshot = claim;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await calculatePayRunOnce(orgId, actorId, run, body, leaveSnapshot);
+      } catch (err) {
+        if (shouldRetryCalculateWithoutReclaim(err, attempt)) {
+          leaveSnapshot = {
+            fallback: claim.fallback,
+            reloadLeave: true,
+            leave_fingerprint: err.leaveFingerprint || null,
+          };
+          continue;
+        }
+        throw err;
+      }
+    }
+    const err = new Error("Leave changed during calculation. Try again.");
+    err.status = 409;
+    throw err;
+  } catch (err) {
+    await releasePayRunCalculateClaim(orgId, runId, previousStatus, run.calculated_at);
+    throw err;
+  }
+}
+
+async function calculatePayRunOnce(orgId, actorId, run, body = {}, leaveSnapshot = {}) {
+  const runId = run.id;
   const rules = await loadStatutoryRules(orgId, run.period_end);
   const components = await loadRecurringComponents(orgId);
   const profileIds = (run.items || []).map((i) => i.payroll_profile_id);
@@ -557,11 +662,24 @@ export async function calculatePayRun(orgId, actorId, runId, body = {}) {
   const overrides = Array.isArray(body.items) ? body.items : [];
   const overrideById = new Map(overrides.map((o) => [o.id, o]));
   const workingDaysInPeriod = countWorkingDays(run.period_start, run.period_end);
-  const leaveByProfile = await unpaidLeaveRequestsByProfile(orgId, run.period_start, run.period_end, profileIds);
+  const leaveByProfile =
+    leaveSnapshot.fallback || leaveSnapshot.reloadLeave
+      ? await unpaidLeaveRequestsByProfile(orgId, run.period_start, run.period_end, profileIds)
+      : leaveRowsByProfile(leaveSnapshot.leave_rows);
+  let leaveFingerprint = leaveSnapshot.leave_fingerprint;
+  if (leaveSnapshot.reloadLeave && !leaveSnapshot.fallback) {
+    const { data: fp, error: fpErr } = await supabaseAdmin.rpc("workforce_leave_overlap_fingerprint", {
+      p_org_id: orgId,
+      p_period_start: run.period_start,
+      p_period_end: run.period_end,
+    });
+    if (!fpErr && fp) leaveFingerprint = fp;
+  }
 
   let grossTotal = 0;
   let dedTotal = 0;
   let netTotal = 0;
+  const snapshots = [];
 
   for (const item of run.items || []) {
     const profile = profileById.get(item.payroll_profile_id) || {};
@@ -604,60 +722,32 @@ export async function calculatePayRun(orgId, actorId, runId, body = {}) {
     grossTotal += result.gross_pay;
     dedTotal += result.total_deductions;
     netTotal += result.net_pay;
-    const snapshotUpdate = {
-      employee_number: profile.employee_number || item.employee_number,
-      employee_name: profile.full_name || item.employee_name,
-      membership_id: profile.membership_id || item.membership_id,
-      status: "calculated",
-      base_pay: result.basic,
-      overtime_hours: over.overtime_hours ?? item.overtime_hours,
-      overtime_rate: over.overtime_rate ?? item.overtime_rate,
-      overtime_amount: result.overtime_pay,
-      earnings: result.earnings,
-      deductions: result.other_deductions,
-      gross_pay: result.gross_pay,
-      taxable_income: result.taxable_income,
-      statutory_deductions: result.statutory_deductions,
-      other_deductions: result.other_deductions,
-      total_deductions: result.total_deductions,
-      net_pay: result.net_pay,
-      calculation: {
-        ...result.breakdown,
-        profile_snapshot: {
-          membership_id: profile.membership_id,
-          base_salary: profile.base_salary,
-          pay_frequency: profile.pay_frequency,
-          pay_type: profile.pay_type,
-          tax_identifiers: profile.tax_identifiers || {},
-        },
-      },
-      warnings: result.warnings,
-      base_salary_snapshot: money(profile.base_salary),
-      unpaid_leave_days: result.unpaid_leave_days,
-      unpaid_leave_amount: result.unpaid_leave_amount,
-    };
-    const { error } = await supabaseAdmin.from("pay_run_items").update(snapshotUpdate).eq("id", item.id);
-    if (error) {
-      throwIfMissingWorkforceColumn(error, [
-        "base_salary_snapshot",
-        "unpaid_leave_days",
-        "unpaid_leave_amount",
-      ]);
-      throw error;
-    }
+    snapshots.push(buildPayRunItemSnapshot(item, profile, over, result));
   }
 
-  await supabaseAdmin
-    .from("pay_runs")
-    .update({
-      status: "calculated",
-      calculated_at: new Date().toISOString(),
-      gross_total: money(grossTotal),
-      deductions_total: money(dedTotal),
-      net_total: money(netTotal),
-      employee_count: (run.items || []).length,
-    })
-    .eq("id", runId);
+  if (!leaveSnapshot.fallback) {
+    await commitPayRunCalculate(orgId, runId, {
+      items: snapshots,
+      leaveFingerprint: leaveFingerprint,
+      grossTotal: money(grossTotal),
+      deductionsTotal: money(dedTotal),
+      netTotal: money(netTotal),
+      employeeCount: (run.items || []).length,
+    });
+  } else {
+    await writePayRunItemSnapshots(snapshots);
+    await supabaseAdmin
+      .from("pay_runs")
+      .update({
+        status: "calculated",
+        calculated_at: new Date().toISOString(),
+        gross_total: money(grossTotal),
+        deductions_total: money(dedTotal),
+        net_total: money(netTotal),
+        employee_count: (run.items || []).length,
+      })
+      .eq("id", runId);
+  }
 
   await writePayrollAudit({
     orgId,
@@ -1054,46 +1144,80 @@ export async function listStatutoryRules(orgId) {
 }
 
 export async function upsertStatutoryRule(orgId, actorId, payload) {
-  const row = {
-    org_id: orgId,
-    code: String(payload.code || "").toUpperCase(),
-    name: payload.name || payload.code,
-    effective_from: payload.effective_from,
-    effective_to: payload.effective_to || null,
-    calculation_type: payload.calculation_type,
-    value: payload.value || {},
-    employee_portion: payload.employee_portion !== false,
-    employer_portion: Boolean(payload.employer_portion),
-  };
+  assertAppendOnlyStatutoryPayload(payload);
+  const row = statutoryVersionRow(orgId, payload);
   if (!row.code || !row.effective_from || !row.calculation_type) {
     const err = new Error("code, effective_from, and calculation_type are required.");
     err.status = 400;
     throw err;
   }
-  let result;
-  if (payload.id) {
-    const { data, error } = await supabaseAdmin
+
+  const { data: previous } = await supabaseAdmin
+    .from("payroll_statutory_rules")
+    .select("id, effective_from, effective_to")
+    .eq("org_id", orgId)
+    .eq("code", row.code)
+    .is("effective_to", null)
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const closeTo = supersedeEffectiveTo(previous, row.effective_from);
+  if (previous?.id && closeTo) {
+    const { error: closeErr } = await supabaseAdmin
       .from("payroll_statutory_rules")
-      .update(row)
-      .eq("id", payload.id)
-      .eq("org_id", orgId)
-      .select("*")
-      .maybeSingle();
-    if (error) throw error;
-    result = data;
-  } else {
-    const { data, error } = await supabaseAdmin.from("payroll_statutory_rules").insert(row).select("*").maybeSingle();
-    if (error) throw error;
-    result = data;
+      .update({ effective_to: closeTo })
+      .eq("id", previous.id)
+      .eq("org_id", orgId);
+    if (closeErr) throw closeErr;
+    await writePayrollAudit({
+      orgId,
+      actorId,
+      action: "STATUTORY_RULE_SUPERSEDED",
+      recordType: "payroll_statutory_rules",
+      recordId: previous.id,
+      metadata: { effective_to: closeTo, next_from: row.effective_from },
+    });
+  }
+
+  const { data, error } = await supabaseAdmin.from("payroll_statutory_rules").insert(row).select("*").maybeSingle();
+  if (error) {
+    if (error.code === "23505") {
+      const err = new Error("A statutory version already exists for this code and effective_from.");
+      err.status = 409;
+      throw err;
+    }
+    throw error;
   }
   await writePayrollAudit({
     orgId,
     actorId,
-    action: "STATUTORY_RULE_UPDATED",
+    action: "STATUTORY_RULE_VERSION_CREATED",
     recordType: "payroll_statutory_rules",
-    recordId: result?.id,
+    recordId: data?.id,
   });
-  return result;
+  return data;
+}
+
+export async function ensureDraftAdjustmentRun(orgId, originalPayRunId, actorId = null) {
+  const originalId = parseUuid(originalPayRunId);
+  if (!orgId || !originalId) return { created: false, runId: null };
+  const { data: existing } = await supabaseAdmin
+    .from("pay_runs")
+    .select("id, status")
+    .eq("org_id", orgId)
+    .eq("run_type", "adjustment")
+    .eq("original_pay_run_id", originalId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existing?.id) return { created: false, runId: existing.id };
+  const run = await createPayRun(orgId, actorId, {
+    run_type: "adjustment",
+    original_pay_run_id: originalId,
+  });
+  return { created: true, runId: run.id };
 }
 
 export { PAY_RUN_STATUSES };

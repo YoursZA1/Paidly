@@ -10,6 +10,7 @@ import { throwIfMissingWorkforceColumn } from "../workforce/schemaGuard.js";
 import { sendHtmlEmail } from "../sendInvoice.js";
 import { buildEmployeeNumber, nextEmployeeSequence } from "../../../shared/payroll/payslipNumber.js";
 import { canDecideLeave } from "./leaveAuthz.js";
+import { lockOpenPayRunsForLeave } from "../payroll/payRunLockRpc.js";
 import {
   issueLeaveApprovalToken,
   invalidateLeaveApprovalTokens,
@@ -686,6 +687,32 @@ export async function decideLeaveRequest(orgId, actorId, requestId, options = {}
   }
 
   const year = leaveYearForDate(request.start_date);
+  const days = Number(request.working_days) || 0;
+  const paid = request.leave_types?.paid !== false;
+
+  const { data: balanceHint } = await supabaseAdmin
+    .from("leave_balances")
+    .select("id")
+    .eq("payroll_profile_id", request.payroll_profile_id)
+    .eq("leave_type_id", request.leave_type_id)
+    .eq("leave_year", year)
+    .maybeSingle();
+
+  await lockOpenPayRunsForLeave(orgId, request.start_date, request.end_date, balanceHint?.id || null);
+
+  const { data: stillPending } = await supabaseAdmin
+    .from("leave_requests")
+    .select("id, status")
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (!stillPending) {
+    const err = new Error("This leave request was already decided.");
+    err.status = 409;
+    throw err;
+  }
+
   const { data: balance } = await supabaseAdmin
     .from("leave_balances")
     .select("*")
@@ -694,8 +721,53 @@ export async function decideLeaveRequest(orgId, actorId, requestId, options = {}
     .eq("leave_year", year)
     .maybeSingle();
 
-  const days = Number(request.working_days) || 0;
-  const paid = request.leave_types?.paid !== false;
+  let updated;
+  const firstUpdate = await supabaseAdmin
+    .from("leave_requests")
+    .update({
+      status: approve ? "approved" : "rejected",
+      rejection_reason: approve ? null : String(reason || comment || "").trim(),
+      manager_comment: String(comment || reason || "").trim() || null,
+      decided_at: new Date().toISOString(),
+      decided_by: actor,
+      approver_membership_id: actorMembership?.id || null,
+      approval_method: method,
+      decided_email: decidedEmail || null,
+    })
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .eq("status", "pending")
+    .select("*")
+    .maybeSingle();
+  if (
+    firstUpdate.error &&
+    /manager_comment|approver_membership_id|approval_method|decided_email/i.test(firstUpdate.error.message || "")
+  ) {
+    const retry = await supabaseAdmin
+      .from("leave_requests")
+      .update({
+        status: approve ? "approved" : "rejected",
+        rejection_reason: approve ? null : String(reason || comment || "").trim(),
+        decided_at: new Date().toISOString(),
+        decided_by: actor,
+      })
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle();
+    if (retry.error) throw mapLeaveDbError(retry.error);
+    updated = retry.data;
+  } else if (firstUpdate.error) {
+    throw mapLeaveDbError(firstUpdate.error);
+  } else {
+    updated = firstUpdate.data;
+  }
+  if (!updated) {
+    const err = new Error("This leave request was already decided.");
+    err.status = 409;
+    throw err;
+  }
 
   if (approve && paid && balance) {
     const next = {
@@ -703,7 +775,12 @@ export async function decideLeaveRequest(orgId, actorId, requestId, options = {}
       used: Number(balance.used) + days,
     };
     const computed = computeLeaveBalance({ ...balance, ...next });
-    await supabaseAdmin.from("leave_balances").update(next).eq("id", balance.id);
+    await supabaseAdmin
+      .from("leave_balances")
+      .update(next)
+      .eq("id", balance.id)
+      .eq("pending", balance.pending)
+      .eq("used", balance.used);
     await supabaseAdmin.from("leave_transactions").insert([
       withEmployeeId(
         {
@@ -739,7 +816,11 @@ export async function decideLeaveRequest(orgId, actorId, requestId, options = {}
   } else if (!approve && paid && balance) {
     const nextPending = Math.max(0, Number(balance.pending) - days);
     const computed = computeLeaveBalance({ ...balance, pending: nextPending });
-    await supabaseAdmin.from("leave_balances").update({ pending: nextPending }).eq("id", balance.id);
+    await supabaseAdmin
+      .from("leave_balances")
+      .update({ pending: nextPending })
+      .eq("id", balance.id)
+      .eq("pending", balance.pending);
     await insertLeaveRow(
       "leave_transactions",
       withEmployeeId(
@@ -758,45 +839,6 @@ export async function decideLeaveRequest(orgId, actorId, requestId, options = {}
         request.payroll_profiles
       )
     );
-  }
-
-  let updated;
-  const firstUpdate = await supabaseAdmin
-    .from("leave_requests")
-    .update({
-      status: approve ? "approved" : "rejected",
-      rejection_reason: approve ? null : String(reason || comment || "").trim(),
-      manager_comment: String(comment || reason || "").trim() || null,
-      decided_at: new Date().toISOString(),
-      decided_by: actor,
-      approver_membership_id: actorMembership?.id || null,
-      approval_method: method,
-      decided_email: decidedEmail || null,
-    })
-    .eq("id", id)
-    .select("*")
-    .maybeSingle();
-  if (
-    firstUpdate.error &&
-    /manager_comment|approver_membership_id|approval_method|decided_email/i.test(firstUpdate.error.message || "")
-  ) {
-    const retry = await supabaseAdmin
-      .from("leave_requests")
-      .update({
-        status: approve ? "approved" : "rejected",
-        rejection_reason: approve ? null : String(reason || comment || "").trim(),
-        decided_at: new Date().toISOString(),
-        decided_by: actor,
-      })
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
-    if (retry.error) throw mapLeaveDbError(retry.error);
-    updated = retry.data;
-  } else if (firstUpdate.error) {
-    throw mapLeaveDbError(firstUpdate.error);
-  } else {
-    updated = firstUpdate.data;
   }
 
   try {

@@ -15,11 +15,12 @@ export async function loadOutstandingAdjustmentSignals(orgId) {
   try {
     const { data, error } = await supabaseAdmin
       .from("workforce_events")
-      .select("id, employee_id, payload, created_at")
+      .select("id, org_id, employee_id, payload, created_at")
       .eq("org_id", orgId)
       .eq("event_type", WORKFORCE_EVENT_TYPES.PAYROLL_PROCESSED)
+      .filter("payload->>needs_adjustment_run", "eq", "true")
       .order("created_at", { ascending: false })
-      .limit(25);
+      .limit(50);
     if (error) throw error;
     events = (data || []).filter((row) => row.payload?.needs_adjustment_run);
   } catch {

@@ -429,12 +429,32 @@ export default async function handler(req, res) {
       } catch (err) {
         workforceEvents = { error: err?.message || String(err) };
       }
+      let adjustmentRuns = null;
+      let payslipAccess = null;
+      try {
+        const { processOutstandingAdjustmentRuns, nagOutstandingAdjustmentRuns } = await import(
+          "../server/src/workforce/adjustmentCron.js"
+        );
+        const { alertUnusualPayslipAccess } = await import(
+          "../server/src/payroll/payslipAccessCron.js"
+        );
+        adjustmentRuns = {
+          ...(await processOutstandingAdjustmentRuns()),
+          ...(await nagOutstandingAdjustmentRuns()),
+        };
+        payslipAccess = await alertUnusualPayslipAccess();
+      } catch (err) {
+        adjustmentRuns = { error: err?.message || String(err) };
+        payslipAccess = { error: err?.message || String(err) };
+      }
       return res.status(200).json({
         ok: true,
         at: new Date().toISOString(),
         path: "payment-reminders",
         ...batch,
         workforceEvents,
+        adjustmentRuns,
+        payslipAccess,
       });
     }
     if (job === "subscription-dunning") {
