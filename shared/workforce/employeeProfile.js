@@ -8,6 +8,12 @@
 
 import { parseUuid } from "../ids/uuid.js";
 import { canonicalEmployeeId, formatEmployeeLabel, payrollProfileIdOf } from "./employeeIdentity.js";
+import {
+  employeeAttentionReasons,
+  isWorkforceEmployeeActive,
+  managerAssignmentState,
+  workforceLifecycleStatus,
+} from "./employeeLifecycle.js";
 
 export const COMPENSATION_FIELDS = Object.freeze([
   "base_salary",
@@ -161,7 +167,19 @@ export function buildEmployeeProfile(input, opts = {}) {
     portal_status: membership.user_id ? "active" : "invited",
     disabled_at: membership.disabled_at || null,
     created_at: membership.created_at || null,
+    lifecycle_status: workforceLifecycleStatus(membership),
+    manager_active: membership.manager_membership_id
+      ? input.manager
+        ? isWorkforceEmployeeActive(input.manager)
+        : false
+      : null,
+    manager_assignment: null,
+    attention_reasons: [],
+    needs_attention: false,
   };
+  row.manager_assignment = managerAssignmentState(row);
+  row.attention_reasons = employeeAttentionReasons(row);
+  row.needs_attention = row.attention_reasons.length > 0;
   return redactEmployeeCompensation(row, {
     canManagePayroll: opts.canManagePayroll,
     isSelf,

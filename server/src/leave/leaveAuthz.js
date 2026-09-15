@@ -1,3 +1,4 @@
+import { isWorkforceEmployeeActive } from "../../../shared/workforce/employeeLifecycle.js";
 import {
   membershipHasPermission,
   PERMISSIONS,
@@ -32,6 +33,13 @@ export function canDecideLeave(actorMembership, employeeMembership) {
   }
   if (actor.id === employeeMembership.id) {
     return { ok: false, code: "SELF_APPROVAL", message: "You cannot approve or decline your own leave request." };
+  }
+  if (!isWorkforceEmployeeActive(actor)) {
+    return {
+      ok: false,
+      code: "MANAGER_INACTIVE",
+      message: "Inactive managers cannot approve leave or manage their team.",
+    };
   }
   if (employeeMembership.manager_membership_id && employeeMembership.manager_membership_id === actor.id) {
     return { ok: true, role: "assigned_manager" };

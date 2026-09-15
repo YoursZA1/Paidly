@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
 import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
+import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
 import { uncoveredPayRunIds } from "@shared/payroll/adjustmentRun.js";
 
 const STATUS_LABEL = {
@@ -128,6 +129,7 @@ export default function PayrollPage() {
           </PageHeader>
         </PageTemplate.Header>
         <PageTemplate.Body>
+          <WorkforceSubnav />
           {needsAdjustment ? (
             <AdjustmentRunBanner
               signals={data?.adjustment_signals || []}

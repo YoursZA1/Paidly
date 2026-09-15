@@ -18,8 +18,7 @@ export default function WorkforceAttendance() {
         <WorkforceSubnav />
         <Card className="rounded-xl">
           <CardContent className="p-6 text-sm text-muted-foreground">
-            Attendance stays a stub so payroll, leave, and identity are not blocked on a second time-tracking stack.
-            Hours and clock events will attach to the same membership ID later.
+            Attendance stays on the same membership ID. Deactivating an employee pauses attendance participation without deleting historical clock data when that product ships.
           </CardContent>
         </Card>
       </PageTemplate.Body>

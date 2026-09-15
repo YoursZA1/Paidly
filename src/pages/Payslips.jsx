@@ -20,6 +20,7 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { payrollApi } from "@/services/PayrollApiService";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
+import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
 
 export default function PayslipsPage() {
     const { loading: companyLoading, hasPermission } = useCompanyContext();
@@ -191,6 +192,7 @@ function PayslipsMain() {
                             {canManagePayroll ? "Manage and distribute employee payslips." : "Payslips issued to you by your employer."}
                         </p>
                     </div>
+                    <WorkforceSubnav />
                     <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
                         <input
                             type="file"

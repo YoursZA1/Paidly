@@ -101,6 +101,8 @@ function WorkforceOverview() {
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <Kpi label="Total employees" value={summary.workforce?.total ?? 0} />
                 <Kpi label="Active" value={summary.workforce?.active ?? 0} />
+                <Kpi label="Inactive" value={summary.workforce?.inactive ?? 0} />
+                <Kpi label="Needs attention" value={summary.workforce?.needs_attention ?? 0} />
                 <Kpi label="Pending invitations" value={inviteCount} />
                 <Kpi label="New employees" value={summary.workforce?.new_employees ?? 0} />
                 <Kpi label="On leave today" value={summary.leave?.on_leave_today ?? 0} />

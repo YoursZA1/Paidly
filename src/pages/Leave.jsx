@@ -19,6 +19,8 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { parseUuid } from "@shared/ids/uuid.js";
 import EmployeeSelect from "@/components/workforce/EmployeeSelect";
+import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
+import { eligibleManagersFromRoster } from "@shared/workforce/employeeLifecycle.js";
 
 const EMPTY_TYPE = {
   id: "",
@@ -108,11 +110,10 @@ export default function LeaveManagementPage({ embedded = false }) {
     return [...new Set((employees || []).map((row) => row.department).filter(Boolean))].sort();
   }, [employees]);
 
-  const managers = useMemo(() => {
-    const byId = new Map((employees || []).map((row) => [row.id, row]));
-    const ids = new Set((employees || []).map((row) => row.manager_membership_id).filter(Boolean));
-    return [...ids].map((id) => byId.get(id)).filter(Boolean);
-  }, [employees]);
+  const eligibleManagers = useMemo(
+    () => eligibleManagersFromRoster(employees),
+    [employees]
+  );
 
   const decide = async (id, approve) => {
     try {
@@ -224,6 +225,7 @@ export default function LeaveManagementPage({ embedded = false }) {
         </PageTemplate.Header>
         )}
         <PageTemplate.Body>
+          {embedded ? null : <WorkforceSubnav />}
           <Tabs defaultValue="requests">
             <TabsList className="mb-4">
               <TabsTrigger value="requests">Requests</TabsTrigger>
@@ -292,7 +294,7 @@ export default function LeaveManagementPage({ embedded = false }) {
                   })}
                 </select>
                 <EmployeeSelect
-                  employees={managers.length ? managers : employees}
+                  employees={eligibleManagers.length ? eligibleManagers : employees}
                   value={managerId}
                   onChange={setManagerId}
                   emptyLabel="All managers"
@@ -356,7 +358,7 @@ export default function LeaveManagementPage({ embedded = false }) {
                                   reassignId === row.id ? (
                                     <div className="flex gap-2 w-full max-w-sm">
                                       <EmployeeSelect
-                                        employees={employees.filter((emp) => emp.id !== row.employee_id)}
+                                        employees={eligibleManagers.filter((emp) => emp.id !== row.employee_id)}
                                         value={reassignManager}
                                         onChange={setReassignManager}
                                         emptyLabel="Unassigned"

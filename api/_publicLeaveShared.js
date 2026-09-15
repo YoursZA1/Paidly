@@ -91,7 +91,7 @@ export async function handlePublicLeaveDecide(req, res) {
     }
     const { data: manager } = await supabaseAdmin
       .from("memberships")
-      .select("id, user_id, invited_email, org_id, role, job_function")
+      .select("id, user_id, invited_email, org_id, role, job_function, employment_status, disabled_at")
       .eq("id", found.row.approver_membership_id)
       .eq("org_id", found.row.org_id)
       .maybeSingle();

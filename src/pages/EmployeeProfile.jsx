@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import PageTemplate from "@/components/layout/PageTemplate";
 import PageHeader from "@/components/dashboard/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User } from "lucide-react";
@@ -14,7 +15,10 @@ import { parseUuid } from "@shared/ids/uuid.js";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { canViewEmployeeProfile, PERMISSIONS } from "@/lib/companyPermissions";
 import EmployeeSelect from "@/components/workforce/EmployeeSelect";
+import EmployeeLifecycleBadges from "@/components/workforce/EmployeeLifecycleBadges.jsx";
+import EmployeeDirectoryActions from "@/components/workforce/EmployeeDirectoryActions.jsx";
 import { createPageUrl } from "@/utils";
+import { eligibleManagersFromRoster } from "@shared/workforce/employeeLifecycle.js";
 
 function employeeIdFromRoute(params, search) {
   return parseUuid(params?.id) || parseUuid(new URLSearchParams(search).get("id"));
@@ -29,8 +33,13 @@ export default function EmployeeProfile() {
   const [bundle, setBundle] = useState(null);
   const [roster, setRoster] = useState([]);
   const [managerId, setManagerId] = useState("");
+  const [department, setDepartment] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [savingManager, setSavingManager] = useState(false);
+  const [savingEmployment, setSavingEmployment] = useState(false);
   const [restricted, setRestricted] = useState(false);
+  const tab = new URLSearchParams(location.search).get("tab") || "overview";
 
   const employee = bundle?.employee || null;
   const canOpenProfile =
@@ -53,6 +62,9 @@ export default function EmployeeProfile() {
       .then((data) => {
         setBundle(data);
         setManagerId(parseUuid(data?.employee?.manager_membership_id) || "");
+        setDepartment(data?.employee?.department || "");
+        setJobTitle(data?.employee?.job_title || "");
+        setStartDate(data?.employee?.employment_start_date || "");
       })
       .catch((err) => {
         if (err?.status === 403) {
@@ -70,6 +82,11 @@ export default function EmployeeProfile() {
     }
   }, [id, toast, canReassign, companyLoading, canOpenProfile]);
 
+  const eligibleManagers = useMemo(
+    () => eligibleManagersFromRoster(roster, { excludeId: id }),
+    [roster, id]
+  );
+
   const saveManager = async () => {
     if (!id) return;
     setSavingManager(true);
@@ -84,6 +101,24 @@ export default function EmployeeProfile() {
       toast({ variant: "destructive", title: "Could not update manager", description: err.message });
     } finally {
       setSavingManager(false);
+    }
+  };
+
+  const saveEmployment = async () => {
+    if (!id) return;
+    setSavingEmployment(true);
+    try {
+      const updated = await workforceApi.update(id, {
+        department: department.trim() || null,
+        job_title: jobTitle.trim() || null,
+        employment_start_date: startDate || null,
+      });
+      setBundle((prev) => ({ ...prev, employee: updated }));
+      toast({ title: "Employment updated" });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Could not save employment", description: err.message });
+    } finally {
+      setSavingEmployment(false);
     }
   };
 
@@ -105,7 +140,7 @@ export default function EmployeeProfile() {
           </p>
         ) : null}
         {employee ? (
-          <Tabs defaultValue="overview">
+          <Tabs defaultValue={tab}>
             <TabsList className="mb-4 flex-wrap h-auto">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="personal">Personal</TabsTrigger>
@@ -126,12 +161,20 @@ export default function EmployeeProfile() {
                 <Stat label="Payslips" value={employee.payslip_count ?? (bundle.payslips || []).length} />
               </div>
               <Card className="rounded-xl mt-4">
-                <CardContent className="pt-4 text-sm space-y-1">
+                <CardContent className="pt-4 text-sm space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <EmployeeLifecycleBadges employee={employee} />
+                    <EmployeeDirectoryActions
+                      employee={employee}
+                      roster={roster}
+                      departments={[...new Set(roster.map((row) => row.department).filter(Boolean))]}
+                      canManage={canReassign}
+                      onUpdated={(updated) => setBundle((prev) => ({ ...prev, employee: updated }))}
+                    />
+                  </div>
                   <p>Number: {employee.employee_number || "—"}</p>
                   <p>Manager: {employee.manager_name || "—"}</p>
-                  <p>
-                    Status: <Badge variant="outline">{employee.employment_status}</Badge> · Portal {employee.portal_status}
-                  </p>
+                  <p>Portal {employee.portal_status}</p>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -155,31 +198,51 @@ export default function EmployeeProfile() {
                 <CardHeader>
                   <CardTitle className="text-base">Employment</CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm space-y-2">
-                  <p>Number: {employee.employee_number || "—"}</p>
-                  <p>Department: {employee.department || "—"}</p>
-                  <p>Job title: {employee.job_title || "—"}</p>
-                  <p>Manager: {employee.manager_name || "—"}</p>
-                  <p>Start date: {employee.employment_start_date || "—"}</p>
-                  <p>End date: {employee.employment_end_date || "—"}</p>
-                  <p>
-                    Status: <Badge variant="outline">{employee.employment_status}</Badge>
-                  </p>
-                  <p>Portal: {employee.portal_status}</p>
+                <CardContent className="text-sm space-y-3">
+                  <EmployeeLifecycleBadges employee={employee} />
                   {canReassign ? (
-                    <div className="pt-2 space-y-2">
-                      <Label>Reassign manager</Label>
-                      <EmployeeSelect
-                        employees={roster.filter((row) => row.id !== id)}
-                        value={managerId}
-                        onChange={setManagerId}
-                        emptyLabel="No manager"
-                      />
-                      <Button size="sm" className="rounded-xl" disabled={savingManager} onClick={saveManager}>
-                        {savingManager ? "Saving…" : "Save manager"}
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Department / team</Label>
+                          <Input value={department} onChange={(e) => setDepartment(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Job title</Label>
+                          <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Start date</Label>
+                          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                        </div>
+                      </div>
+                      <Button size="sm" className="rounded-xl" disabled={savingEmployment} onClick={saveEmployment}>
+                        {savingEmployment ? "Saving…" : "Save employment"}
                       </Button>
-                    </div>
-                  ) : null}
+                      <div className="pt-2 space-y-2">
+                        <Label>Assign manager</Label>
+                        <EmployeeSelect
+                          employees={eligibleManagers}
+                          value={managerId}
+                          onChange={setManagerId}
+                          emptyLabel="No manager"
+                        />
+                        <Button size="sm" className="rounded-xl" disabled={savingManager} onClick={saveManager}>
+                          {savingManager ? "Saving…" : "Save manager"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p>Number: {employee.employee_number || "—"}</p>
+                      <p>Department: {employee.department || "—"}</p>
+                      <p>Job title: {employee.job_title || "—"}</p>
+                      <p>Manager: {employee.manager_name || "—"}</p>
+                      <p>Start date: {employee.employment_start_date || "—"}</p>
+                      <p>End date: {employee.employment_end_date || "—"}</p>
+                      <p>Portal: {employee.portal_status}</p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

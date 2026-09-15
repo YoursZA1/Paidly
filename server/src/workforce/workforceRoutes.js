@@ -2,7 +2,7 @@ import { normalizeRequestBody } from "../validateBody.js";
 import { membershipHasPermission, PERMISSIONS } from "../companyRouteAccess.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import { sanitizeEmployeeWritePayload } from "../../../shared/workforce/employeeWrite.js";
-import { createEmployee, getEmployee, getEmployeeProfile, listEmployees, updateEmployee, workforceSummary } from "./employeeService.js";
+import { createEmployee, getEmployee, getEmployeeProfile, listEmployees, reassignManagerReports, updateEmployee, workforceSummary } from "./employeeService.js";
 import { requireWorkforcePermission } from "./workforceAuth.js";
 import { canSeeOrgWorkforce } from "../leave/leaveAuthz.js";
 
@@ -94,6 +94,15 @@ export async function handleWorkforceEmployees(req, res) {
   if (req.method === "PATCH" || req.method === "PUT") {
     const gate = await requireWorkforcePermission(req, res, PERMISSIONS.MANAGE_EMPLOYEES);
     if (!gate.ok) return gate.response;
+    const action = String(body.action || "").trim().toLowerCase();
+    if (action === "reassign_reports") {
+      try {
+        const data = await reassignManagerReports(gate.membership.companyId, gate.membership, body);
+        return res.status(200).json({ ok: true, data });
+      } catch (err) {
+        return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+      }
+    }
     if (!employeeId) return jsonError(res, 400, "Employee id is required");
     try {
       const data = await updateEmployee(gate.membership.companyId, gate.membership, employeeId, body);

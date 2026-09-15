@@ -12,6 +12,7 @@ import { requirePayslipMembershipId } from "../../../shared/payroll/payslipWrite
 import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/documentSendAdapter.js";
 import { loadOutstandingAdjustmentSignals } from "../workforce/adjustmentSignals.js";
 import { throwIfMissingWorkforceColumn } from "../workforce/schemaGuard.js";
+import { isPayrollParticipationActive } from "../../../shared/workforce/employeeLifecycle.js";
 
 const DEFAULT_COMPONENTS = [
   { kind: "earning", code: "ALLOWANCE", name: "Allowance", taxable: true, recurring: true },
@@ -347,11 +348,7 @@ async function loadRecurringComponents(orgId) {
 }
 
 function eligibleProfile(profile) {
-  return (
-    profile.payroll_status === "active" &&
-    profile.employment_status !== "terminated" &&
-    profile.employment_status !== "suspended"
-  );
+  return isPayrollParticipationActive(profile);
 }
 
 function payRunItemInsert(orgId, runId, profile) {

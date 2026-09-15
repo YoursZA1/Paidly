@@ -15,6 +15,25 @@ export const workforceApi = {
       method: "PATCH",
       body: { ...payload, id: requireUuid(id, "employee id") },
     }),
+  activate: (id) =>
+    payrollRequest("/api/company/employees", {
+      method: "PATCH",
+      body: { id: requireUuid(id, "employee id"), action: "activate" },
+    }),
+  deactivate: (id) =>
+    payrollRequest("/api/company/employees", {
+      method: "PATCH",
+      body: { id: requireUuid(id, "employee id"), action: "deactivate" },
+    }),
+  reassignReports: (fromManagerId, toManagerId) =>
+    payrollRequest("/api/company/employees", {
+      method: "PATCH",
+      body: {
+        action: "reassign_reports",
+        from_manager_id: requireUuid(fromManagerId, "from manager id"),
+        manager_membership_id: requireUuid(toManagerId, "manager id"),
+      },
+    }),
 };
 
 export function employeeProfilePath(id) {

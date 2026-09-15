@@ -185,10 +185,19 @@ async function resolveActiveOrgIdForUser(supabaseAdmin, userId) {
 async function fetchMembershipForOrg(supabaseAdmin, userId, orgId) {
   const withJobFunction = await supabaseAdmin
     .from("memberships")
-    .select("id, org_id, role, job_function, pos_register_id, created_at")
+    .select("id, org_id, role, job_function, pos_register_id, employment_status, disabled_at, created_at")
     .eq("user_id", userId)
     .eq("org_id", orgId)
     .maybeSingle();
+
+  if (withJobFunction.error && /employment_status|disabled_at/i.test(withJobFunction.error.message || "")) {
+    return supabaseAdmin
+      .from("memberships")
+      .select("id, org_id, role, job_function, pos_register_id, created_at")
+      .eq("user_id", userId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+  }
 
   if (withJobFunction.error && /pos_register_id/i.test(withJobFunction.error.message || "")) {
     const withoutTill = await supabaseAdmin
@@ -250,6 +259,8 @@ export async function loadCompanyMembership(supabaseAdmin, userId) {
     membershipRole,
     jobFunction: normalizeJobFunction(membership?.job_function),
     posRegisterId: membership?.pos_register_id || null,
+    employment_status: membership?.employment_status || "active",
+    disabled_at: membership?.disabled_at || null,
   };
 }
 

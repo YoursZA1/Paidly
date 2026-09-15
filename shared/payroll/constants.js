@@ -8,6 +8,7 @@ export const PAY_TYPES = Object.freeze(["monthly_salary", "hourly", "daily", "ot
 export const EMPLOYMENT_STATUSES = Object.freeze([
   "active",
   "on_leave",
+  "inactive",
   "suspended",
   "terminated",
 ]);

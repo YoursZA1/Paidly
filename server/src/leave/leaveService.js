@@ -15,6 +15,7 @@ import {
   invalidateLeaveApprovalTokens,
 } from "./leaveApprovalTokens.js";
 import { writeWorkforceAudit } from "../workforce/workforceAudit.js";
+import { isWorkforceEmployeeActive } from "../../../shared/workforce/employeeLifecycle.js";
 
 const DEFAULT_LEAVE_TYPES = [
   { code: "ANNUAL", name: "Annual leave", paid: true, accrual_method: "monthly", days_per_year: 21, requires_approval: true, sort_order: 1 },
@@ -66,7 +67,7 @@ async function insertLeaveRow(table, row) {
 }
 
 const MEMBERSHIP_COLS =
-  "id, org_id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, manager_membership_id, invited_email, created_at";
+  "id, org_id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, manager_membership_id, invited_email, disabled_at, created_at";
 
 async function loadMembership(orgId, { employeeId, userId } = {}) {
   let q = supabaseAdmin.from("memberships").select(MEMBERSHIP_COLS).eq("org_id", orgId);
@@ -292,7 +293,8 @@ async function prepareLeaveApplication(orgId, userId, body) {
   await ensureLeaveTypes(orgId);
   const actorId = requireUuid(userId, "user id");
   const profile = await getOrCreateProfile(orgId, actorId);
-  if (profile.employment_status === "terminated" || profile.employment_status === "suspended") {
+  const membership = await loadMembership(orgId, { userId: actorId });
+  if (!isWorkforceEmployeeActive(membership || profile)) {
     const err = new Error("Inactive employees cannot apply for leave.");
     err.status = 400;
     throw err;
@@ -319,7 +321,7 @@ async function prepareLeaveApplication(orgId, userId, body) {
     .in("status", ["pending", "approved"]);
 
   const check = validateLeaveApplication({
-    employeeActive: profile.employment_status === "active" || profile.employment_status === "on_leave",
+    employeeActive: isWorkforceEmployeeActive(membership || profile),
     leaveTypeActive: leaveType.active,
     startIso: body.start_date,
     endIso: body.end_date,
@@ -578,6 +580,9 @@ export async function listLeaveEmployees(orgId, { managerScopeId = null } = {}) 
       job_title: profile?.job_title || person?.job_title || null,
       manager_membership_id: parseUuid(membership.manager_membership_id),
       employment_status: membership.employment_status || profile?.employment_status || "active",
+      disabled_at: membership.disabled_at || null,
+      role: membership.role || null,
+      job_function: membership.job_function || null,
     });
   }
   rows.sort((a, b) => String(a.full_name || "").localeCompare(String(b.full_name || "")));

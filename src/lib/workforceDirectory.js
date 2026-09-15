@@ -1,7 +1,10 @@
+import {
+  employeeNeedsAttention,
+  workforceLifecycleStatus,
+} from "../../shared/workforce/employeeLifecycle.js";
+
 /**
  * Client-side Workforce directory filters. Server list is already scoped to the caller.
- * @param {Array<{ label?: string, full_name?: string, employee_number?: string, email?: string, job_title?: string, department?: string, employment_status?: string, manager_membership_id?: string, leave_status?: string }>} rows
- * @param {{ search?: string, department?: string, status?: string, managerId?: string, jobTitle?: string, leaveStatus?: string }} filters
  */
 export function filterWorkforceDirectory(rows, filters = {}) {
   const list = Array.isArray(rows) ? rows : [];
@@ -11,12 +14,22 @@ export function filterWorkforceDirectory(rows, filters = {}) {
   const managerId = String(filters.managerId || "").trim();
   const jobTitle = String(filters.jobTitle || "").trim();
   const leaveStatus = String(filters.leaveStatus || "").trim();
+  const attention = Boolean(filters.attention);
   return list.filter((row) => {
     if (department && row.department !== department) return false;
-    if (status && row.employment_status !== status) return false;
-    if (managerId && row.manager_membership_id !== managerId) return false;
+    if (status === "active" || status === "inactive") {
+      if (workforceLifecycleStatus(row) !== status) return false;
+    } else if (status && row.employment_status !== status) {
+      return false;
+    }
+    if (managerId === "__none__" && row.manager_membership_id) return false;
+    if (managerId === "__inactive__" && row.manager_assignment !== "inactive") return false;
+    if (managerId && managerId !== "__none__" && managerId !== "__inactive__" && row.manager_membership_id !== managerId) {
+      return false;
+    }
     if (jobTitle && row.job_title !== jobTitle) return false;
     if (leaveStatus && (row.leave_status || "none") !== leaveStatus) return false;
+    if (attention && !employeeNeedsAttention(row)) return false;
     if (!q) return true;
     const hay = [row.label, row.full_name, row.employee_number, row.email, row.job_title]
       .filter(Boolean)
