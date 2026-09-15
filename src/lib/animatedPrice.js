@@ -20,6 +20,20 @@ export function countPriceFrame(from, to, t) {
   return Math.round(interpolateEaseOut(from, to, t));
 }
 
+/**
+ * Where a count-up should start. If we have never shown a valid amount
+ * (placeholder "—" / initial 0), snap to the new target instead of
+ * interpolating from a stale 0.
+ */
+export function animationStartFrom(displayed, target, { hadValidDisplay } = {}) {
+  const to = Number(target);
+  if (!Number.isFinite(to)) return displayed;
+  if (hadValidDisplay === false) return to;
+  const from = Number(displayed);
+  if (!Number.isFinite(from)) return to;
+  return from;
+}
+
 export function marketingZarNumericPart(amount, opts = {}) {
   const label = formatMarketingZar(amount, opts);
   if (!label.startsWith("R")) return label;

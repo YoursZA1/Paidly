@@ -35,6 +35,7 @@ import {
 } from "@/components/layout/AppQuickSearch";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { getSessionAccessToken, hasSessionAccessToken } from "@/lib/authUserId";
 import { schedulePrimaryNavPrefetch } from "@/lib/paidlyRoutePrefetch";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import Logo from "@/components/shared/Logo";
@@ -679,6 +680,7 @@ export default function Layout({ children, currentPageName }) {
   const prefersReducedMotion = useReducedMotion();
   const isCompactLayout = useIsCompactLayout();
   const { user, session, logout, refreshUser } = useAuth();
+  const accessToken = getSessionAccessToken(session);
   const userRef = useRef(user);
   userRef.current = user;
   const { profile: layoutProfile } = useUserProfileQuery();
@@ -827,6 +829,7 @@ export default function Layout({ children, currentPageName }) {
   // Fetch shared app data when the auth user is known. Admins need this too — Invoices, Clients, Cash Flow read useAppStore.
   useEffect(() => {
     if (!user?.id) return;
+    if (!hasSessionAccessToken(session)) return;
     if (isAdminV2Route || isPosTerminal) return;
     // Company members use MemberDashboardService — skip heavy invoice/client bootstrap.
     if (companyCtx?.companyId && !showBusinessDashboard) return;
@@ -837,12 +840,13 @@ export default function Layout({ children, currentPageName }) {
     if (now - lastFetchAllRequestAtRef.current < FETCH_ALL_COOLDOWN_MS) return;
     lastFetchAllRequestAtRef.current = now;
     // Omit profile display fields in deps (full_name, company_name) to avoid refetch loops on every Settings save.
-    fetchAll(user, { accessToken: session?.accessToken ?? null });
-  }, [user?.id, user?.role, fetchAll, isAdminV2Route, isPosTerminal, lastFetchedAt, userProfile, session?.accessToken, companyCtx?.companyId, showBusinessDashboard]);
+    fetchAll(user, { accessToken });
+  }, [user?.id, user?.role, fetchAll, isAdminV2Route, isPosTerminal, lastFetchedAt, userProfile, accessToken, companyCtx?.companyId, showBusinessDashboard]);
 
   // Auto refetch shared Zustand data when the user returns to the tab (if cache is stale — same window as React Query).
   useEffect(() => {
     if (!user?.id || isAdminV2Route || isPosTerminal) return undefined;
+    if (!hasSessionAccessToken(session)) return undefined;
     if (companyCtx?.companyId && !showBusinessDashboard) return undefined;
     let debounceId = null;
     const handleVisibility = () => {
@@ -856,7 +860,7 @@ export default function Layout({ children, currentPageName }) {
         const now = Date.now();
         if (now - lastFetchAllRequestAtRef.current < FETCH_ALL_COOLDOWN_MS) return;
         lastFetchAllRequestAtRef.current = now;
-        fetchAll(userRef.current, { accessToken: session?.accessToken ?? null });
+        fetchAll(userRef.current, { accessToken });
       }, 400);
     };
     document.addEventListener("visibilitychange", handleVisibility);
@@ -864,7 +868,7 @@ export default function Layout({ children, currentPageName }) {
       if (debounceId) clearTimeout(debounceId);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [user?.id, fetchAll, isAdminV2Route, isPosTerminal, lastFetchedAt, session?.accessToken, companyCtx?.companyId, showBusinessDashboard]);
+  }, [user?.id, fetchAll, isAdminV2Route, isPosTerminal, lastFetchedAt, accessToken, companyCtx?.companyId, showBusinessDashboard]);
 
   // Scroll main content area to top when route changes (content lives in overflow-auto, not window).
   // Skip standalone shells: they use window scroll; parent effects run after children and would undo

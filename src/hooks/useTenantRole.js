@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { hasSessionAccessToken } from "@/lib/authUserId";
 import { loadTenantContext, clearTenantContextCache } from "@/services/TenantRoleService";
 
 /** SaaS tenant role from user_roles + get_my_tenant_context (post-auth, read-only). */
 export default function useTenantRole() {
-  const { authUserId } = useAuth();
+  const { authUserId, session, authReady } = useAuth();
   const userId = authUserId || null;
+  const tokenReady = authReady !== false && hasSessionAccessToken(session);
   const [ctx, setCtx] = useState(null);
   const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async ({ invalidateCache = false } = {}) => {
-    if (!userId) {
+    if (!userId || !tokenReady) {
       setCtx(null);
       setLoading(false);
       setError(null);
@@ -29,20 +31,20 @@ export default function useTenantRole() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, tokenReady]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !tokenReady) {
       clearTenantContextCache();
       setCtx(null);
       setLoading(false);
       setError(null);
     }
-  }, [userId]);
+  }, [userId, tokenReady]);
 
   return useMemo(
     () => ({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  animationStartFrom,
   countPriceFrame,
   easeOutCubic,
   interpolateEaseOut,
@@ -40,5 +41,12 @@ describe("pricing count animation", () => {
     expect(marketingZarNumericPart(1500, { grouped: true })).toBe("1,500");
     expect(interpolateEaseOut(50, 500, 0)).toBe(50);
     expect(interpolateEaseOut(50, 500, 1)).toBe(500);
+  });
+
+  it("snaps to the target when the first valid amount arrives instead of counting from 0", () => {
+    expect(animationStartFrom(0, 50, { hadValidDisplay: false })).toBe(50);
+    expect(animationStartFrom(0, 50, { hadValidDisplay: true })).toBe(0);
+    expect(animationStartFrom(50, 40, { hadValidDisplay: true })).toBe(50);
+    expect(animationStartFrom(NaN, 150, { hadValidDisplay: true })).toBe(150);
   });
 });

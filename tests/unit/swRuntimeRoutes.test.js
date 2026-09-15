@@ -35,6 +35,31 @@ describe("service worker runtime routes", () => {
     ).toBe(false);
   });
 
+  it("matches Workbox {url, request} using the service worker origin, not sameOrigin", () => {
+    const previousSelf = globalThis.self;
+    const previousLocation = globalThis.location;
+    const runtime = { location: { origin: "https://app.paidly.co.za" } };
+    globalThis.self = runtime;
+    globalThis.location = runtime.location;
+    try {
+      expect(
+        isPaidlyApiRequest({
+          url: new URL("https://app.paidly.co.za/api/company/employees"),
+          request: {},
+        })
+      ).toBe(true);
+      expect(
+        isPaidlyApiRequest({
+          url: new URL("https://vercel.com/api/www/avatar?u=yoursza1&s=64"),
+          request: {},
+        })
+      ).toBe(false);
+    } finally {
+      globalThis.self = previousSelf;
+      globalThis.location = previousLocation;
+    }
+  });
+
   it("matches Supabase and Sentry by host, not by path", () => {
     expect(isSupabaseRequest({ url: new URL("https://xyz.supabase.co/rest/v1/payslips") })).toBe(true);
     expect(isSupabaseRequest({ url: new URL("https://evil.example/rest/v1/payslips") })).toBe(false);

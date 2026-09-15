@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { hasSessionAccessToken } from "@/lib/authUserId";
 import {
   loadOnboardingContext,
   clearOnboardingContextCache,
@@ -10,14 +11,15 @@ import {
  * Resolves post-signup onboarding form from Supabase user_company_roles (RPC).
  */
 export default function useOnboardingRole() {
-  const { authUserId } = useAuth();
+  const { authUserId, session, authReady } = useAuth();
   const userId = authUserId || null;
+  const tokenReady = authReady !== false && hasSessionAccessToken(session);
   const [ctx, setCtx] = useState(null);
   const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
-    if (!userId) {
+    if (!userId || !tokenReady) {
       setCtx(null);
       setLoading(false);
       return;
@@ -34,17 +36,17 @@ export default function useOnboardingRole() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, tokenReady]);
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !tokenReady) {
       clearOnboardingContextCache();
       setCtx(null);
       setLoading(false);
       return;
     }
     void refresh();
-  }, [refresh, userId]);
+  }, [refresh, userId, tokenReady]);
 
   return useMemo(
     () => ({

@@ -17,3 +17,15 @@ export function assertAuthUserId(user, message = "Not authenticated") {
   }
   return id;
 }
+
+/** JWT string from AuthContext (`accessToken`) or raw GoTrue (`access_token`). */
+export function getSessionAccessToken(session) {
+  if (!session || typeof session !== "object") return null;
+  const token = String(session.accessToken || session.access_token || "").trim();
+  return token || null;
+}
+
+/** True when AuthContext or GoTrue session can authorize PostgREST as `authenticated`. */
+export function hasSessionAccessToken(session) {
+  return Boolean(getSessionAccessToken(session));
+}

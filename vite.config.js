@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { isPaidlyApiRequest, isSentryRequest, isSupabaseRequest } from './shared/pwa/swRuntimeRoutes.js'
+import { isPaidlyApiRequest } from './shared/pwa/swRuntimeRoutes.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const sharedDir = path.resolve(__dirname, 'shared')
@@ -56,15 +56,7 @@ export default defineConfig(async ({ mode }) => {
             maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
             runtimeCaching: [
               {
-                urlPattern: isSupabaseRequest,
-                handler: 'NetworkOnly',
-              },
-              {
                 urlPattern: isPaidlyApiRequest,
-                handler: 'NetworkOnly',
-              },
-              {
-                urlPattern: isSentryRequest,
                 handler: 'NetworkOnly',
               },
             ],

@@ -3,6 +3,7 @@ import { useReducedMotion } from "framer-motion";
 import { formatMarketingZar } from "@shared/planMarketing.js";
 import {
   PRICE_COUNT_DURATION_MS,
+  animationStartFrom,
   countPriceFrame,
   marketingZarNumericPart,
 } from "@/lib/animatedPrice.js";
@@ -13,10 +14,17 @@ export default function AnimatedMarketingPrice({ amount, grouped = false }) {
   const valid = Number.isFinite(target);
   const [frame, setFrame] = useState(valid ? target : 0);
   const displayedRef = useRef(valid ? target : 0);
+  const hadValidDisplayRef = useRef(valid);
 
   useEffect(() => {
-    if (!valid) return undefined;
-    const from = displayedRef.current;
+    if (!valid) {
+      hadValidDisplayRef.current = false;
+      return undefined;
+    }
+    const from = animationStartFrom(displayedRef.current, target, {
+      hadValidDisplay: hadValidDisplayRef.current,
+    });
+    hadValidDisplayRef.current = true;
     if (prefersReducedMotion || from === target) {
       displayedRef.current = target;
       setFrame(target);
@@ -39,11 +47,12 @@ export default function AnimatedMarketingPrice({ amount, grouped = false }) {
 
   if (!valid) return "—";
 
+  const shown = hadValidDisplayRef.current ? frame : target;
   return (
     <span aria-label={formatMarketingZar(target, { grouped })}>
       R
       <span className="tabular-nums" aria-hidden="true">
-        {marketingZarNumericPart(frame, { grouped })}
+        {marketingZarNumericPart(shown, { grouped })}
       </span>
     </span>
   );

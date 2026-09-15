@@ -159,6 +159,8 @@ async function signLogoUrl(path) {
   const { bucket, cleaned } = resolveLogoSource(path);
   if (!cleaned || cleaned.startsWith("blob:") || cleaned.startsWith("data:")) return FALLBACK_LOGO;
   if (!isValidLogoStorageObjectKey(cleaned)) return FALLBACK_LOGO;
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData?.session?.access_token) return FALLBACK_LOGO;
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(cleaned, 60 * 60);
   if (error || !data?.signedUrl) return FALLBACK_LOGO;
   return data.signedUrl;

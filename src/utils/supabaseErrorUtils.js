@@ -68,6 +68,20 @@ export function isSupabaseMissingRelationError(error) {
 }
 
 /**
+ * PostgREST 401/403 / Postgres 42501 — missing JWT role grants or RLS helper EXECUTE.
+ * Distinct from empty RLS results (HTTP 200 + []).
+ */
+export function isPostgrestForbiddenError(error) {
+  if (error == null || typeof error !== "object") return false;
+  const status = Number(error.status ?? error.statusCode ?? NaN);
+  if (status === 401 || status === 403) return true;
+  const code = String(error.code ?? "").toUpperCase();
+  if (code === "42501" || code === "PGRST301") return true;
+  const msg = String(error.message ?? error.details ?? "").toLowerCase();
+  return /permission denied for (function|table|relation)|not authorized|jwt expired|invalid jwt/i.test(msg);
+}
+
+/**
  * PostgREST: column not in schema cache (hub migration columns not applied yet).
  * @param {unknown} error
  */

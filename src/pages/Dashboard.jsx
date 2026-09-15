@@ -23,6 +23,7 @@ import { createPageUrl } from "@/utils";
 import { getUserCurrency } from "@/api/currencyProfiles";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { useAuth } from "@/contexts/AuthContext";
+import { hasSessionAccessToken } from "@/lib/authUserId";
 import { useToast } from "@/components/ui/use-toast";
 import { userService } from "@/services/ExcelUserService";
 import { normalizePaidPackageKey } from "@/lib/subscriptionPlan";
@@ -112,6 +113,7 @@ export default function Dashboard() {
 function DashboardMain() {
   const { user: authUser, session } = useAuth();
   const canShowPosEntry = useCanShowPosNav();
+  const { companyId, loading: companyCtxLoading, showBusinessDashboard } = useCompanyContext();
   const { loading: appLoading, setLoading: setAppLoading } = useAppContext();
   const {
     profile: profileFromQuery,
@@ -248,9 +250,16 @@ function DashboardMain() {
     }))
   );
 
-  const dashboardInvoicesQuery = useDashboardInvoicesQuery(authUser?.id);
-  const dashboardPayslipsQuery = useDashboardPayslipsQuery(authUser?.id);
-  const revenueSourcesQuery = useDashboardRevenueSourcesQuery(authUser?.id, !isAdmin);
+  const tokenReady = hasSessionAccessToken(session);
+  const canQueryBusinessDashboard =
+    tokenReady && !companyCtxLoading && (isAdmin || Boolean(companyId && showBusinessDashboard));
+
+  const dashboardInvoicesQuery = useDashboardInvoicesQuery(authUser?.id, canQueryBusinessDashboard);
+  const dashboardPayslipsQuery = useDashboardPayslipsQuery(authUser?.id, canQueryBusinessDashboard);
+  const revenueSourcesQuery = useDashboardRevenueSourcesQuery(
+    authUser?.id,
+    canQueryBusinessDashboard && !isAdmin
+  );
   const currentSubscriptionQuery = useCurrentSubscriptionQuery({ enabled: !isAdmin });
   const invoices = isAdmin ? invoicesState : storeInvoices;
   const resolvedInvoices = isAdmin

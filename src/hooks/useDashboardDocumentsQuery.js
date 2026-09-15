@@ -7,11 +7,11 @@ import {
 } from "@/services/DashboardDataService";
 import { PAIDLY_STALE_MS } from "@/lib/paidlyClientCachePolicy";
 
-export function useDashboardInvoicesQuery(userId) {
+export function useDashboardInvoicesQuery(userId, enabled = true) {
   return useQuery({
     queryKey: dashboardInvoicesQueryKey(userId),
     queryFn: () => fetchDashboardInvoicesSummary(),
-    enabled: Boolean(userId),
+    enabled: Boolean(userId) && enabled,
     staleTime: PAIDLY_STALE_MS.dashboard,
     gcTime: 15 * 60 * 1000,
     /** Global defaults already disable retries; keep explicit so PostgREST 400 never multiplies requests. */
@@ -21,11 +21,11 @@ export function useDashboardInvoicesQuery(userId) {
   });
 }
 
-export function useDashboardPayslipsQuery(userId) {
+export function useDashboardPayslipsQuery(userId, enabled = true) {
   return useQuery({
     queryKey: dashboardPayslipsQueryKey(userId),
     queryFn: () => fetchDashboardPayslipsSummary(),
-    enabled: Boolean(userId),
+    enabled: Boolean(userId) && enabled,
     staleTime: PAIDLY_STALE_MS.dashboard,
     gcTime: 15 * 60 * 1000,
     retry: false,

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { hasSessionAccessToken } from "@/lib/authUserId";
 import {
   hasCompanyPermission,
   canViewEmployee,
@@ -54,8 +55,9 @@ function companyContextValue({ loading, error, ctx, hasPermission, refresh }) {
 }
 
 export function CompanyContextProvider({ children, forcedContext = null }) {
-  const { user, authUserId } = useAuth() || {};
+  const { user, authUserId, session, authReady } = useAuth() || {};
   const userId = forcedContext?.userId || authUserId || user?.id || null;
+  const tokenReady = Boolean(forcedContext) || (authReady !== false && hasSessionAccessToken(session));
   const [ctx, setCtx] = useState(forcedContext || null);
   const [loading, setLoading] = useState(Boolean(userId) && !forcedContext);
   const [error, setError] = useState(null);
@@ -67,7 +69,7 @@ export function CompanyContextProvider({ children, forcedContext = null }) {
       setError(null);
       return;
     }
-    if (!userId) {
+    if (!userId || !tokenReady) {
       setCtx(null);
       setLoading(false);
       setError(null);
@@ -85,7 +87,7 @@ export function CompanyContextProvider({ children, forcedContext = null }) {
     } finally {
       setLoading(false);
     }
-  }, [userId, forcedContext]);
+  }, [userId, forcedContext, tokenReady]);
 
   useEffect(() => {
     void refresh();
@@ -93,13 +95,13 @@ export function CompanyContextProvider({ children, forcedContext = null }) {
 
   useEffect(() => {
     if (forcedContext) return;
-    if (!userId) {
+    if (!userId || !tokenReady) {
       clearCompanyAccessContextCache();
       setCtx(null);
       setLoading(false);
       setError(null);
     }
-  }, [userId, forcedContext]);
+  }, [userId, forcedContext, tokenReady]);
 
   const hasPermission = useCallback(
     (permission) => hasCompanyPermission(ctx, permission),

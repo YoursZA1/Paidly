@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { clearOrgBootstrapInflight } from "@/lib/orgBootstrapApi";
+import { isPostgrestForbiddenError } from "@/utils/supabaseErrorUtils";
 
 /** Shared org resolution cache (EntityManager + AuthManager.logout). */
 export const orgIdCache = {};
@@ -32,6 +33,7 @@ export async function resolveActiveOrgIdForUser(userId) {
   if (ownedErr && !ownedErr.message?.includes("0 rows")) {
     console.warn("Error resolving owned organization:", ownedErr);
   }
+  if (isPostgrestForbiddenError(ownedErr)) return null;
   if (ownedOrg?.id) return ownedOrg.id;
 
   const { data: invitedMembership, error: membershipCheckError } = await supabase
