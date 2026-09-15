@@ -67,6 +67,7 @@ const QuoteTemplates = lazy(() => import("./QuoteTemplates"));
 const Vendors = lazy(() => import("./Vendors"));
 const PurchaseOrders = lazy(() => import("./PurchaseOrders"));
 const PosAccess = lazy(() => import("./PosAccess"));
+const PaidlyPay = lazy(() => import("./PaidlyPay"));
 const Budgets = lazy(() => import("./Budgets"));
 const Accounting = lazy(() => import("./Accounting"));
 const AdminV2Dashboard = lazy(() => import("./AdminV2Dashboard"));
@@ -108,6 +109,7 @@ import RequireCompanyPermission, { RequireCompanyPermissionRedirect, RequireEmpl
 import RequireBusinessOwner from "@/components/auth/RequireBusinessOwner";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { isPosAccessPath } from "@shared/posStaffInvite.js";
+import { isPosTerminalPath } from "@/lib/posNavAccess";
 import PosErrorBoundary from "@/components/pos/PosErrorBoundary";
 import { PosLoading } from "@/components/pos/PosShellStates";
 import AuthProtectedRouteInvariant from "@/components/auth/AuthProtectedRouteInvariant";
@@ -120,7 +122,7 @@ import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 function RouteFallback() {
     const { pathname } = useLocation();
-    if (isPosAccessPath(pathname)) return <PosLoading />;
+    if (isPosAccessPath(pathname) || isPosTerminalPath(pathname)) return <PosLoading />;
     return (
         <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading page">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -233,6 +235,7 @@ const MAIN_ROUTES = [
     // that redirect matches /pos as well and never commits UI (blank till).
     { path: "/pos/till/:tillId", element: <PosAccessRoute /> },
     { path: "/pos", element: <PosAccessRoute /> },
+    { path: "/pay", element: <PaidlyPay /> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },
     { path: "/about", element: <RequireAuth><About /></RequireAuth> },
     { path: "/PrivacyPolicy", element: <RequireAuth><PrivacyPolicy /></RequireAuth> },
@@ -591,7 +594,7 @@ function PagesContent() {
     const location = useLocation();
     const { loading, user, session, profileReady } = useAuth();
     const authUserId = getAuthUserId(user);
-    const posTillPath = isPosAccessPath(location.pathname);
+    const posTillPath = isPosAccessPath(location.pathname) || isPosTerminalPath(location.pathname);
     const needsAppShell = !shouldBypassAppLayout(location.pathname) && !posTillPath;
     const sessionUserId = session?.user?.id ?? null;
     const waitForProfile = shouldWaitForProfileRestore(sessionUserId, user, profileReady);

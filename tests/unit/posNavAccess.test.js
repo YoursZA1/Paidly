@@ -15,6 +15,7 @@ import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
 describe("canShowPosNav", () => {
   it("treats POS as a dedicated till page name", () => {
     expect(isPosTerminalPage("POS")).toBe(true);
+    expect(isPosTerminalPage("Pay")).toBe(true);
     expect(isPosTerminalPage("Dashboard")).toBe(false);
   });
 

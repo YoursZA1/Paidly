@@ -8,6 +8,8 @@ describe("isPathAllowedWithoutSession", () => {
     expect(isPathAllowedWithoutSession("/pos/till/11111111-1111-4111-8111-111111111111")).toBe(true);
     expect(isPathAllowedWithoutSession("/pos/join")).toBe(true);
     expect(isPathAllowedWithoutSession("/pos/invite/abc")).toBe(true);
+    expect(isPathAllowedWithoutSession("/pay")).toBe(true);
+    expect(isPathAllowedWithoutSession("/pay/")).toBe(true);
   });
 
   it("lets guests open the leave approval magic-link page", () => {

@@ -67,6 +67,7 @@ Keep these in the **host environment**, `server/.env` (gitignored), or Supabase 
 | `SQUARE_APPLICATION_ID`, `SQUARE_APPLICATION_SECRET`, `SQUARE_PERSONAL_ACCESS_TOKEN`, `SQUARE_WEBHOOK_SIGNATURE_KEY` | POS OAuth and webhooks. See [POS_INTEGRATIONS.md](POS_INTEGRATIONS.md). |
 | `POS_API_KEY`, `POS_API_ORG_ID`, `POS_API_COMPANY_ID`, `POS_WEBHOOK_SECRET` | Paidly Pay terminal API. Server-only. Never `VITE_` / `NEXT_PUBLIC_`. See [paidly-pay-api.md](paidly-pay-api.md). |
 | `PAIDLY_PAY_ORIGINS` | Comma-separated CORS allowlist for Paidly Pay. Never `*`. |
+| `PAIDLY_PAY_APP_URL` | Optional public origin of the Paidly Pay app (e.g. `https://pay.example`). Not a secret. If unset, POS opens same-origin `/pay?payment_intent_id=`. Never put API keys on this URL. |
 | `PAYMENT_PROVIDER_MODE` | `live` (production default) or `mock`. Mock in production also needs `ALLOW_MOCK_PAYMENTS=1`. |
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | Source-map upload at **build** time. Never prefix with `VITE_`. |
 | `SENTRY_DSN` | Server-side Sentry. Optional; distinct from the public `VITE_SENTRY_DSN`. |

@@ -32,6 +32,7 @@ MVP bootstrap (server env only — never `VITE_` / `NEXT_PUBLIC_`):
 | `POS_API_COMPANY_ID` | Optional brand (`companies.id`). If set, the key cannot read other brands |
 | `POS_WEBHOOK_SECRET` | HMAC secret for `X-POS-Signature` |
 | `PAIDLY_PAY_ORIGINS` | Comma-separated allowed CORS origins (never `*`) |
+| `PAIDLY_PAY_APP_URL` | Optional public origin of the Pay app. If unset, POS opens same-origin `/pay?payment_intent_id=` |
 | `PAYMENT_PROVIDER_MODE` | `live` (default in production) or `mock` |
 | `ALLOW_MOCK_PAYMENTS` | Must be `1` to use mock in `NODE_ENV=production` |
 
@@ -114,7 +115,12 @@ Methods: `tap_to_pay`, `qr`, `card`, `cash`, `eft`, `payment_link`.
   "status": "pending",
   "payment_method": "tap_to_pay",
   "reference": "PAY-20260915-A1B2C3",
-  "next_action": { "type": "tap_to_pay", "display": "TAP CARD" }
+  "next_action": {
+    "type": "tap_to_pay",
+    "display": "TAP CARD",
+    "payment_intent_id": "intent-uuid",
+    "open_url": "https://www.paidly.co.za/pay?payment_intent_id=intent-uuid"
+  }
 }
 ```
 
@@ -127,7 +133,15 @@ Current status. Poll this after presenting TAP CARD / QR PAY.
 
 ### `POST /api/paidly/payment-intents/:id/cancel`
 
-Cancels an in-flight intent. Settled (`paid` / `refunded`) intents are not cancellable from the terminal.
+Cancels an in-flight intent. Settled (`paid` / `refunded`) intents are not cancellable from the terminal. POS remains unpaid.
+
+### `POST /api/paidly/payment-intents/:id/simulate`
+
+Mock only (`PAYMENT_PROVIDER_MODE=mock`). Body: `{ "outcome": "succeeded" | "failed" | "cancelled" | "processing" | "expired" }`. Amount/status cannot be sent. `succeeded` is the only outcome that settles the POS sale. Idempotent per intent + outcome.
+
+### `POST /api/payment-intents/:id`
+
+Session-auth twin for the till / `/pay` screen (Hobby: one extra segment). `{ "action": "cancel" }` or `{ "action": "mock", "outcome": "succeeded" }`. Same rules: never trust client amount/status.
 
 ### `POST /api/paidly/payment-intents/:id/refund`
 
@@ -210,13 +224,16 @@ Set `PAYMENT_PROVIDER_MODE=mock` in development. The terminal still cannot mark 
 | `PAYMENT_NOT_CANCELLABLE` | Already settled |
 | `PAYMENT_NOT_REFUNDABLE` | Intent is not `paid` |
 | `REFUND_AMOUNT_INVALID` | Amount ≤ 0 or greater than paid |
-| `DEVICE_REVOKED` | Device cannot charge |
+| `MOCK_NOT_ENABLED` | Simulate/mock called while not in mock mode |
+| `INVALID_MOCK_OUTCOME` | Unknown mock outcome |
 
 ## Flow
 
-1. Merchant checks out on Paidly POS (card / tap).
-2. POS creates a `payment_intents` row (`source_kind=pos`, amount from catalog). Sale is **not** written yet.
-3. Paidly Pay lists the open intent and shows TAP CARD / QR PAY.
-4. Provider (or mock webhook) posts a signed `payment.succeeded`.
-5. Intent becomes `paid` → settlement writes `pos_sales_events` → inventory and receipt.
-6. A second webhook with the same `provider_event_id` does nothing.
+1. Merchant checks out on Paidly POS (Card Payment).
+2. POS creates or **reuses** an active `payment_intents` row (`source_kind=pos`, amount from catalog). Sale is **not** written yet.
+3. POS opens Paidly Pay with `payment_intent_id` (`next_action.open_url`, typically `/pay?payment_intent_id=`).
+4. Paidly Pay displays the **server** amount and TAP CARD / QR PAY.
+5. Provider (or mock simulate / signed webhook) posts a verified `payment.succeeded`.
+6. Intent becomes `paid` → settlement writes `pos_sales_events` → inventory and receipt. POS polls the intent and shows PAID.
+7. `pending` / `processing` / `failed` / `cancelled` / `expired` never mark the sale paid.
+8. A second webhook with the same `provider_event_id` does nothing.

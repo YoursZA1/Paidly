@@ -17,11 +17,15 @@ import {
   isMockPaymentsEnabled,
   isOpenIntentStatus,
   intentStatusFromWebhookEvent,
+  mockOutcomeToIntentStatus,
+  mockOutcomeToWebhookEvent,
   normalizePaidlyPayMethod,
   paidlyPayEnvironment,
+  paidlyPayOpenUrl,
   paymentReferenceForIntent,
   providerForPaidlyPayMethod,
   publicStatusFromIntent,
+  resolvePaidlyPayOrigin,
   tillMethodForPaidlyPayMethod,
   transactionReferenceForIntent,
 } from "../../../shared/payments/paidlyPayContract.js";
@@ -103,17 +107,38 @@ function publicTransaction(intent, sale = null) {
   };
 }
 
-function publicPaymentIntent(intent, sale = null) {
+function withOpenUrl(nextAction, intent, req, method) {
+  const action = nextAction && typeof nextAction === "object" ? { ...nextAction } : {};
+  if (!intent?.id) return action;
+  action.payment_intent_id = intent.id;
+  if (!action.open_url) {
+    const origin = resolvePaidlyPayOrigin(process.env, req);
+    action.open_url = paidlyPayOpenUrl(intent.id, {
+      origin,
+      method: method === "qr" || action.type === "qr" ? "qr" : "tap_to_pay",
+    });
+  }
+  if ((method === "qr" || action.type === "qr") && !action.qr_payload) {
+    action.qr_payload = action.open_url;
+  }
+  return action;
+}
+
+function publicPaymentIntent(intent, sale = null, req = null) {
   const metadata = intent?.metadata && typeof intent.metadata === "object" ? intent.metadata : {};
+  const checkout = checkoutMeta(intent);
   return {
     payment_intent_id: intent.id,
     pos_transaction_id: intent.id,
+    company_id: intent.company_id || checkout.company_id || null,
     amount: roundMoney(intent.amount),
     currency: intent.currency || "ZAR",
     status: publicStatusFromIntent(intent, sale),
     payment_method: metadata.paidly_pay_method || metadata.payment_method || null,
     reference: paymentReferenceForIntent(intent),
-    next_action: metadata.next_action || null,
+    created_at: intent.created_at || null,
+    updated_at: intent.updated_at || null,
+    next_action: withOpenUrl(metadata.next_action, intent, req, metadata.paidly_pay_method),
   };
 }
 
@@ -354,12 +379,17 @@ async function handleCreatePaymentIntent(req, res, requestId, auth) {
   const provider = providerForPaidlyPayMethod(method);
   const nextAction =
     provider === "card_terminal"
-      ? {
-          type: method === "qr" ? "qr" : "tap_to_pay",
-          display: method === "qr" ? "QR PAY" : "TAP CARD",
-          mock: isMockPaymentsEnabled(),
-        }
-      : intent.metadata?.next_action || null;
+      ? withOpenUrl(
+          {
+            type: method === "qr" ? "qr" : "tap_to_pay",
+            display: method === "qr" ? "QR PAY" : "TAP CARD",
+            mock: isMockPaymentsEnabled(),
+          },
+          intent,
+          req,
+          method
+        )
+      : withOpenUrl(intent.metadata?.next_action || null, intent, req, method);
 
   const metadata = {
     ...(intent.metadata && typeof intent.metadata === "object" ? intent.metadata : {}),
@@ -383,7 +413,7 @@ async function handleCreatePaymentIntent(req, res, requestId, auth) {
     .single();
   if (error) throw error;
 
-  return sendPaidlyJson(res, 200, publicPaymentIntent(updated), requestId);
+  return sendPaidlyJson(res, 200, publicPaymentIntent(updated, null, req), requestId);
 }
 
 async function handleGetPaymentIntent(req, res, requestId, auth, id) {
@@ -397,7 +427,7 @@ async function handleGetPaymentIntent(req, res, requestId, auth, id) {
     return sendPaidlyError(res, 404, PAIDLY_PAY_ERROR.PAYMENT_INTENT_NOT_FOUND, "Payment intent not found", requestId);
   }
   const sale = await loadSaleForIntent(intent);
-  return sendPaidlyJson(res, 200, publicPaymentIntent(intent, sale), requestId);
+  return sendPaidlyJson(res, 200, publicPaymentIntent(intent, sale, req), requestId);
 }
 
 async function handleCancelPaymentIntent(req, res, requestId, auth, id) {
@@ -422,7 +452,95 @@ async function handleCancelPaymentIntent(req, res, requestId, auth, id) {
   const applied = await applyVerifiedIntentStatus(intent, PAYMENT_INTENT_STATUS.cancelled, {
     source: "paidly_pay_cancel",
   });
-  return sendPaidlyJson(res, 200, publicPaymentIntent(applied.intent), requestId);
+  return sendPaidlyJson(res, 200, publicPaymentIntent(applied.intent, null, req), requestId);
+}
+
+async function handleSimulatePaymentIntent(req, res, requestId, auth, id) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return sendPaidlyError(res, 405, PAIDLY_PAY_ERROR.METHOD_NOT_ALLOWED, "Method not allowed", requestId);
+  }
+  if (!isMockPaymentsEnabled()) {
+    return sendPaidlyError(
+      res,
+      403,
+      PAIDLY_PAY_ERROR.MOCK_NOT_ENABLED,
+      "Mock payments are not enabled on this environment.",
+      requestId
+    );
+  }
+  if (!(await enforcePaidlyPayRateLimit(res, "payments_mutate", req, requestId))) return;
+  const intent = await loadOwnedIntent(auth, id);
+  if (!intent) {
+    return sendPaidlyError(res, 404, PAIDLY_PAY_ERROR.PAYMENT_INTENT_NOT_FOUND, "Payment intent not found", requestId);
+  }
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  if (body.amount != null || body.status != null) {
+    return sendPaidlyError(
+      res,
+      422,
+      PAIDLY_PAY_ERROR.AMOUNT_OVERRIDE_FORBIDDEN,
+      "Amount and status are taken from the payment intent. The client cannot override them.",
+      requestId
+    );
+  }
+  const nextStatus = mockOutcomeToIntentStatus(body.outcome);
+  if (!nextStatus) {
+    return sendPaidlyError(
+      res,
+      422,
+      PAIDLY_PAY_ERROR.INVALID_MOCK_OUTCOME,
+      "outcome must be succeeded, failed, cancelled, processing, or expired",
+      requestId
+    );
+  }
+  const eventType = mockOutcomeToWebhookEvent(body.outcome) || `payment.${nextStatus}`;
+  const eventKey = `mock:${intent.id}:${nextStatus}`;
+  const existingEvent = await findProviderEvent(intent.org_id, eventKey);
+  if (existingEvent) {
+    return sendPaidlyJson(
+      res,
+      200,
+      { ok: true, duplicate: true, payment_intent: publicPaymentIntent(intent, null, req) },
+      requestId
+    );
+  }
+  const applied = await applyVerifiedProviderEvent({
+    intentId: intent.id,
+    nextStatus,
+    externalId: eventKey,
+    metadata: {
+      mock: true,
+      webhook_verified: true,
+      terminal_confirmed: nextStatus === PAYMENT_INTENT_STATUS.paid,
+      paidly_pay_event: eventType,
+      source: "paidly_pay_simulate",
+    },
+  });
+  await rememberProviderEvent({
+    orgId: intent.org_id,
+    providerEventId: eventKey,
+    eventType,
+    paymentIntentId: intent.id,
+    payload: { event: eventType, payment_intent_id: intent.id, mock: true },
+  });
+  return sendPaidlyJson(
+    res,
+    200,
+    {
+      ok: true,
+      duplicate: Boolean(applied.duplicate),
+      payment_intent: publicPaymentIntent(applied.intent, null, req),
+      settlement: applied.settlement
+        ? {
+            settled: applied.settlement.settled,
+            duplicate: applied.settlement.duplicate,
+            sale_id: applied.settlement.saleId || null,
+          }
+        : null,
+    },
+    requestId
+  );
 }
 
 async function handleRefundPaymentIntent(req, res, requestId, auth, id) {
@@ -865,6 +983,11 @@ export async function handlePaidlyPayApi(req, res) {
     }
     if (head === "payment-intents" && parts[2] === "cancel") {
       const result = await handleCancelPaymentIntent(req, res, requestId, auth, parts[1]);
+      statusForLog = res.statusCode;
+      return result;
+    }
+    if (head === "payment-intents" && parts[2] === "simulate") {
+      const result = await handleSimulatePaymentIntent(req, res, requestId, auth, parts[1]);
       statusForLog = res.statusCode;
       return result;
     }

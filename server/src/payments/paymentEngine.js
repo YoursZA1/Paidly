@@ -28,6 +28,8 @@ export {
 
 export {
   createPaymentIntentRow as createCustomerPaymentIntent,
+  findPaymentIntentByIdempotency,
+  findActivePosCheckoutIntent,
   confirmPaymentIntent as confirmCustomerPaymentIntent,
   applyVerifiedIntentStatus,
   getOrgPaymentIntent,

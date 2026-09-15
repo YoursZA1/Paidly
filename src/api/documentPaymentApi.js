@@ -117,3 +117,13 @@ export async function fetchOrgPaymentIntent(intentId) {
   });
   return parseJson(res, "Could not load payment intent");
 }
+
+export async function postPaymentIntentAction(intentId, body) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/payment-intents/${encodeURIComponent(intentId)}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body || {}),
+  });
+  return parseJson(res, "Could not update payment intent");
+}

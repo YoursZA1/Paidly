@@ -71,6 +71,32 @@ export const PAIDLY_PAY_ERROR = Object.freeze({
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   AMOUNT_OVERRIDE_FORBIDDEN: "AMOUNT_OVERRIDE_FORBIDDEN",
   INVALID_PAYMENT_METHOD: "INVALID_PAYMENT_METHOD",
+  MOCK_NOT_ENABLED: "MOCK_NOT_ENABLED",
+  INVALID_MOCK_OUTCOME: "INVALID_MOCK_OUTCOME",
+});
+
+/** Same-origin Paidly Pay terminal. Override with server-only PAIDLY_PAY_APP_URL. */
+export const PAIDLY_PAY_PATH = "/pay";
+
+const MOCK_OUTCOME_TO_STATUS = Object.freeze({
+  succeeded: "paid",
+  success: "paid",
+  paid: "paid",
+  failed: "failed",
+  failure: "failed",
+  cancelled: "cancelled",
+  canceled: "cancelled",
+  cancel: "cancelled",
+  processing: "processing",
+  expired: "expired",
+});
+
+const STATUS_TO_WEBHOOK_EVENT = Object.freeze({
+  paid: "payment.succeeded",
+  failed: "payment.failed",
+  cancelled: "payment.cancelled",
+  processing: "payment.processing",
+  expired: "payment.expired",
 });
 
 const INTENT_TO_PUBLIC = Object.freeze({
@@ -182,4 +208,62 @@ export function paidlyPayEnvironment(env = process.env) {
   if (env.VERCEL_ENV === "production") return "production";
   if (env.VERCEL_ENV === "preview") return "preview";
   return "development";
+}
+
+export function mockOutcomeToIntentStatus(outcome) {
+  const key = String(outcome || "").trim().toLowerCase();
+  return MOCK_OUTCOME_TO_STATUS[key] || null;
+}
+
+export function mockOutcomeToWebhookEvent(outcome) {
+  const status = mockOutcomeToIntentStatus(outcome);
+  return status ? STATUS_TO_WEBHOOK_EVENT[status] || null : null;
+}
+
+/**
+ * Public origin of the Paidly Pay app. Not a secret — never include API keys.
+ * Prefer PAIDLY_PAY_APP_URL; otherwise the request host or APP_URL.
+ */
+export function paidlyPayConfiguredOrigin(env = process.env) {
+  const raw = String(env.PAIDLY_PAY_APP_URL || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return "";
+  }
+}
+
+export function resolvePaidlyPayOrigin(env = process.env, req = null) {
+  const configured = paidlyPayConfiguredOrigin(env);
+  if (configured) return configured;
+  const protoRaw = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+  const host = String(req?.headers?.["x-forwarded-host"] || req?.headers?.host || "")
+    .split(",")[0]
+    .trim();
+  const proto = protoRaw === "http" || protoRaw === "https" ? protoRaw : "https";
+  if (host) return `${proto}://${host}`;
+  const fallback = String(env.PUBLIC_APP_URL || env.APP_URL || env.VITE_APP_URL || "")
+    .trim()
+    .replace(/\/$/, "");
+  if (fallback) {
+    try {
+      const url = new URL(fallback.includes("://") ? fallback : `https://${fallback}`);
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      return fallback;
+    }
+  }
+  return "https://www.paidly.co.za";
+}
+
+export function paidlyPayOpenUrl(intentId, { origin, method } = {}) {
+  const id = String(intentId || "").trim();
+  const base = String(origin || "").replace(/\/$/, "");
+  if (!id || !base) return null;
+  const qs = new URLSearchParams({ payment_intent_id: id });
+  if (String(method || "").trim().toLowerCase() === "qr") qs.set("method", "qr");
+  return `${base}${PAIDLY_PAY_PATH}?${qs.toString()}`;
 }

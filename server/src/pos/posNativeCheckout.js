@@ -13,6 +13,7 @@ import {
   quotedCheckoutMoneyConflict,
   paymentIntentMatchesPayable,
   posSaleCompletesWhenPaid,
+  posCheckoutFingerprint,
 } from "./posCheckoutMath.js";
 import { loadPosTillCustomer } from "./posTillCustomer.js";
 import {
@@ -27,6 +28,8 @@ import {
   attachPosSaleToIntent,
   confirmCustomerPaymentIntent,
   createCustomerPaymentIntent,
+  findActivePosCheckoutIntent,
+  findPaymentIntentByIdempotency,
   mapPaymentIntentSchemaError,
   settleTillCashIntent,
 } from "../payments/paymentEngine.js";
@@ -44,6 +47,9 @@ import {
 } from "./posAuditMath.js";
 import { isValidUuid } from "../inputValidation.js";
 import { resolveTillCardRail } from "./posCardRail.js";
+import { isActivePaymentIntentStatus } from "../../../shared/payments/paymentIntentStates.js";
+import { resolvePaidlyPayOrigin } from "../../../shared/payments/paidlyPayContract.js";
+import { cardTerminalProvider } from "../payments/providers/cardTerminalProvider.js";
 
 const CATALOG_SELECT =
   "id, org_id, name, sku, barcode, item_type, is_active, price, default_rate, unit_price, rate, stock_quantity, image_url, category, company_id";
@@ -522,30 +528,64 @@ export async function handleNativePosCheckout(req, res, gate) {
     card_rail: cardRail,
   };
 
+  const checkoutFingerprint = posCheckoutFingerprint({
+    registerId: register?.id || null,
+    sessionId: session?.id || null,
+    clientId,
+    items: built.lines,
+    discountAmount: payable.discount_amount,
+    total: payable.total,
+  });
+  checkoutSnapshot.fingerprint = checkoutFingerprint;
+
+  const intentMetadata = {
+    origin: "pos",
+    settlement: isTillCashSettlement(rail) ? "till" : isCardTerminalSettlement(rail) ? "terminal" : "online",
+    payment_method: paymentMethod,
+    paidly_pay_method: paymentMethod === "card" ? "tap_to_pay" : paymentMethod === "digital" ? "eft" : "cash",
+    card_rail: cardRail,
+    subtotal: payable.subtotal,
+    discount_amount: payable.discount_amount,
+    tax_amount: payable.tax_amount,
+    checkout: checkoutSnapshot,
+    checkout_fingerprint: checkoutFingerprint,
+  };
+
+  let createKey = idempotencyKey;
   let intent;
   try {
-    intent = await createCustomerPaymentIntent({
-      orgId: gate.membership.orgId,
-      sourceKind: "pos",
-      provider: rail,
-      amount: payable.total,
-      currency,
-      idempotencyKey,
-      clientId,
-      companyId,
-      createdBy: gate.user.id,
-      metadata: {
-        origin: "pos",
-        settlement: isTillCashSettlement(rail) ? "till" : isCardTerminalSettlement(rail) ? "terminal" : "online",
-        payment_method: paymentMethod,
-        paidly_pay_method: paymentMethod === "card" ? "tap_to_pay" : paymentMethod === "digital" ? "eft" : "cash",
-        card_rail: cardRail,
-        subtotal: payable.subtotal,
-        discount_amount: payable.discount_amount,
-        tax_amount: payable.tax_amount,
-        checkout: checkoutSnapshot,
-      },
-    });
+    if (isCardTerminalSettlement(rail)) {
+      const existingActive = await findActivePosCheckoutIntent({
+        orgId: gate.membership.orgId,
+        fingerprint: checkoutFingerprint,
+        companyId,
+        amount: payable.total,
+      });
+      if (existingActive) {
+        intent = existingActive;
+      } else {
+        const byKey = await findPaymentIntentByIdempotency(gate.membership.orgId, createKey);
+        if (byKey && !isActivePaymentIntentStatus(byKey.status)) {
+          createKey = crypto.randomUUID();
+        } else if (byKey && isActivePaymentIntentStatus(byKey.status)) {
+          intent = byKey;
+        }
+      }
+    }
+    if (!intent) {
+      intent = await createCustomerPaymentIntent({
+        orgId: gate.membership.orgId,
+        sourceKind: "pos",
+        provider: rail,
+        amount: payable.total,
+        currency,
+        idempotencyKey: createKey,
+        clientId,
+        companyId,
+        createdBy: gate.user.id,
+        metadata: intentMetadata,
+      });
+    }
   } catch (err) {
     return jsonError(res, 500, mapMissingSchema(err?.message), { code: err?.code });
   }
@@ -588,15 +628,44 @@ export async function handleNativePosCheckout(req, res, gate) {
     };
   } else {
     try {
-      const confirmed = isTillCashSettlement(rail)
-        ? await settleTillCashIntent(intent, body.amount_tendered)
-        : await confirmCustomerPaymentIntent(intent, {
-            paymentMethod,
-            amountTendered: body.amount_tendered,
-            cardRail,
-          });
-      intent = confirmed.intent;
-      charge = confirmed.charge;
+      const appOrigin = resolvePaidlyPayOrigin(process.env, req);
+      const alreadyWaiting =
+        isCardTerminalSettlement(rail) &&
+        (intent.status === "requires_action" || intent.status === "processing");
+      if (alreadyWaiting) {
+        const refreshed = await cardTerminalProvider.createCharge(intent, {
+          paymentMethod,
+          cardRail,
+          appOrigin,
+        });
+        const metadata = {
+          ...(intent.metadata && typeof intent.metadata === "object" ? intent.metadata : {}),
+          ...intentMetadata,
+          next_action: refreshed.next_action || null,
+          code: refreshed.code || null,
+        };
+        const { data: updated, error: refreshError } = await supabaseAdmin
+          .from("payment_intents")
+          .update({ metadata, updated_at: new Date().toISOString() })
+          .eq("id", intent.id)
+          .eq("org_id", intent.org_id)
+          .select("*")
+          .single();
+        if (refreshError) throw refreshError;
+        intent = updated || intent;
+        charge = { ...refreshed, status: intent.status };
+      } else {
+        const confirmed = isTillCashSettlement(rail)
+          ? await settleTillCashIntent(intent, body.amount_tendered)
+          : await confirmCustomerPaymentIntent(intent, {
+              paymentMethod,
+              amountTendered: body.amount_tendered,
+              cardRail,
+              appOrigin,
+            });
+        intent = confirmed.intent;
+        charge = confirmed.charge;
+      }
     } catch (err) {
       return jsonError(res, 500, mapMissingSchema(err?.message), { code: err?.code });
     }
@@ -611,7 +680,13 @@ export async function handleNativePosCheckout(req, res, gate) {
       nextAction?.type === "reader" ||
       nextAction?.type === "redirect" ||
       Boolean(redirectUrl);
-    if (terminalWait && (charge.status === "requires_action" || intent.status === "requires_action")) {
+    if (
+      terminalWait &&
+      (charge.status === "requires_action" ||
+        intent.status === "requires_action" ||
+        intent.status === "processing" ||
+        isActivePaymentIntentStatus(intent.status))
+    ) {
       return res.status(202).json({
         ok: true,
         pending: true,

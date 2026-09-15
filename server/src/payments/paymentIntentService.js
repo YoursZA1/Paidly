@@ -11,6 +11,7 @@ import {
   applyPaymentIntentTransition,
   PAYMENT_INTENT_STATUS,
   paymentIntentIsExpired,
+  isActivePaymentIntentStatus,
 } from "../../../shared/payments/paymentIntentStates.js";
 import { assertPaymentEngineSource } from "../../../shared/payments/paymentEngine.js";
 
@@ -32,6 +33,38 @@ export async function findPaymentIntentByIdempotency(orgId, idempotencyKey) {
     .maybeSingle();
   if (error) throw error;
   return data || null;
+}
+
+/**
+ * Reuse an in-flight POS card intent for the same checkout fingerprint.
+ * Expired / cancelled / failed rows are ignored so the cashier can retry.
+ */
+export async function findActivePosCheckoutIntent({
+  orgId,
+  fingerprint,
+  companyId = null,
+  amount = null,
+} = {}) {
+  const key = String(fingerprint || "").trim();
+  if (!orgId || !key) return null;
+  let query = supabaseAdmin
+    .from("payment_intents")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("source_kind", "pos")
+    .eq("provider", "card_terminal")
+    .is("pos_sale_event_id", null)
+    .in("status", ["pending", "requires_action", "processing"])
+    .order("created_at", { ascending: false })
+    .limit(25);
+  if (companyId) query = query.eq("company_id", companyId);
+  if (amount != null && amount !== "") query = query.eq("amount", amount);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || []).find((row) => {
+    const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+    return String(metadata.checkout_fingerprint || "") === key && isActivePaymentIntentStatus(row.status);
+  }) || null;
 }
 
 /**

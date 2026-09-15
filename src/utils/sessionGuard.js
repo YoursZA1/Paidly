@@ -1,5 +1,6 @@
 import { navigateTo } from "@/lib/navigationService";
 import { isPosAccessPath } from "@shared/posStaffInvite.js";
+import { isPosTerminalPath } from "@/lib/posNavAccess";
 
 /**
  * When Supabase session is cleared (sign-out, invalid refresh), only redirect to login
@@ -42,6 +43,7 @@ const PUBLIC_PATH_PATTERNS = [
 export function isPathAllowedWithoutSession(pathname) {
   const p = pathname || "";
   if (isPosAccessPath(p)) return true;
+  if (isPosTerminalPath(p)) return true;
   return PUBLIC_PATH_PATTERNS.some((re) => re.test(p));
 }
 

@@ -29,6 +29,8 @@ import {
   Receipt,
   LogOut,
   MoreHorizontal,
+  ExternalLink,
+  QrCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -63,13 +65,14 @@ import { isPosOnlyStaff, posAccessPath } from "@shared/posStaffInvite.js";
 import PosStaffInviteSheet from "@/components/pos/PosStaffInviteSheet";
 import PosTillStaffSheet from "@/components/pos/PosTillStaffSheet";
 import { formatCurrency } from "@/utils/currencyCalculations";
-import { fetchOrgPaymentIntent } from "@/api/documentPaymentApi";
 import { createPageUrl, triggerHaptic } from "@/utils";
 import {
   checkoutPosSale,
   convertPosSaleToInvoice,
   emailPosReceipt,
   fetchPosCatalog,
+  fetchPosPaymentIntent,
+  postPosPaymentIntentAction,
   listPosRegisters,
   listPosSales,
   listPosSessions,
@@ -355,6 +358,8 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   const scanDebounceRef = useRef(null);
   const lastSearchKeyAtRef = useRef(0);
   const completeCheckoutRef = useRef(null);
+  const cardIdempotencyRef = useRef(null);
+  const openedPayRef = useRef("");
   const [products, setProducts] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(null);
@@ -594,6 +599,20 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   const subtotal = useMemo(() => posCartSubtotal(cart), [cart]);
   const totals = useMemo(() => applyPosSaleDiscount(subtotal, discountAmount), [subtotal, discountAmount]);
   const cartTotal = totals.total;
+  const cardCartKey = useMemo(
+    () =>
+      JSON.stringify({
+        items: cart.map((line) => [line.product_id, line.quantity, line.unit_price]),
+        discount: totals.discount_amount,
+        clientId,
+        register: activeRegister?.id || null,
+      }),
+    [cart, totals.discount_amount, clientId, activeRegister?.id]
+  );
+  useEffect(() => {
+    cardIdempotencyRef.current = null;
+    openedPayRef.current = "";
+  }, [cardCartKey]);
   const needsShift = Boolean(
     canSell && activeRegister?.id && !openSession && !sessionDegraded && !sessionLoading
   );
@@ -959,7 +978,10 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         company_id: activeRegister?.company_id || null,
         register_id: activeRegister?.id || null,
         currency,
-        idempotency_key: idempotencyKey || crypto.randomUUID(),
+        idempotency_key:
+          idempotencyKey ||
+          (paymentMethod === "card" ? cardIdempotencyRef.current : null) ||
+          crypto.randomUUID(),
         brand_name: tillBrandName,
         cashier_name: cashierName,
         customer_name: attachedCustomer?.name || undefined,
@@ -983,14 +1005,28 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       }
       if (result.pending) {
         if (paymentMethod === "card") {
+          cardIdempotencyRef.current = checkoutPayload.idempotency_key;
+          const openUrl = result.next_action?.open_url || null;
+          const isReader = result.next_action?.type === "reader";
           setCardWait({
-            intentId: result.payment_intent?.id || null,
+            intentId: result.payment_intent?.id || result.next_action?.payment_intent_id || null,
             payload: checkoutPayload,
             display: result.next_action?.display || "TAP CARD",
             provider: result.next_action?.provider || cardRail?.id || "paidly_pay",
             deviceName: result.next_action?.device_name || cardRail?.device_name || null,
+            openUrl,
+            mock: Boolean(result.next_action?.mock),
+            phase: "waiting",
+            popupBlocked: false,
           });
           setCardOpen(true);
+          if (openUrl && !isReader && openedPayRef.current !== openUrl) {
+            const opened = window.open(openUrl, "paidly_pay", "noopener,noreferrer");
+            openedPayRef.current = openUrl;
+            if (!opened) {
+              setCardWait((prev) => (prev ? { ...prev, popupBlocked: true } : prev));
+            }
+          }
           return;
         }
         toast({
@@ -1011,6 +1047,8 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       setCashOpen(false);
       setCardOpen(false);
       setCardWait(null);
+      openedPayRef.current = "";
+      cardIdempotencyRef.current = null;
       setDigitalOpen(false);
       setPayMethodOpen(false);
       setCartSheetOpen(false);
@@ -1043,9 +1081,24 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       if (inFlight || cancelled) return;
       inFlight = true;
       try {
-        const status = await fetchOrgPaymentIntent(cardWait.intentId);
+        const status = await fetchPosPaymentIntent(cardWait.intentId);
         if (cancelled) return;
-        if (status.payment_intent?.status === "paid") {
+        const intentStatus = String(status.payment_intent?.status || "").toLowerCase();
+        if (intentStatus === "processing") {
+          setCardWait((prev) => (prev ? { ...prev, phase: "processing" } : prev));
+          return;
+        }
+        if (intentStatus === "failed" || intentStatus === "cancelled" || intentStatus === "expired") {
+          cardIdempotencyRef.current = null;
+          openedPayRef.current = "";
+          setCardWait(null);
+          toast({
+            title: intentStatus === "failed" ? "Card payment failed" : "Card payment cancelled",
+            description: "The sale stays unpaid. You can tap Card Payment again.",
+          });
+          return;
+        }
+        if (intentStatus === "paid") {
           await completeCheckoutRef.current?.({
             paymentMethod: "card",
             idempotencyKey: cardWait.payload?.idempotency_key,
@@ -1469,6 +1522,26 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     setCardOpen(false);
     setCardWait(null);
     setDigitalOpen(false);
+  };
+
+  const cancelCardPayment = async () => {
+    const intentId = cardWait?.intentId;
+    if (!intentId) {
+      closePayStage();
+      return;
+    }
+    try {
+      await postPosPaymentIntentAction(intentId, { action: "cancel" });
+    } catch {
+      /* till stays unpaid even if cancel races a webhook */
+    }
+    cardIdempotencyRef.current = null;
+    openedPayRef.current = "";
+    closePayStage();
+    toast({
+      title: "Payment cancelled",
+      description: "The sale stays unpaid. Tap Card Payment to try again.",
+    });
   };
 
   const handlePosLogout = async () => {
@@ -2269,25 +2342,60 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
           <DialogHeader>
             <DialogTitle>Card · {cardWait?.provider === "yoco" || cardRail?.id === "yoco" ? "Yoco" : cardWait?.provider === "square" || cardRail?.id === "square" ? "Square" : "Paidly Pay"}</DialogTitle>
             <DialogDescription>
-              {cardWait
-                ? "Waiting for the connected terminal to confirm."
-                : "The connected payment provider will take this amount. The sale stays unpaid until it confirms."}
+              {cardWait?.phase === "processing"
+                ? "Processing payment..."
+                : cardWait
+                  ? "Connecting to Paidly Pay..."
+                  : "The connected payment provider will take this amount. The sale stays unpaid until it confirms."}
             </DialogDescription>
           </DialogHeader>
           <p className="font-display text-4xl font-bold tabular-nums">{formatCurrency(cartTotal, currency)}</p>
           <p className="text-sm text-muted-foreground">
             {cardWait
-              ? `${cardWait.display}${cardWait.deviceName ? ` · ${cardWait.deviceName}` : ""}. Stay on this till until the webhook lands.`
+              ? cardWait.phase === "processing"
+                ? "Processing payment..."
+                : `${cardWait.display}${cardWait.deviceName ? ` · ${cardWait.deviceName}` : ""}. Tap card or phone.`
               : cardRail?.action === "reader"
                 ? `${cardRail.label} is connected from POS Integrations. Take this amount on that reader. Paidly records the sale when the reader confirms.`
                 : `${cardRail?.device_name ? `${cardRail.device_name} · ` : ""}Paidly Pay is the card terminal for this till. Send the sale, then tap or scan on Paidly Pay.`}
           </p>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             {cardWait ? (
-              <Button type="button" className="h-12 min-h-11 w-full" disabled>
-                <Loader2 className="size-5 animate-spin" />
-                Waiting for {cardWait.provider === "yoco" ? "Yoco" : cardWait.provider === "square" ? "Square" : "Paidly Pay"}
-              </Button>
+              <>
+                <Button type="button" className="h-12 min-h-11 w-full" disabled>
+                  <Loader2 className="size-5 animate-spin" />
+                  {cardWait.phase === "processing"
+                    ? "Processing payment..."
+                    : `Waiting for ${cardWait.provider === "yoco" ? "Yoco" : cardWait.provider === "square" ? "Square" : "Paidly Pay"}`}
+                </Button>
+                {cardWait.openUrl && cardWait.provider !== "yoco" && cardWait.provider !== "square" ? (
+                  <>
+                    <Button type="button" variant="secondary" className="h-12 min-h-11 w-full" asChild>
+                      <a href={cardWait.openUrl} target="paidly_pay" rel="noopener noreferrer">
+                        <ExternalLink className="size-5" />
+                        {cardWait.popupBlocked ? "Open Paidly Pay" : "Reopen Paidly Pay"}
+                      </a>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-12 min-h-11 w-full"
+                      onClick={() => {
+                        const url = cardWait.openUrl.includes("method=qr")
+                          ? cardWait.openUrl
+                          : `${cardWait.openUrl}${cardWait.openUrl.includes("?") ? "&" : "?"}method=qr`;
+                        window.open(url, "paidly_pay_qr", "noopener,noreferrer");
+                      }}
+                    >
+                      <QrCode className="size-5" />
+                      Show QR
+                    </Button>
+                  </>
+                ) : null}
+                <Button type="button" variant="ghost" className="h-12 min-h-11 w-full" onClick={() => void cancelCardPayment()}>
+                  Cancel payment
+                </Button>
+              </>
             ) : (
               <Button
                 type="button"
@@ -2296,7 +2404,11 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
                 onClick={() => void completeCheckout({ paymentMethod: "card" })}
               >
                 {submitting ? <Loader2 className="size-5 animate-spin" /> : <CreditCard className="size-5" />}
-                {cardRail?.action === "reader" ? `Send to ${cardRail.label}` : "Send to Paidly Pay"}
+                {submitting
+                  ? "Connecting to Paidly Pay..."
+                  : cardRail?.action === "reader"
+                    ? `Send to ${cardRail.label}`
+                    : "Send to Paidly Pay"}
               </Button>
             )}
             {posOnlyStaff || cardWait ? null : (
@@ -2413,6 +2525,9 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
           <p className="font-display text-4xl font-bold tabular-nums">
             {formatCurrency(Math.abs(Number(completedSale?.total_amount) || 0), completedSale?.currency || currency)}
           </p>
+          {completedSale?.sale_kind === "return" ? null : (
+            <p className="text-sm font-semibold uppercase tracking-wide">PAID</p>
+          )}
           <p className="text-sm text-muted-foreground">
             {completedSale?.receipt_number ? `Order ${completedSale.receipt_number}` : null}
             {completedSale?.cashier_name ? ` · ${completedSale.cashier_name}` : null}

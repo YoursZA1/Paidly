@@ -2,6 +2,7 @@ import {
   handleCustomerPaymentWebhook,
   handlePaymentIntentCreate,
   handlePaymentIntentGet,
+  handlePaymentIntentAction,
   handlePaymentProvidersList,
 } from "./paymentIntentRoutes.js";
 import {
@@ -29,5 +30,6 @@ export function registerPaymentIntentRoutes(app) {
   app.get("/api/payment-intents/ozow-return", handleOzowReturn);
   app.post("/api/payment-intents/webhook/:provider", handleCustomerPaymentWebhook);
   app.get("/api/payment-intents/:id", handlePaymentIntentGet);
+  app.post("/api/payment-intents/:id", handlePaymentIntentAction);
   app.post("/api/payments/webhook/:provider", handleCustomerPaymentWebhook);
 }

@@ -94,6 +94,9 @@ describe("customer payment rails", () => {
     expect(charge.status).not.toBe("paid");
     expect(charge.status).toBe("requires_action");
     expect(charge.next_action.type).toBe("tap_to_pay");
+    expect(charge.next_action.payment_intent_id).toBe("i3");
+    expect(charge.next_action.open_url).toContain("/pay?payment_intent_id=i3");
+    expect(charge.next_action.open_url).not.toMatch(/POS_API_KEY|WEBHOOK_SECRET/i);
   });
 
   it("names a connected Yoco reader on createCharge", async () => {
@@ -105,5 +108,6 @@ describe("customer payment rails", () => {
     expect(charge.next_action.type).toBe("reader");
     expect(charge.next_action.display).toContain("Yoco");
     expect(charge.next_action.provider).toBe("yoco");
+    expect(charge.next_action.open_url).toBeNull();
   });
 });

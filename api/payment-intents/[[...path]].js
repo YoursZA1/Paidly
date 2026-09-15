@@ -3,6 +3,7 @@ import { normalizeRequestBody } from "../../server/src/validateBody.js";
 import {
   handlePaymentIntentCreate,
   handlePaymentIntentGet,
+  handlePaymentIntentAction,
   handlePaymentProvidersList,
   handleCustomerPaymentWebhook,
 } from "../../server/src/payments/paymentIntentRoutes.js";
@@ -86,6 +87,10 @@ export default async function handler(req, res) {
   if (head && req.method === "GET") {
     req.params = { ...(req.params || {}), id: head };
     return handlePaymentIntentGet(req, res);
+  }
+  if (head && req.method === "POST") {
+    req.params = { ...(req.params || {}), id: head };
+    return handlePaymentIntentAction(req, res);
   }
 
   res.setHeader("Allow", "GET, POST, OPTIONS");

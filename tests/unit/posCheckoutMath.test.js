@@ -12,6 +12,7 @@ import {
   remainingReturnQuantities,
   roundMoney,
   posSaleCompletesWhenPaid,
+  posCheckoutFingerprint,
   clientBelongsToCheckoutOrg,
   posCustomerEligibleForTill,
 } from "../../server/src/pos/posCheckoutMath.js";
@@ -166,6 +167,33 @@ describe("posCheckoutMath", () => {
     expect(posSaleCompletesWhenPaid({ status: "paid" })).toBe(true);
     expect(posSaleCompletesWhenPaid({ status: "pending" })).toBe(false);
     expect(posSaleCompletesWhenPaid({ status: "failed" })).toBe(false);
+  });
+
+  it("fingerprints the same cart so card checkout can reuse an intent", () => {
+    const items = [{ product_id: "p1", quantity: 2, unit_price: 225 }];
+    const a = posCheckoutFingerprint({
+      registerId: "r1",
+      sessionId: "s1",
+      items,
+      discountAmount: 0,
+      total: 450,
+    });
+    const b = posCheckoutFingerprint({
+      registerId: "r1",
+      sessionId: "s1",
+      items,
+      discountAmount: 0,
+      total: 450,
+    });
+    const c = posCheckoutFingerprint({
+      registerId: "r1",
+      sessionId: "s1",
+      items,
+      discountAmount: 0,
+      total: 451,
+    });
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
   });
 
   it("rejects customers that belong to another organization", () => {

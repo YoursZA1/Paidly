@@ -209,6 +209,38 @@ export function posSaleCompletesWhenPaid(intent) {
   return String(intent?.status || "").toLowerCase() === "paid";
 }
 
+/**
+ * Stable cart identity for reusing an in-flight card payment intent.
+ * Same register + session + customer + lines + totals → same fingerprint.
+ */
+export function posCheckoutFingerprint({
+  registerId = null,
+  sessionId = null,
+  clientId = null,
+  items = [],
+  discountAmount = 0,
+  total = 0,
+} = {}) {
+  const lines = (Array.isArray(items) ? items : [])
+    .map((line) => {
+      const productId = String(line?.product_id || "").trim();
+      const qty = Number(line?.quantity) || 0;
+      const unit = roundMoney(line?.unit_price);
+      return `${productId}:${qty}:${unit}`;
+    })
+    .filter((row) => row !== ":0:0")
+    .sort()
+    .join("|");
+  return [
+    String(registerId || ""),
+    String(sessionId || ""),
+    String(clientId || ""),
+    roundMoney(discountAmount),
+    roundMoney(total),
+    lines,
+  ].join("::");
+}
+
 /** Named customer on a sale must be an org `clients` row — not another tenant. */
 export function clientBelongsToCheckoutOrg(client, orgId) {
   const tenant = String(orgId || "").trim();

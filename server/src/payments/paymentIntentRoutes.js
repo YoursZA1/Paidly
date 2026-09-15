@@ -1,6 +1,7 @@
-import { requireOrgMember } from "../pos/posConnectionsRoutes.js";
+import { requireOrgMember, requirePosPermission } from "../pos/posConnectionsRoutes.js";
 import { requirePosCapability } from "../pos/posBusinessType.js";
 import { requirePosPlan } from "../pos/posEntitlement.js";
+import { PERMISSIONS } from "../companyRouteAccess.js";
 import { roundMoney } from "../pos/posCheckoutMath.js";
 import {
   mapPosPaymentMethodToProvider,
@@ -10,12 +11,19 @@ import {
 } from "./paymentIntentContract.js";
 import { getCustomerPaymentProvider, listCustomerPaymentProviders } from "./paymentProviders.js";
 import {
+  applyVerifiedIntentStatus,
   applyVerifiedProviderEvent,
   assertPaymentEngineSource,
   createCustomerPaymentIntent,
   getOrgPaymentIntent,
   mapPaymentIntentSchemaError,
 } from "./paymentEngine.js";
+import {
+  isMockPaymentsEnabled,
+  mockOutcomeToIntentStatus,
+  PAIDLY_PAY_ERROR,
+} from "../../../shared/payments/paidlyPayContract.js";
+import { isConfirmedPaymentIntent, PAYMENT_INTENT_STATUS } from "../../../shared/payments/paymentIntentStates.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -107,6 +115,94 @@ export async function handlePaymentProvidersList(req, res) {
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate.response;
   return res.status(200).json({ ok: true, providers: listCustomerPaymentProviders() });
+}
+
+/**
+ * POST /api/payment-intents/:id — cashier cancel or mock outcome.
+ * Hobby-safe (one extra path segment). Amount/status from the client are ignored.
+ */
+export async function handlePaymentIntentAction(req, res) {
+  const gate = await requirePosPermission(req, res, PERMISSIONS.POS_SELL);
+  if (!gate.ok) return gate.response;
+  const id = String(req.params?.id || req.query?.id || "").trim();
+  if (!id) return jsonError(res, 422, "id is required");
+
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const action = String(body.action || "").trim().toLowerCase();
+  if (action !== "cancel" && action !== "mock") {
+    return jsonError(res, 422, "action must be cancel or mock");
+  }
+  if (body.amount != null || (body.status != null && action !== "mock")) {
+    return jsonError(res, 422, "Amount and status are taken from the payment intent. The client cannot override them.", {
+      code: PAIDLY_PAY_ERROR.AMOUNT_OVERRIDE_FORBIDDEN,
+    });
+  }
+
+  try {
+    const intent = await getOrgPaymentIntent(gate.membership.orgId, id);
+    if (!intent) return jsonError(res, 404, "Payment intent not found");
+    if (intent.source_kind !== "pos") {
+      return jsonError(res, 403, "This payment intent is not a POS sale", { code: PAIDLY_PAY_ERROR.FORBIDDEN });
+    }
+
+    if (action === "cancel") {
+      if (isConfirmedPaymentIntent(intent.status) || intent.status === "refunded") {
+        return jsonError(res, 409, "Settled payments cannot be cancelled from the terminal.", {
+          code: PAIDLY_PAY_ERROR.PAYMENT_NOT_CANCELLABLE,
+        });
+      }
+      const applied = await applyVerifiedIntentStatus(intent, PAYMENT_INTENT_STATUS.cancelled, {
+        source: "pos_terminal_cancel",
+      });
+      return res.status(200).json({
+        ok: true,
+        payment_intent: publicPaymentIntentView(applied.intent),
+      });
+    }
+
+    if (!isMockPaymentsEnabled()) {
+      return jsonError(res, 403, "Mock payments are not enabled on this environment.", {
+        code: PAIDLY_PAY_ERROR.MOCK_NOT_ENABLED,
+      });
+    }
+
+    const nextStatus = mockOutcomeToIntentStatus(body.outcome);
+    if (!nextStatus) {
+      return jsonError(res, 422, "outcome must be succeeded, failed, cancelled, processing, or expired", {
+        code: PAIDLY_PAY_ERROR.INVALID_MOCK_OUTCOME,
+      });
+    }
+
+    const applied = await applyVerifiedProviderEvent({
+      intentId: intent.id,
+      nextStatus,
+      externalId: `mock:${intent.id}:${nextStatus}`,
+      metadata: {
+        mock: true,
+        webhook_verified: true,
+        terminal_confirmed: nextStatus === PAYMENT_INTENT_STATUS.paid,
+        paidly_pay_event: `mock.${body.outcome || nextStatus}`,
+        source: "pos_mock_terminal",
+      },
+    });
+    return res.status(200).json({
+      ok: true,
+      duplicate: Boolean(applied.duplicate),
+      payment_intent: publicPaymentIntentView(applied.intent),
+      settlement: applied.settlement
+        ? {
+            settled: applied.settlement.settled,
+            duplicate: applied.settlement.duplicate,
+            sale_id: applied.settlement.saleId || null,
+          }
+        : null,
+    });
+  } catch (err) {
+    if (err?.code === "INVALID_INTENT_TRANSITION") {
+      return jsonError(res, 409, err.message, { code: err.code });
+    }
+    return schemaError(res, err);
+  }
 }
 
 /**

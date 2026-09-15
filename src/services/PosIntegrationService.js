@@ -383,3 +383,24 @@ export async function connectYocoPos(payload) {
   const raw = await res.text().catch(() => "");
   return parseApiJsonError(res, raw, "Could not connect Yoco");
 }
+
+export async function fetchPosPaymentIntent(intentId) {
+  const headers = await authHeaders({ includeJsonContentType: false });
+  const res = await posServiceRequest(`${apiBase()}/api/payment-intents/${encodeURIComponent(intentId)}`, {
+    method: "GET",
+    headers,
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not load payment intent");
+}
+
+export async function postPosPaymentIntentAction(intentId, body) {
+  const headers = await authHeaders();
+  const res = await posServiceRequest(`${apiBase()}/api/payment-intents/${encodeURIComponent(intentId)}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body || {}),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not update payment intent");
+}

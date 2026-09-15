@@ -352,10 +352,10 @@ The native till Pay sheet offers three architecture-ready methods. **Cash** is t
 | Till method | `payment_intents.provider` | Completes sale when | Must not |
 |-------------|----------------------------|---------------------|----------|
 | **Cash** | `cash` | Cashier tenders ≥ total (trusted till cash workflow) | Route through Ozow or PayFast |
-| **Card** | `card_terminal` | Hardware reader / webhook confirms (`terminal_confirmed`) | Cashier click, `manual_complete`, `force_paid`, or `mark_paid` |
+| **Card** | `card_terminal` | Paidly Pay (`/pay?payment_intent_id=`) or a connected reader webhook confirms (`terminal_confirmed`) | Cashier click, `manual_complete`, `force_paid`, or `mark_paid` |
 | **Digital Payment** | `ozow` | Ozow charge/webhook confirms success | Complete from a till click alone |
 
-There is **no** `MANAGE_POS_MANUAL_CARD` (or similar) permission. Paidly does not fake a card terminal. External Yoco/Square readers are adapters: they confirm completed sales through `/api/pos/webhook`, which is a real confirmation — not the native **Card** button. Do not write till money into invoice `payments` or SaaS `payment_history`.
+There is **no** `MANAGE_POS_MANUAL_CARD` (or similar) permission. Native **Card Payment** creates or reuses a `payment_intents` row, then opens Paidly Pay with `payment_intent_id` (`next_action.open_url`, default `/pay?payment_intent_id=`). Paidly Pay displays the **server** amount. The POS sale is marked paid only after a verified `payment.succeeded` webhook (or mock simulate when `PAYMENT_PROVIDER_MODE=mock`). External Yoco/Square readers remain adapters: they confirm through `/api/pos/webhook`. Do not write till money into invoice `payments` or SaaS `payment_history`.
 
 **POS inventory commit:**
 
@@ -902,6 +902,7 @@ Ship these in parallel with **High impact next**—they reduce churn and make ev
 
 - `POST /api/payment-intents` (create customer intent; POS or document)
 - `GET /api/payment-intents/:id` (intent status)
+- `POST /api/payment-intents/:id` (POS cashier `action=cancel` or mock `action=mock` when mock mode is on; Hobby-safe one extra segment)
 - `GET /api/payment-intents/providers` (registered customer rails)
 - `POST /api/payments/webhook/:provider` (customer rails, e.g. `ozow`; PayFast ITN stays on `/api/payfast-handler`; Vercel rewrites onto `/api/payment-intents/webhook-fwd`)
 - `POST /api/pos/webhook/:token` (POS sale ingress — generic, Yoco, Square parsers; Vercel Hobby flattens nested `/api/pos/*/*` in `vercel.json`)
@@ -916,7 +917,7 @@ Ship these in parallel with **High impact next**—they reduce churn and make ev
 - `POST /api/pos/receipt/email` (till receipt email; not an invoice)
 - `POST /api/pos/invoice` (optional tax-invoice copy of a completed sale; paid; no invoice payments)
 - `GET|POST /api/pos/registers` · `PATCH|DELETE /api/pos/registers/:id` (till identity; org members list; settings managers write)
-- `/api/paidly/*` (Paidly Pay terminal bridge — rewritten onto `api/pos`; HMAC webhooks; does not add a 13th Hobby function). See `docs/paidly-pay-api.md`.
+- `/api/paidly/*` (Paidly Pay terminal bridge — rewritten onto `api/pos`; HMAC webhooks; does not add a 13th Hobby function). Native Card Payment opens `/pay?payment_intent_id=` (or `PAIDLY_PAY_APP_URL`) with the same intent. See `docs/paidly-pay-api.md`.
 - `POST /api/documents/:type/:id/events` (new internal endpoint) or service-only ingestion path for `document_events`
 - `POST /api/reminders/dispatch` (new internal endpoint used by cron workers)
 

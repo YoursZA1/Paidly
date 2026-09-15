@@ -269,6 +269,7 @@ describe("Paidly Pay API", () => {
     "POS_API_COMPANY_ID",
     "POS_WEBHOOK_SECRET",
     "PAYMENT_PROVIDER_MODE",
+    "PAIDLY_PAY_APP_URL",
     "RATE_LIMIT_PERSIST",
     "NODE_ENV",
   ];
@@ -281,6 +282,7 @@ describe("Paidly Pay API", () => {
     process.env.POS_API_COMPANY_ID = COMPANY_A;
     process.env.POS_WEBHOOK_SECRET = WEBHOOK_SECRET;
     process.env.PAYMENT_PROVIDER_MODE = "mock";
+    process.env.PAIDLY_PAY_APP_URL = "https://www.paidly.co.za";
     process.env.RATE_LIMIT_PERSIST = "false";
     process.env.NODE_ENV = "test";
     memory.reset();
@@ -392,6 +394,11 @@ describe("Paidly Pay API", () => {
     expect(res.body.amount).toBe(450);
     expect(res.body.payment_method).toBe("tap_to_pay");
     expect(res.body.next_action.display).toBe("TAP CARD");
+    expect(res.body.next_action.payment_intent_id).toBe(INTENT_A);
+    expect(res.body.next_action.open_url).toBe(
+      `https://www.paidly.co.za/pay?payment_intent_id=${INTENT_A}`
+    );
+    expect(JSON.stringify(res.body)).not.toContain(API_KEY);
   });
 
   it("rejects an already-paid transaction", async () => {
@@ -511,6 +518,69 @@ describe("Paidly Pay API", () => {
     expect(second.statusCode).toBe(200);
     expect(second.body.duplicate).toBe(true);
     expect(memory.tables.pos_sales_events).toHaveLength(1);
+  });
+
+  it("does not mark the POS sale paid on a failed webhook", async () => {
+    memory.tables.payment_intents.push(openIntent({ status: "requires_action" }));
+    const res = createRes();
+    await handlePaidlyPayApi(
+      createReq(
+        signedReq({
+          event: "payment.failed",
+          provider_event_id: "evt_fail",
+          payment_intent_id: INTENT_A,
+        })
+      ),
+      res
+    );
+    expect(res.statusCode).toBe(200);
+    expect(memory.tables.payment_intents[0].status).toBe("failed");
+    expect(memory.tables.pos_sales_events).toHaveLength(0);
+  });
+
+  it("simulates a mock success once and ignores a duplicate tap", async () => {
+    memory.tables.payment_intents.push(openIntent({ status: "requires_action" }));
+    const first = createRes();
+    await handlePaidlyPayApi(
+      createReq({
+        method: "POST",
+        paidlyParts: ["payment-intents", INTENT_A, "simulate"],
+        headers: authHeaders(),
+        body: { outcome: "succeeded" },
+      }),
+      first
+    );
+    expect(first.statusCode).toBe(200);
+    expect(memory.tables.payment_intents[0].status).toBe("paid");
+    expect(memory.tables.pos_sales_events).toHaveLength(1);
+    const second = createRes();
+    await handlePaidlyPayApi(
+      createReq({
+        method: "POST",
+        paidlyParts: ["payment-intents", INTENT_A, "simulate"],
+        headers: authHeaders(),
+        body: { outcome: "succeeded" },
+      }),
+      second
+    );
+    expect(second.body.duplicate).toBe(true);
+    expect(memory.tables.pos_sales_events).toHaveLength(1);
+  });
+
+  it("cancels a payment without writing a POS sale", async () => {
+    memory.tables.payment_intents.push(openIntent({ status: "requires_action" }));
+    const res = createRes();
+    await handlePaidlyPayApi(
+      createReq({
+        method: "POST",
+        paidlyParts: ["payment-intents", INTENT_A, "cancel"],
+        headers: authHeaders(),
+      }),
+      res
+    );
+    expect(res.statusCode).toBe(200);
+    expect(memory.tables.payment_intents[0].status).toBe("cancelled");
+    expect(memory.tables.pos_sales_events).toHaveLength(0);
   });
 
   it("refunds a successful payment only after a verified webhook", async () => {

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { hmacSha256Hex, verifyPaidlyPaySignature } from "../../server/src/paidlyPay/paidlyPayHmac.js";
 import {
   isMockPaymentsEnabled,
+  mockOutcomeToIntentStatus,
+  paidlyPayOpenUrl,
   providerForPaidlyPayMethod,
   publicStatusFromIntent,
 } from "../../shared/payments/paidlyPayContract.js";
@@ -33,5 +35,16 @@ describe("Paidly Pay HMAC and contract", () => {
       isMockPaymentsEnabled({ PAYMENT_PROVIDER_MODE: "mock", NODE_ENV: "production", ALLOW_MOCK_PAYMENTS: "1" })
     ).toBe(true);
     expect(isMockPaymentsEnabled({ PAYMENT_PROVIDER_MODE: "live", NODE_ENV: "test" })).toBe(false);
+  });
+
+  it("opens Paidly Pay by payment_intent_id and maps mock outcomes without trusting amount", () => {
+    expect(paidlyPayOpenUrl("pi_12345", { origin: "https://www.paidly.co.za" })).toBe(
+      "https://www.paidly.co.za/pay?payment_intent_id=pi_12345"
+    );
+    expect(paidlyPayOpenUrl("pi_12345", { origin: "https://pay.example", method: "qr" })).toContain("method=qr");
+    expect(mockOutcomeToIntentStatus("succeeded")).toBe("paid");
+    expect(mockOutcomeToIntentStatus("failed")).toBe("failed");
+    expect(mockOutcomeToIntentStatus("cancelled")).toBe("cancelled");
+    expect(mockOutcomeToIntentStatus("pending")).toBeNull();
   });
 });
