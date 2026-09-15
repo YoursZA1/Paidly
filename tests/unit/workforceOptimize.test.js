@@ -4,6 +4,7 @@ import { validatePayRunItem } from "../../shared/payroll/payRunValidation.js";
 import { displayPayslipStatus, payslipStatusLabel } from "../../shared/payroll/payslipStatus.js";
 import { annualLeaveEligibility } from "../../shared/leave/leaveEligibility.js";
 import { accrueLeaveDays } from "../../shared/leave/leaveMath.js";
+import { normalizeEmployeeList } from "../../shared/workforce/directory.js";
 
 describe("live pay rate", () => {
   it("does not treat a default zero salary as complete", () => {
@@ -65,5 +66,14 @@ describe("SA leave eligibility", () => {
     expect(eligibility.waiting_period_days).toBe(0);
     expect(eligibility.eligible).toBe(true);
     expect(eligibility.year_to_date_accrual).toBeGreaterThan(0);
+  });
+});
+
+describe("employee list contract", () => {
+  it("unwraps paginated { items } for pickers that used to expect a raw array", () => {
+    expect(normalizeEmployeeList({ items: [{ id: "a" }], total: 1 }).items).toEqual([{ id: "a" }]);
+    expect(normalizeEmployeeList([{ id: "b" }]).items).toEqual([{ id: "b" }]);
+    expect(normalizeEmployeeList({ data: [{ id: "c" }] }).items).toEqual([{ id: "c" }]);
+    expect(normalizeEmployeeList(null).items).toEqual([]);
   });
 });

@@ -93,6 +93,7 @@ export async function handleWorkforceEmployees(req, res) {
         sort: req.query?.sort || "name",
         limit: req.query?.limit,
         offset: req.query?.offset,
+        pageAll: req.query?.page_all === "1" || req.query?.all === "1",
         includeAttendance: req.query?.include === "attendance" || String(req.query?.include || "").includes("attendance"),
         includeLeaveStatus: req.query?.include !== "none",
       });

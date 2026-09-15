@@ -219,6 +219,17 @@ export default function CreatePayslip() {
         });
     }, [draftRestoreNotice, toast]);
 
+    const { calculatedPayroll, previewError } = useServerPayrollPreview({
+        basicSalary: payslipData.basic_salary,
+        allowances: payslipData.allowances,
+        overtimeHours: payslipData.overtime_hours,
+        overtimeRate: payslipData.overtime_rate,
+        medicalAid: payslipData.medical_aid_deduction,
+        pensionFund: payslipData.pension_deduction,
+        otherDeductions: payslipData.other_deductions,
+        periodEnd: payslipData.pay_period_end,
+    });
+
     const isFormValid = useMemo(() => {
         const { employee_name, pay_period_start, pay_period_end, pay_date, basic_salary } = payslipData;
         return (
@@ -232,17 +243,6 @@ export default function CreatePayslip() {
             !previewError
         );
     }, [payslipData, employeeUuid, calculatedPayroll, previewError]);
-
-    const { calculatedPayroll, previewError } = useServerPayrollPreview({
-        basicSalary: payslipData.basic_salary,
-        allowances: payslipData.allowances,
-        overtimeHours: payslipData.overtime_hours,
-        overtimeRate: payslipData.overtime_rate,
-        medicalAid: payslipData.medical_aid_deduction,
-        pensionFund: payslipData.pension_deduction,
-        otherDeductions: payslipData.other_deductions,
-        periodEnd: payslipData.pay_period_end,
-    });
 
     const addAllowance = () => {
         setPayslipData(prev => ({
@@ -360,7 +360,11 @@ export default function CreatePayslip() {
             navigate(createPageUrl("Payslips"));
         } catch (error) {
             console.error("Error creating payslip:", error);
-            alert("Failed to create payslip. Please try again.");
+            toast({
+                title: "Could not create payslip",
+                description: error?.message || "Please try again.",
+                variant: "destructive",
+            });
         }
     };
 

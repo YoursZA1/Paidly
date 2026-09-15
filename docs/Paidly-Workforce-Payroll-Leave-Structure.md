@@ -85,6 +85,7 @@ gross  →  statutory (PAYE, UIF, …) + other deductions  =  net
 - Org overrides are **append-only versions**. A new `effective_from` inserts a row and closes the previous open window (`effective_to`). Do not UPDATE `value` on an existing id.
 - Pay-run items snapshot `base_salary` and unpaid-leave impact so later salary changes do not rewrite history
 - Calculate claims the pay run (`claim_pay_run_for_calculate`) and commits snapshots (`commit_pay_run_calculate`) so overlapping leave approval cannot mix unpaid days. Math stays in `calculatePayroll.js`. Leave decide locks overlapping open runs first.
+- Recalculate UPDATEs `pay_runs` and `pay_run_items`. The lock trigger must not read `OLD.locked` on those tables (`payslips` is the only one with that column).
 
 ### Pay-run lifecycle
 

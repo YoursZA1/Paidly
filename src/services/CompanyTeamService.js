@@ -8,6 +8,7 @@ import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequest } from "@/utils/apiRequest";
 import { normalizeCompanyRole, normalizeJobFunction, COMPANY_ROLES } from "@/lib/companyPermissions";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
+import { workforceApi } from "@/services/WorkforceApiService";
 
 const INVITE_ROLES = [
   { value: COMPANY_ROLES.EMPLOYEE, label: "Employee" },
@@ -62,12 +63,8 @@ async function authHeaders() {
  * @param {{ email: string, fullName?: string, role?: string, jobFunction?: string, source?: string, registerId?: string | null }} payload
  */
 export async function listWorkforceEmployees() {
-  const headers = await authHeaders();
-  const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
-  const res = await apiRequest(`${apiBase}/api/company/employees`, { method: "GET", headers });
-  const raw = await res.text().catch(() => "");
-  const json = parseApiJsonError(res, raw, "Could not load employees");
-  return Array.isArray(json.data) ? json.data : [];
+  const list = await workforceApi.list({ pageAll: true, include: "none" });
+  return Array.isArray(list.items) ? list.items : [];
 }
 
 export async function createWorkforceEmployee({

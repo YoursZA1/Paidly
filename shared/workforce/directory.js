@@ -89,3 +89,28 @@ export function paginateRows(rows, { limit = 50, offset = 0 } = {}) {
     offset: safeOffset,
   };
 }
+
+const EMPTY_FACETS = { departments: [], job_titles: [], managers: [] };
+
+/** Client pickers used to expect `data` as an array. Directory list now returns `{ items, total }`. */
+export function normalizeEmployeeList(data) {
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+      limit: data.length,
+      offset: 0,
+      facets: EMPTY_FACETS,
+      eligible_managers: [],
+    };
+  }
+  const items = Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : [];
+  return {
+    items,
+    total: data?.total ?? items.length,
+    limit: data?.limit ?? items.length,
+    offset: data?.offset ?? 0,
+    facets: data?.facets || EMPTY_FACETS,
+    eligible_managers: data?.eligible_managers || [],
+  };
+}

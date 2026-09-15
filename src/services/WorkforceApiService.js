@@ -1,5 +1,8 @@
 import { payrollRequest } from "./PayrollApiService";
 import { parseUuid, requireUuid } from "@shared/ids/uuid.js";
+import { normalizeEmployeeList } from "@shared/workforce/directory.js";
+
+export { normalizeEmployeeList };
 
 function listQuery(params = {}) {
   const q = new URLSearchParams();
@@ -15,6 +18,7 @@ function listQuery(params = {}) {
     limit: params.limit,
     offset: params.offset,
     include: params.include,
+    page_all: params.pageAll ? "1" : "",
     eligible_managers: params.eligibleManagers ? "1" : "",
     exclude_id: params.excludeId,
   };
@@ -24,28 +28,6 @@ function listQuery(params = {}) {
   }
   const qs = q.toString();
   return qs ? `/api/company/employees?${qs}` : "/api/company/employees";
-}
-
-export function normalizeEmployeeList(data) {
-  if (Array.isArray(data)) {
-    return {
-      items: data,
-      total: data.length,
-      limit: data.length,
-      offset: 0,
-      facets: { departments: [], job_titles: [], managers: [] },
-      eligible_managers: [],
-    };
-  }
-  const items = data?.items || data?.data || [];
-  return {
-    items,
-    total: data?.total ?? items.length,
-    limit: data?.limit ?? items.length,
-    offset: data?.offset ?? 0,
-    facets: data?.facets || { departments: [], job_titles: [], managers: [] },
-    eligible_managers: data?.eligible_managers || [],
-  };
 }
 
 export const workforceApi = {
