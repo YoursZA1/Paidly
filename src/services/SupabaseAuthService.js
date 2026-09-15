@@ -7,6 +7,8 @@ import {
 } from "@/api/backendClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { retryOnAbort, isAbortError } from "@/utils/retryOnAbort";
+import { invalidateSessionSnapshot } from "@/core/auth/SessionCoordinator";
+import { authFlowLog } from "@/lib/auth/authFlowLog";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
 
@@ -117,10 +119,16 @@ function isNodeAuthRouteUnsupportedStatus(status) {
 
 const normalizeSession = (session) => {
   if (!session) return null;
+  const expiresAt =
+    typeof session.expires_at === "number"
+      ? session.expires_at
+      : typeof session.expires_in === "number"
+        ? Math.floor(Date.now() / 1000) + session.expires_in
+        : undefined;
   return {
     accessToken: session.access_token,
     refreshToken: session.refresh_token,
-    expiresAt: session.expires_at,
+    expiresAt,
     user: session.user
   };
 };
@@ -134,6 +142,7 @@ async function activateSessionFromApiTokens({ access_token, refresh_token }, abo
   if (error) {
     throwIfSupabaseAuthError(error, { abortMessage });
   }
+  invalidateSessionSnapshot();
   return normalizeSession(data.session);
 }
 
@@ -248,6 +257,7 @@ const SupabaseAuthService = {
    */
   async signInWithEmail(email, password) {
     const normalized = (email || "").trim().toLowerCase();
+    authFlowLog("AUTH", "sign-in started", { stage: "password" });
 
     const SIGN_IN_DIRECT_TIMEOUT_MS = 20_000;
     const signInDirect = async () => {
@@ -273,6 +283,8 @@ const SupabaseAuthService = {
             if (error) {
               throwIfSupabaseAuthError(error, { abortMessage: "Sign-in was interrupted. Please try again." });
             }
+            invalidateSessionSnapshot();
+            authFlowLog("AUTH", "sign-in successful", { stage: "supabase_password" });
             return normalizeSession(data.session);
           })(),
           timeoutPromise,
@@ -303,6 +315,7 @@ const SupabaseAuthService = {
       );
 
       if (status === 200 && data?.access_token && data?.refresh_token) {
+        authFlowLog("AUTH", "sign-in successful", { stage: "api_tokens" });
         const SESSION_OPS_TIMEOUT_MS = 10_000;
         let sessionOpsTimeoutId;
         const sessionOpsTimeout = new Promise((_, reject) => {

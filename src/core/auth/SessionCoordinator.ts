@@ -24,6 +24,7 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { useAuthSessionStore } from "@/stores/authSessionStore";
+import { isAbortError, isTransientFetchFailure } from "@/utils/retryOnAbort";
 
 const SNAPSHOT_TTL_MS = 5_000;
 /** Minimum seconds remaining before expiry to trust the in-memory session */
@@ -50,9 +51,13 @@ function _storeSession() {
 }
 
 function _isStoreSessionFresh(s: ReturnType<typeof _storeSession>): boolean {
-  if (!s?.expiresAt || !s?.user?.id) return false;
+  if (!s?.expiresAt || !s?.user?.id || !s?.accessToken) return false;
   const nowS = Math.floor(Date.now() / 1000);
   return s.expiresAt > nowS + STORE_SESSION_MIN_TTL_S;
+}
+
+function isUncacheableSessionReadError(error: unknown): boolean {
+  return isAbortError(error) || isTransientFetchFailure(error);
 }
 
 function _fromStore(stored: NonNullable<ReturnType<typeof _storeSession>>): RawSession {
@@ -93,7 +98,12 @@ export async function getStableSessionResult(): Promise<{
         error: (error as Error | null) ?? null,
         fetchedAt: Date.now(),
       };
-      _cached = snap;
+      // Aborted/transient reads must not poison the 5s snapshot (login races with setSession).
+      if (!isUncacheableSessionReadError(error)) {
+        _cached = snap;
+      } else {
+        _cached = null;
+      }
       return snap;
     } catch (e) {
       const snap: Snapshot = {
@@ -101,7 +111,11 @@ export async function getStableSessionResult(): Promise<{
         error: e instanceof Error ? e : new Error(String(e)),
         fetchedAt: Date.now(),
       };
-      _cached = snap;
+      if (!isUncacheableSessionReadError(e)) {
+        _cached = snap;
+      } else {
+        _cached = null;
+      }
       return snap;
     } finally {
       _inflight = null;

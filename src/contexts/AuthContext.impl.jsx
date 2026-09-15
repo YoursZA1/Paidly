@@ -10,13 +10,21 @@ import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { enforceProtectedRouteSessionInvariant } from "@/lib/authProtectedSessionInvariant";
 import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import Button from "@/components/ui/button";
-import { isAbortError } from "@/utils/retryOnAbort";
+import { isAbortError, isTransientFetchFailure } from "@/utils/retryOnAbort";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 import { clearStoredAuthUser } from "@/utils/authStorage";
 import {
   reportSupabaseGetSessionFailure,
   reportSupabaseGetSessionRecovered,
 } from "@/lib/authSessionReconnectToast";
+import { authFlowLog, sessionReadErrorType } from "@/lib/auth/authFlowLog";
+import {
+  deferAfterAuthLock,
+  isTransientSessionReadFailure,
+  resolveSessionForProfileRestore,
+  shouldKeepHydratedUserOnSessionReadFailure,
+} from "@/lib/auth/profileRestorePolicy";
+import { invalidateSessionSnapshot } from "@/core/auth/SessionCoordinator";
 import { isRefreshTokenFatalError } from "@/lib/supabaseAuthRefresh";
 import { resetApp } from "@/utils/resetApp";
 import { AUTH_BOOTSTRAP_FAILSAFE_MS } from "@/hooks/useLoadingFailSafe";
@@ -147,6 +155,7 @@ function minimalUserFromJwtUser(su) {
     currency: "ZAR",
     logo_url: "",
     timezone: "UTC",
+    profileReady: false,
   };
 }
 
@@ -186,6 +195,7 @@ export function AuthProvider({ children }) {
   const session = useAuthSessionStore((s) => s.session);
   const loading = useAuthSessionStore((s) => s.loading);
   const authLoadingTimedOut = useAuthSessionStore((s) => s.authLoadingTimedOut);
+  const profileReady = useAuthSessionStore((s) => s.profileReady);
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   /** Email for resend when login blocked verification before `user` is hydrated. */
   const [verifyGateEmail, setVerifyGateEmail] = useState("");
@@ -356,8 +366,79 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  const refreshUserInflightRef = useRef(null);
   const refreshUser = useCallback(async () => {
+    if (refreshUserInflightRef.current) return refreshUserInflightRef.current;
+
+    const run = (async () => {
+    const startedAt = Date.now();
+    const keepHydratedUserFromStore = (error) => {
+      const { session: stored, user: storedUser } = useAuthSessionStore.getState();
+      if (
+        !shouldKeepHydratedUserOnSessionReadFailure({
+          storeSession: stored,
+          storeUser,
+          error,
+        })
+      ) {
+        return false;
+      }
+      if (storedUser && getAuthUserId(storedUser)) {
+        if (storedUser.profileReady !== true) {
+          patchAuthSession({ user: storedUser, profileReady: false });
+        }
+        return true;
+      }
+      const min = stored?.user ? minimalUserFromJwtUser(stored.user) : null;
+      if (min) {
+        patchAuthSession({ user: min, profileReady: false });
+        authFlowLog("PROFILE", "restoration used in-memory session", {
+          stage: "store_fallback",
+          keptSession: true,
+          durationMs: Date.now() - startedAt,
+        });
+        return true;
+      }
+      return false;
+    };
+
+    const applyRestoredUser = async (sessionNorm, attempt = 0) => {
+      authFlowLog("PROFILE", "request started", {
+        stage: "restoreFromSupabaseSession",
+        retry: attempt,
+      });
+      const PROFILE_RESTORE_MS = 10000;
+      const currentUser = await Promise.race([
+        User.restoreFromSupabaseSession(sessionNorm),
+        new Promise((resolve) => {
+          setTimeout(() => resolve(null), PROFILE_RESTORE_MS);
+        }),
+      ]);
+      if (currentUser?.profileReady) {
+        patchAuthSession({ user: currentUser, profileReady: true });
+        authFlowLog("PROFILE", "restoration successful", {
+          stage: "profile",
+          retry: attempt,
+          durationMs: Date.now() - startedAt,
+        });
+        return true;
+      }
+      if (currentUser) {
+        patchAuthSession({ user: currentUser, profileReady: false });
+      } else {
+        const min = minimalUserFromJwtUser(sessionNorm.user);
+        if (min) patchAuthSession({ user: min, profileReady: false });
+      }
+      authFlowLog("PROFILE", "restoration used JWT profile", {
+        stage: "jwt_fallback",
+        retry: attempt,
+        durationMs: Date.now() - startedAt,
+      });
+      return false;
+    };
+
     try {
+      authFlowLog("PROFILE", "restoration started", { stage: "refreshUser" });
       const SESSION_READ_MS = 10_000;
       const first = await Promise.race([
         readSessionSafe(false),
@@ -368,12 +449,21 @@ export function AuthProvider({ children }) {
 
       let sessionNorm = null;
       if (first === SESSION_READ_TIMEOUT || !first?.user) {
-        // Slow or inconclusive read — ask the client once without a fake “empty session” timeout.
         const { data, error } = await supabase.auth.getSession();
-        if (error) reportSupabaseGetSessionFailure();
-        else reportSupabaseGetSessionRecovered();
-        if (!error && data?.session?.user) {
+        if (error) {
+          if (isTransientSessionReadFailure(error) && keepHydratedUserFromStore(error)) {
+            sessionNorm = resolveSessionForProfileRestore(null, useAuthSessionStore.getState().session);
+          } else {
+            reportSupabaseGetSessionFailure();
+          }
+        } else {
+          reportSupabaseGetSessionRecovered();
+        }
+        if (!sessionNorm && !error && data?.session?.user) {
           sessionNorm = normalizeSessionFromClient(data.session);
+        }
+        if (!sessionNorm) {
+          sessionNorm = resolveSessionForProfileRestore(null, useAuthSessionStore.getState().session);
         }
       } else {
         sessionNorm = first;
@@ -381,19 +471,7 @@ export function AuthProvider({ children }) {
       }
 
       if (sessionNorm?.user) {
-        const PROFILE_RESTORE_MS = 10000;
-        const currentUser = await Promise.race([
-          User.restoreFromSupabaseSession(sessionNorm),
-          new Promise((resolve) => {
-            setTimeout(() => resolve(null), PROFILE_RESTORE_MS);
-          }),
-        ]);
-        if (currentUser) {
-          patchAuthSession({ user: currentUser });
-        } else {
-          const min = minimalUserFromJwtUser(sessionNorm.user);
-          if (min) patchAuthSession({ user: min });
-        }
+        await applyRestoredUser(sessionNorm, 0);
         setError("");
       } else {
         const { data, error: gsErr } = await supabase.auth.getSession();
@@ -404,40 +482,52 @@ export function AuthProvider({ children }) {
             return;
           }
           reportSupabaseGetSessionFailure();
+          if (!keepHydratedUserFromStore(gsErr)) {
+            authFlowLog("PROFILE", "request failed", {
+              stage: "getSession",
+              errorType: sessionReadErrorType(gsErr),
+              durationMs: Date.now() - startedAt,
+            });
+          }
           setError("");
           return;
         }
         reportSupabaseGetSessionRecovered();
         if (!data?.session?.user) {
-          patchAuthSession({ user: null });
+          const stored = useAuthSessionStore.getState().session;
+          const fallback = resolveSessionForProfileRestore(null, stored);
+          if (fallback?.user) {
+            await applyRestoredUser(fallback, 1);
+          } else {
+            patchAuthSession({ user: null });
+          }
           setError("");
         } else {
           const s = normalizeSessionFromClient(data.session);
           if (!isSessionValid(s)) {
-            patchAuthSession({ user: null });
+            if (!keepHydratedUserFromStore(null)) {
+              patchAuthSession({ user: null });
+            }
             setError("");
             return;
           }
           patchAuthSession({ session: s });
-          const PROFILE_RESTORE_MS = 10000;
-          const currentUser = await Promise.race([
-            User.restoreFromSupabaseSession(s),
-            new Promise((resolve) => {
-              setTimeout(() => resolve(null), PROFILE_RESTORE_MS);
-            }),
-          ]);
-          if (currentUser) {
-            patchAuthSession({ user: currentUser });
-          } else {
-            const min = minimalUserFromJwtUser(s.user);
-            if (min) patchAuthSession({ user: min });
-          }
+          await applyRestoredUser(s, 1);
           setError("");
         }
       }
     } catch (e) {
-      if (!isAbortError(e)) {
+      if (!isAbortError(e) && !isTransientFetchFailure(e)) {
         console.warn("[Auth] refreshUser:", e?.message || e);
+      }
+      authFlowLog("PROFILE", "request failed", {
+        stage: "refreshUser",
+        errorType: sessionReadErrorType(e),
+        durationMs: Date.now() - startedAt,
+      });
+      if (isTransientSessionReadFailure(e) && keepHydratedUserFromStore(e)) {
+        setError("");
+        return;
       }
       try {
         const { data, error } = await supabase.auth.getSession();
@@ -448,21 +538,33 @@ export function AuthProvider({ children }) {
           await connectionLifecycle.handleRefreshFatal("refresh_token_invalid");
           return;
         }
+        if (error && keepHydratedUserFromStore(error)) {
+          setError("");
+          return;
+        }
         const su = !error && data?.session?.user ? data.session.user : null;
         if (su) {
           const min = minimalUserFromJwtUser(su);
-          if (min) patchAuthSession({ user: min });
-        } else {
+          if (min) patchAuthSession({ user: min, profileReady: false });
+        } else if (!keepHydratedUserFromStore(error)) {
           patchAuthSession({ user: null });
         }
-      } catch {
+      } catch (inner) {
         reportSupabaseGetSessionFailure();
-        patchAuthSession({ user: null });
+        if (!keepHydratedUserFromStore(inner)) {
+          patchAuthSession({ user: null });
+        }
       }
       setError("");
     } finally {
       patchAuthSession({ loading: false });
     }
+    })();
+
+    refreshUserInflightRef.current = run.finally(() => {
+      refreshUserInflightRef.current = null;
+    });
+    return refreshUserInflightRef.current;
   }, [connectionLifecycle, isTerminalRefreshFailure]);
 
   /** Coalesce TOKEN_REFRESHED + Realtime profile bursts so we don't stack profile restores after writes. */
@@ -627,7 +729,7 @@ export function AuthProvider({ children }) {
         if (!currentUser) {
           const min = minimalUserFromJwtUser(initialSession.user);
           if (min) {
-            patchAuthSession({ user: min });
+            patchAuthSession({ user: min, profileReady: false });
             setError("");
             touchAuthHeartbeatIfValid(initialSession);
             if (import.meta.env?.DEV) {
@@ -640,7 +742,10 @@ export function AuthProvider({ children }) {
           }
           return;
         }
-        patchAuthSession({ user: currentUser });
+        patchAuthSession({
+          user: currentUser,
+          profileReady: currentUser?.profileReady === true,
+        });
         setError("");
         touchAuthHeartbeatIfValid(initialSession);
       } catch (err) {
@@ -653,7 +758,7 @@ export function AuthProvider({ children }) {
             if (recovered?.user && isSessionValid(recovered)) {
               const min = minimalUserFromJwtUser(recovered.user);
               if (min) {
-                patchAuthSession({ session: recovered, user: min });
+                patchAuthSession({ session: recovered, user: min, profileReady: false });
                 setError("");
                 touchAuthHeartbeatIfValid(recovered);
               } else {
@@ -1022,7 +1127,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === "SIGNED_OUT") {
         clearSessionOrgIdCache();
         useWakeRecoveryStore.getState().reset();
@@ -1039,62 +1144,68 @@ export function AuthProvider({ children }) {
           authTabSyncRef.current?.publish("AUTH_SIGNED_OUT");
           return;
         }
-        await connectionLifecycle.transitionToExpired("signed_out", {
-          signOutLocal: false,
-          clearAuthState: true,
-          broadcast: true,
-          redirect: true,
-          source: "supabase_signed_out",
+        deferAfterAuthLock(async () => {
+          await connectionLifecycle.transitionToExpired("signed_out", {
+            signOutLocal: false,
+            clearAuthState: true,
+            broadcast: true,
+            redirect: true,
+            source: "supabase_signed_out",
+          });
+          authTabSyncRef.current?.publish("AUTH_SIGNED_OUT");
         });
-        authTabSyncRef.current?.publish("AUTH_SIGNED_OUT");
         return;
       }
 
       if (event === "AUTH_EXPIRED") {
-        await connectionLifecycle.transitionToExpired("auth_expired", {
-          signOutLocal: true,
-          clearAuthState: true,
-          broadcast: true,
-          redirect: true,
-          source: "supabase_auth_expired_event",
+        deferAfterAuthLock(async () => {
+          await connectionLifecycle.transitionToExpired("auth_expired", {
+            signOutLocal: true,
+            clearAuthState: true,
+            broadcast: true,
+            redirect: true,
+            source: "supabase_auth_expired_event",
+          });
         });
         return;
       }
 
       if (!nextSession) {
         if (event === "INITIAL_SESSION") {
-          // INITIAL_SESSION can momentarily be null during startup races; recover once before clearing user state.
+          deferAfterAuthLock(async () => {
+            try {
+              const recovered = await readSessionSafe(true);
+              if (recovered?.user && isSessionValid(recovered)) {
+                patchAuthSession({ session: recovered });
+                touchAuthHeartbeatIfValid(recovered);
+                scheduleRefreshUserRef.current();
+                return;
+              }
+            } catch {
+              // ignore and evaluate existing auth state below
+            }
+            if (!userIdRef.current && !sessionUserIdRef.current) {
+              patchAuthSession({ session: null, user: null, loading: false });
+              setError("");
+              redirectToLoginIfProtectedPath();
+            } else {
+              scheduleRefreshUserRef.current();
+            }
+          });
+          return;
+        }
+        deferAfterAuthLock(async () => {
           try {
             const recovered = await readSessionSafe(true);
             if (recovered?.user && isSessionValid(recovered)) {
               patchAuthSession({ session: recovered });
               touchAuthHeartbeatIfValid(recovered);
               scheduleRefreshUserRef.current();
-              return;
             }
           } catch {
-            // ignore and evaluate existing auth state below
+            /* offline — do not clear */
           }
-          // Only hard-clear when we truly have no session and no hydrated user to avoid route flicker.
-          if (!userIdRef.current && !sessionUserIdRef.current) {
-            patchAuthSession({ session: null, user: null, loading: false });
-            setError("");
-            redirectToLoginIfProtectedPath();
-          } else {
-            scheduleRefreshUserRef.current();
-          }
-          return;
-        }
-        try {
-          const recovered = await readSessionSafe(true);
-          if (recovered?.user && isSessionValid(recovered)) {
-            patchAuthSession({ session: recovered });
-            touchAuthHeartbeatIfValid(recovered);
-            scheduleRefreshUserRef.current();
-          }
-        } catch {
-          /* offline — do not clear */
-        }
+        });
         return;
       }
 
@@ -1102,19 +1213,27 @@ export function AuthProvider({ children }) {
         ? {
             accessToken: nextSession.access_token,
             refreshToken: nextSession.refresh_token,
-            expiresAt: nextSession.expires_at,
+            expiresAt:
+              typeof nextSession.expires_at === "number"
+                ? nextSession.expires_at
+                : typeof nextSession.expires_in === "number"
+                  ? Math.floor(Date.now() / 1000) + nextSession.expires_in
+                  : nextSession.expires_at,
             user: nextSession.user,
           }
         : null;
 
       if (event === "SIGNED_IN" && norm) {
+        authFlowLog("AUTH", "session available", { stage: "SIGNED_IN" });
         clearSessionOrgIdCache();
+        invalidateSessionSnapshot();
         connectionLifecycle.markConnected("signed_in");
         patchAuthSession({ session: norm });
         void bootstrapOrganizationAfterLogin(norm);
-        void tryAcceptStoredInviteToken();
-        // Do not await — refreshUser calls getSession and can deadlock with setSession.
-        void refreshUserRef.current();
+        deferAfterAuthLock(() => {
+          void tryAcceptStoredInviteToken();
+          void refreshUserRef.current();
+        });
         touchAuthHeartbeatIfValid(norm);
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "SIGNED_IN" });
       } else if ((event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && norm) {
@@ -1139,7 +1258,9 @@ export function AuthProvider({ children }) {
         connectionLifecycle.markConnected("initial_session");
         patchAuthSession({ session: norm });
         void bootstrapOrganizationAfterLogin(norm);
-        void refreshUserRef.current();
+        deferAfterAuthLock(() => {
+          void refreshUserRef.current();
+        });
         touchAuthHeartbeatIfValid(norm);
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "INITIAL_SESSION" });
       }
@@ -1152,6 +1273,8 @@ export function AuthProvider({ children }) {
     setVerifyGateEmail("");
     const normalizedEmail = (email || "").trim().toLowerCase();
     const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password);
+    invalidateSessionSnapshot();
+    authFlowLog("AUTH", "session available", { stage: "login" });
     if (session?.user && session.user.email_confirmed_at == null) {
       // Defense in depth: do not allow app login for unverified users.
       try {
@@ -1164,7 +1287,7 @@ export function AuthProvider({ children }) {
       setShowVerifyDialog(true);
       throw new Error("Email not verified. Please verify your email before signing in.");
     }
-    patchAuthSession({ session, authLoadingTimedOut: false });
+    patchAuthSession({ session, authLoadingTimedOut: false, profileReady: false });
     void bootstrapOrganizationAfterLogin(session);
 
     // 5-second timeout prevents a slow DB profile fetch from freezing the sign-in button.
@@ -1189,7 +1312,10 @@ export function AuthProvider({ children }) {
     if (!currentUser && session?.user) {
       currentUser = minimalUserFromJwtUser(session.user);
     }
-    patchAuthSession({ user: currentUser ?? null });
+    patchAuthSession({
+      user: currentUser ?? null,
+      profileReady: currentUser?.profileReady === true,
+    });
     const normAfterLogin = useAuthSessionStore.getState().session;
     touchAuthHeartbeatIfValid(normAfterLogin);
 
@@ -1456,6 +1582,7 @@ export function AuthProvider({ children }) {
       userPermissions,
       session,
       authLoadingTimedOut,
+      profileReady,
       retryAuthBootstrap,
     };
   }, [
@@ -1475,6 +1602,7 @@ export function AuthProvider({ children }) {
     error,
     session,
     authLoadingTimedOut,
+    profileReady,
     retryAuthBootstrap,
   ]);
 
@@ -1545,6 +1673,7 @@ const AUTH_FALLBACK = {
   userRole: null,
   userPermissions: [],
   authLoadingTimedOut: false,
+  profileReady: false,
 };
 
 let warnedAuthOutsideProvider = false;

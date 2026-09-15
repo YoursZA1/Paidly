@@ -4,31 +4,65 @@ import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl } from "@/utils";
 import { getAuthUserId } from "@/lib/authUserId";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
-import { useSessionHealthStore, SESSION_STATUS, isTerminalSessionStatus } from "@/stores/sessionHealthStore";
+import { Button } from "@/components/ui/button";
+import { useSessionHealthStore, isTerminalSessionStatus } from "@/stores/sessionHealthStore";
+import { useAuthSessionStore } from "@/stores/authSessionStore";
+import { authFlowLog } from "@/lib/auth/authFlowLog";
+import { isProfileReady } from "@/lib/auth/profileRestorePolicy";
+
+const PROFILE_RESTORE_ATTEMPTS = 3;
+const PROFILE_RESTORE_BACKOFF_MS = [400, 800];
 
 /**
  * Rare edge: Supabase session exists but the app user object has not hydrated yet.
- * Recover with refreshUser instead of rendering protected children with user === null.
+ * Recover with refreshUser. A valid session must not be sent back to login.
  */
 function SessionProfileHydrating() {
   const { refreshUser, session } = useAuth();
-  const [timedOut, setTimedOut] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    void refreshUser();
-  }, [refreshUser, session?.user?.id]);
+    let cancelled = false;
+    (async () => {
+      setFailed(false);
+      for (let attempt = 0; attempt < PROFILE_RESTORE_ATTEMPTS; attempt++) {
+        if (cancelled) return;
+        authFlowLog(
+          "PROFILE",
+          attempt === 0 ? "restoration started" : `retry ${attempt}/${PROFILE_RESTORE_ATTEMPTS}`,
+          {
+            stage: "SessionProfileHydrating",
+            retry: attempt,
+          }
+        );
+        await refreshUser();
+        if (cancelled) return;
+        const state = useAuthSessionStore.getState();
+        if (isProfileReady(state.user, state.profileReady)) return;
+        if (attempt < PROFILE_RESTORE_ATTEMPTS - 1) {
+          await new Promise((resolve) => setTimeout(resolve, PROFILE_RESTORE_BACKOFF_MS[attempt] || 800));
+        }
+      }
+      if (!cancelled) setFailed(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Restore once per session user / explicit retry. Do not loop on refreshUser identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id, retryKey]);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => setTimedOut(true), 12_000);
-    return () => window.clearTimeout(t);
-  }, []);
-
-  if (timedOut) {
+  if (failed) {
     return (
-      <Navigate
-        to={`${createPageUrl("Home")}#sign-in`}
-        replace
-      />
+      <div className="min-h-screen bg-gray-50 dark:bg-background flex flex-col items-center justify-center gap-4 px-6">
+        <p className="text-sm text-muted-foreground text-center max-w-sm">
+          Unable to restore your workspace right now. Please try again.
+        </p>
+        <Button type="button" onClick={() => setRetryKey((n) => n + 1)}>
+          Retry
+        </Button>
+      </div>
     );
   }
 
@@ -44,23 +78,18 @@ function SessionProfileHydrating() {
 }
 
 export default function RequireAuth({ children, roles }) {
-  const { loading, user, session } = useAuth();
+  const { loading, user, session, profileReady } = useAuth();
   const location = useLocation();
   const sessionHealthStatus = useSessionHealthStore((s) => s.status);
   const authUserId = getAuthUserId(user);
   const sessionUserId = session?.user?.id ?? null;
+  const restored = isProfileReady(user, profileReady);
 
-  // Keep protected pages interactive when we already have a hydrated user
-  // and auth is doing a background session/profile reconciliation.
   if (loading && !authUserId) {
     return <AuthBootstrapShell />;
   }
 
-  // Never render protected routes without a stable app user id (avoids null.id crashes).
-  if (!authUserId) {
-    if (sessionUserId) {
-      return <SessionProfileHydrating />;
-    }
+  if (isTerminalSessionStatus(sessionHealthStatus)) {
     return (
       <Navigate
         to={`${createPageUrl("Home")}#sign-in`}
@@ -70,10 +99,11 @@ export default function RequireAuth({ children, roles }) {
     );
   }
 
-  // Both EXPIRED and REAUTH_REQUIRED are terminal states that require re-authentication.
-  // EXPIRED covers inactivity, sign-out, and general session loss.
-  // REAUTH_REQUIRED covers fatal refresh-token invalidation (more secure expiry path).
-  if (isTerminalSessionStatus(sessionHealthStatus)) {
+  // Never render protected routes without a restored profiles query (JWT-only is not enough).
+  if (!authUserId || !restored) {
+    if (sessionUserId) {
+      return <SessionProfileHydrating />;
+    }
     return (
       <Navigate
         to={`${createPageUrl("Home")}#sign-in`}

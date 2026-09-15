@@ -114,6 +114,7 @@ import AuthProtectedRouteInvariant from "@/components/auth/AuthProtectedRouteInv
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthUserId } from "@/lib/authUserId";
+import { shouldWaitForProfileRestore } from "@/lib/auth/profileRestorePolicy";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
@@ -588,10 +589,12 @@ function shouldBypassAppLayout(pathname) {
 
 function PagesContent() {
     const location = useLocation();
-    const { loading, user } = useAuth();
+    const { loading, user, session, profileReady } = useAuth();
     const authUserId = getAuthUserId(user);
     const posTillPath = isPosAccessPath(location.pathname);
     const needsAppShell = !shouldBypassAppLayout(location.pathname) && !posTillPath;
+    const sessionUserId = session?.user?.id ?? null;
+    const waitForProfile = shouldWaitForProfileRestore(sessionUserId, user, profileReady);
 
     // Avoid mounting the main shell (nav, store hydration) until session bootstrap knows if there is a user.
     // /pos is a dedicated till shell — guests and signed-in cashiers skip dashboard bootstrap.
@@ -628,6 +631,16 @@ function PagesContent() {
     );
 
     if (shouldBypassAppLayout(location.pathname) || posTillPath) {
+        return (
+            <>
+                {content}
+                <PWAInstallPrompt />
+            </>
+        );
+    }
+
+    // Session is valid but profiles has not completed — do not mount Layout/dashboard data.
+    if (waitForProfile) {
         return (
             <>
                 {content}

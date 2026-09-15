@@ -13,6 +13,7 @@ import {
   isSupabaseAuthUuid,
 } from "@/api/auth/authSessionHelpers.js";
 import { getStableSession } from "@/core/auth/SessionCoordinator";
+import { useAuthSessionStore } from "@/stores/authSessionStore";
 import { normalizePaidlyPlan } from "@/api/auth/planNormalize.js";
 import { clearOrgIdCache } from "@/api/auth/orgCache.js";
 import { selectProfileByUserId } from "@/api/auth/profileSelect.js";
@@ -68,12 +69,15 @@ export class AuthManager {
     }
 
     let companyProfile = {};
-    let supabaseUserId = null;
+    let supabaseUserId = useAuthSessionStore.getState().session?.user?.id || null;
     let resolvedRole = credentials.role || "user";
+    let profileQueryOk = false;
     try {
       const { data: sessionData, error: sessionError } = await getSessionWithRetry();
       if (sessionError) {
-        console.warn("Failed to get session for login:", getSupabaseErrorMessage(sessionError, "Session failed"));
+        if (!isAbortError(sessionError) || !supabaseUserId) {
+          console.warn("Failed to get session for login:", getSupabaseErrorMessage(sessionError, "Session failed"));
+        }
       } else if (sessionData?.session?.user?.id) {
         const su = sessionData.session.user;
         supabaseUserId = su.id;
@@ -84,6 +88,8 @@ export class AuthManager {
           } else if (import.meta.env.DEV) {
             console.debug("[auth] Profile select aborted during login; role/plan may use defaults until me() refetch.");
           }
+        } else {
+          profileQueryOk = true;
         }
         resolvedRole = resolveUserRoleFromSessionAndProfile(su, profile || {});
         if (profile) {
@@ -119,17 +125,22 @@ export class AuthManager {
     }
 
     if (isSupabaseConfigured && !supabaseUserId) {
-      this.isAuthenticated = false;
-      this.user = null;
-      const decision = decideSessionAction({
-        reason: "missing-supabase-session",
-        believedSignedIn: true,
-        online: typeof navigator !== "undefined" ? navigator.onLine !== false : true,
-      });
-      if (decision.action === SESSION_DECISION.RECONNECTING) {
-        getSessionAuthority()?.markReconnecting(decision.reason || "session_reconnecting");
+      const storedId = useAuthSessionStore.getState().session?.user?.id || null;
+      if (storedId) {
+        supabaseUserId = storedId;
+      } else {
+        this.isAuthenticated = false;
+        this.user = null;
+        const decision = decideSessionAction({
+          reason: "missing-supabase-session",
+          believedSignedIn: true,
+          online: typeof navigator !== "undefined" ? navigator.onLine !== false : true,
+        });
+        if (decision.action === SESSION_DECISION.RECONNECTING) {
+          getSessionAuthority()?.markReconnecting(decision.reason || "session_reconnecting");
+        }
+        return null;
       }
-      return null;
     }
 
     this.isAuthenticated = true;
@@ -155,6 +166,7 @@ export class AuthManager {
       plan: normalizePaidlyPlan(credentials.plan) // Keep null unless explicitly set
     };
     this.user = syncProfileLogoAliases(this.user);
+    this.user = { ...this.user, profileReady: profileQueryOk };
     this.saveUserToStorage();
     return this.user;
   }
@@ -380,6 +392,7 @@ export class AuthManager {
       }
 
       let profileData = {};
+      let profileQueryOk = false;
       try {
         const { data: profile, error: profileErr } = await retryOnAbort(
           () => selectProfileByUserId(supabase, su.id),
@@ -392,7 +405,10 @@ export class AuthManager {
             getSupabaseErrorMessage(profileErr, "Profile load failed")
           );
         }
-        profileData = profile || {};
+        if (!profileErr) {
+          profileQueryOk = true;
+          profileData = profile || {};
+        }
       } catch (profileErr) {
         if (!isAbortError(profileErr)) {
           console.warn(
@@ -450,6 +466,7 @@ export class AuthManager {
         quote_reminder_settings: profileData.quote_reminder_settings ?? null,
       };
       this.user = syncProfileLogoAliases(this.user);
+      this.user = { ...this.user, profileReady: profileQueryOk };
       this.isAuthenticated = true;
       this.saveUserToStorage();
       return this.user;
@@ -581,8 +598,11 @@ export class AuthManager {
 
     const upsertProfileRow = async () => {
       let { error } = await retryOnAbort(
-        () =>
-          supabase.from("profiles").upsert({ id: authUserId, ...profileData }, { onConflict: "id" }),
+        async () => {
+          const result = await supabase.from("profiles").upsert({ id: authUserId, ...profileData }, { onConflict: "id" });
+          if (result?.error && isAbortError(result.error)) throw result.error;
+          return result;
+        },
         8,
         450
       );
@@ -635,7 +655,11 @@ export class AuthManager {
           if (fallback[key] === undefined) delete fallback[key];
         });
         const retry = await retryOnAbort(
-          () => supabase.from("profiles").upsert({ id: authUserId, ...fallback }, { onConflict: "id" }),
+          async () => {
+            const result = await supabase.from("profiles").upsert({ id: authUserId, ...fallback }, { onConflict: "id" });
+            if (result?.error && isAbortError(result.error)) throw result.error;
+            return result;
+          },
           8,
           450
         );
@@ -668,6 +692,7 @@ export class AuthManager {
       }
 
       if (error) {
+        if (isAbortError(error)) throw error;
         alertSupabaseWriteFailure(error, "Save profile failed");
         throw new Error(getSupabaseErrorMessage(error, "Save profile failed"));
       }
