@@ -892,7 +892,7 @@ function CompanyProfileSettings() {
                             Document Template
                             <HelpTooltip content="Applies to PDF exports for invoices and quotes." />
                         </Label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0" role="radiogroup" aria-label="Document templates">
+                        <div className="grid grid-cols-4 gap-2 min-w-0" role="radiogroup" aria-label="Document templates">
                             {DOCUMENT_TEMPLATES.map((template) => {
                                 const isSelected =
                                     toSelectableInvoiceTemplateKey(formData.invoice_template) ===
@@ -917,19 +917,19 @@ function CompanyProfileSettings() {
                                             selectTemplate();
                                         }
                                     }}
-                                    className={`relative cursor-pointer text-left rounded-xl border-2 p-3 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 ${
+                                    className={`relative cursor-pointer text-left rounded-lg border-2 p-1.5 sm:p-2 transition-all hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 ${
                                         isSelected
-                                            ? "border-orange-500 ring-2 ring-orange-500/30"
+                                            ? "border-orange-500 ring-1 ring-orange-500/30"
                                             : "border-border hover:border-primary/40"
                                     }`}
                                 >
                                     {isSelected && (
-                                        <div className="absolute top-2 right-2 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center z-10">
-                                            <Check className="w-3 h-3 text-white" strokeWidth={2.5} />
+                                        <div className="absolute top-1 right-1 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center z-10">
+                                            <Check className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
                                         </div>
                                     )}
                                     <div
-                                        className="aspect-[3/4] rounded-lg mb-2 overflow-hidden border border-border"
+                                        className="aspect-[4/3] rounded-md mb-1.5 overflow-hidden border border-border"
                                         style={{ backgroundColor: bodyBg }}
                                     >
                                         {/* Distinct thumbnail per template identity */}
@@ -1023,17 +1023,17 @@ function CompanyProfileSettings() {
                                             </>
                                         )}
                                     </div>
-                                    <p className="text-sm font-medium text-foreground text-center">{template.name}</p>
-                                    <p className="text-[11px] text-muted-foreground text-center mt-0.5">{template.description}</p>
+                                    <p className="text-[11px] sm:text-xs font-medium text-foreground text-center truncate">{template.name}</p>
+                                    <p className="hidden sm:block text-[10px] text-muted-foreground text-center mt-0.5 truncate">{template.description}</p>
                                     <button
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             handlePreviewTemplate(template.id);
                                         }}
-                                        className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                                        className="mt-1.5 w-full inline-flex items-center justify-center gap-1 rounded-md border border-border py-1 text-[10px] sm:text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
                                     >
-                                        <FileText className="w-3.5 h-3.5" />
+                                        <FileText className="w-3 h-3" />
                                         Preview
                                     </button>
                                 </div>
