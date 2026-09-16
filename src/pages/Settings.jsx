@@ -1310,6 +1310,7 @@ function PaymentMethodsSettings() {
     const [isLoading, setIsLoading] = useState(true);
     const [isImporting, setIsImporting] = useState(false);
     const [isSavingDefaults, setIsSavingDefaults] = useState(false);
+    const [editingDefaults, setEditingDefaults] = useState(false);
     const [defaultBankForm, setDefaultBankForm] = useState({
         business_bank_name: "",
         business_account_name: "",
@@ -1318,6 +1319,14 @@ function PaymentMethodsSettings() {
     });
     const bankingFileInputRef = useRef(null);
     const { toast } = useToast();
+
+    const hasDefaultBank = Boolean(
+        defaultBankForm.business_bank_name?.trim() ||
+            defaultBankForm.business_account_name?.trim() ||
+            defaultBankForm.business_account_number?.trim() ||
+            defaultBankForm.business_branch_code?.trim()
+    );
+    const showDefaultBankForm = editingDefaults || !hasDefaultBank;
 
     useEffect(() => {
         loadBankingDetails();
@@ -1420,6 +1429,7 @@ function PaymentMethodsSettings() {
             }
 
             await refreshUser();
+            setEditingDefaults(false);
             toast({
                 title: "✓ Default bank details updated",
                 description:
@@ -1551,59 +1561,147 @@ function PaymentMethodsSettings() {
                 title="Default Bank Details"
                 description="Shown on PDFs when an invoice does not use a saved bank account. Invoice-specific payment methods still take priority."
             >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="pm_default_bank_name" className="text-sm font-medium text-foreground">Bank</Label>
-                        <Input
-                            id="pm_default_bank_name"
-                            value={defaultBankForm.business_bank_name}
-                            onChange={(e) => handleDefaultBankInputChange("business_bank_name", e.target.value)}
-                            placeholder="e.g., FNB"
-                            className="h-11 rounded-lg"
-                        />
+                {showDefaultBankForm ? (
+                    <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="pm_default_bank_name" className="text-sm font-medium text-foreground">Bank</Label>
+                                <Input
+                                    id="pm_default_bank_name"
+                                    value={defaultBankForm.business_bank_name}
+                                    onChange={(e) => handleDefaultBankInputChange("business_bank_name", e.target.value)}
+                                    placeholder="e.g., FNB"
+                                    className="h-11 rounded-lg"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="pm_default_account_name" className="text-sm font-medium text-foreground">Account name</Label>
+                                <Input
+                                    id="pm_default_account_name"
+                                    value={defaultBankForm.business_account_name}
+                                    onChange={(e) => handleDefaultBankInputChange("business_account_name", e.target.value)}
+                                    placeholder="Business name on account"
+                                    className="h-11 rounded-lg"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="pm_default_account_number" className="text-sm font-medium text-foreground">Account number</Label>
+                                <Input
+                                    id="pm_default_account_number"
+                                    value={defaultBankForm.business_account_number}
+                                    onChange={(e) => handleDefaultBankInputChange("business_account_number", e.target.value)}
+                                    placeholder="Account number"
+                                    className="h-11 rounded-lg"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="pm_default_branch_code" className="text-sm font-medium text-foreground">Branch code</Label>
+                                <Input
+                                    id="pm_default_branch_code"
+                                    value={defaultBankForm.business_branch_code}
+                                    onChange={(e) => handleDefaultBankInputChange("business_branch_code", e.target.value)}
+                                    placeholder="e.g., 250655"
+                                    className="h-11 rounded-lg"
+                                />
+                            </div>
+                        </div>
+                        <div className="mt-4 flex justify-end gap-2">
+                            {hasDefaultBank && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        const b = businessFieldsFromProfile(authUser?.business);
+                                        setDefaultBankForm({
+                                            business_bank_name: b.bank_name || "",
+                                            business_account_name: b.account_name || "",
+                                            business_account_number: b.account_number || "",
+                                            business_branch_code: b.branch_code || "",
+                                        });
+                                        setEditingDefaults(false);
+                                    }}
+                                    disabled={isSavingDefaults}
+                                >
+                                    Cancel
+                                </Button>
+                            )}
+                            <Button
+                                type="button"
+                                onClick={handleSaveProfileDefaults}
+                                disabled={isSavingDefaults}
+                                className="bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00] text-white"
+                            >
+                                <Save className="w-4 h-4 mr-2" />
+                                {isSavingDefaults ? "Saving..." : "Save Default Bank Details"}
+                            </Button>
+                        </div>
+                    </>
+                ) : (
+                    <div className="max-w-sm">
+                        <div className="group relative bg-muted/40 border border-border rounded-[28px] p-5 shadow-sm hover:shadow-md transition-all duration-300">
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="w-12 h-12 bg-orange-50 dark:bg-orange-950/50 rounded-2xl flex items-center justify-center border border-orange-100 dark:border-orange-900/50">
+                                    <div className="w-7 h-7 bg-orange-600 rounded-lg flex items-center justify-center">
+                                        <Landmark className="w-4 h-4 text-white" />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-0 text-[10px] font-bold uppercase tracking-wide">
+                                        PDF default
+                                    </Badge>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setEditingDefaults(true)}
+                                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                        aria-label="Edit default bank details"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Account Holder</p>
+                                <h3 className="text-lg font-black text-foreground truncate">
+                                    {defaultBankForm.business_account_name?.trim() || "—"}
+                                </h3>
+                            </div>
+
+                            <div className="mt-5 flex justify-between items-end gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Account Number</p>
+                                    <p className="text-xl font-bold text-foreground tracking-tighter tabular-nums">
+                                        {maskAccount(defaultBankForm.business_account_number)}
+                                    </p>
+                                </div>
+                                <div className="text-right min-w-0">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bank</p>
+                                    <p className="text-sm font-bold text-muted-foreground truncate">
+                                        {defaultBankForm.business_bank_name?.trim() || "—"}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-6 pt-4 border-t border-border/50 flex justify-between items-center gap-3">
+                                <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Branch</p>
+                                    <p className="text-sm font-semibold text-foreground tabular-nums">
+                                        {defaultBankForm.business_branch_code?.trim() || "—"}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingDefaults(true)}
+                                    className="text-[10px] font-bold text-orange-500 hover:text-orange-600 transition-colors"
+                                >
+                                    EDIT DETAILS <ChevronRight className="w-3 h-3 inline" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="pm_default_account_name" className="text-sm font-medium text-foreground">Account name</Label>
-                        <Input
-                            id="pm_default_account_name"
-                            value={defaultBankForm.business_account_name}
-                            onChange={(e) => handleDefaultBankInputChange("business_account_name", e.target.value)}
-                            placeholder="Business name on account"
-                            className="h-11 rounded-lg"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="pm_default_account_number" className="text-sm font-medium text-foreground">Account number</Label>
-                        <Input
-                            id="pm_default_account_number"
-                            value={defaultBankForm.business_account_number}
-                            onChange={(e) => handleDefaultBankInputChange("business_account_number", e.target.value)}
-                            placeholder="Account number"
-                            className="h-11 rounded-lg"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="pm_default_branch_code" className="text-sm font-medium text-foreground">Branch code</Label>
-                        <Input
-                            id="pm_default_branch_code"
-                            value={defaultBankForm.business_branch_code}
-                            onChange={(e) => handleDefaultBankInputChange("business_branch_code", e.target.value)}
-                            placeholder="e.g., 250655"
-                            className="h-11 rounded-lg"
-                        />
-                    </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                    <Button
-                        type="button"
-                        onClick={handleSaveProfileDefaults}
-                        disabled={isSavingDefaults}
-                        className="bg-gradient-to-r from-primary to-[#ff7c00] hover:from-primary/90 hover:to-[#ff7c00] text-white"
-                    >
-                        <Save className="w-4 h-4 mr-2" />
-                        {isSavingDefaults ? "Saving..." : "Save Default Bank Details"}
-                    </Button>
-                </div>
+                )}
             </SettingsCard>
 
             {showForm && (
