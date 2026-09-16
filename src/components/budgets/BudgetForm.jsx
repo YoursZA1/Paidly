@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2 } from "lucide-react";
 
 export default function BudgetForm({ budget, onSave, onCancel, onDelete }) {
     const [formData, setFormData] = useState(budget || {
@@ -124,9 +124,12 @@ export default function BudgetForm({ budget, onSave, onCancel, onDelete }) {
 
             <div className="flex gap-2 pt-4">
                 {budget && (
-                    <Button type="button" variant="destructive" size="icon" onClick={onDelete}>
-                        <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <ConfirmActionButton
+                        action="delete"
+                        size="sm"
+                        label="Delete budget"
+                        onConfirm={onDelete}
+                    />
                 )}
                 <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
                     Cancel

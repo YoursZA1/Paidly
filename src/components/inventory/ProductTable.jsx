@@ -2,13 +2,8 @@ import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ArrowDown, ArrowUp, ArrowUpDown, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
+import { ArrowDown, ArrowUp, ArrowUpDown, Pencil } from "lucide-react";
 import { formatCurrency } from "@/components/CurrencySelector";
 import ProductThumbnail from "@/components/inventory/ProductThumbnail";
 
@@ -29,25 +24,16 @@ function MobileProductCard({ product, currencyCode, quantityLabel, onOpenProduct
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium text-sm text-foreground leading-snug truncate">{product.name}</p>
-          <div className="shrink-0 flex items-center -mr-2 -mt-1" onClick={(e) => e.stopPropagation()}>
+          <div className="shrink-0 flex items-center gap-0.5 -mr-1 -mt-1" onClick={(e) => e.stopPropagation()}>
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(product)}>
               <Pencil className="h-3.5 w-3.5" />
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onOpenProduct?.(product)}>Open product</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onEdit(product)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onDelete(product)} className="text-destructive focus:text-destructive">
-                  <Trash2 className="h-3.5 w-3.5 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ConfirmActionButton
+              action="delete"
+              size="sm"
+              label={`Delete ${product.name}`}
+              onConfirm={() => onDelete(product)}
+            />
           </div>
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
@@ -282,28 +268,16 @@ export default function ProductTable({
                 {statusLabel(product)}
               </TableCell>
               <TableCell className="py-4 pr-4 text-right" onClick={(e) => e.stopPropagation()}>
-                <div className="inline-flex items-center">
+                <div className="inline-flex items-center gap-0.5">
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(product)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onOpenProduct?.(product)}>Open product</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onEdit(product)}>Edit</DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => onDelete(product)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <ConfirmActionButton
+                    action="delete"
+                    size="sm"
+                    label={`Delete ${product.name}`}
+                    onConfirm={() => onDelete(product)}
+                  />
                 </div>
               </TableCell>
             </TableRow>

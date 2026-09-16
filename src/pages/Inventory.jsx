@@ -920,7 +920,6 @@ export default function Inventory() {
 
   const handleDeleteProduct = useCallback(
     async (product) => {
-      if (!window.confirm(`Delete "${product.name}"?`)) return;
       try {
         await Service.delete(product.id);
         toast({
@@ -1101,7 +1100,6 @@ export default function Inventory() {
 
   const handleDeleteDelivery = useCallback(
     async (delivery) => {
-      if (!window.confirm("Delete this delivery?")) return;
       try {
         const { error: delErr } = await supabase.from("deliveries").delete().eq("id", delivery.id);
         if (delErr) throw delErr;

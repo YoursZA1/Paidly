@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ConfirmActionButton } from '@/components/ui/confirm-action-button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -8,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { User } from '@/api/entities';
-import { Bell, Plus, Trash2, Edit2, Save } from 'lucide-react';
+import { Bell, Plus, Edit2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -243,9 +244,12 @@ export default function PaymentReminderSettings() {
                                         <Button variant="ghost" size="icon" onClick={() => handleEditRule(rule)}>
                                             <Edit2 className="w-4 h-4 text-muted-foreground" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRule(rule.id)}>
-                                            <Trash2 className="w-4 h-4 text-red-500" />
-                                        </Button>
+                                        <ConfirmActionButton
+                                            action="delete"
+                                            size="sm"
+                                            label="Delete reminder rule"
+                                            onConfirm={() => handleDeleteRule(rule.id)}
+                                        />
                                     </div>
                                 </div>
                             ))}

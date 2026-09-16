@@ -1,7 +1,8 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, Pencil, Trash2 } from "lucide-react";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
+import { Check, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -71,16 +72,24 @@ export default function DeliveryTable({ deliveries, products, onEdit, onDelete, 
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       {d.status !== "delivered" && d.status !== "cancelled" && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:text-primary" onClick={() => onMarkDelivered(d)} title="Mark as Delivered">
-                          <Check className="w-3.5 h-3.5" />
-                        </Button>
+                        <ConfirmActionButton
+                          action="custom"
+                          size="sm"
+                          label="Mark as delivered"
+                          confirmLabel="Confirm delivered"
+                          icon={Check}
+                          onConfirm={() => onMarkDelivered(d)}
+                        />
                       )}
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(d)}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(d)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      <ConfirmActionButton
+                        action="delete"
+                        size="sm"
+                        label="Delete delivery"
+                        onConfirm={() => onDelete(d)}
+                      />
                     </div>
                   </TableCell>
                 </motion.tr>

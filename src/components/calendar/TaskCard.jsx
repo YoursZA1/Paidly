@@ -1,8 +1,9 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ConfirmActionButton } from '@/components/ui/confirm-action-button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Edit, Trash2, CheckCircle, Circle, Clock, AlertTriangle, Link2, GitBranch } from 'lucide-react';
+import { MoreVertical, Edit, CheckCircle, Circle, Clock, AlertTriangle, Link2, GitBranch } from 'lucide-react';
 import { format, parseISO, isPast, isToday } from 'date-fns';
 
 const priorityColors = {
@@ -123,31 +124,35 @@ export default function TaskCard({ task, client, onEdit, onDelete, onStatusChang
                         </div>
                     </div>
 
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 dark:text-slate-400">
-                                <MoreVertical className="w-4 h-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => onEdit(task)}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onStatusChange(task, 'in_progress')}>
-                                <Clock className="w-4 h-4 mr-2" />
-                                Mark In Progress
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onStatusChange(task, 'completed')}>
-                                <CheckCircle className="w-4 h-4 mr-2" />
-                                Mark Complete
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onDelete(task)} className="text-red-600">
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center gap-1">
+                        <ConfirmActionButton
+                            action="delete"
+                            size="sm"
+                            label="Delete task"
+                            onConfirm={() => onDelete(task)}
+                        />
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 dark:text-slate-400">
+                                    <MoreVertical className="w-4 h-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onEdit(task)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onStatusChange(task, 'in_progress')}>
+                                    <Clock className="w-4 h-4 mr-2" />
+                                    Mark In Progress
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onStatusChange(task, 'completed')}>
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    Mark Complete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
             </CardContent>
         </Card>

@@ -6,12 +6,12 @@ import { format } from "date-fns";
 import {
   Plus,
   Search,
-  Trash2,
   Star,
   Archive,
   ArrowLeft,
   FileEdit,
 } from "lucide-react";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { useToast } from "@/components/ui/use-toast";
 
 export default function Notes() {
@@ -356,15 +356,13 @@ export default function Notes() {
                 >
                   {saveStatus}
                 </span>
-                <button
-                  onClick={handleDeleteNote}
+                <ConfirmActionButton
+                  action="delete"
+                  size="sm"
+                  label="Delete note"
+                  onConfirm={handleDeleteNote}
                   data-testid="note-delete"
-                  className="flex items-center gap-2 text-red-500 dark:text-red-400 text-sm font-bold px-4 py-2 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-colors"
-                  aria-label="Delete note"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Delete
-                </button>
+                />
               </div>
             </div>
 

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ConfirmActionButton } from '@/components/ui/confirm-action-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import TaxService from '@/services/TaxService';
 import PropTypes from 'prop-types';
 
@@ -37,9 +38,7 @@ export default function TaxConfiguration({ user, onSave }) {
   };
 
   const handleDeleteProfile = (profileId) => {
-    if (window.confirm('Delete this tax profile?')) {
-      setCustomTaxProfiles(customTaxProfiles.filter(p => p.id !== profileId));
-    }
+    setCustomTaxProfiles(customTaxProfiles.filter(p => p.id !== profileId));
   };
 
   const handleSaveConfiguration = () => {
@@ -212,13 +211,12 @@ export default function TaxConfiguration({ user, onSave }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-900">{profile.rate}%</span>
-                    <Button
-                      variant="ghost"
+                    <ConfirmActionButton
+                      action="delete"
                       size="sm"
-                      onClick={() => handleDeleteProfile(profile.id)}
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </Button>
+                      label="Delete tax profile"
+                      onConfirm={() => handleDeleteProfile(profile.id)}
+                    />
                   </div>
                 </div>
               ))}

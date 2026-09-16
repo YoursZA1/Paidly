@@ -4,10 +4,11 @@ import TablePagination from '@/components/ui/TablePagination';
 const VENDORS_PAGE_SIZE = 12;
 import { Vendor, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CardGridSkeleton } from "@/components/shared/PageSkeleton";
-import { ArrowLeft, Plus, Search, Pencil, Trash2, Building2, Phone, Mail } from "lucide-react";
+import { ArrowLeft, Plus, Search, Pencil, Building2, Phone, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -59,13 +60,11 @@ export default function VendorsPage() {
     };
 
     const handleDelete = async (id) => {
-        if (confirm("Are you sure you want to delete this vendor?")) {
-            try {
-                await Vendor.delete(id);
-                loadVendors();
-            } catch (error) {
-                console.error("Error deleting vendor:", error);
-            }
+        try {
+            await Vendor.delete(id);
+            loadVendors();
+        } catch (error) {
+            console.error("Error deleting vendor:", error);
         }
     };
 
@@ -179,9 +178,12 @@ export default function VendorsPage() {
                                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(vendor)}>
                                                     <Pencil className="w-4 h-4 text-gray-500" />
                                                 </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(vendor.id)}>
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
+                                                <ConfirmActionButton
+                                                    action="delete"
+                                                    size="sm"
+                                                    label="Delete vendor"
+                                                    onConfirm={() => handleDelete(vendor.id)}
+                                                />
                                             </div>
                                         </div>
                                         

@@ -248,7 +248,6 @@ export default function CalendarPage() {
   };
 
   const handleDeleteTask = async (task) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return;
     try {
       await Task.delete(task.id);
       await loadData();

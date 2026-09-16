@@ -10,10 +10,11 @@ import {
   logoMaxSizeLabel,
 } from "@/lib/logoUpload";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Users, Building2, Trash2, Download, Upload, ChevronDown, Landmark, Star, MoreVertical, Edit, ChevronRight, Loader2, Plug } from "lucide-react";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Users, Building2, Trash2, Download, Upload, ChevronDown, Landmark, Star, Edit, ChevronRight, Loader2, Plug } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
@@ -29,13 +30,6 @@ import { clearLogoUrlDiskCacheForSrc } from "@/lib/logoUrlDiskCache";
 
 import HelpTooltip from "@/components/shared/HelpTooltip";
 import BankingForm from "@/components/banking/BankingForm";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -1451,8 +1445,6 @@ function PaymentMethodsSettings() {
     };
 
     const handleRemoveDetail = async (detail) => {
-        const label = detail.account_name || detail.bank_name || "this payment method";
-        if (!window.confirm(`Remove ${label}? Invoices already using it will keep the saved details.`)) return;
         try {
             await BankingDetail.delete(detail.id);
             setBankingDetails((prev) => prev.filter((d) => d.id !== detail.id));
@@ -1744,39 +1736,35 @@ function PaymentMethodsSettings() {
                                         <Landmark className="w-5 h-5 text-white" />
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    {detail.is_default && (
+                                <div className="flex items-center gap-1.5">
+                                    {detail.is_default ? (
                                         <div className="bg-amber-100 dark:bg-amber-900/50 p-1.5 rounded-full ring-4 ring-amber-50 dark:ring-amber-800/30">
                                             <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
                                         </div>
+                                    ) : (
+                                        <ConfirmActionButton
+                                            action="star"
+                                            size="sm"
+                                            label="Set as default"
+                                            onConfirm={() => handleSetDefault(detail.id)}
+                                        />
                                     )}
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="p-2 text-muted-foreground/40 hover:text-foreground">
-                                                <MoreVertical className="w-5 h-5" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onClick={() => handleEditDetail(detail)}>
-                                                <Edit className="w-4 h-4 mr-2" />
-                                                Edit
-                                            </DropdownMenuItem>
-                                            {!detail.is_default && (
-                                                <DropdownMenuItem onClick={() => handleSetDefault(detail.id)}>
-                                                    <Star className="w-4 h-4 mr-2" />
-                                                    Set as Default
-                                                </DropdownMenuItem>
-                                            )}
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                onClick={() => handleRemoveDetail(detail)}
-                                                className="text-destructive focus:text-destructive"
-                                            >
-                                                <Trash2 className="w-4 h-4 mr-2" />
-                                                Remove payment method
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    <ConfirmActionButton
+                                        action="remove"
+                                        size="sm"
+                                        label="Remove payment method"
+                                        onConfirm={() => handleRemoveDetail(detail)}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-muted-foreground/50 hover:text-foreground"
+                                        onClick={() => handleEditDetail(detail)}
+                                        aria-label="Edit payment method"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                    </Button>
                                 </div>
                             </div>
 

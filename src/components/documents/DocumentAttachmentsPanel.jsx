@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Paperclip, Trash2, ExternalLink } from "lucide-react";
+import { Paperclip, ExternalLink } from "lucide-react";
 
 export default function DocumentAttachmentsPanel({ attachments = [], onAdd, onRemove, busy = false }) {
   const [fileName, setFileName] = useState("");
@@ -69,17 +70,13 @@ export default function DocumentAttachmentsPanel({ attachments = [], onAdd, onRe
                   Open <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="shrink-0 text-destructive hover:text-destructive"
+              <ConfirmActionButton
+                action="remove"
+                size="sm"
+                label="Remove attachment"
                 disabled={busy}
-                onClick={() => onRemove?.(att.id)}
-                aria-label="Remove attachment"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                onConfirm={() => onRemove?.(att.id)}
+              />
             </li>
           ))}
         </ul>

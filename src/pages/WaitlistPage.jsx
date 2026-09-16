@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
-import { Search, Trash2, CheckCircle, Eye, Filter } from 'lucide-react';
+import { Search, CheckCircle, Eye, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { ConfirmActionButton } from '@/components/ui/confirm-action-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -89,7 +90,6 @@ export default function WaitlistPage() {
   };
 
   const handleDelete = (id) => {
-    if (!window.confirm('Delete this waitlist entry? This action cannot be undone.')) return;
     deleteMutation.mutate(id);
   };
 
@@ -247,16 +247,13 @@ export default function WaitlistPage() {
                               <CheckCircle className="h-4 w-4" />
                             </Button>
                           ) : null}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            title="Remove entry"
-                            onClick={() => handleDelete(entry.id)}
+                          <ConfirmActionButton
+                            action="delete"
+                            size="sm"
+                            label="Remove entry"
                             disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                            onConfirm={() => handleDelete(entry.id)}
+                          />
                         </div>
                       </td>
                     </tr>
