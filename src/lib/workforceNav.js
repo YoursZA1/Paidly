@@ -5,6 +5,7 @@ import {
   ClipboardList,
   FileText,
   Receipt,
+  Store,
   User,
   Users,
   Wallet,
@@ -46,7 +47,7 @@ function item(id, title, url, icon) {
   return { id, title, url, icon };
 }
 
-function employeeChildren({ membershipId }) {
+function employeeChildren({ membershipId, posEnabled = false }) {
   const children = [
     item("nav-workforce-overview", "Home", createPageUrl("Workforce"), ClipboardList),
     item("nav-workforce-leave", "My leave", `${createPageUrl("MyPayroll")}?tab=leave`, CalendarOff),
@@ -54,6 +55,9 @@ function employeeChildren({ membershipId }) {
   ];
   if (membershipId) {
     children.push(item("nav-workforce-profile", "My profile", employeeProfilePath(membershipId), User));
+  }
+  if (posEnabled) {
+    children.push(item("nav-workforce-pos", "POS", `${createPageUrl("Workforce")}?tab=pos`, Store));
   }
   return children;
 }
@@ -116,13 +120,14 @@ function hrChildren(can) {
  * Commercial Document Engine is not a Workforce child.
  *
  * @param {(permission: string) => boolean} hasPermission
- * @param {{ experience?: string | null, membershipId?: string | null }} [opts]
+ * @param {{ experience?: string | null, membershipId?: string | null, posEnabled?: boolean }} [opts]
  */
 export function getWorkforceNavChildren(hasPermission, opts = {}) {
   const can = typeof hasPermission === "function" ? hasPermission : () => false;
   const experience = opts.experience || null;
-  if (experience === WORKFORCE_EXPERIENCES.POS_ONLY) return [];
-  if (experience === WORKFORCE_EXPERIENCES.EMPLOYEE) return employeeChildren(opts);
+  if (experience === WORKFORCE_EXPERIENCES.EMPLOYEE || experience === WORKFORCE_EXPERIENCES.POS_ONLY) {
+    return employeeChildren(opts);
+  }
   if (experience === WORKFORCE_EXPERIENCES.MANAGER) return managerChildren();
   if (experience === WORKFORCE_EXPERIENCES.FINANCE) return financeChildren(can);
   return hrChildren(can);

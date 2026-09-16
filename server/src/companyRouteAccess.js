@@ -183,6 +183,57 @@ async function resolveActiveOrgIdForUser(supabaseAdmin, userId) {
 }
 
 async function fetchMembershipForOrg(supabaseAdmin, userId, orgId) {
+  const withPortal = await supabaseAdmin
+    .from("memberships")
+    .select(
+      "id, org_id, role, job_function, pos_register_id, employment_status, disabled_at, portal_revoked_at, created_at"
+    )
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (withPortal.error && /portal_revoked_at/i.test(withPortal.error.message || "")) {
+    return fetchMembershipForOrgLegacy(supabaseAdmin, userId, orgId);
+  }
+  if (withPortal.error && /employment_status|disabled_at/i.test(withPortal.error.message || "")) {
+    return supabaseAdmin
+      .from("memberships")
+      .select("id, org_id, role, job_function, pos_register_id, created_at")
+      .eq("user_id", userId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+  }
+
+  if (withPortal.error && /pos_register_id/i.test(withPortal.error.message || "")) {
+    const withoutTill = await supabaseAdmin
+      .from("memberships")
+      .select("id, org_id, role, job_function, created_at")
+      .eq("user_id", userId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (withoutTill.error && /job_function/i.test(withoutTill.error.message || "")) {
+      return supabaseAdmin
+        .from("memberships")
+        .select("id, org_id, role, created_at")
+        .eq("user_id", userId)
+        .eq("org_id", orgId)
+        .maybeSingle();
+    }
+    return withoutTill;
+  }
+  if (withPortal.error && /job_function/i.test(withPortal.error.message || "")) {
+    const withoutJobFunction = await supabaseAdmin
+      .from("memberships")
+      .select("id, org_id, role, created_at")
+      .eq("user_id", userId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    return withoutJobFunction;
+  }
+  return withPortal;
+}
+
+async function fetchMembershipForOrgLegacy(supabaseAdmin, userId, orgId) {
   const withJobFunction = await supabaseAdmin
     .from("memberships")
     .select("id, org_id, role, job_function, pos_register_id, employment_status, disabled_at, created_at")
@@ -261,6 +312,7 @@ export async function loadCompanyMembership(supabaseAdmin, userId) {
     posRegisterId: membership?.pos_register_id || null,
     employment_status: membership?.employment_status || "active",
     disabled_at: membership?.disabled_at || null,
+    portalRevokedAt: membership?.portal_revoked_at || null,
   };
 }
 

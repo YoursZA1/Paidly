@@ -69,6 +69,7 @@ Keep these in the **host environment**, `server/.env` (gitignored), or Supabase 
 | `PAIDLY_PAY_ORIGINS` | Comma-separated CORS allowlist for Paidly Pay. Never `*`. |
 | `PAIDLY_PAY_APP_URL` | Optional public origin of the Paidly Pay app (e.g. `https://pay.example`). Not a secret. If unset, POS opens same-origin `/pay?payment_intent_id=`. Never put API keys on this URL. |
 | `PAYMENT_PROVIDER_MODE` | `live` (production default) or `mock`. Mock in production also needs `ALLOW_MOCK_PAYMENTS=1`. |
+| `PAIDLY_ENTITLEMENTS_ENFORCE` | Server billing gates (`requireFeature` / `requireActiveBilling`). `true`/`1`/`on`/`enforce` = block; `false`/`0`/`off`/`report` = log only. **Unset:** enforce on Vercel `preview`/`development` and local/test; **report-only on production** until explicitly set `true` after soak (see [ENTITLEMENTS_ENFORCEMENT.md](ENTITLEMENTS_ENFORCEMENT.md)). Feature checks in `featureGate.assertUserHasFeature` always use the `subscriptions` table (never `profiles.plan`). UI uses `useEntitlementAccess` → `/api/subscriptions/current`. |
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | Source-map upload at **build** time. Never prefix with `VITE_`. |
 | `SENTRY_DSN` | Server-side Sentry. Optional; distinct from the public `VITE_SENTRY_DSN`. |
 

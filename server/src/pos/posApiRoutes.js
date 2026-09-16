@@ -39,6 +39,7 @@ import {
   handlePosAccessGet,
   handlePosAccessEnd,
 } from "./posInviteActivate.js";
+import { handlePosPinGet, handlePosPinSet } from "./posPinRoutes.js";
 import { handlePaidlyPayApi } from "../paidlyPay/paidlyPayApi.js";
 
 /**
@@ -97,6 +98,8 @@ export function registerPosRoutes(app) {
   app.post("/api/pos/invite-activate", handlePosInviteActivate);
   app.get("/api/pos/access", handlePosAccessGet);
   app.post("/api/pos/access-end", handlePosAccessEnd);
+  app.get("/api/pos/pin", handlePosPinGet);
+  app.post("/api/pos/pin", handlePosPinSet);
 
   app.get("/api/pos/oauth/status", handlePosOAuthStatus);
   app.post("/api/pos/oauth/square/start", handleSquareOAuthStart);

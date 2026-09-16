@@ -189,20 +189,20 @@ async function handlePayment(req, res) {
     return res.status(404).json({ error: "Client not found" });
   }
 
-  const body = parseBody(req);
+  // Integrity: never accept portal-self-declared payments (no fake money).
   const pay = await recordPortalPayment(
     supabase,
     client.org_id,
     session.sub,
-    body?.invoiceId,
-    body?.amount,
-    body?.method,
-    body?.notes
+    null,
+    null,
+    null,
+    null
   );
-  if (!pay.ok) {
-    return res.status(400).json({ error: pay.error });
-  }
-  return res.status(200).json({ success: true });
+  return res.status(403).json({
+    error: pay.error,
+    code: pay.code || "PORTAL_PAYMENT_DISABLED",
+  });
 }
 
 async function requireSession(req, res) {

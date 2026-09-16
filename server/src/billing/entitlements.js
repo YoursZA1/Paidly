@@ -1,8 +1,11 @@
 /**
  * Server-side subscription entitlements (SoR = subscriptions table, never profiles).
  *
- * PAIDLY_ENTITLEMENTS_ENFORCE=false → report-only (log, never block).
- * Default: enforce on write paths that call requireActiveBilling / requireFeature.
+ * PAIDLY_ENTITLEMENTS_ENFORCE:
+ *   true / 1 / on / enforce → block on requireFeature / requireActiveBilling
+ *   false / 0 / off / report → report-only (log, never block) for those helpers
+ *   unset → enforce on preview/development/test; report-only on production
+ *             (set explicitly true on staging; soak before production true)
  */
 
 import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
@@ -22,10 +25,30 @@ import {
   shouldExpireTrialRow,
 } from "../../../shared/subscriptionAccess.js";
 
+let entitlementsProductionUnsetWarned = false;
+
 function entitlementsEnforceEnabled() {
-  // Default report-only until PAIDLY_ENTITLEMENTS_ENFORCE=true is set after migrations + soak.
-  const raw = String(process.env.PAIDLY_ENTITLEMENTS_ENFORCE || "false").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "on" || raw === "enforce";
+  const raw = String(process.env.PAIDLY_ENTITLEMENTS_ENFORCE ?? "").trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "off" || raw === "report") return false;
+  if (raw === "1" || raw === "true" || raw === "on" || raw === "enforce") return true;
+
+  // Unset: enforce on preview/development/test; production requires explicit true after soak
+  // (escape hatch: PAIDLY_ENTITLEMENTS_ENFORCE=false). Prefer setting the var on Vercel Production.
+  const vercelEnv = String(process.env.VERCEL_ENV || "").trim().toLowerCase();
+  if (vercelEnv === "production") {
+    if (!entitlementsProductionUnsetWarned) {
+      entitlementsProductionUnsetWarned = true;
+      console.warn(
+        "[entitlements] PAIDLY_ENTITLEMENTS_ENFORCE unset on production — report-only. Set true on Vercel Production after soak (docs/ENTITLEMENTS_ENFORCEMENT.md)."
+      );
+    }
+    return false;
+  }
+  if (vercelEnv === "preview" || vercelEnv === "development") return true;
+
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
+  if (nodeEnv === "production") return false;
+  return true;
 }
 
 /**

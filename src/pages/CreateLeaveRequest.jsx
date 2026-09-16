@@ -17,6 +17,7 @@ import { countWorkingDays } from "@shared/leave/leaveMath.js";
 import { parseUuid } from "@shared/ids/uuid.js";
 import { createPageUrl } from "@/utils";
 import FeatureGate from "@/components/subscription/FeatureGate";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 
 function isoFromDate(d) {
   if (!d) return "";
@@ -27,8 +28,10 @@ function isoFromDate(d) {
 export default function CreateLeaveRequestPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, profile } = useAuth();
-  const userPlan = profile?.subscription_plan || profile?.plan || "starter";
+  const { user } = useAuth();
+  const { planSlug, entitlement, hasFeature } = useEntitlementAccess();
+  const userPlan = planSlug || "none";
+  const gateEntitlement = { ...entitlement, hasFeature };
   const [me, setMe] = useState(null);
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -121,7 +124,7 @@ export default function CreateLeaveRequestPage() {
   };
 
   return (
-    <FeatureGate feature="leave_management" userPlan={userPlan}>
+    <FeatureGate feature="leave_management" userPlan={userPlan} entitlement={gateEntitlement}>
       <PageTemplate>
         <PageTemplate.Header>
           <PageHeader

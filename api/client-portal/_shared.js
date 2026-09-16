@@ -293,59 +293,18 @@ export async function markPortalMessagesRead(supabase, orgId, clientId, messageI
   return { ok: !error, error: error?.message };
 }
 
-export async function recordPortalPayment(supabase, orgId, clientId, invoiceId, amountRaw, method, notes) {
-  const amountNum = Number(amountRaw);
-  if (!Number.isFinite(amountNum) || amountNum <= 0) {
-    return { ok: false, error: "Invalid amount" };
-  }
-
-  const { data: inv, error: invErr } = await supabase
-    .from("invoices")
-    .select("id, client_id, org_id, total_amount, status")
-    .eq("id", invoiceId)
-    .maybeSingle();
-
-  if (invErr || !inv || inv.org_id !== orgId || inv.client_id !== clientId) {
-    return { ok: false, error: "Invoice not found" };
-  }
-
-  const { error: payErr } = await supabase.from("payments").insert({
-    org_id: orgId,
-    invoice_id: invoiceId,
-    client_id: clientId,
-    amount: amountNum,
-    status: "completed",
-    paid_at: new Date().toISOString(),
-    method: method || "portal",
-    reference: notes ? String(notes).slice(0, 500) : null,
-  });
-
-  if (payErr) {
-    return { ok: false, error: payErr.message || "Payment failed" };
-  }
-
-  const { data: pays } = await supabase
-    .from("payments")
-    .select("amount")
-    .eq("invoice_id", invoiceId)
-    .eq("org_id", orgId);
-
-  const totalPaid = (pays || []).reduce((s, p) => s + Number(p.amount || 0), 0);
-  const total = Number(inv.total_amount || 0);
-  let newStatus = inv.status;
-  if (total > 0 && totalPaid >= total) {
-    newStatus = "paid";
-  } else if (totalPaid > 0) {
-    newStatus = "partial_paid";
-  }
-
-  await supabase
-    .from("invoices")
-    .update({ status: newStatus, updated_at: new Date().toISOString() })
-    .eq("id", invoiceId)
-    .eq("org_id", orgId);
-
-  return { ok: true };
+/**
+ * Portal must NEVER write customer money from a browser click / simulated card form.
+ * Customer settlement only via Payment Engine (verified Ozow Notify → payment_intents → payments).
+ * Kept as a hard-fail stub so any leftover client callers get a clear rejection.
+ */
+export async function recordPortalPayment(_supabase, _orgId, _clientId, _invoiceId, _amountRaw, _method, _notes) {
+  return {
+    ok: false,
+    code: "PORTAL_PAYMENT_DISABLED",
+    error:
+      "Online payment from the client portal is not available. Pay via the secure invoice link (Ozow) sent by the business, or contact them to arrange payment.",
+  };
 }
 
 const PORTAL_CLIENT_PATCH_KEYS = new Set(["phone", "address", "contact_person", "website"]);

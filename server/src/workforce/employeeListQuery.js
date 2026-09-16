@@ -20,9 +20,11 @@ import {
 import { displayPayslipStatus } from "../../../shared/payroll/payslipStatus.js";
 import { normalizeCompanyRole, normalizeJobFunction } from "../companyRouteAccess.js";
 import { ensureAttendanceProfile } from "./employeeProvisioning.js";
+import { membershipIsPosEnabled } from "../../../shared/posStaffInvite.js";
+import { PORTAL_STATUS } from "../../../shared/workforce/portalAccess.js";
 
 const MEMBER_EXPANDED_COLS =
-  "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, employment_end_date, manager_membership_id, invited_email, invited_name, job_title, disabled_at, created_at";
+  "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, employment_end_date, manager_membership_id, invited_email, invited_name, job_title, disabled_at, portal_revoked_at, pos_pin_hash, pos_pin_locked_until, pos_register_id, created_at";
 const MEMBER_LEGACY_COLS =
   "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, invited_email, disabled_at, created_at";
 const PAYROLL_LIST_COLS =
@@ -46,7 +48,7 @@ async function loadOrgMemberships(orgId) {
     .select(MEMBER_EXPANDED_COLS)
     .eq("org_id", orgId)
     .order("created_at", { ascending: true });
-  if (membersQuery.error && /invited_name|job_title|employment_end_date|manager_membership_id|schema cache|column/i.test(membersQuery.error.message || "")) {
+  if (membersQuery.error && /invited_name|job_title|employment_end_date|manager_membership_id|portal_revoked_at|pos_pin|pos_register_id|schema cache|column/i.test(membersQuery.error.message || "")) {
     membersQuery = await supabaseAdmin
       .from("memberships")
       .select(MEMBER_LEGACY_COLS)
@@ -64,7 +66,7 @@ async function loadMembershipById(orgId, employeeId) {
     .eq("org_id", orgId)
     .eq("id", employeeId)
     .maybeSingle();
-  if (query.error && /invited_name|job_title|employment_end_date|manager_membership_id|schema cache|column/i.test(query.error.message || "")) {
+  if (query.error && /invited_name|job_title|employment_end_date|manager_membership_id|portal_revoked_at|pos_pin|pos_register_id|schema cache|column/i.test(query.error.message || "")) {
     query = await supabaseAdmin
       .from("memberships")
       .select(MEMBER_LEGACY_COLS)
@@ -110,6 +112,7 @@ function shapeEmployeeRow({
   leaveStatus,
   actorMembershipId,
   canManagePayroll,
+  pendingInvite = null,
 }) {
   const managerName =
     managerPerson?.full_name || managerMem?.invited_name || managerMem?.invited_email || null;
@@ -125,6 +128,12 @@ function shapeEmployeeRow({
       attendance,
       leaveAvailable,
       payslipCount,
+      pendingInvite,
+      posAccess: membershipIsPosEnabled({
+        companyRole: membership.role,
+        job_function: membership.job_function,
+        pos_register_id: membership.pos_register_id,
+      }),
       manager: managerMem
         ? {
             id: managerMem.id,
@@ -143,6 +152,30 @@ function shapeEmployeeRow({
     ...profile,
     leave_status: leaveStatus || "none",
   };
+}
+
+async function loadPendingInvitesByMembership(orgId, membershipIds) {
+  const map = new Map();
+  if (!membershipIds.length) return map;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("company_invites")
+      .select("id, membership_id, status, revoked_at, expires_at, token, email")
+      .eq("org_id", orgId)
+      .in("membership_id", membershipIds)
+      .eq("status", "pending")
+      .is("revoked_at", null);
+    if (error) return map;
+    const now = Date.now();
+    for (const row of data || []) {
+      if (!row.membership_id) continue;
+      if (row.expires_at && new Date(row.expires_at).getTime() <= now) continue;
+      if (!map.has(row.membership_id)) map.set(row.membership_id, row);
+    }
+  } catch {
+    return map;
+  }
+  return map;
 }
 
 async function loadLeaveStatusByEmployee(orgId, employeeIds) {
@@ -243,9 +276,10 @@ export async function listEmployees(orgId, opts = {}) {
 
   const employeeIds = scoped.map((m) => m.id).filter(Boolean);
   const needsLeave = includeLeaveStatus || Boolean(leaveStatus);
-  const [leaveByEmployee, attendanceByEmployee] = await Promise.all([
+  const [leaveByEmployee, attendanceByEmployee, pendingByMembership] = await Promise.all([
     needsLeave ? loadLeaveStatusByEmployee(orgId, employeeIds) : Promise.resolve(new Map()),
     includeAttendance ? loadAttendanceByEmployee(employeeIds) : Promise.resolve(new Map()),
+    loadPendingInvitesByMembership(orgId, employeeIds),
   ]);
 
   const rows = scoped.map((m) =>
@@ -263,6 +297,7 @@ export async function listEmployees(orgId, opts = {}) {
       leaveStatus: leaveByEmployee.get(m.id) || "none",
       actorMembershipId,
       canManagePayroll,
+      pendingInvite: pendingByMembership.get(m.id) || null,
     })
   );
 
@@ -325,7 +360,7 @@ export async function getEmployee(orgId, employeeId, { actorUserId, actorMembers
     ? await loadMembershipById(orgId, membership.manager_membership_id)
     : null;
   const userIds = [membership.user_id, managerMem?.user_id].filter(Boolean);
-  const [byUser, payrollRows] = await Promise.all([
+  const [byUser, payrollRows, pendingByMembership] = await Promise.all([
     loadPeopleByUserIds(userIds),
     supabaseAdmin
       .from("payroll_profiles")
@@ -333,6 +368,7 @@ export async function getEmployee(orgId, employeeId, { actorUserId, actorMembers
       .eq("org_id", orgId)
       .eq("membership_id", membership.id)
       .maybeSingle(),
+    loadPendingInvitesByMembership(orgId, [membership.id]),
   ]);
   const row = shapeEmployeeRow({
     membership,
@@ -346,6 +382,7 @@ export async function getEmployee(orgId, employeeId, { actorUserId, actorMembers
     leaveStatus: "none",
     actorMembershipId,
     canManagePayroll,
+    pendingInvite: pendingByMembership.get(membership.id) || null,
   });
   assertOwnEmployee({ userId: actorUserId, id: actorMembershipId }, row, { canViewTeam });
   return row;
@@ -601,7 +638,10 @@ export async function workforceSummary(orgId, { managerScopeId = null, includePe
       active: roster.filter((row) => row.lifecycle_status === "active").length,
       inactive: roster.filter((row) => row.lifecycle_status === "inactive").length,
       new_employees: roster.filter((row) => row.created_at && row.created_at >= thirtyDaysAgo).length,
-      pending_onboarding: roster.filter((row) => row.portal_status === "invited").length,
+      pending_onboarding: roster.filter(
+        (row) =>
+          row.portal_status === PORTAL_STATUS.INVITATION_SENT || row.portal_status === "invited"
+      ).length,
       pending_invites: pendingInvites,
       incomplete_profiles: roster.filter((row) => row.needs_attention).length,
       incomplete_payroll: incompletePayroll,

@@ -103,8 +103,29 @@ export const hasFeatureAccess = (userPlan, feature) => {
   return hasFeature(userPlan, key);
 };
 
-export default function FeatureGate({ children, feature, userPlan, fallback }) {
-  const hasAccess = hasFeatureAccess(userPlan, feature);
+/**
+ * Prefer subscription-backed access when SoR is ready.
+ * @param {{ ready?: boolean, accessGranted?: boolean | null, planSlug?: string | null, hasFeature?: (f: string) => boolean } | null} ent
+ * @param {string} feature
+ * @param {string} [profilePlanFallback]
+ */
+export const hasEntitlementFeatureAccess = (ent, feature, profilePlanFallback) => {
+  const key = FEATURE_ALIASES[feature] || feature;
+  if (!key) return false;
+  if (ent && typeof ent.hasFeature === "function") {
+    return ent.hasFeature(key);
+  }
+  if (ent?.ready) {
+    if (!ent.accessGranted) return false;
+    return hasFeature(ent.planSlug || ent.planFamily || "none", key);
+  }
+  return hasFeatureAccess(profilePlanFallback || "none", key);
+};
+
+export default function FeatureGate({ children, feature, userPlan, entitlement, fallback }) {
+  const hasAccess = entitlement
+    ? hasEntitlementFeatureAccess(entitlement, feature, userPlan)
+    : hasFeatureAccess(userPlan, feature);
 
   if (hasAccess) {
     return children;
@@ -115,8 +136,13 @@ export default function FeatureGate({ children, feature, userPlan, fallback }) {
   }
 
   const required = getRequiredPlan(feature);
-  const fam = familyForSlug(userPlan);
-  const currentLabel = fam ? FAMILY_LABEL[fam] : userPlan || 'Free';
+  const displayPlan = entitlement?.ready
+    ? entitlement.accessGranted
+      ? entitlement.planSlug || entitlement.planFamily || userPlan
+      : "none"
+    : userPlan;
+  const fam = familyForSlug(displayPlan);
+  const currentLabel = fam ? FAMILY_LABEL[fam] : displayPlan || "Free";
 
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center dark:border-zinc-700 dark:bg-zinc-900/40">

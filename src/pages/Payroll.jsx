@@ -12,7 +12,7 @@ import { useAppStore } from "@/stores/useAppStore";
 import { payrollApi } from "@/services/PayrollApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
-import { useAuth } from "@/contexts/AuthContext";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
 import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
 import { uncoveredPayRunIds } from "@shared/payroll/adjustmentRun.js";
@@ -38,8 +38,9 @@ function statusClass(status) {
 export default function PayrollPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { profile } = useAuth();
-  const userPlan = profile?.subscription_plan || profile?.plan || "starter";
+  const { planSlug, entitlement, hasFeature } = useEntitlementAccess();
+  const userPlan = planSlug || "none";
+  const gateEntitlement = { ...entitlement, hasFeature };
   const currency = useAppStore((s) => s.userProfile)?.currency || "ZAR";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -102,7 +103,7 @@ export default function PayrollPage() {
   const flaggedRunIds = new Set(uncoveredPayRunIds(data?.adjustment_signals || []));
 
   return (
-    <FeatureGate feature="payroll" userPlan={userPlan}>
+    <FeatureGate feature="payroll" userPlan={userPlan} entitlement={gateEntitlement}>
       <PageTemplate>
         <PageTemplate.Header>
           <PageHeader

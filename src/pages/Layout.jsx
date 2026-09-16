@@ -38,6 +38,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSessionAccessToken, hasSessionAccessToken } from "@/lib/authUserId";
 import { schedulePrimaryNavPrefetch } from "@/lib/paidlyRoutePrefetch";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 import Logo from "@/components/shared/Logo";
 import { useCompanyBrand } from "@/hooks/useCompanyBrand";
 import BrandSwitcher from "@/components/brands/BrandSwitcher";
@@ -58,7 +59,7 @@ import { getWorkforceNavChildren, isWorkforceSectionPath, WORKFORCE_NAV_ID } fro
 import { canSeeWorkforceNav, resolveWorkforceExperience } from "@/lib/workforceExperience.js";
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
-import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
+import { isPosOnlyStaff, membershipIsPosEnabled } from "@shared/posStaffInvite.js";
 import { isSubscriptionExpired, shouldShowExpiredSubscriptionLock } from "@/lib/subscriptionPlan";
 import UpgradeScreen from "@/components/subscription/UpgradeScreen";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
@@ -299,7 +300,11 @@ const allNavigationItems = [
   },
 ];
 
-const getNavigationItems = (userPlan, userRole) => {
+const getNavigationItems = (userPlan, userRole, featureCheck) => {
+  const check =
+    typeof featureCheck === "function"
+      ? featureCheck
+      : (feature) => !feature || hasFeatureAccess(userPlan, feature);
   const normalizedRole = (userRole || "user").toLowerCase();
   if (isStaffDashboardRole(normalizedRole)) {
     // Internal staff see full app navigation plus admin-v2 tools (scoped by per-page permissions inside admin-v2).
@@ -314,7 +319,7 @@ const getNavigationItems = (userPlan, userRole) => {
       })
       .map(item => ({
       ...item,
-      hasAccess: !item.feature || hasFeatureAccess(userPlan, item.feature),
+      hasAccess: !item.feature || check(item.feature),
       requiredPlan: item.feature ? getRequiredPlan(item.feature) : null,
       hasRoleAccess: !item.roles || item.roles.includes(normalizedRole)
     }));
@@ -322,7 +327,7 @@ const getNavigationItems = (userPlan, userRole) => {
     // Only user dashboard and user nav for non-admin
     return allNavigationItems.map(item => ({
       ...item,
-      hasAccess: !item.feature || hasFeatureAccess(userPlan, item.feature),
+      hasAccess: !item.feature || check(item.feature),
       requiredPlan: item.feature ? getRequiredPlan(item.feature) : null,
       hasRoleAccess: !item.roles || item.roles.includes(normalizedRole)
     }));
@@ -685,12 +690,35 @@ export default function Layout({ children, currentPageName }) {
   userRef.current = user;
   const { profile: layoutProfile } = useUserProfileQuery();
   const brand = useCompanyBrand();
-  const planForNavFeatures =
-    layoutProfile?.subscription_plan ||
-    layoutProfile?.plan ||
-    user?.subscription_plan ||
-    user?.plan ||
-    "none";
+  const {
+    planSlug: entitlementPlanSlug,
+    hasFeature: entitlementHasFeature,
+    isEntitlementReady,
+  } = useEntitlementAccess({ enabled: Boolean(user) });
+  const planForNavFeatures = entitlementPlanSlug || "none";
+
+  const navHasFeature = useCallback(
+    (feature) => {
+      if (!feature) return true;
+      if (isEntitlementReady) return entitlementHasFeature(feature);
+      return hasFeatureAccess(
+        layoutProfile?.subscription_plan ||
+          layoutProfile?.plan ||
+          user?.subscription_plan ||
+          user?.plan ||
+          "none",
+        feature
+      );
+    },
+    [
+      isEntitlementReady,
+      entitlementHasFeature,
+      layoutProfile?.subscription_plan,
+      layoutProfile?.plan,
+      user?.subscription_plan,
+      user?.plan,
+    ]
+  );
 
   const {
     ctx: companyCtx,
@@ -734,7 +762,7 @@ export default function Layout({ children, currentPageName }) {
   ]);
 
   const navigationItems = useMemo(() => {
-    let items = getNavigationItems(planForNavFeatures, user?.role);
+    let items = getNavigationItems(planForNavFeatures, user?.role, navHasFeature);
     const experience = resolveWorkforceExperience(companyCtx);
     items = items.map((item) => {
       if (item.id !== WORKFORCE_NAV_ID) return item;
@@ -745,6 +773,7 @@ export default function Layout({ children, currentPageName }) {
         children: getWorkforceNavChildren(has, {
           experience,
           membershipId: companyCtx?.membershipId || null,
+          posEnabled: membershipIsPosEnabled(companyCtx),
         }).map((child) => ({
           ...child,
           hasAccess: true,
@@ -769,7 +798,7 @@ export default function Layout({ children, currentPageName }) {
       items = items.filter((item) => item.id !== "nav-pos");
     }
     return items;
-  }, [planForNavFeatures, user?.role, companyCtx, showPosNav]);
+  }, [planForNavFeatures, user?.role, companyCtx, showPosNav, navHasFeature]);
 
   useEffect(() => {
     if (!user?.id || !layoutProfile?.id) return;

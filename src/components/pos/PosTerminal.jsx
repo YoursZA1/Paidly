@@ -413,6 +413,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [staffManageOpen, setStaffManageOpen] = useState(false);
   const [openingDraft, setOpeningDraft] = useState("0");
+  const [shiftPinDraft, setShiftPinDraft] = useState("");
   const [closingDraft, setClosingDraft] = useState("");
   const [shiftBusy, setShiftBusy] = useState(false);
   const registerBrand = useMemo(
@@ -1283,9 +1284,11 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       const session = await openPosSession({
         register_id: activeRegister.id,
         opening_balance: Number(openingDraft),
+        pos_pin: shiftPinDraft || undefined,
       });
       setOpenSession(session);
       setStartShiftOpen(false);
+      setShiftPinDraft("");
       toast({ title: "Shift started" });
     } catch (err) {
       toast({
@@ -2137,7 +2140,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
             <li>USB or Bluetooth scanners type into search and add on Enter. Camera Scan requests permission only when you open it.</li>
             <li>Search or scan to add products. Out of stock items cannot be sold.</li>
             <li>Walk-in Customer is the default. Attach a POS customer only when you need a name.</li>
-            <li>Cash is counted on this till. Card and EFT wait for the real payment rail.</li>
+            <li>Cash is counted on this till. EFT / Digital waits for Ozow to confirm. Card-present is not available yet.</li>
             <li>Stock decreases only after a sale is paid — not when you add to the cart.</li>
           </ul>
           {posOnlyStaff ? null : (
@@ -2302,15 +2305,15 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
               type="button"
               variant="secondary"
               className="h-14 min-h-11 justify-between text-base font-semibold uppercase tracking-wide touch-manipulation"
-              disabled={!checkoutAllowed}
-              onClick={openCard}
+              disabled
+              title="Card-present settlement is not available yet"
             >
               <span className="inline-flex items-center gap-2">
                 <CreditCard className="size-5" />
                 Card
               </span>
               <span className="text-xs font-medium normal-case tracking-normal text-muted-foreground">
-                {cardRail?.device_name || cardRail?.label || "Paidly Pay"}
+                Coming soon
               </span>
             </Button>
             <Button
@@ -2325,8 +2328,8 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cash is counted on this till. Card uses the connected terminal ({cardRail?.label || "Paidly Pay"})
-            and EFT uses Ozow. This screen never marks a sale paid on tap.
+            Cash is counted on this till. EFT / Digital uses Ozow and settles only after Ozow confirms.
+            Card-present is disabled until Paidly Pay can complete a verified settlement.
           </p>
         </DialogContent>
       </Dialog>
@@ -2735,6 +2738,18 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
               value={openingDraft}
               onChange={(e) => setOpeningDraft(e.target.value)}
               autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pos-shift-pin">POS PIN</Label>
+            <Input
+              id="pos-shift-pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              value={shiftPinDraft}
+              onChange={(e) => setShiftPinDraft(e.target.value)}
+              placeholder="Required for POS staff accounts"
             />
           </div>
           <DialogFooter>

@@ -18,13 +18,13 @@ function ctx(partial) {
 }
 
 describe("resolveWorkforceExperience", () => {
-  it("sends POS-only staff to the till experience", () => {
+  it("puts POS-only staff on the shared employee portal, not a second portal", () => {
     expect(
       resolveWorkforceExperience(ctx({ companyRole: "employee", jobFunction: "pos" }))
-    ).toBe(WORKFORCE_EXPERIENCES.POS_ONLY);
+    ).toBe(WORKFORCE_EXPERIENCES.EMPLOYEE);
     expect(
       resolveWorkforceHomePath(ctx({ companyRole: "employee", jobFunction: "pos" }))
-    ).toBe(createPageUrl("POS"));
+    ).toBe(createPageUrl("Workforce"));
   });
 
   it("keeps org owners on the business dashboard", () => {

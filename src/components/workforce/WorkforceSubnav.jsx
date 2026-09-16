@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { getWorkforceNavChildren, isWorkforceChildActive } from "@/lib/workforceNav.js";
 import { resolveWorkforceExperience } from "@/lib/workforceExperience.js";
+import { membershipIsPosEnabled } from "@shared/posStaffInvite.js";
 
 /**
  * Compact Workforce links for small screens when the nested sidebar is collapsed.
@@ -12,6 +13,7 @@ export default function WorkforceSubnav() {
   const children = getWorkforceNavChildren(hasPermission, {
     experience: resolveWorkforceExperience(ctx),
     membershipId,
+    posEnabled: membershipIsPosEnabled(ctx),
   });
 
   if (!children.length) return null;

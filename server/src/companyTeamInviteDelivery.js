@@ -16,7 +16,7 @@ function escapeHtml(value) {
 }
 
 /**
- * @param {{ to: string, inviteLink: string, companyName?: string, inviterName?: string, roleLabel?: string, tillName?: string | null, inviteCode?: string | null, posOnly?: boolean }} opts
+ * @param {{ to: string, inviteLink: string, companyName?: string, inviterName?: string, roleLabel?: string, tillName?: string | null, inviteCode?: string | null, posOnly?: boolean, employeePortal?: boolean, employeeName?: string | null, expiresAt?: string | null }} opts
  */
 export async function sendCompanyTeamInviteEmail({
   to,
@@ -27,6 +27,9 @@ export async function sendCompanyTeamInviteEmail({
   tillName = null,
   inviteCode = null,
   posOnly = false,
+  employeePortal = false,
+  employeeName = null,
+  expiresAt = null,
 }) {
   const safeCompany = sanitizeOneLine(companyName, 120) || "your company";
   const safeInviter = sanitizeOneLine(inviterName, 120) || "Your team admin";
@@ -79,6 +82,47 @@ export async function sendCompanyTeamInviteEmail({
     return sendHtmlEmail(to, subject, html, {
       text,
       tags: [{ name: "category", value: "pos_till_invite" }],
+    });
+  }
+
+  if (employeePortal) {
+    const safeEmployee = sanitizeOneLine(employeeName, 120) || "there";
+    const subject = "Your Paidly Employee Portal Access";
+    const expiryLine = expiresAt
+      ? `This secure link expires on ${new Date(expiresAt).toUTCString()}.`
+      : "This secure link expires automatically.";
+    const html = `<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.5; color: #0f172a;">
+  <p>Hi ${escapeHtml(safeEmployee)},</p>
+  <p>You have been invited to the Paidly Employee Portal for <strong>${escapeHtml(safeCompany)}</strong>.</p>
+  <p>Use the secure link below to confirm your email and create your own password. You will only see information for your company and your own employee record.</p>
+  <p style="margin: 24px 0;">
+    <a href="${escapeHtml(inviteLink)}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;">
+      Activate portal access
+    </a>
+  </p>
+  <p style="font-size: 14px; color: #475569;">Or copy this link into your browser:</p>
+  <p style="font-size: 13px; word-break: break-all; color: #334155;">${escapeHtml(inviteLink)}</p>
+  <p style="font-size: 13px; color: #64748b; margin-top: 24px;">${escapeHtml(expiryLine)}</p>
+  <p style="font-size: 13px; color: #64748b;">Never share your password or POS PIN. Paidly will never email you a password or PIN.</p>
+  <p style="font-size: 13px; color: #64748b;">If you did not expect this invite, you can ignore this email.</p>
+</body>
+</html>`;
+    const text = [
+      `Hi ${safeEmployee},`,
+      "",
+      `You have been invited to the Paidly Employee Portal for ${safeCompany}.`,
+      "Confirm your email and create your own password using this secure link:",
+      inviteLink,
+      "",
+      expiryLine,
+      "Never share your password or POS PIN. Paidly will never email you a password or PIN.",
+    ].join("\n");
+
+    return sendHtmlEmail(to, subject, html, {
+      text,
+      tags: [{ name: "category", value: "employee_portal_invite" }],
     });
   }
 

@@ -13,6 +13,7 @@ function childrenFor(partial) {
   return getWorkforceNavChildren((permission) => ctx.permissions.has(permission), {
     experience: resolveWorkforceExperience(ctx),
     membershipId: ctx.membershipId,
+    posEnabled: String(partial.jobFunction || "").toLowerCase() === "pos",
   });
 }
 
@@ -86,6 +87,17 @@ describe("getWorkforceNavChildren", () => {
     expect(ids).not.toContain("nav-workforce-settings");
     expect(ids).not.toContain("nav-workforce-attendance");
     expect(ids).not.toContain("nav-workforce-reports");
+  });
+
+  it("gives POS staff the employee portal plus a POS child", () => {
+    const ids = idsFor({ companyRole: "employee", jobFunction: "pos" });
+    expect(ids).toEqual([
+      "nav-workforce-overview",
+      "nav-workforce-leave",
+      "nav-workforce-payslips",
+      "nav-workforce-profile",
+      "nav-workforce-pos",
+    ]);
   });
 
   it("keeps company Settings on the main sidebar, not nested under Workforce", () => {

@@ -1,6 +1,6 @@
 import { createPageUrl } from "@/utils";
 import { COMPANY_ROLES, hasCompanyPermission, PERMISSIONS } from "@/lib/companyPermissions";
-import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
+import { isPosOnlyStaff, membershipIsPosEnabled } from "@shared/posStaffInvite.js";
 
 export const WORKFORCE_EXPERIENCES = Object.freeze({
   OWNER: "owner",
@@ -20,11 +20,12 @@ function jobFunctionKey(ctx) {
 
 /**
  * Highest authorized Workforce experience inside the active org.
+ * POS-only Auth staff share the employee portal (plus POS), not a second portal.
  * Does not use SaaS get_my_tenant_context (that maps manager → company_admin).
  */
 export function resolveWorkforceExperience(ctx) {
   if (!ctx?.companyId) return null;
-  if (isPosOnlyStaff(ctx)) return WORKFORCE_EXPERIENCES.POS_ONLY;
+  if (isPosOnlyStaff(ctx)) return WORKFORCE_EXPERIENCES.EMPLOYEE;
   if (ctx.isOrgOwner) return WORKFORCE_EXPERIENCES.OWNER;
   if (ctx.companyRole === COMPANY_ROLES.ADMIN) return WORKFORCE_EXPERIENCES.HR;
   if (ctx.companyRole === COMPANY_ROLES.MANAGER) {
@@ -39,8 +40,6 @@ export function resolveWorkforceExperience(ctx) {
 export function resolveWorkforceHomePath(ctx) {
   const experience = resolveWorkforceExperience(ctx);
   switch (experience) {
-    case WORKFORCE_EXPERIENCES.POS_ONLY:
-      return createPageUrl("POS");
     case WORKFORCE_EXPERIENCES.OWNER:
       return createPageUrl("Dashboard");
     case WORKFORCE_EXPERIENCES.FINANCE:
@@ -49,6 +48,7 @@ export function resolveWorkforceHomePath(ctx) {
       return `${createPageUrl("Workforce/manager")}?tab=overview`;
     case WORKFORCE_EXPERIENCES.HR:
     case WORKFORCE_EXPERIENCES.EMPLOYEE:
+    case WORKFORCE_EXPERIENCES.POS_ONLY:
       return createPageUrl("Workforce");
     default:
       return createPageUrl("Dashboard");
@@ -66,11 +66,11 @@ export function isWorkforceGenericHomePath(pathname) {
 
 export function canSeeWorkforceNav(ctx) {
   if (!ctx?.companyId) return true;
-  if (isPosOnlyStaff(ctx)) return false;
   return (
     hasCompanyPermission(ctx, PERMISSIONS.VIEW_OWN_PAYSLIPS) ||
     hasCompanyPermission(ctx, PERMISSIONS.VIEW_OWN_LEAVE) ||
     hasCompanyPermission(ctx, PERMISSIONS.VIEW_TEAM_MEMBERS) ||
-    hasCompanyPermission(ctx, PERMISSIONS.MANAGE_PAYROLL)
+    hasCompanyPermission(ctx, PERMISSIONS.MANAGE_PAYROLL) ||
+    membershipIsPosEnabled(ctx)
   );
 }

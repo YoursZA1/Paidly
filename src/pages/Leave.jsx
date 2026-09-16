@@ -14,7 +14,7 @@ import { leaveApi } from "@/services/PayrollApiService";
 import { workforceApi } from "@/services/WorkforceApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
-import { useAuth } from "@/contexts/AuthContext";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { parseUuid } from "@shared/ids/uuid.js";
@@ -40,8 +40,9 @@ const selectClass = "w-full h-10 rounded-xl border border-border bg-background p
 
 export default function LeaveManagementPage({ embedded = false }) {
   const { toast } = useToast();
-  const { profile } = useAuth();
-  const userPlan = profile?.subscription_plan || profile?.plan || "starter";
+  const { planSlug, entitlement, hasFeature } = useEntitlementAccess();
+  const userPlan = planSlug || "none";
+  const gateEntitlement = { ...entitlement, hasFeature };
   const { hasPermission } = useCompanyContext();
   const canManage = hasPermission(PERMISSIONS.MANAGE_LEAVE);
   const canReassign = hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
@@ -205,7 +206,7 @@ export default function LeaveManagementPage({ embedded = false }) {
   };
 
   return (
-    <FeatureGate feature="leave_management" userPlan={userPlan}>
+    <FeatureGate feature="leave_management" userPlan={userPlan} entitlement={gateEntitlement}>
       <PageTemplate embedded={embedded}>
         {embedded ? null : (
         <PageTemplate.Header>

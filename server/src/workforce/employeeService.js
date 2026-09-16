@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { normalizeCompanyRole, normalizeJobFunction, COMPANY_ROLES, membershipHasPermission, PERMISSIONS } from "../companyRouteAccess.js";
-import { isPosStaffInviteRequest, POS_JOB_FUNCTION } from "../../../shared/posStaffInvite.js";
+import { isPosStaffInviteRequest, POS_JOB_FUNCTION, membershipIsPosEnabled } from "../../../shared/posStaffInvite.js";
 import { buildEmployeeNumber, nextEmployeeSequence } from "../../../shared/payroll/payslipNumber.js";
-import { companyInviteShareUrl } from "../companyInviteAppUrl.js";
+import { companyInviteShareUrl, resolvePublicAppOrigin } from "../companyInviteAppUrl.js";
 import { sendCompanyTeamInviteEmail } from "../companyTeamInviteDelivery.js";
 import {
   emitWorkforceEvent,
@@ -30,6 +30,8 @@ import {
   lifecyclePatchForAction,
   normalizeEmploymentLifecycleAction,
 } from "../../../shared/workforce/employeeLifecycle.js";
+import { clearPosPinPatch } from "../pos/posPinCrypto.js";
+import { PORTAL_STATUS, derivePortalStatus } from "../../../shared/workforce/portalAccess.js";
 
 export {
   getEmployee,
@@ -386,6 +388,9 @@ export async function createEmployee(orgId, actor, payload = {}) {
       companyName: orgRow?.name || "your company",
       inviterName: "Your team admin",
       roleLabel: role,
+      employeePortal: true,
+      employeeName: fullName || null,
+      expiresAt: invite.expiresAt || null,
     });
     await emitWorkforceEvent({
       orgId,
@@ -590,6 +595,277 @@ export async function reassignManagerReports(orgId, actor, payload = {}) {
   }
 
   return { updated: ids.length, from_manager_id: fromId, manager_membership_id: toId, employee_ids: ids };
+}
+
+async function loadEmployeeMembershipForPortal(orgId, employeeId) {
+  const id = parseUuid(employeeId);
+  if (!id) {
+    const err = new Error("Employee id is required");
+    err.status = 400;
+    throw err;
+  }
+  const { data: membership } = await supabaseAdmin
+    .from("memberships")
+    .select(
+      "id, org_id, user_id, role, job_function, invited_email, invited_name, portal_revoked_at, pos_register_id, pos_pin_hash"
+    )
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!membership?.id) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
+  }
+  assertSameOrg({ companyId: orgId }, membership);
+  return membership;
+}
+
+async function resolveEmployeePortalEmail(membership) {
+  const invited = String(membership.invited_email || "").trim().toLowerCase();
+  if (invited && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invited)) return invited;
+  if (membership.user_id) {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("email")
+      .eq("id", membership.user_id)
+      .maybeSingle();
+    const email = String(profile?.email || "").trim().toLowerCase();
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return email;
+  }
+  return null;
+}
+
+async function loadPendingInviteForMembership(orgId, membershipId) {
+  const { data } = await supabaseAdmin
+    .from("company_invites")
+    .select("id, token, status, expires_at, revoked_at, email, membership_id")
+    .eq("org_id", orgId)
+    .eq("membership_id", membershipId)
+    .eq("status", "pending")
+    .is("revoked_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data?.id) return null;
+  if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) return null;
+  return data;
+}
+
+async function revokePendingInvitesForMembership(orgId, membershipId) {
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from("company_invites")
+    .update({ status: "revoked", revoked_at: now })
+    .eq("org_id", orgId)
+    .eq("membership_id", membershipId)
+    .eq("status", "pending")
+    .is("revoked_at", null);
+}
+
+/**
+ * Send or resend a portal invite for an existing membership (no recreate).
+ */
+export async function inviteEmployeePortal(orgId, actor, employeeId, { resend = false } = {}) {
+  const membership = await loadEmployeeMembershipForPortal(orgId, employeeId);
+  if (membership.user_id && !membership.portal_revoked_at) {
+    const err = new Error("Portal access is already active for this employee");
+    err.status = 400;
+    err.code = "PORTAL_ALREADY_ACTIVE";
+    throw err;
+  }
+
+  const email = await resolveEmployeePortalEmail(membership);
+  if (!email) {
+    const err = new Error("Add an email on this employee before sending a portal invite");
+    err.status = 400;
+    err.code = "PORTAL_EMAIL_REQUIRED";
+    throw err;
+  }
+
+  let invite = await loadPendingInviteForMembership(orgId, membership.id);
+  if (invite && resend) {
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { error } = await supabaseAdmin
+      .from("company_invites")
+      .update({
+        token,
+        token_hash: hashInviteToken(token),
+        expires_at: expiresAt,
+        email,
+        status: "pending",
+        revoked_at: null,
+      })
+      .eq("id", invite.id)
+      .eq("org_id", orgId);
+    if (error) throw error;
+    invite = { ...invite, token, expires_at: expiresAt, email };
+  } else if (!invite) {
+    await revokePendingInvitesForMembership(orgId, membership.id);
+    invite = await persistPortalInvite({
+      orgId,
+      email,
+      role: membership.role || "employee",
+      jobFunction: membership.job_function || "general",
+      actorId: actor.userId,
+      membershipId: membership.id,
+      invitedName: membership.invited_name || null,
+    });
+  }
+
+  if (membership.portal_revoked_at) {
+    await supabaseAdmin
+      .from("memberships")
+      .update({ portal_revoked_at: null })
+      .eq("id", membership.id)
+      .eq("org_id", orgId);
+  }
+
+  const inviteLink = invite.inviteLink || companyInviteShareUrl(invite.token);
+  const expiresAt = invite.expiresAt || invite.expires_at || null;
+  const { data: orgRow } = await supabaseAdmin.from("organizations").select("name").eq("id", orgId).maybeSingle();
+  await sendCompanyTeamInviteEmail({
+    to: email,
+    inviteLink,
+    companyName: orgRow?.name || "your company",
+    inviterName: "Your team admin",
+    roleLabel: membership.role || "employee",
+    employeePortal: true,
+    employeeName: membership.invited_name || null,
+    expiresAt,
+  });
+
+  await writeWorkforceAudit({
+    orgId,
+    employeeId: membership.id,
+    actorId: actor.userId,
+    action: resend ? "employee.portal.resent" : "employee.portal.invited",
+    after: { invite_id: invite.id, email },
+  });
+  await emitWorkforceEvent({
+    orgId,
+    employeeId: membership.id,
+    eventType: WORKFORCE_EVENT_TYPES.EMPLOYEE_PORTAL_INVITED,
+    actorId: actor.userId,
+    payload: { invite_id: invite.id, resend: Boolean(resend) },
+    idempotencyKey: `membership:${membership.id}:portal_invited:${invite.id}:${Date.now()}`,
+  });
+
+  const employee = await getEmployee(orgId, membership.id, {
+    actorUserId: actor.userId,
+    actorMembershipId: actor.id,
+    canViewTeam: true,
+    canManagePayroll: membershipHasPermission(actor, PERMISSIONS.MANAGE_PAYROLL),
+  });
+  return { employee, invite_link: inviteLink, expires_at: expiresAt };
+}
+
+export async function getEmployeePortalLink(orgId, actor, employeeId) {
+  const membership = await loadEmployeeMembershipForPortal(orgId, employeeId);
+  const invite = await loadPendingInviteForMembership(orgId, membership.id);
+  if (invite?.token) {
+    return {
+      invite_link: companyInviteShareUrl(invite.token),
+      expires_at: invite.expires_at || null,
+      portal_status: derivePortalStatus(membership, invite),
+    };
+  }
+  if (membership.user_id && !membership.portal_revoked_at) {
+    return {
+      invite_link: `${resolvePublicAppOrigin()}/Workforce`,
+      expires_at: null,
+      portal_status: PORTAL_STATUS.ACTIVATED,
+    };
+  }
+  const err = new Error("No pending portal invitation to copy");
+  err.status = 404;
+  err.code = "PORTAL_INVITE_MISSING";
+  throw err;
+}
+
+export async function revokeEmployeePortalAccess(orgId, actor, employeeId) {
+  const membership = await loadEmployeeMembershipForPortal(orgId, employeeId);
+  await revokePendingInvitesForMembership(orgId, membership.id);
+  const now = new Date().toISOString();
+  const { error } = await supabaseAdmin
+    .from("memberships")
+    .update({ portal_revoked_at: now })
+    .eq("id", membership.id)
+    .eq("org_id", orgId);
+  if (error && /portal_revoked_at/i.test(error.message || "")) {
+    const err = new Error(
+      "Portal revoke needs a database update. Run supabase/migrations/20260916120000_employee_portal_pos_pin.sql"
+    );
+    err.status = 503;
+    err.code = "WORKFORCE_SCHEMA";
+    throw err;
+  }
+  if (error) throw error;
+
+  await writeWorkforceAudit({
+    orgId,
+    employeeId: membership.id,
+    actorId: actor.userId,
+    action: "employee.portal.revoked",
+    after: { portal_revoked_at: now },
+  });
+
+  const employee = await getEmployee(orgId, membership.id, {
+    actorUserId: actor.userId,
+    actorMembershipId: actor.id,
+    canViewTeam: true,
+    canManagePayroll: membershipHasPermission(actor, PERMISSIONS.MANAGE_PAYROLL),
+  });
+  return { employee, portal_status: PORTAL_STATUS.REVOKED };
+}
+
+export async function resetEmployeePosPin(orgId, actor, employeeId) {
+  const membership = await loadEmployeeMembershipForPortal(orgId, employeeId);
+  if (
+    !membershipIsPosEnabled({
+      companyRole: membership.role,
+      job_function: membership.job_function,
+      pos_register_id: membership.pos_register_id,
+    })
+  ) {
+    const err = new Error("POS PIN is only available for POS-enabled employees");
+    err.status = 400;
+    err.code = "POS_PIN_NOT_ENABLED";
+    throw err;
+  }
+
+  const patch = clearPosPinPatch();
+  const { error } = await supabaseAdmin
+    .from("memberships")
+    .update(patch)
+    .eq("id", membership.id)
+    .eq("org_id", orgId);
+  if (error && /pos_pin/i.test(error.message || "")) {
+    const err = new Error(
+      "POS PIN needs a database update. Run supabase/migrations/20260916120000_employee_portal_pos_pin.sql"
+    );
+    err.status = 503;
+    err.code = "WORKFORCE_SCHEMA";
+    throw err;
+  }
+  if (error) throw error;
+
+  await writeWorkforceAudit({
+    orgId,
+    employeeId: membership.id,
+    actorId: actor.userId,
+    action: "pos.pin_reset",
+    after: { pos_pin_set: false },
+  });
+
+  const employee = await getEmployee(orgId, membership.id, {
+    actorUserId: actor.userId,
+    actorMembershipId: actor.id,
+    canViewTeam: true,
+    canManagePayroll: membershipHasPermission(actor, PERMISSIONS.MANAGE_PAYROLL),
+  });
+  return { employee, pos_pin_set: false };
 }
 
 export async function emitEmployeeCreatedForMembership(orgId, membershipId, actorId) {

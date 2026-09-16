@@ -22,6 +22,8 @@ import PayslipStatusBadge from "@/components/payslips/PayslipStatusBadge";
 import { createPageUrl } from "@/utils";
 import { attentionReasonLabel } from "@shared/workforce/employeeLifecycle.js";
 import { PAY_TYPES, PAY_FREQUENCIES } from "@shared/payroll/constants.js";
+import EmployeePortalAccessPanel from "@/components/workforce/EmployeePortalAccessPanel.jsx";
+import { portalStatusLabel } from "@shared/workforce/portalAccess.js";
 
 const SECTION_TABS = new Set(["leave", "payslips", "documents", "attendance", "activity"]);
 
@@ -295,9 +297,17 @@ export default function EmployeeProfile() {
                   </div>
                   <p>Number: {employee.employee_number || "—"}</p>
                   <p>Manager: {employee.manager_name || "—"}</p>
-                  <p>Portal {employee.portal_status}</p>
+                  <p>Portal: {employee.portal_status_label || portalStatusLabel(employee.portal_status)}</p>
                 </CardContent>
               </Card>
+              <EmployeePortalAccessPanel
+                employee={employee}
+                canManage={canReassign}
+                onUpdated={(next) => {
+                  if (next) syncEmployee(next);
+                  else void workforceApi.profile(id).then(syncEmployee);
+                }}
+              />
             </TabsContent>
 
             <TabsContent value="personal">
@@ -383,7 +393,7 @@ export default function EmployeeProfile() {
                       <p>Manager: {employee.manager_name || "—"}</p>
                       <p>Start date: {employee.employment_start_date || "—"}</p>
                       <p>End date: {employee.employment_end_date || "—"}</p>
-                      <p>Portal: {employee.portal_status}</p>
+                      <p>Portal: {employee.portal_status_label || portalStatusLabel(employee.portal_status)}</p>
                     </>
                   )}
                 </CardContent>

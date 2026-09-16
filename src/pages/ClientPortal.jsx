@@ -84,7 +84,6 @@ function ClientPortalShell() {
         login,
         logout,
         updateClientProfile,
-        recordPayment,
     } = useClientPortal();
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
@@ -106,18 +105,6 @@ function ClientPortalShell() {
     const handlePayment = (invoice) => {
         setSelectedInvoice(invoice);
         setShowPaymentModal(true);
-    };
-
-    const handlePaymentSuccess = async (invoiceId, amount) => {
-        try {
-            await recordPayment(invoiceId, amount, {
-                method: 'credit_card',
-                notes: 'Online payment via client portal',
-            });
-        } catch (error) {
-            console.error("Payment processing error:", error);
-            alert("Payment could not be recorded. Please contact support.");
-        }
     };
 
     const handleContactUpdate = async (formData) => {
@@ -570,7 +557,6 @@ function ClientPortalShell() {
                         setSelectedInvoice(null);
                     }}
                     invoice={selectedInvoice}
-                    onPaymentSuccess={handlePaymentSuccess}
                 />
             )}
 

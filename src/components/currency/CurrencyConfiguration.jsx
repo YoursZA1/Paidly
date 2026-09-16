@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { hasFeatureAccess } from '@/components/subscription/FeatureGate';
-import { useUserProfileQuery } from '@/hooks/useUserProfileQuery';
+import { useEntitlementAccess } from '@/hooks/useEntitlementAccess';
 import {
   getAllCurrencies,
   getCurrencyByCode,
@@ -21,15 +21,16 @@ import CurrencySelector from './CurrencySelector';
  * Manages currency settings and preferences
  */
 export default function CurrencyConfiguration() {
-  const { profile } = useUserProfileQuery();
+  const { planSlug, hasFeature, isEntitlementReady } = useEntitlementAccess();
   const [selectedCurrency, setSelectedCurrency] = useState('ZAR');
   const [allCurrencies, setAllCurrencies] = useState([]);
   const [exchangeRates, setExchangeRates] = useState({});
   const [loading, setLoading] = useState(true);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [viewMode, setViewMode] = useState('common'); // 'common' or 'all'
-  const userPlan = profile?.subscription_plan || profile?.plan || "starter";
-  const canUseMultiCurrency = hasFeatureAccess(userPlan, 'multicurrency');
+  const canUseMultiCurrency = isEntitlementReady
+    ? hasFeature('invoices')
+    : hasFeatureAccess(planSlug || 'none', 'multicurrency');
 
   const loadCurrencyData = async () => {
     try {

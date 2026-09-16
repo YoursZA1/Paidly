@@ -69,6 +69,30 @@ export const workforceApi = {
         manager_membership_id: requireUuid(toManagerId, "manager id"),
       },
     }),
+  portalInvite: (id) =>
+    payrollRequest("/api/company/employees", {
+      method: "POST",
+      body: { id: requireUuid(id, "employee id"), action: "portal_invite" },
+    }),
+  portalResend: (id) =>
+    payrollRequest("/api/company/employees", {
+      method: "POST",
+      body: { id: requireUuid(id, "employee id"), action: "portal_resend" },
+    }),
+  portalLink: (id) =>
+    payrollRequest(
+      `/api/company/employees?id=${encodeURIComponent(requireUuid(id, "employee id"))}&action=portal_link`
+    ),
+  portalRevoke: (id) =>
+    payrollRequest("/api/company/employees", {
+      method: "POST",
+      body: { id: requireUuid(id, "employee id"), action: "portal_revoke" },
+    }),
+  resetPosPin: (id) =>
+    payrollRequest("/api/company/employees", {
+      method: "POST",
+      body: { id: requireUuid(id, "employee id"), action: "pos_pin_reset" },
+    }),
 };
 
 export function employeeProfilePath(id, tab) {

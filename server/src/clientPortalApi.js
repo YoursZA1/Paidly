@@ -124,15 +124,11 @@ router.post("/payment", async (req, res) => {
   if (!client?.org_id) {
     return res.status(404).json({ error: "Client not found" });
   }
-  const invoiceId = req.body?.invoiceId;
-  const amount = req.body?.amount;
-  const method = req.body?.method;
-  const notes = req.body?.notes;
-  const pay = await recordPortalPayment(supabase, client.org_id, session.sub, invoiceId, amount, method, notes);
-  if (!pay.ok) {
-    return res.status(400).json({ error: pay.error });
-  }
-  return res.status(200).json({ success: true });
+  const pay = await recordPortalPayment(supabase, client.org_id, session.sub, null, null, null, null);
+  return res.status(403).json({
+    error: pay.error,
+    code: pay.code || "PORTAL_PAYMENT_DISABLED",
+  });
 });
 
 router.get("/messages", async (req, res) => {

@@ -1,12 +1,15 @@
-import { useMemo } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
-import FeatureGate from '@/components/subscription/FeatureGate';
-import AccountingDashboard from '@/components/accounting/AccountingDashboard';
-import { useAuth } from '@/contexts/AuthContext';
+import { useMemo } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import FeatureGate from "@/components/subscription/FeatureGate";
+import AccountingDashboard from "@/components/accounting/AccountingDashboard";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 
 export default function Accounting() {
   const { profile, loading: authLoading } = useAuth();
+  const { planSlug, entitlement, hasFeature } = useEntitlementAccess({ enabled: !authLoading });
   const user = useMemo(() => profile || null, [profile]);
+  const gateEntitlement = { ...entitlement, hasFeature };
   const isLoading = authLoading;
 
   if (isLoading) {
@@ -25,9 +28,10 @@ export default function Accounting() {
   }
 
   return (
-    <FeatureGate 
-      feature="accounting" 
-      userPlan={user?.subscription_plan || user?.plan || "starter"}
+    <FeatureGate
+      feature="accounting"
+      userPlan={planSlug || "none"}
+      entitlement={gateEntitlement}
     >
       <AccountingDashboard user={user} />
     </FeatureGate>

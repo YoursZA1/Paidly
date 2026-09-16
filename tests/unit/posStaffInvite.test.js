@@ -111,19 +111,21 @@ describe("POS-only staff invite", () => {
     expect(formatCompanyMemberRoleLabel("employee", "sales")).toBe("Sales Employee");
   });
 
-  it("does not grant back-office permissions to POS-only staff", () => {
+  it("grants employee self-service to POS-only staff, not back-office admin", () => {
     const cashier = { companyRole: "employee", jobFunction: "pos", isOrgOwner: false };
     expect(membershipHasPermission(cashier, PERMISSIONS.POS_ACCESS)).toBe(true);
     expect(membershipHasPermission(cashier, PERMISSIONS.POS_SELL)).toBe(true);
     expect(membershipHasPermission(cashier, PERMISSIONS.POS_CLOSE_REGISTER)).toBe(true);
-    expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_OWN_PAYSLIPS)).toBe(false);
+    expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_OWN_PAYSLIPS)).toBe(true);
+    expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_OWN_LEAVE)).toBe(true);
     expect(membershipHasPermission(cashier, PERMISSIONS.MANAGE_COMPANY_SETTINGS)).toBe(false);
     expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_COMPANY_REPORTS)).toBe(false);
     expect(POS_ONLY_PERMISSIONS).toContain("pos_close_register");
+    expect(POS_ONLY_PERMISSIONS).toContain("view_own_payslips");
     expect(POS_INVITE_NEXT).toBe("POS");
   });
 
-  it("sends POS-only staff to the till, not the dashboard", () => {
+  it("sends POS-only staff to the employee portal home, not a second portal", () => {
     expect(
       resolveCompanyHomePath({
         companyId: "o1",
@@ -131,7 +133,7 @@ describe("POS-only staff invite", () => {
         jobFunction: "pos",
         isOrgOwner: false,
       })
-    ).toBe(createPageUrl("POS"));
+    ).toBe(createPageUrl("Workforce"));
     expect(
       resolveCompanyHomePath({
         companyId: "o1",

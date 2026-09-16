@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { Contact } from "lucide-react";
 import PageTemplate from "@/components/layout/PageTemplate";
 import PageHeader from "@/components/dashboard/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
+import WorkforcePosPanel from "@/components/workforce/WorkforcePosPanel.jsx";
 import MyPayrollPage from "@/pages/MyPayroll";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
@@ -26,15 +27,11 @@ export default function Workforce() {
 
   if (loading) return <AuthBootstrapShell />;
 
-  if (experience === WORKFORCE_EXPERIENCES.POS_ONLY) {
-    return <Navigate to={createPageUrl("POS")} replace />;
-  }
-
   if (experience === WORKFORCE_EXPERIENCES.MANAGER) {
     return <Navigate to={`${createPageUrl("Workforce/manager")}?tab=overview`} replace />;
   }
 
-  if (experience === WORKFORCE_EXPERIENCES.EMPLOYEE) {
+  if (experience === WORKFORCE_EXPERIENCES.EMPLOYEE || experience === WORKFORCE_EXPERIENCES.POS_ONLY) {
     return <EmployeeWorkforcePortal />;
   }
 
@@ -42,11 +39,13 @@ export default function Workforce() {
 }
 
 function EmployeeWorkforcePortal() {
+  const location = useLocation();
+  const tab = new URLSearchParams(location.search).get("tab") || "home";
   return (
     <PageTemplate>
       <PageTemplate.Body>
         <WorkforceSubnav />
-        <MyPayrollPage embedded variant="portal" />
+        {tab === "pos" ? <WorkforcePosPanel /> : <MyPayrollPage embedded variant="portal" />}
       </PageTemplate.Body>
     </PageTemplate>
   );

@@ -30,21 +30,24 @@ export async function requirePayrollPermission(req, res, permission, opts = {}) 
       return { ok: false, response: jsonError(res, 403, "No company membership") };
     }
     if (isPosOnlyStaff(membership)) {
-      return {
-        ok: false,
-        response: jsonError(res, 403, "POS staff cannot access payroll or leave administration", {
-          code: "POS_SCOPE",
-        }),
-      };
-    }
-    if (!membershipHasPermission(membership, permission)) {
+      if (!membershipHasPermission(membership, permission)) {
+        return {
+          ok: false,
+          response: jsonError(res, 403, "POS staff cannot access payroll or leave administration", {
+            code: "POS_SCOPE",
+          }),
+        };
+      }
+    } else if (!membershipHasPermission(membership, permission)) {
       return { ok: false, response: jsonError(res, 403, "Forbidden", { code: "FORBIDDEN" }) };
     }
 
     const feature = opts.feature;
     if (feature) {
       try {
-        await assertUserHasFeature(supabaseAdmin, user.id, feature);
+        await assertUserHasFeature(supabaseAdmin, user.id, feature, {
+          companyId: membership.orgId,
+        });
       } catch (err) {
         if (err instanceof UpgradeRequiredError) {
           return {

@@ -93,6 +93,7 @@ export function resolvePosRoute(req) {
   if (head === "invite-activate") return { route: "invite-activate" };
   if (head === "access-end") return { route: "access-end" };
   if (head === "access") return { route: "access" };
+  if (head === "pin") return { route: "pin" };
   if (head === "oauth-status") return { route: "oauth-status" };
   if (head === "oauth-square-start") return { route: "oauth-square-start" };
   if (head === "oauth-square-callback") return { route: "oauth-square-callback" };
@@ -179,6 +180,9 @@ export function resolvePosRoute(req) {
   }
   if (urlPath.endsWith("/access") || /\/access$/i.test(urlPath)) {
     return { route: "access" };
+  }
+  if (urlPath.endsWith("/pin") || /\/pin$/i.test(urlPath)) {
+    return { route: "pin" };
   }
   if (urlPath.includes("/oauth/square/start") || urlPath.endsWith("/oauth-square-start")) {
     return { route: "oauth-square-start" };

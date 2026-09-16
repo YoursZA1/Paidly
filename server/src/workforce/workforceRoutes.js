@@ -2,7 +2,20 @@ import { normalizeRequestBody } from "../validateBody.js";
 import { membershipHasPermission, PERMISSIONS } from "../companyRouteAccess.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import { sanitizeEmployeeWritePayload } from "../../../shared/workforce/employeeWrite.js";
-import { createEmployee, getEmployee, getEmployeeProfile, listEmployees, listEligibleManagers, reassignManagerReports, updateEmployee, workforceSummary } from "./employeeService.js";
+import {
+  createEmployee,
+  getEmployee,
+  getEmployeeProfile,
+  getEmployeePortalLink,
+  inviteEmployeePortal,
+  listEmployees,
+  listEligibleManagers,
+  reassignManagerReports,
+  resetEmployeePosPin,
+  revokeEmployeePortalAccess,
+  updateEmployee,
+  workforceSummary,
+} from "./employeeService.js";
 import { requireWorkforcePermission } from "./workforceAuth.js";
 import { canSeeOrgWorkforce } from "../leave/leaveAuthz.js";
 
@@ -17,6 +30,10 @@ function managerScope(membership) {
 export async function handleWorkforceEmployees(req, res) {
   const body = sanitizeEmployeeWritePayload(normalizeRequestBody(req));
   const employeeId = parseUuid(req.query?.id || body.id);
+  const action = String(body.action || req.query?.action || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
   const resolved = resolveWorkforceRoute(req);
 
   if (resolved?.route === "workforce-summary") {
@@ -28,6 +45,17 @@ export async function handleWorkforceEmployees(req, res) {
         managerScopeId: managerScope(gate.membership),
         includePendingInvites: membershipHasPermission(gate.membership, PERMISSIONS.MANAGE_EMPLOYEES),
       });
+      return res.status(200).json({ ok: true, data });
+    } catch (err) {
+      return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+    }
+  }
+
+  if (req.method === "GET" && employeeId && action === "portal_link") {
+    const gate = await requireWorkforcePermission(req, res, PERMISSIONS.MANAGE_EMPLOYEES);
+    if (!gate.ok) return gate.response;
+    try {
+      const data = await getEmployeePortalLink(gate.membership.companyId, gate.membership, employeeId);
       return res.status(200).json({ ok: true, data });
     } catch (err) {
       return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
@@ -94,7 +122,8 @@ export async function handleWorkforceEmployees(req, res) {
         limit: req.query?.limit,
         offset: req.query?.offset,
         pageAll: req.query?.page_all === "1" || req.query?.all === "1",
-        includeAttendance: req.query?.include === "attendance" || String(req.query?.include || "").includes("attendance"),
+        includeAttendance:
+          req.query?.include === "attendance" || String(req.query?.include || "").includes("attendance"),
         includeLeaveStatus: req.query?.include !== "none",
       });
       return res.status(200).json({ ok: true, data });
@@ -107,6 +136,28 @@ export async function handleWorkforceEmployees(req, res) {
     const gate = await requireWorkforcePermission(req, res, PERMISSIONS.MANAGE_EMPLOYEES);
     if (!gate.ok) return gate.response;
     try {
+      if (action === "portal_invite" || action === "portal_resend") {
+        if (!employeeId) return jsonError(res, 400, "Employee id is required");
+        const data = await inviteEmployeePortal(gate.membership.companyId, gate.membership, employeeId, {
+          resend: action === "portal_resend",
+        });
+        return res.status(200).json({ ok: true, data });
+      }
+      if (action === "portal_revoke") {
+        if (!employeeId) return jsonError(res, 400, "Employee id is required");
+        const data = await revokeEmployeePortalAccess(gate.membership.companyId, gate.membership, employeeId);
+        return res.status(200).json({ ok: true, data });
+      }
+      if (action === "portal_link") {
+        if (!employeeId) return jsonError(res, 400, "Employee id is required");
+        const data = await getEmployeePortalLink(gate.membership.companyId, gate.membership, employeeId);
+        return res.status(200).json({ ok: true, data });
+      }
+      if (action === "pos_pin_reset") {
+        if (!employeeId) return jsonError(res, 400, "Employee id is required");
+        const data = await resetEmployeePosPin(gate.membership.companyId, gate.membership, employeeId);
+        return res.status(200).json({ ok: true, data });
+      }
       const data = await createEmployee(gate.membership.companyId, gate.membership, body);
       return res.status(200).json({ ok: true, data });
     } catch (err) {
@@ -117,10 +168,38 @@ export async function handleWorkforceEmployees(req, res) {
   if (req.method === "PATCH" || req.method === "PUT") {
     const gate = await requireWorkforcePermission(req, res, PERMISSIONS.MANAGE_EMPLOYEES);
     if (!gate.ok) return gate.response;
-    const action = String(body.action || "").trim().toLowerCase();
     if (action === "reassign_reports") {
       try {
         const data = await reassignManagerReports(gate.membership.companyId, gate.membership, body);
+        return res.status(200).json({ ok: true, data });
+      } catch (err) {
+        return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+      }
+    }
+    if (action === "portal_invite" || action === "portal_resend") {
+      if (!employeeId) return jsonError(res, 400, "Employee id is required");
+      try {
+        const data = await inviteEmployeePortal(gate.membership.companyId, gate.membership, employeeId, {
+          resend: action === "portal_resend",
+        });
+        return res.status(200).json({ ok: true, data });
+      } catch (err) {
+        return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+      }
+    }
+    if (action === "portal_revoke") {
+      if (!employeeId) return jsonError(res, 400, "Employee id is required");
+      try {
+        const data = await revokeEmployeePortalAccess(gate.membership.companyId, gate.membership, employeeId);
+        return res.status(200).json({ ok: true, data });
+      } catch (err) {
+        return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+      }
+    }
+    if (action === "pos_pin_reset") {
+      if (!employeeId) return jsonError(res, 400, "Employee id is required");
+      try {
+        const data = await resetEmployeePosPin(gate.membership.companyId, gate.membership, employeeId);
         return res.status(200).json({ ok: true, data });
       } catch (err) {
         return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });

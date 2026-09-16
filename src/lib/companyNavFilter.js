@@ -1,6 +1,8 @@
 import { PERMISSIONS, hasCompanyPermission, buildCompanyAccessContext } from "@/lib/companyPermissions";
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
-import { WORKFORCE_NAV_ID } from "@/lib/workforceNav.js";
+import {
+  WORKFORCE_NAV_ID,
+} from "@/lib/workforceNav.js";
 import {
   WORKFORCE_EXPERIENCES,
   canSeeWorkforceNav,
@@ -70,7 +72,11 @@ export function filterNavigationForCompanyRole(items, membership) {
   });
 
   if (isPosOnlyStaff({ ...membership, jobFunction: ctx.jobFunction })) {
-    return dropEmptySections(items.filter((item) => item.type === "section" || item.id === "nav-pos"));
+    return dropEmptySections(
+      items.filter(
+        (item) => item.type === "section" || item.id === "nav-pos" || item.id === WORKFORCE_NAV_ID
+      )
+    );
   }
 
   const experience = resolveWorkforceExperience({
@@ -82,7 +88,7 @@ export function filterNavigationForCompanyRole(items, membership) {
   });
 
   const allowed = new Set();
-  if (canSeeWorkforceNav(ctx) && experience !== WORKFORCE_EXPERIENCES.POS_ONLY) {
+  if (canSeeWorkforceNav(ctx)) {
     allowed.add(WORKFORCE_NAV_ID);
   }
   if (experience === WORKFORCE_EXPERIENCES.HR && hasCompanyPermission(ctx, PERMISSIONS.MANAGE_COMPANY_SETTINGS)) {

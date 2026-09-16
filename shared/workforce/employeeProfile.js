@@ -16,6 +16,8 @@ import {
   managerAssignmentState,
   workforceLifecycleStatus,
 } from "./employeeLifecycle.js";
+import { derivePortalStatus, portalStatusLabel } from "./portalAccess.js";
+import { publicPosPinState } from "../pos/posPin.js";
 
 export const COMPENSATION_FIELDS = Object.freeze([
   "base_salary",
@@ -121,6 +123,8 @@ export function resolveEmployeeEmail(parts = {}) {
  *   leaveAvailable?: number | null,
  *   payslipCount?: number,
  *   manager?: { id?: string, full_name?: string, label?: string } | null,
+ *   pendingInvite?: { status?: unknown, revoked_at?: unknown, expires_at?: unknown } | null,
+ *   posAccess?: boolean,
  * }} input
  * @param {{ canManagePayroll?: boolean, actorMembershipId?: string | null }} [opts]
  */
@@ -136,6 +140,8 @@ export function buildEmployeeProfile(input, opts = {}) {
   const email = resolveEmployeeEmail({ membership, profile });
   const name = resolveEmployeeDisplayName({ membership, profile, payrollProfile: payroll });
   const isSelf = Boolean(opts.actorMembershipId && employeeId && opts.actorMembershipId === employeeId);
+  const portalStatus = derivePortalStatus(membership, input.pendingInvite || null);
+  const pinState = publicPosPinState(membership);
   const row = {
     id: employeeId,
     employee_id: employeeId,
@@ -167,7 +173,12 @@ export function buildEmployeeProfile(input, opts = {}) {
     attendance_status: input.attendance?.status || (payroll?.id ? "active" : "unprovisioned"),
     leave_available: input.leaveAvailable ?? null,
     payslip_count: Number(input.payslipCount) || 0,
-    portal_status: membership.user_id ? "active" : "invited",
+    portal_status: portalStatus,
+    portal_status_label: portalStatusLabel(portalStatus),
+    portal_revoked_at: membership.portal_revoked_at || null,
+    pos_access: Boolean(input.posAccess),
+    pos_pin_set: pinState.pos_pin_set,
+    pos_pin_locked: pinState.pos_pin_locked,
     disabled_at: membership.disabled_at || null,
     created_at: membership.created_at || null,
     lifecycle_status: workforceLifecycleStatus(membership),

@@ -57,10 +57,12 @@ describe("workforce permissions", () => {
     expect(membershipHasPermission(employeeHr, PERMISSIONS.VIEW_OWN_LEAVE)).toBe(true);
   });
 
-  it("keeps POS-only staff off workforce permissions", () => {
+  it("gives POS-only staff self-service, not workforce admin", () => {
     const cashier = { companyRole: "employee", jobFunction: "pos" };
     expect(membershipHasPermission(cashier, PERMISSIONS.MANAGE_EMPLOYEES)).toBe(false);
-    expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_OWN_PAYSLIPS)).toBe(false);
+    expect(membershipHasPermission(cashier, PERMISSIONS.MANAGE_PAYROLL)).toBe(false);
+    expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_OWN_PAYSLIPS)).toBe(true);
+    expect(membershipHasPermission(cashier, PERMISSIONS.VIEW_OWN_LEAVE)).toBe(true);
     expect(membershipGrantsPermission(cashier, "pos_sell", () => true)).toBe(true);
   });
 

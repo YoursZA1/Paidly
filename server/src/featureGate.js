@@ -1,4 +1,9 @@
-import { hasFeature } from "./subscriptionPlans.js";
+/**
+ * Server feature authorization — Subscriptions SoR only.
+ * Never use profiles.plan / profiles.subscription_plan for access decisions.
+ */
+import { resolveEntitlement } from "./billing/entitlements.js";
+import { familyHasFeature, hasFeature } from "./subscriptionPlans.js";
 
 export class UpgradeRequiredError extends Error {
   /**
@@ -13,6 +18,7 @@ export class UpgradeRequiredError extends Error {
 }
 
 /**
+ * Pure slug check (catalog math only). Prefer assertUserHasFeature for live authz.
  * @param {string} planSlug
  * @param {string} feature
  */
@@ -24,6 +30,7 @@ export function assertHasFeatureForPlan(planSlug, feature) {
 }
 
 /**
+ * @deprecated Display / migration helpers only — NOT for authorization.
  * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
  * @param {string} userId
  */
@@ -38,25 +45,40 @@ export async function fetchProfilePlanSlug(supabaseAdmin, userId) {
 }
 
 /**
+ * Authoritative feature check: subscriptions row → access + plan family features.
+ * profiles.plan is ignored even when it claims a higher plan.
+ *
  * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
  * @param {string} userId
  * @param {string} feature
+ * @param {{ companyId?: string | null }} [opts]
  */
-export async function assertUserHasFeature(supabaseAdmin, userId, feature) {
-  const slug = await fetchProfilePlanSlug(supabaseAdmin, userId);
-  assertHasFeatureForPlan(slug, feature);
+export async function assertUserHasFeature(supabaseAdmin, userId, feature, opts = {}) {
+  const companyId = opts.companyId != null ? String(opts.companyId).trim() || null : null;
+  const ent = await resolveEntitlement(supabaseAdmin, userId, companyId);
+  if (!ent.access) {
+    throw new UpgradeRequiredError(feature);
+  }
+  if (!familyHasFeature(ent.family, feature)) {
+    throw new UpgradeRequiredError(feature);
+  }
 }
 
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
  * @param {string} userId
  * @param {string[]} features
+ * @param {{ companyId?: string | null }} [opts]
  */
-export async function assertUserHasAnyFeature(supabaseAdmin, userId, features) {
-  const slug = await fetchProfilePlanSlug(supabaseAdmin, userId);
-  const plan = slug || "free";
-  const ok = features.some((f) => hasFeature(plan, f));
+export async function assertUserHasAnyFeature(supabaseAdmin, userId, features, opts = {}) {
+  const companyId = opts.companyId != null ? String(opts.companyId).trim() || null : null;
+  const ent = await resolveEntitlement(supabaseAdmin, userId, companyId);
+  if (!ent.access) {
+    throw new UpgradeRequiredError(features?.[0] || "unknown");
+  }
+  const list = Array.isArray(features) ? features : [];
+  const ok = list.some((f) => familyHasFeature(ent.family, f));
   if (!ok) {
-    throw new UpgradeRequiredError(features[0] || "unknown");
+    throw new UpgradeRequiredError(list[0] || "unknown");
   }
 }

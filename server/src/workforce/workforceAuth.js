@@ -23,11 +23,20 @@ export async function requireWorkforcePermission(req, res, permission) {
     if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
     const membership = await loadCompanyMembership(supabaseAdmin, user.id);
     if (!membership) return { ok: false, response: jsonError(res, 403, "No company membership") };
-    if (isPosOnlyStaff(membership)) {
-      return { ok: false, response: jsonError(res, 403, "POS staff cannot access workforce", { code: "POS_SCOPE" }) };
+    if (membership.portalRevokedAt) {
+      return {
+        ok: false,
+        response: jsonError(res, 403, "Employee portal access has been revoked", { code: "PORTAL_REVOKED" }),
+      };
     }
     if (!membershipHasPermission(membership, permission)) {
-      return { ok: false, response: jsonError(res, 403, "Forbidden", { code: "FORBIDDEN", permission }) };
+      return {
+        ok: false,
+        response: jsonError(res, 403, "Forbidden", {
+          code: isPosOnlyStaff(membership) ? "POS_SCOPE" : "FORBIDDEN",
+          permission,
+        }),
+      };
     }
     return { ok: true, user, membership };
   } catch (err) {

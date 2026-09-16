@@ -390,6 +390,16 @@ export async function handleNativePosCheckout(req, res, gate) {
   if (!paymentMethod) {
     return jsonError(res, 422, "payment_method must be cash, card, digital, or other");
   }
+  // Card-present (Paidly Pay / Yoco / Square till) cannot complete settlement in-product yet.
+  // Do not open unpaid intents that cashiers cannot finish. Cash + Ozow digital remain.
+  if (paymentMethod === "card") {
+    return jsonError(
+      res,
+      422,
+      "Card-present checkout is not available yet. Use Cash or EFT / Digital (Ozow).",
+      { code: "POS_CARD_UNAVAILABLE" }
+    );
+  }
   if (body.manual_complete || body.force_paid || body.mark_paid) {
     return jsonError(res, 403, "Manual card/digital complete is not enabled. Wait for the payment rail to confirm.", {
       code: "MANUAL_CARD_FORBIDDEN",

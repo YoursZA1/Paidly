@@ -6,8 +6,8 @@ import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supa
 import { runPostgrestWithResilience } from "@/lib/supabaseDataResilience";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { readStoredAuthUser } from "@/utils/authStorage";
-import { hasFeature } from "@/lib/plans.js";
 import { assertRuntimeAllowsMutations } from "@/lib/runtimeMutationGuard";
+import { clientHasFeature, getClientEntitlementSnapshot } from "@/lib/clientEntitlement";
 import { ensureUserHasOrganization as ensureUserHasOrganizationShared } from "@/api/auth/ensureUserOrganization.js";
 import {
   getSessionWithRetry,
@@ -156,14 +156,9 @@ export class EntityManager {
     EntityManager.breakApiClient = client;
   }
 
-  static getAuthBillingPlanSlug() {
-    const u = EntityManager.breakApiClient?.auth?.user;
-    return String(u?.subscription_plan || u?.plan || "").trim();
-  }
-
   /**
-   * Blocks Supabase writes for tiered features (mirrors `shared/plans.js`).
-   * Uses in-memory `auth.user.plan` from the active Break API client.
+   * Blocks Supabase writes for tiered features using the subscription entitlement
+   * snapshot published by useEntitlementAccess (never profiles.plan alone once ready).
    */
   static assertSupabaseTableFeatureGate(supabaseTable) {
     if (!isSupabaseConfigured || !supabaseTable) return;
@@ -171,15 +166,25 @@ export class EntityManager {
       invoices: "invoices",
       quotes: "quotes",
       clients: "clients",
-      recurring_invoices: "invoices",
+      recurring_invoices: "recurring_invoices",
       payments: "invoices",
+      purchase_orders: "purchase_orders",
     };
     const feature = featureByTable[supabaseTable];
     if (!feature) return;
-    const plan = EntityManager.getAuthBillingPlanSlug() || "free";
-    if (!hasFeature(plan, feature)) {
+    if (!clientHasFeature(feature)) {
       throw new Error("Upgrade required");
     }
+  }
+
+  /** @deprecated Prefer client entitlement snapshot; kept for diagnostics. */
+  static getAuthBillingPlanSlug() {
+    const snap = getClientEntitlementSnapshot();
+    if (snap.ready) {
+      return snap.accessGranted ? String(snap.planSlug || snap.planFamily || "").trim() : "";
+    }
+    const u = EntityManager.breakApiClient?.auth?.user;
+    return String(u?.subscription_plan || u?.plan || "").trim();
   }
 
   constructor(entityName = '', userId = null) {

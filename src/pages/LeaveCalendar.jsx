@@ -10,7 +10,7 @@ import { createPageUrl } from "@/utils";
 import { leaveApi } from "@/services/PayrollApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
-import { useAuth } from "@/contexts/AuthContext";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 import { daysInMonth, eachIsoDateInclusive, formatIsoDate, monthLabel } from "@shared/payroll/dates.js";
 
 function addDays(iso, n) {
@@ -21,8 +21,9 @@ function addDays(iso, n) {
 
 export default function LeaveCalendarPage({ embedded = false }) {
   const { toast } = useToast();
-  const { profile } = useAuth();
-  const userPlan = profile?.subscription_plan || profile?.plan || "starter";
+  const { planSlug, entitlement, hasFeature } = useEntitlementAccess();
+  const userPlan = planSlug || "none";
+  const gateEntitlement = { ...entitlement, hasFeature };
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -98,7 +99,7 @@ export default function LeaveCalendarPage({ embedded = false }) {
   const listEvents = [...events].sort((a, b) => String(a.start_date || "").localeCompare(String(b.start_date || "")));
 
   return (
-    <FeatureGate feature="leave_management" userPlan={userPlan}>
+    <FeatureGate feature="leave_management" userPlan={userPlan} entitlement={gateEntitlement}>
       <PageTemplate embedded={embedded}>
         {embedded ? null : (
         <PageTemplate.Header>

@@ -1,40 +1,38 @@
 import { useMemo } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
-import { hasFeatureAccess } from "@/components/subscription/FeatureGate";
 import { canShowPosNav } from "@/lib/posNavAccess";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 
 /**
  * Whether back-office chrome should offer a POS / till entry.
- * Org opted into POS (retail/mixed) + `pos` plan feature + pos_access.
+ * Org opted into POS (retail/mixed) + subscription `pos` feature + pos_access.
  */
 export function useCanShowPosNav() {
-  const { user } = useAuth();
-  const { profile } = useUserProfileQuery();
   const { hasPermission, isOrgOwner, ctx, posEnabled } = useCompanyContext();
+  const { hasFeature, isEntitlementReady, isLoading } = useEntitlementAccess({
+    enabled: Boolean(ctx?.companyId || isOrgOwner),
+  });
 
   return useMemo(() => {
-    const userPlan =
-      profile?.subscription_plan ||
-      profile?.plan ||
-      user?.subscription_plan ||
-      user?.plan ||
-      "none";
+    // While subscription SoR is loading, do not advertise POS from a stale profile plan.
+    const hasPosEntitlement = isEntitlementReady
+      ? hasFeature("pos")
+      : isLoading
+        ? false
+        : hasFeature("pos");
     return canShowPosNav({
       hasPosCapability: posEnabled === true,
-      hasPosEntitlement: hasFeatureAccess(userPlan, "pos"),
+      hasPosEntitlement,
       hasPosAccess: hasPermission(PERMISSIONS.POS_ACCESS),
       isOrgOwner: Boolean(isOrgOwner),
       isCompanyMember: Boolean(ctx?.companyId) && !isOrgOwner,
     });
   }, [
     posEnabled,
-    profile?.subscription_plan,
-    profile?.plan,
-    user?.subscription_plan,
-    user?.plan,
+    hasFeature,
+    isEntitlementReady,
+    isLoading,
     hasPermission,
     isOrgOwner,
     ctx?.companyId,

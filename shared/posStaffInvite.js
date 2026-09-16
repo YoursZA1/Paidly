@@ -20,11 +20,17 @@ export const POS_ACCESS_COOKIE = "paidly_pos_access";
 export const POS_ACCESS_BEARER_PREFIX = "pos.";
 export const POS_ACCESS_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-/** Till-only grants. Close-shift is allowed so cashiers can cash up their own drawer. */
+/** Till grants. Auth-backed POS staff also get employee self-service (one portal). */
 export const POS_ONLY_PERMISSIONS = Object.freeze([
   "pos_access",
   "pos_sell",
   "pos_close_register",
+  "view_own_profile",
+  "view_own_payslips",
+  "view_own_leave",
+  "view_own_documents",
+  "view_notifications",
+  "view_announcements",
 ]);
 
 /** @param {unknown} raw */
@@ -35,6 +41,21 @@ export function isPosInviteDest(raw) {
 /** @param {unknown} permission */
 export function posOnlyStaffHasPermission(permission) {
   return POS_ONLY_PERMISSIONS.includes(String(permission || ""));
+}
+
+/**
+ * POS-enabled for portal PIN / Start Shift / admin POS Access UI.
+ * Distinct from generic role matrix `pos_access` (all employees have that entry).
+ * @param {{ isOrgOwner?: boolean, companyRole?: string | null, jobFunction?: string | null, job_function?: string | null, pos_register_id?: unknown, posRegisterId?: unknown } | null | undefined} membership
+ */
+export function membershipIsPosEnabled(membership) {
+  if (isPosOnlyStaff(membership)) return true;
+  const fn = String(membership?.jobFunction || membership?.job_function || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  if (fn === POS_JOB_FUNCTION || fn === "cashier" || fn === "till" || fn === "pos_only") return true;
+  return Boolean(membership?.pos_register_id || membership?.posRegisterId);
 }
 
 /**

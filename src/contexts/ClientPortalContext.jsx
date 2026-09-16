@@ -10,7 +10,6 @@ import {
 import {
   portalFetchData,
   portalLogin,
-  portalProcessPayment,
   portalUpdateClient,
 } from "@/api/clientPortalClient";
 import {
@@ -123,19 +122,13 @@ export function ClientPortalProvider({ children }) {
     [token, client?.id]
   );
 
-  const recordPayment = useCallback(
-    async (invoiceId, amount, extra = {}) => {
-      if (!token) return;
-      await portalProcessPayment(token, {
-        invoiceId,
-        amount,
-        method: extra.method || "credit_card",
-        notes: extra.notes || "Online payment via client portal",
-      });
-      await refreshDocuments(token);
-    },
-    [token, refreshDocuments]
-  );
+  const recordPayment = useCallback(async () => {
+    const err = new Error(
+      "Online payment from the client portal is not available. Use the secure invoice payment link."
+    );
+    err.code = "PORTAL_PAYMENT_DISABLED";
+    throw err;
+  }, []);
 
   const value = useMemo(
     () => ({

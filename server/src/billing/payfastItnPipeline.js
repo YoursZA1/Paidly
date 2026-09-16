@@ -17,7 +17,6 @@ import {
 } from "../payfast.js";
 import { getPayfastItnPayload } from "../payfastItnBody.js";
 import { isValidUuid, sanitizeOneLine } from "../inputValidation.js";
-import { processPayfastInvoiceItn } from "../payfastInvoiceItn.js";
 import {
   upsertSubscriptionFromItn,
   resolvePayfastSubscriptionUserIdForExport,
@@ -286,23 +285,26 @@ export function createPayfastItnProductionHandler(deps) {
       return res.status(400).send("Merchant mismatch");
     }
 
-    // Invoice document payments (Document Engine) — verified channel only
+    // Legacy customer invoice PayFast path — DISABLED (Payment Engine / Ozow only).
+    // SaaS subscription ITN continues below. Acknowledge so PayFast does not retry forever.
     const customStr1 = String(payload.custom_str1 || "");
     if (customStr1.startsWith("invoice:")) {
-      try {
-        await processPayfastInvoiceItn(supabase, payload);
-        await updateItnLog(supabase, itnLogId, { verified: true, amount_valid: true });
-        await logWebhook(supabase, {
-          path: "/api/payfast/itn",
-          response: { ok: true, path: "invoice" },
-          status_code: 200,
-          duration_ms: Date.now() - started,
-        });
-        return res.status(200).send("OK");
-      } catch (err) {
-        console.error("[payfast-itn] invoice processing error", err);
-        return res.status(500).send("Internal error");
-      }
+      console.warn(
+        "[payfast-itn] Ignoring legacy customer invoice ITN — use Payment Engine (Ozow). custom_str1=",
+        customStr1.slice(0, 48)
+      );
+      await updateItnLog(supabase, itnLogId, {
+        verified: false,
+        amount_valid: false,
+        verification_response: `${validate.responseText}|invoice_customer_path_disabled`,
+      });
+      await logWebhook(supabase, {
+        path: "/api/payfast/itn",
+        response: { ok: true, path: "invoice_disabled", settled: false },
+        status_code: 200,
+        duration_ms: Date.now() - started,
+      });
+      return res.status(200).send("OK");
     }
 
     // 8) Subscription validation (locate agreement)

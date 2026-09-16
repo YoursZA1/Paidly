@@ -61,20 +61,13 @@ export async function portalUpdateClient(token, patch) {
   return data;
 }
 
-export async function portalProcessPayment(token, payload) {
-  const r = await fetch(`${BASE}/payment`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload || {}),
-  });
-  const data = await parseJsonResponse(r);
-  if (!r.ok) {
-    throw new Error(data?.error || `Payment failed (${r.status})`);
-  }
-  return data;
+/** @deprecated Portal never records customer payments — Payment Engine only. */
+export async function portalProcessPayment(_token, _payload) {
+  const err = new Error(
+    "Online payment from the client portal is not available. Use the secure invoice payment link."
+  );
+  err.code = "PORTAL_PAYMENT_DISABLED";
+  throw err;
 }
 
 export async function portalGetMessages(token) {

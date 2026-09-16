@@ -10,9 +10,12 @@ import {
   summarizeSessionCash,
 } from "./posRegisterSessionMath.js";
 import { resolveAssignedTill } from "./posRegisterMath.js";
+import { verifyMembershipPosPin } from "./posPinRoutes.js";
+import { membershipIsPosEnabled } from "../../../shared/posStaffInvite.js";
+import { writeWorkforceAudit } from "../workforce/workforceAudit.js";
 
 const SESSION_SELECT =
-  "id, org_id, register_id, status, opening_balance, cash_sales, cash_refunds, expected_cash, closing_cash, variance, opened_by, closed_by, opened_at, closed_at, notes, created_at, updated_at";
+  "id, org_id, register_id, status, opening_balance, cash_sales, cash_refunds, expected_cash, closing_cash, variance, opened_by, closed_by, opened_by_membership_id, closed_by_membership_id, opened_at, closed_at, notes, created_at, updated_at";
 
 const SESSION_SALES_SELECT = "sale_kind, payment_method, status, total_amount";
 
@@ -263,27 +266,61 @@ export async function handlePosSessionOpen(req, res) {
     const parsed = parseOpenSessionBody({ ...body, register_id: lockedId }, register.opening_balance);
     if (!parsed.ok) return jsonError(res, 422, parsed.error, { code: parsed.code });
 
-    const { data, error } = await supabaseAdmin
+    const membershipId = gate.membership.id || null;
+    const posEnabled = membershipIsPosEnabled(gate.membership);
+    if (posEnabled && membershipId && gate.user?.id) {
+      const pinCheck = await verifyMembershipPosPin(orgId, membershipId, body.pos_pin);
+      if (!pinCheck.ok) {
+        return jsonError(res, pinCheck.status, pinCheck.error, { code: pinCheck.code });
+      }
+    }
+
+    const insertRow = {
+      org_id: orgId,
+      register_id: parsed.register_id,
+      status: "open",
+      opening_balance: parsed.opening_balance,
+      cash_sales: 0,
+      cash_refunds: 0,
+      expected_cash: parsed.opening_balance,
+      opened_by: gate.user.id,
+      notes: parsed.notes,
+    };
+    if (membershipId) insertRow.opened_by_membership_id = membershipId;
+
+    let { data, error } = await supabaseAdmin
       .from("pos_register_sessions")
-      .insert({
-        org_id: orgId,
-        register_id: parsed.register_id,
-        status: "open",
-        opening_balance: parsed.opening_balance,
-        cash_sales: 0,
-        cash_refunds: 0,
-        expected_cash: parsed.opening_balance,
-        opened_by: gate.user.id,
-        notes: parsed.notes,
-      })
+      .insert(insertRow)
       .select(SESSION_SELECT)
       .single();
+    if (error && /opened_by_membership_id|schema cache|column/i.test(error.message || "")) {
+      delete insertRow.opened_by_membership_id;
+      const retry = await supabaseAdmin
+        .from("pos_register_sessions")
+        .insert(insertRow)
+        .select(
+          "id, org_id, register_id, status, opening_balance, cash_sales, cash_refunds, expected_cash, closing_cash, variance, opened_by, closed_by, opened_at, closed_at, notes, created_at, updated_at"
+        )
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) {
       const status = /duplicate key|idx_pos_register_sessions_one_open/i.test(error.message || "")
         ? 422
         : 500;
       return jsonError(res, status, mapSessionSchemaError(error.message), {
         code: status === 422 ? "SESSION_OPEN" : undefined,
+      });
+    }
+
+    if (membershipId) {
+      await writeWorkforceAudit({
+        orgId,
+        employeeId: membershipId,
+        actorId: gate.user.id,
+        action: "pos.shift_started",
+        after: { session_id: data.id, register_id: data.register_id },
       });
     }
 
@@ -329,28 +366,57 @@ export async function handlePosSessionClose(req, res) {
       closing_cash: parsed.closing_cash,
     });
     const now = new Date().toISOString();
-    const { data, error } = await supabaseAdmin
+    const membershipId = gate.membership.id || null;
+    const updateRow = {
+      status: "closed",
+      cash_sales: snapshot.cash_sales,
+      cash_refunds: snapshot.cash_refunds,
+      expected_cash: snapshot.expected_cash,
+      closing_cash: snapshot.closing_cash,
+      variance: snapshot.variance,
+      closed_by: gate.user.id,
+      closed_at: now,
+      notes: parsed.notes != null ? parsed.notes : row.notes,
+      updated_at: now,
+    };
+    if (membershipId) updateRow.closed_by_membership_id = membershipId;
+
+    let { data, error } = await supabaseAdmin
       .from("pos_register_sessions")
-      .update({
-        status: "closed",
-        cash_sales: snapshot.cash_sales,
-        cash_refunds: snapshot.cash_refunds,
-        expected_cash: snapshot.expected_cash,
-        closing_cash: snapshot.closing_cash,
-        variance: snapshot.variance,
-        closed_by: gate.user.id,
-        closed_at: now,
-        notes: parsed.notes != null ? parsed.notes : row.notes,
-        updated_at: now,
-      })
+      .update(updateRow)
       .eq("id", id)
       .eq("org_id", orgId)
       .eq("status", "open")
       .select(SESSION_SELECT)
       .maybeSingle();
+    if (error && /closed_by_membership_id|schema cache|column/i.test(error.message || "")) {
+      delete updateRow.closed_by_membership_id;
+      const retry = await supabaseAdmin
+        .from("pos_register_sessions")
+        .update(updateRow)
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .eq("status", "open")
+        .select(
+          "id, org_id, register_id, status, opening_balance, cash_sales, cash_refunds, expected_cash, closing_cash, variance, opened_by, closed_by, opened_at, closed_at, notes, created_at, updated_at"
+        )
+        .maybeSingle();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) return jsonError(res, 500, mapSessionSchemaError(error.message));
     if (!data) {
       return jsonError(res, 422, "Completed POS sessions cannot be edited", { code: "SESSION_CLOSED" });
+    }
+
+    if (membershipId) {
+      await writeWorkforceAudit({
+        orgId,
+        employeeId: membershipId,
+        actorId: gate.user.id,
+        action: "pos.shift_ended",
+        after: { session_id: data.id, register_id: data.register_id },
+      });
     }
 
     const [session] = await viewSessions(orgId, [data], { liveOpen: false });
