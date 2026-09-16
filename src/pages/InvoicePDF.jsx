@@ -7,6 +7,10 @@ import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeou
 import { Button } from '@/components/ui/button';
 import generatePdfFromElement from '@/utils/generatePdfFromElement';
 import {
+  downloadInvoicePdfBlob,
+  generateInvoicePDF,
+} from '@/components/pdf/generateInvoicePDF';
+import {
   buildInvoiceTemplatePdfCaptureProps,
   safeFormatDate as templateSafeFormatDate,
 } from '@/components/pdf/InvoiceTemplatePdfCapture';
@@ -79,31 +83,6 @@ export default function InvoicePDF() {
     }, [invoiceId, shareToken, isDraft]);
 
     const printRef = useRef(null);
-
-    useEffect(() => {
-        if (!autoDownload || isLoading || !invoice) return;
-        let cancelled = false;
-        const timer = setTimeout(async () => {
-            if (cancelled || !printRef.current) return;
-            try {
-                setIsGeneratingPdf(true);
-                const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
-                const el = await waitUntilElementReady(printRef.current);
-                if (cancelled || !el) return;
-                await generatePdfFromElement(el, filename);
-            } catch (e) {
-                if (isAbortError(e) || cancelled) return;
-                console.error('Auto-download PDF failed, falling back to print:', e);
-                window.print();
-            } finally {
-                setIsGeneratingPdf(false);
-            }
-        }, 600);
-        return () => {
-            cancelled = true;
-            clearTimeout(timer);
-        };
-    }, [autoDownload, isLoading, invoice]);
 
     /** Public /view/:token and email links: no login; same API as InvoiceView. */
     const loadInvoiceByShareToken = async (token) => {
@@ -218,6 +197,43 @@ export default function InvoicePDF() {
         [pdfPack?.clientForTemplate, invoice?.client_id]
     );
 
+    useEffect(() => {
+        if (!autoDownload || isLoading || !invoice || !pdfPack) return;
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            if (cancelled) return;
+            try {
+                setIsGeneratingPdf(true);
+                const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
+                if (pdfPack.templateKey === DOCUMENT_TEMPLATE_KEY) {
+                    const blob = await generateInvoicePDF({
+                        invoice,
+                        client: clientFallback,
+                        user,
+                        bankingDetail,
+                    });
+                    if (cancelled) return;
+                    downloadInvoicePdfBlob(blob, filename);
+                } else {
+                    if (!printRef.current) return;
+                    const el = await waitUntilElementReady(printRef.current);
+                    if (cancelled || !el) return;
+                    await generatePdfFromElement(el, filename);
+                }
+            } catch (e) {
+                if (isAbortError(e) || cancelled) return;
+                console.error('Auto-download PDF failed, falling back to print:', e);
+                window.print();
+            } finally {
+                setIsGeneratingPdf(false);
+            }
+        }, 600);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [autoDownload, isLoading, invoice, pdfPack, clientFallback, user, bankingDetail]);
+
     if (isLoading) {
         return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
     }
@@ -254,13 +270,24 @@ export default function InvoicePDF() {
     }
 
     const handleDownloadPDF = async () => {
-        if (!printRef.current || isGeneratingPdf) return;
+        if (isGeneratingPdf || !pdfPack) return;
         setIsGeneratingPdf(true);
         try {
             const filename = `${invoice.invoice_number || 'invoice'}.pdf`;
-            const el = await waitUntilElementReady(printRef.current);
-            if (!el) return;
-            await generatePdfFromElement(el, filename);
+            if (pdfPack.templateKey === DOCUMENT_TEMPLATE_KEY) {
+                const blob = await generateInvoicePDF({
+                    invoice,
+                    client: clientFallback,
+                    user,
+                    bankingDetail,
+                });
+                downloadInvoicePdfBlob(blob, filename);
+            } else {
+                if (!printRef.current) return;
+                const el = await waitUntilElementReady(printRef.current);
+                if (!el) return;
+                await generatePdfFromElement(el, filename);
+            }
         } catch (e) {
             if (isAbortError(e)) return;
             console.error('PDF generation failed, falling back to print:', e);

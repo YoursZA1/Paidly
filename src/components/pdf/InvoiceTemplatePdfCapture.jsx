@@ -18,9 +18,10 @@ import InvoiceTemplateDocument from "./InvoiceTemplateDocument";
 const TEMPLATES = {
   classic: ClassicTemplate,
   modern: ModernTemplate,
+  paidlypro: PaidlyProTemplate,
+  // Legacy keys (resolveInvoiceTemplateKey maps these away; kept as fallbacks)
   minimal: MinimalTemplate,
   bold: BoldTemplate,
-  paidlypro: PaidlyProTemplate,
 };
 
 export function safeFormatDate(dateStr) {

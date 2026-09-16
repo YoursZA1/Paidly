@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import InvoiceMetaTags from '@/components/invoice/InvoiceMetaTags';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
-import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
+import { resolveInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { isValidShareToken } from '@/utils/inputSanitization';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 import DocumentPaymentActionBar from '@/components/invoice/DocumentPaymentActionBar';
@@ -266,7 +266,7 @@ export default function InvoiceView() {
   const publicViewUrl =
     typeof window !== 'undefined' ? `${window.location.origin}/view/${token}` : '';
 
-  const templateKey = normalizeInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
+  const templateKey = resolveInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
   const issuerBrand = resolveIssuerBrand({
     document: invoice,
     company: invoice.company,

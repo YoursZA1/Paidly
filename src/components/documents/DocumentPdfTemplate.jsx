@@ -59,7 +59,8 @@ function safeDate(v) {
 function normalizeItems(doc) {
   const items = doc.document_items || doc.items || [];
   return items.map((it) => {
-    const qty = Number(it.quantity ?? 1) || 1;
+    const qtyRaw = Number(it.quantity ?? it.qty ?? 1);
+    const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? qtyRaw : 1;
     const unit = Number(it.unit_price ?? it.unit ?? 0) || 0;
     const rawTotal = it.total_price ?? it.total;
     const total =

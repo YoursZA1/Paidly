@@ -17,6 +17,10 @@ import { ArrowLeft, Save, Loader2, Send, Download, ImageIcon, RotateCcw } from "
 import LineItemsEditor from "@/components/LineItemsEditor";
 import DocumentPreview from "@/components/DocumentPreview";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
+import {
+  downloadInvoicePdfBlob,
+  generateInvoicePDF,
+} from "@/components/pdf/generateInvoicePDF";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl, createViewDocumentUrl } from "@/utils";
@@ -1284,27 +1288,67 @@ function CreateDocumentCore({ docType }) {
     let cancelled = false;
 
     const run = async () => {
-      await waitForPreviewPaint();
       if (cancelled) return;
 
-      const el = previewPdfRef.current;
-      if (!el) {
-        if (!cancelled) {
-          toast({
-            title: "Preview not ready",
-            description: "Try Download PDF again in a moment.",
-            variant: "destructive",
-          });
-          setPdfExportPending(false);
+      if (docType !== "invoice") {
+        await waitForPreviewPaint();
+        if (cancelled) return;
+        const el = previewPdfRef.current;
+        if (!el) {
+          if (!cancelled) {
+            toast({
+              title: "Preview not ready",
+              description: "Try Download PDF again in a moment.",
+              variant: "destructive",
+            });
+            setPdfExportPending(false);
+          }
+          return;
         }
-        return;
       }
 
       if (!cancelled) setPdfExporting(true);
       try {
         const numberRaw =
           (form.number || "").trim() || (docType === "quote" ? "quote-draft" : "invoice-draft");
-        await downloadDocumentPreviewFromElement(el, docType, numberRaw);
+
+        if (docType === "invoice") {
+          const invoiceForPdf = {
+            ...previewDoc,
+            invoice_number: numberRaw,
+            reference_number: numberRaw,
+            invoice_date: form.issue_date,
+            delivery_date: form.due_date,
+            items: Array.isArray(form.line_items) ? form.line_items : [],
+            line_items: Array.isArray(form.line_items) ? form.line_items : [],
+            subtotal: computed.subtotal,
+            tax_rate: Number(form.tax_rate) || 0,
+            tax_amount: computed.tax_amount,
+            discount_amount: computed.discount_amount,
+            total_amount: computed.total,
+            currency: form.currency || user?.currency || "ZAR",
+            notes: form.notes || "",
+            terms_conditions: form.terms_conditions || "",
+            status: "draft",
+            company: selectedBrand || undefined,
+          };
+          const clientForPdf = {
+            id: form.client_id || undefined,
+            name: form.client_name || "Client",
+            email: form.client_email || "",
+            address: form.client_address || "",
+          };
+          const blob = await generateInvoicePDF({
+            invoice: invoiceForPdf,
+            client: clientForPdf,
+            user,
+            bankingDetail: previewBankingRow,
+          });
+          downloadInvoicePdfBlob(blob, `${numberRaw}.pdf`);
+        } else {
+          const el = previewPdfRef.current;
+          await downloadDocumentPreviewFromElement(el, docType, numberRaw);
+        }
         if (!cancelled) {
           toast({ title: "PDF downloaded", description: "Saved to your downloads folder.", variant: "success" });
         }

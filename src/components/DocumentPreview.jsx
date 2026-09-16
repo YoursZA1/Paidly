@@ -8,7 +8,14 @@ import { resolveIssuerBrand } from "@/lib/documentIssuerBrand";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatLineItemNameAndDescription } from "@/utils/invoiceTemplateData";
 import { effectiveBankingDetail } from "@/utils/effectiveBankingDetail";
-import { formatDocumentPreviewBankingLines } from "@/utils/formatDocumentPreviewBankingLines";
+import {
+  formatDocumentPreviewBankingLines,
+  formatDocumentPreviewBankingRows,
+} from "@/utils/formatDocumentPreviewBankingLines";
+import {
+  coerceDocumentLineRow,
+  sanitizeDocumentDisplayText,
+} from "@/utils/documentInvoiceDisplay";
 import {
   CONTENT_HEIGHT_PX,
   PAGE_OVERFLOW_SAFETY_PX,
@@ -63,39 +70,22 @@ function isDiscountItem(it) {
 
 /** Rows for the line-items table (no synthetic discount line — discount is in totals). */
 function normalizeLineItems(doc) {
-  if (Array.isArray(doc?.line_items) && doc.line_items.length > 0) {
-    return doc.line_items
-      .map((row) => {
-        const qty = Number(row.quantity) || 0;
-        const unit = Number(row.unit_price) || 0;
-        const total =
-          row.total != null && row.total !== ""
-            ? Number(row.total)
-            : Math.round(qty * unit * 100) / 100;
-        const desc = formatLineItemNameAndDescription(row);
-        return { description: desc, quantity: qty || 1, unit_price: unit, total };
-      })
-      .filter((row) => row.description || row.unit_price || row.quantity !== 1 || row.total);
-  }
+  const source =
+    Array.isArray(doc?.line_items) && doc.line_items.length > 0
+      ? doc.line_items
+      : Array.isArray(doc?.items) && doc.items.length > 0
+        ? doc.items.filter((it) => !isDiscountItem(it))
+        : [];
 
-  if (Array.isArray(doc?.items) && doc.items.length > 0) {
-    return doc.items
-      .filter((it) => !isDiscountItem(it))
-      .map((it) => {
-        const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
-        const unit = Number(it.unit_price ?? it.rate ?? it.price ?? 0) || 0;
-        const rawTotal = it.total_price ?? it.total;
-        const hasExplicitTotal =
-          rawTotal != null && rawTotal !== "" && !Number.isNaN(Number(rawTotal));
-        const total = hasExplicitTotal
-          ? Number(rawTotal)
-          : Math.round(qty * unit * 100) / 100;
-        const desc = formatLineItemNameAndDescription(it) || "Item";
-        return { description: desc, quantity: qty, unit_price: unit, total };
+  return source
+    .map((row) => {
+      const coerced = coerceDocumentLineRow({
+        ...row,
+        description: formatLineItemNameAndDescription(row),
       });
-  }
-
-  return [];
+      return coerced;
+    })
+    .filter((row) => row.description || row.unit_price || row.total);
 }
 
 const STATUS_STYLES_BASE = {
@@ -168,7 +158,7 @@ function fallbackPages(resolved) {
   return [{ isFirst: true, showFirstOnly: true, blocks, flowContinued: {} }];
 }
 
-function CommercialPageBody({ page, resolved, bankingLines, primary, secondary }) {
+function CommercialPageBody({ page, resolved, bankingLines, bankingRows, primary, secondary }) {
   return pageBlockRuns(page.blocks).map((run, i) => {
     if (run.type === "table") {
       const isEmpty = run.blocks.some((b) => b.kind === "line-item-empty");
@@ -183,6 +173,7 @@ function CommercialPageBody({ page, resolved, bankingLines, primary, secondary }
           key={`tbl-${i}`}
           rows={rows}
           fmt={resolved.fmt}
+          primary={primary}
           secondary={secondary}
           continued={!page.isFirst && rows.length > 0}
         />
@@ -210,6 +201,7 @@ function CommercialPageBody({ page, resolved, bankingLines, primary, secondary }
           resolved={resolved}
           primary={primary}
           bankingLines={bankingLines}
+          bankingRows={bankingRows}
         />
       );
     }
@@ -251,10 +243,18 @@ const DocumentPreview = forwardRef(function DocumentPreview(
     [BRAND_PRIMARY]
   );
 
-  const bankingLines = useMemo(() => {
-    const merged = effectiveBankingDetail(bankingDetail, effectiveUser);
-    return formatDocumentPreviewBankingLines(merged);
-  }, [bankingDetail, effectiveUser]);
+  const bankingMerged = useMemo(
+    () => effectiveBankingDetail(bankingDetail, effectiveUser),
+    [bankingDetail, effectiveUser]
+  );
+  const bankingLines = useMemo(
+    () => formatDocumentPreviewBankingLines(bankingMerged),
+    [bankingMerged]
+  );
+  const bankingRows = useMemo(
+    () => formatDocumentPreviewBankingRows(bankingMerged),
+    [bankingMerged]
+  );
 
   const resolved = useMemo(() => {
     if (!doc) return null;
@@ -327,8 +327,8 @@ const DocumentPreview = forwardRef(function DocumentPreview(
         : null;
 
     const fmt = (amount) => formatCurrency(amount, currency);
-    const notes = doc.notes || "";
-    const terms_conditions = doc.terms_conditions || "";
+    const notes = sanitizeDocumentDisplayText(doc.notes || "");
+    const terms_conditions = sanitizeDocumentDisplayText(doc.terms_conditions || "");
     const termsParts = splitFlowableText(terms_conditions);
 
     return {
@@ -455,7 +455,12 @@ const DocumentPreview = forwardRef(function DocumentPreview(
               )}
             </tbody>
           </table>
-          <TotalsPaymentBlock resolved={resolved} primary={BRAND_PRIMARY} bankingLines={bankingLines} />
+          <TotalsPaymentBlock
+            resolved={resolved}
+            primary={BRAND_PRIMARY}
+            bankingLines={bankingLines}
+            bankingRows={bankingRows}
+          />
           <NotesBlock notes={resolved.notes} primary={BRAND_PRIMARY} />
           <TermsHeading continued={false} />
           <TermsHeading continued />
@@ -494,6 +499,7 @@ const DocumentPreview = forwardRef(function DocumentPreview(
                 page={page}
                 resolved={resolved}
                 bankingLines={bankingLines}
+                bankingRows={bankingRows}
                 primary={BRAND_PRIMARY}
                 secondary={BRAND_SECONDARY}
               />

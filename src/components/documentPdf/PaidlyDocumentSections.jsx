@@ -1,4 +1,5 @@
 import LogoImage from "@/components/shared/LogoImage";
+import { formatDocumentLineQuantity } from "@/utils/documentInvoiceDisplay";
 
 const SLATE_900 = "#0f172a";
 
@@ -382,26 +383,39 @@ export function LineItemRow({ item, index, fmt }) {
         {item.description || "—"}
       </td>
       <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", color: "#374151", textAlign: "right", whiteSpace: "nowrap" }}>
-        {item.quantity}
+        {formatDocumentLineQuantity(item.quantity)}
       </td>
       <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", color: "#374151", textAlign: "right", whiteSpace: "nowrap" }}>
-        {fmt(item.unit_price)}
+        {fmt(item.unit_price ?? 0)}
       </td>
       <td style={{ padding: "6px 0", fontSize: "12px", lineHeight: "16px", fontWeight: 600, color: SLATE_900, textAlign: "right", whiteSpace: "nowrap" }}>
-        {fmt(item.total)}
+        {fmt(item.total ?? 0)}
       </td>
     </tr>
   );
 }
 
-export function LineItemsTable({ rows, fmt, secondary, continued }) {
+export function LineItemsTable({ rows, fmt, secondary, continued, primary }) {
   return (
     <div className="document-line-items-table-wrap" style={{ marginBottom: "16px" }}>
       {continued ? (
         <div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "6px", fontWeight: 600 }}>
-          Line items — Continued
+          Items — Continued
         </div>
-      ) : null}
+      ) : (
+        <div
+          style={{
+            fontSize: "12px",
+            fontWeight: 700,
+            color: primary || SLATE_900,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            marginBottom: "8px",
+          }}
+        >
+          Items
+        </div>
+      )}
       <table className="document-line-items-table" style={{ width: "100%", borderCollapse: "collapse" }}>
         <LineItemsTableHeader secondary={secondary} />
         <tbody>
@@ -425,7 +439,7 @@ export function LineItemsTable({ rows, fmt, secondary, continued }) {
   );
 }
 
-export function TotalsPaymentBlock({ resolved, primary, bankingLines }) {
+export function TotalsPaymentBlock({ resolved, primary, bankingLines, bankingRows }) {
   const {
     fmt,
     lineSubtotal,
@@ -437,6 +451,19 @@ export function TotalsPaymentBlock({ resolved, primary, bankingLines }) {
     amount_paid,
     balance_due,
   } = resolved;
+  const rows =
+    Array.isArray(bankingRows) && bankingRows.length > 0
+      ? bankingRows
+      : typeof bankingLines === "string" && bankingLines.trim()
+        ? bankingLines
+            .split("\n")
+            .map((line) => {
+              const idx = line.indexOf(":");
+              if (idx <= 0) return { label: "", value: line.trim() };
+              return { label: line.slice(0, idx).trim(), value: line.slice(idx + 1).trim() };
+            })
+            .filter((r) => r.value)
+        : null;
   return (
     <div
       data-measure="totals"
@@ -450,7 +477,7 @@ export function TotalsPaymentBlock({ resolved, primary, bankingLines }) {
         alignItems: "start",
         marginBottom: "16px",
         paddingTop: "16px",
-        borderTop: "1px solid #f1f5f9",
+        borderTop: "1px solid #e5e7eb",
       }}
     >
       <div className="min-w-0">
@@ -461,27 +488,50 @@ export function TotalsPaymentBlock({ resolved, primary, bankingLines }) {
             color: primary,
             textTransform: "uppercase",
             letterSpacing: "0.06em",
-            marginBottom: "6px",
+            marginBottom: "8px",
           }}
         >
-          Payment details
+          Payment instructions
         </div>
-        {bankingLines ? (
-          <div
+        {rows ? (
+          <dl
             role="group"
             aria-label="Bank details for payment"
-            style={{
-              fontSize: "8px",
-              color: "#374151",
-              lineHeight: 1.45,
-              whiteSpace: "pre-line",
-              wordBreak: "break-word",
-            }}
+            style={{ margin: 0 }}
           >
-            {bankingLines}
-          </div>
+            {rows.map((row) => (
+              <div key={`${row.label}:${row.value}`} style={{ marginBottom: "8px" }}>
+                {row.label ? (
+                  <dt
+                    style={{
+                      margin: 0,
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      color: "#6b7280",
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    {row.label}
+                  </dt>
+                ) : null}
+                <dd
+                  style={{
+                    margin: row.label ? "2px 0 0" : 0,
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "#111827",
+                    lineHeight: 1.4,
+                    wordBreak: "break-word",
+                    whiteSpace: "pre-line",
+                  }}
+                >
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
         ) : (
-          <p style={{ margin: 0, fontSize: "8px", color: "#9ca3af", lineHeight: 1.45 }}>
+          <p style={{ margin: 0, fontSize: "12px", color: "#9ca3af", lineHeight: 1.45 }}>
             Add bank details in Settings or on the document.
           </p>
         )}
@@ -587,7 +637,7 @@ export function TermsHeading({ continued }) {
         letterSpacing: "0.05em",
       }}
     >
-      {continued ? "Terms — Continued" : "Terms"}
+      {continued ? "Terms & Conditions — Continued" : "Terms & Conditions"}
     </p>
   );
 }

@@ -1,14 +1,46 @@
 import { effectiveInvoiceTermsForDisplay } from "@/constants/invoiceTerms";
 
-/** Classic / Modern / Minimal / Bold / Paidly Pro — HTML templates (e.g. legacy PDF). */
+/**
+ * Historical template ids that may still exist on profiles / invoices.
+ * Do not remove — UI may stop offering some of these, but stored values remain valid.
+ */
+export const HISTORICAL_INVOICE_TEMPLATE_KEYS = Object.freeze([
+  "document", // Paidly (default)
+  "paidly", // alias of document if ever stored
+  "classic",
+  "modern",
+  "minimal", // legacy → renders as document
+  "bold", // legacy → renders as modern
+  "paidlypro",
+]);
+
+/** Keys shown in Settings / template picker (4 options). */
+export const SELECTABLE_INVOICE_TEMPLATE_KEYS = Object.freeze([
+  "document",
+  "classic",
+  "modern",
+  "paidlypro",
+]);
+
+/**
+ * Legacy / alias → render key used by PDF + preview engines.
+ * Stored DB values are left unchanged; only presentation maps.
+ */
+const TEMPLATE_RENDER_ALIASES = Object.freeze({
+  paidly: "document",
+  minimal: "document",
+  bold: "modern",
+});
+
+/** Classic / Modern / Paidly Pro — HTML templates (legacy PDF path). */
 const LEGACY_HTML_TEMPLATE_KEYS = ["classic", "modern", "minimal", "bold", "paidlypro"];
 
-/** Paidly document layout (Create / View document, DocumentPreview, PDF). */
+/** Paidly document layout (Create / View document, DocumentPreview, @react-pdf). */
 export const DOCUMENT_TEMPLATE_KEY = "document";
 
 export const DEFAULT_INVOICE_TEMPLATE = DOCUMENT_TEMPLATE_KEY;
 
-const VALID_TEMPLATE_KEYS = [DOCUMENT_TEMPLATE_KEY, ...LEGACY_HTML_TEMPLATE_KEYS];
+const VALID_TEMPLATE_KEYS = HISTORICAL_INVOICE_TEMPLATE_KEYS;
 
 /** Truncated UI labels (e.g. table ellipsis) → full line item titles for Paidly Pro / display polish */
 const LINE_ITEM_DISPLAY_OVERRIDES = [
@@ -48,27 +80,52 @@ export function formatLineItemNameAndDescription(item) {
   return "Item";
 }
 
-/** Resolves stored template id to document or a legacy HTML template key. */
+/**
+ * Validates a stored template id (including legacy minimal/bold and paidly alias).
+ * @param {unknown} value
+ * @returns {string | null}
+ */
 export function normalizeInvoiceTemplateKey(value) {
   const k = typeof value === "string" ? value.trim().toLowerCase() : "";
   return VALID_TEMPLATE_KEYS.includes(k) ? k : null;
 }
 
 /**
- * First valid template from sources, else {@link DEFAULT_INVOICE_TEMPLATE}.
+ * Maps a historical/stored key to the template used for rendering.
+ * @param {unknown} value
+ * @returns {string | null} One of document | classic | modern | paidlypro
+ */
+export function resolveRenderTemplateKey(value) {
+  const k = normalizeInvoiceTemplateKey(value);
+  if (!k) return null;
+  return TEMPLATE_RENDER_ALIASES[k] || k;
+}
+
+/**
+ * First valid **render** template from sources, else {@link DEFAULT_INVOICE_TEMPLATE}.
+ * Applies legacy aliases (minimal → document, bold → modern, paidly → document).
  * @param {...unknown} sources — invoice_template, user.invoice_template, etc.
  */
 export function resolveInvoiceTemplateKey(...sources) {
   for (const s of sources) {
-    const k = normalizeInvoiceTemplateKey(s);
+    const k = resolveRenderTemplateKey(s);
     if (k) return k;
   }
   return DEFAULT_INVOICE_TEMPLATE;
 }
 
-/** True when the stored key is the Paidly document layout (not Classic/Modern/etc.). */
+/**
+ * Map any stored value to a selectable Settings card id (for highlighting).
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function toSelectableInvoiceTemplateKey(value) {
+  return resolveInvoiceTemplateKey(value);
+}
+
+/** True when the key should use the Paidly document / @react-pdf layout. */
 export function isDocumentStyleTemplateKey(key) {
-  return normalizeInvoiceTemplateKey(key) === DOCUMENT_TEMPLATE_KEY;
+  return resolveRenderTemplateKey(key) === DOCUMENT_TEMPLATE_KEY;
 }
 
 /** Line types that imply physical delivery / a traditional "ship to" address on the invoice. */
@@ -87,7 +144,7 @@ export function invoiceItemsRequireShipping(items) {
 }
 
 /**
- * Normalizes draft form data and persisted invoice rows for Classic / Modern / Minimal / Bold templates.
+ * Normalizes draft form data and persisted invoice rows for Classic / Modern / Paidly Pro templates.
  * Used by InvoicePreview, ViewInvoice, and public InvoiceView so layout matches the create flow.
  */
 export function mapInvoiceDataForTemplate(invoiceData) {
@@ -106,12 +163,19 @@ export function mapInvoiceDataForTemplate(invoiceData) {
       service_name: item.name || item.service_name || "Item",
       name: item.name || item.service_name,
       description: item.description ?? "",
-      quantity: Number(item.quantity ?? item.qty ?? 1),
-      unit_price: Number(item.unit_price ?? item.rate ?? item.price ?? 0),
+      quantity: (() => {
+        const q = Number(item.quantity ?? item.qty ?? 1);
+        return Number.isFinite(q) && q > 0 ? q : 1;
+      })(),
+      unit_price: Number(item.unit_price ?? item.rate ?? item.price ?? 0) || 0,
       total_price: Number(
         item.total_price ??
           item.total ??
-          Number(item.quantity ?? item.qty ?? 1) * Number(item.unit_price ?? item.rate ?? item.price ?? 0)
+          (() => {
+            const q = Number(item.quantity ?? item.qty ?? 1);
+            const qty = Number.isFinite(q) && q > 0 ? q : 1;
+            return qty * Number(item.unit_price ?? item.rate ?? item.price ?? 0);
+          })()
       ),
       item_tax_rate: Number(item.item_tax_rate ?? 0),
       item_type: item.item_type || "service",
@@ -130,3 +194,6 @@ export function mapInvoiceDataForTemplate(invoiceData) {
     project_description: invoiceData.project_description || "",
   };
 }
+
+// Keep export for callers that listed legacy HTML keys (not for new UI).
+export { LEGACY_HTML_TEMPLATE_KEYS };

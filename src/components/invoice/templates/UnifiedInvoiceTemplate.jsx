@@ -3,6 +3,7 @@ import {
   formatLineItemNameAndDescription,
   invoiceItemsRequireShipping,
 } from "@/utils/invoiceTemplateData";
+import { formatDocumentLineQuantity } from "@/utils/documentInvoiceDisplay";
 import LogoImage from "@/components/shared/LogoImage";
 import { paginateInvoice } from "./invoicePageLayout";
 import { resolveIssuerBrand } from "@/lib/documentIssuerBrand";
@@ -49,20 +50,22 @@ const VARIANT_CONFIG = {
     zebra: "#f1f5f9",
     rule: "border-slate-300",
   },
+  // Bold & contemporary — absorbs former Bold; solid band (no gradient).
   modern: {
     headerKind: "band",
-    headerColor: "#7c3aed",
-    headerGradient: "linear-gradient(135deg,#7c3aed 0%,#a855f7 100%)",
-    accent: "#7c3aed",
-    sectionBg: "#faf5ff",
+    headerColor: "#0f766e",
+    accent: "#0f766e",
+    sectionBg: "#f0fdfa",
     titleColor: "#ffffff",
     bandStyle: "filled",
     tableHead: "filled",
-    tableHeadFill: "#7c3aed",
+    tableHeadFill: "#0f766e",
     tableHeadText: "#ffffff",
-    zebra: "#faf5ff",
-    rule: "border-purple-200",
+    zebra: "#f0fdfa",
+    rule: "border-teal-700",
+    heavy: true,
   },
+  // Legacy configs kept for safety if a caller still passes variant="minimal"|"bold".
   minimal: {
     headerKind: "minimal",
     headerColor: "#18181b",
@@ -600,6 +603,9 @@ export default function UnifiedInvoiceTemplate({
                   page. Suppressed on a trailing totals-only page (hasTable). */}
               {hasTable ? (
               <section className="section">
+                <SectionLabel heavy={heavy} accent={accent} className="mb-2">
+                  Items
+                </SectionLabel>
                 <table
                   className={`items invoice-table unified-invoice-line-table w-full text-[12px] leading-[1.35] border-collapse table-fixed ${tableFilled ? "" : `border-t border-b ${cfg.rule}`}`}
                 >
@@ -661,13 +667,13 @@ export default function UnifiedInvoiceTemplate({
                               className="align-top text-center tabular-nums text-[12px] text-gray-700"
                               style={tdStyle}
                             >
-                              {item.quantity}
+                              {formatDocumentLineQuantity(item.quantity)}
                             </td>
                             <td
                               className="align-top text-right tabular-nums currency-value text-[12px] text-gray-700 whitespace-nowrap"
                               style={tdStyle}
                             >
-                              {formatCurrency(item.unit_price, userCurrency)}
+                              {formatCurrency(item.unit_price ?? 0, userCurrency)}
                             </td>
                             <td
                               className="align-top text-right tabular-nums currency-value text-[12px] text-gray-900 font-semibold whitespace-nowrap"
@@ -703,7 +709,7 @@ export default function UnifiedInvoiceTemplate({
                   >
                     <div className="min-w-0 no-break">
                       <SectionLabel heavy={heavy} accent={accent} className="mb-2.5">
-                        Payment details
+                        Payment instructions
                       </SectionLabel>
                       <div className="space-y-3 text-neutral-700">
                         {hasAccountDetailsSection ? (

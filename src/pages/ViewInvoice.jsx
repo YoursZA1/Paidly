@@ -23,7 +23,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
-import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
+import { resolveInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 import { useToast } from '@/components/ui/use-toast';
@@ -318,8 +318,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
     const userCurrency = invoice?.currency || invoice?.owner_currency || company?.currency || 'ZAR';
 
     const templateKey =
-        normalizeInvoiceTemplateKey(invoice.invoice_template) ||
-        normalizeInvoiceTemplateKey(company?.invoice_template) ||
+        resolveInvoiceTemplateKey(invoice.invoice_template, company?.invoice_template) ||
         DEFAULT_INVOICE_TEMPLATE;
 
     const issuerBrand = resolveIssuerBrand({

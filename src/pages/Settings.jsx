@@ -67,7 +67,7 @@ import { normalizeBusinessType } from "@shared/businessType.js";
 import { bankingDetailsToCsv, parseBankingCsv, csvRowToBankingDetailPayload } from "@/utils/bankingCsvMapping";
 import { createPageUrl } from "@/utils";
 import { writeInvoiceDraft } from "@/utils/invoiceDraftStorage";
-import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
+import { DEFAULT_INVOICE_TEMPLATE, toSelectableInvoiceTemplateKey } from "@/utils/invoiceTemplateData";
 import {
   parseDocumentBrandHex,
   DEFAULT_DOCUMENT_BRAND_PRIMARY,
@@ -87,40 +87,33 @@ const SettingsCard = ({ title, description, children }) => (
 const DOCUMENT_TEMPLATES = [
     {
         id: "document",
-        name: "Paidly Document",
-        description: "Current invoice & quote layout — PDF and on-screen",
-        colors: ["#0f172a", "#ffffff", "#f24e00"],
+        name: "Paidly",
+        description: "Clean & professional",
+        // Light SaaS/fintech card: white body, charcoal type, orange accent
+        colors: ["#f8fafc", "#ffffff", "#f24e00"],
+        preview: "paidly",
     },
     {
         id: "classic",
         name: "Classic",
-        description: "Traditional layout with clean sections",
-        colors: ["#1e293b", "#f1f5f9", "#3b82f6"]
+        description: "Traditional & formal",
+        colors: ["#1e293b", "#f1f5f9", "#3b82f6"],
+        preview: "classic",
     },
     {
         id: "modern",
         name: "Modern",
-        description: "Gradient header with bold accents",
-        colors: ["#7c3aed", "#faf5ff", "#a855f7"]
-    },
-    {
-        id: "minimal",
-        name: "Minimal",
-        description: "Minimalist style with high readability",
-        colors: ["#18181b", "#ffffff", "#71717a"]
-    },
-    {
-        id: "bold",
-        name: "Bold",
-        description: "Strong contrast with confident headings",
-        colors: ["#0f766e", "#f0fdfa", "#14b8a6"]
+        description: "Bold & contemporary",
+        colors: ["#0f766e", "#f0fdfa", "#14b8a6"],
+        preview: "modern",
     },
     {
         id: "paidlypro",
         name: "Paidly Pro",
-        description: "Future nostalgic — Geist, cards, refined footer",
-        colors: ["#ea580c", "#f8fafc", "#0f172a"]
-    }
+        description: "Premium & refined",
+        colors: ["#0f172a", "#f8fafc", "#ea580c"],
+        preview: "paidlypro",
+    },
 ];
 
 function businessFieldsFromProfile(b) {
@@ -899,10 +892,17 @@ function CompanyProfileSettings() {
                             Document Template
                             <HelpTooltip content="Applies to PDF exports for invoices and quotes." />
                         </Label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-0" role="radiogroup" aria-label="Document templates">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0" role="radiogroup" aria-label="Document templates">
                             {DOCUMENT_TEMPLATES.map((template) => {
-                                const isSelected = formData.invoice_template === template.id;
+                                const isSelected =
+                                    toSelectableInvoiceTemplateKey(formData.invoice_template) ===
+                                    template.id;
                                 const selectTemplate = () => handleInputChange("invoice_template", template.id);
+                                const [headerBg, bodyBg, accent] = template.colors;
+                                const isPaidly = template.preview === "paidly";
+                                const isClassic = template.preview === "classic";
+                                const isModern = template.preview === "modern";
+                                const isPro = template.preview === "paidlypro";
                                 return (
                                 <div
                                     key={template.id}
@@ -930,24 +930,98 @@ function CompanyProfileSettings() {
                                     )}
                                     <div
                                         className="aspect-[3/4] rounded-lg mb-2 overflow-hidden border border-border"
-                                        style={{ backgroundColor: template.colors[1] }}
+                                        style={{ backgroundColor: bodyBg }}
                                     >
-                                        <div className="h-1/4 p-2" style={{ backgroundColor: template.colors[0] }}>
-                                            <div className="w-6 h-1.5 rounded-full bg-white/80 mb-1" />
-                                            <div className="w-10 h-1 rounded-full bg-white/50" />
-                                        </div>
-                                        <div className="p-2 space-y-1.5">
-                                            <div className="flex gap-1">
-                                                <div className="w-8 h-1 rounded-full bg-border" />
-                                                <div className="w-6 h-1 rounded-full bg-border" />
-                                            </div>
-                                            <div className="w-full h-0.5 bg-border rounded-full" />
-                                            <div className="w-full h-0.5 bg-border rounded-full" />
-                                            <div className="w-3/4 h-0.5 bg-border rounded-full" />
-                                            <div className="mt-2 flex justify-end">
-                                                <div className="w-8 h-2 rounded" style={{ backgroundColor: template.colors[2] }} />
-                                            </div>
-                                        </div>
+                                        {/* Distinct thumbnail per template identity */}
+                                        {isPaidly ? (
+                                            <>
+                                                <div className="flex justify-between gap-2 p-2.5 border-b border-border/80">
+                                                    <div className="space-y-1">
+                                                        <div className="w-8 h-1.5 rounded-full bg-foreground/80" />
+                                                        <div className="w-12 h-1 rounded-full bg-muted-foreground/40" />
+                                                    </div>
+                                                    <div className="text-right space-y-1">
+                                                        <div className="w-10 h-2 ml-auto rounded-sm bg-foreground/90" />
+                                                        <div className="w-8 h-1 ml-auto rounded-full bg-muted-foreground/35" />
+                                                    </div>
+                                                </div>
+                                                <div className="p-2.5 space-y-1.5">
+                                                    <div className="w-8 h-1 rounded-full" style={{ backgroundColor: accent }} />
+                                                    <div className="w-full h-0.5 bg-border rounded-full" />
+                                                    <div className="w-full h-0.5 bg-border rounded-full" />
+                                                    <div className="w-2/3 h-0.5 bg-border rounded-full" />
+                                                    <div className="mt-3 flex justify-end">
+                                                        <div className="w-10 h-2.5 rounded" style={{ backgroundColor: accent }} />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : isClassic ? (
+                                            <>
+                                                <div className="h-[28%] p-2" style={{ backgroundColor: headerBg }}>
+                                                    <div className="w-7 h-1.5 rounded-full bg-white/85 mb-1" />
+                                                    <div className="w-11 h-1 rounded-full bg-white/50" />
+                                                </div>
+                                                <div className="h-0.5 w-full" style={{ backgroundColor: accent }} />
+                                                <div className="p-2 space-y-1.5">
+                                                    <div className="w-full h-1.5 rounded-sm" style={{ backgroundColor: headerBg }} />
+                                                    <div className="w-full h-0.5 bg-border rounded-full" />
+                                                    <div className="w-full h-0.5 bg-border rounded-full" />
+                                                    <div className="mt-2 flex justify-end">
+                                                        <div className="w-8 h-2 rounded" style={{ backgroundColor: accent }} />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : isModern ? (
+                                            <>
+                                                <div className="h-[32%] flex items-end justify-between p-2.5" style={{ backgroundColor: headerBg }}>
+                                                    <div className="w-7 h-7 rounded-md bg-white/95" />
+                                                    <div className="space-y-1 text-right">
+                                                        <div className="w-12 h-2.5 ml-auto rounded-sm bg-white" />
+                                                        <div className="w-8 h-1 ml-auto rounded-full bg-white/70" />
+                                                    </div>
+                                                </div>
+                                                <div className="p-2 space-y-1.5">
+                                                    <div className="w-full h-2 rounded-sm" style={{ backgroundColor: headerBg }} />
+                                                    <div className="w-full h-1 rounded-full bg-border" />
+                                                    <div className="w-full h-1 rounded-full bg-border" />
+                                                    <div className="mt-2 flex justify-end">
+                                                        <div className="w-10 h-3 rounded" style={{ backgroundColor: accent }} />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : isPro ? (
+                                            <>
+                                                <div className="h-1.5 w-full" style={{ backgroundColor: accent }} />
+                                                <div className="flex justify-between gap-2 p-2.5">
+                                                    <div className="w-8 h-8 rounded-lg border border-border bg-white shadow-sm" />
+                                                    <div className="space-y-1 text-right pt-0.5">
+                                                        <div className="w-11 h-2 ml-auto rounded-sm" style={{ backgroundColor: headerBg }} />
+                                                        <div className="w-9 h-1 ml-auto rounded-full" style={{ backgroundColor: accent }} />
+                                                    </div>
+                                                </div>
+                                                <div className="mx-2 mb-2 rounded-lg border border-border bg-white p-2 space-y-1.5 shadow-sm">
+                                                    <div className="w-full h-1.5 rounded-sm" style={{ backgroundColor: headerBg }} />
+                                                    <div className="w-full h-0.5 bg-border rounded-full" />
+                                                    <div className="w-3/4 h-0.5 bg-border rounded-full" />
+                                                    <div className="mt-2 flex justify-end">
+                                                        <div className="w-9 h-2 rounded" style={{ backgroundColor: accent }} />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="h-1/4 p-2" style={{ backgroundColor: headerBg }}>
+                                                    <div className="w-6 h-1.5 rounded-full bg-white/80 mb-1" />
+                                                    <div className="w-10 h-1 rounded-full bg-white/50" />
+                                                </div>
+                                                <div className="p-2 space-y-1.5">
+                                                    <div className="w-full h-0.5 bg-border rounded-full" />
+                                                    <div className="mt-2 flex justify-end">
+                                                        <div className="w-8 h-2 rounded" style={{ backgroundColor: accent }} />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                     <p className="text-sm font-medium text-foreground text-center">{template.name}</p>
                                     <p className="text-[11px] text-muted-foreground text-center mt-0.5">{template.description}</p>
@@ -971,7 +1045,7 @@ function CompanyProfileSettings() {
                             <div>
                                 <Label className="text-sm font-medium text-foreground">Document accent colours</Label>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Used for the Paidly Document layout (bars, highlights, totals). Leave as default for Paidly orange, or pick your brand hex colours.
+                                    Used for the Paidly layout (bars, highlights, totals). Leave as default for Paidly orange, or pick your brand hex colours.
                                 </p>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

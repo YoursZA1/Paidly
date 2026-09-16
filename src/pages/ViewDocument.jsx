@@ -29,6 +29,10 @@ import { ToastAction } from "@/components/ui/toast";
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from "@/utils/fetchWithTimeout";
 import { startLoadingFailSafe } from "@/hooks/useLoadingFailSafe";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
+import {
+  downloadInvoicePdfBlob,
+  generateInvoicePDF,
+} from "@/components/pdf/generateInvoicePDF";
 import { parseRouteDocumentTypeStrict, DOCUMENT_TYPES, allowedNextStatuses } from "@/document-engine";
 import {
   normalizeInvoiceStatus,
@@ -214,19 +218,30 @@ export default function ViewDocument() {
     if (!record?.id || !docType) return;
     setDownloading(true);
     try {
-      await waitForPreviewPaint();
-      const el = previewPdfRef.current;
-      if (!el) {
-        toast({
-          title: "Preview not ready",
-          description: "Try Download PDF again in a moment.",
-          variant: "destructive",
-        });
-        return;
-      }
       const numberRaw =
         docType === "invoice" ? record.invoice_number : record.quote_number;
-      await downloadDocumentPreviewFromElement(el, docType, numberRaw, { doc: previewDoc });
+
+      if (docType === "invoice") {
+        const blob = await generateInvoicePDF({
+          invoice: record,
+          client,
+          user: profile,
+          bankingDetail,
+        });
+        downloadInvoicePdfBlob(blob, `${numberRaw || "invoice"}.pdf`);
+      } else {
+        await waitForPreviewPaint();
+        const el = previewPdfRef.current;
+        if (!el) {
+          toast({
+            title: "Preview not ready",
+            description: "Try Download PDF again in a moment.",
+            variant: "destructive",
+          });
+          return;
+        }
+        await downloadDocumentPreviewFromElement(el, docType, numberRaw, { doc: previewDoc });
+      }
       toast({
         title: "PDF downloaded",
         description: "Saved to your downloads folder.",

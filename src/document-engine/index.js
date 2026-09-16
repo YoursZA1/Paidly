@@ -170,6 +170,6 @@ export {
 } from "./observe/adapter";
 
 /** @deprecated Prefer {@link generateDocumentPdf} */
-export { generateDocumentPdf as generateDocument };
+export { generateDocumentPdf as generateDocument } from "./pdf/adapter";
 /** @deprecated Prefer {@link generateDocumentPdf} */
-export { generateDocumentPdf as getDocumentArtifact };
+export { generateDocumentPdf as getDocumentArtifact } from "./pdf/adapter";

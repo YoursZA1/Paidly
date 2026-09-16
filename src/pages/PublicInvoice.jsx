@@ -22,7 +22,7 @@ import InvoicePreview from '@/components/invoice/InvoicePreview';
 import DocumentPaymentActionBar from '@/components/invoice/DocumentPaymentActionBar';
 import InvoicePaymentHistory from '@/components/invoice/InvoicePaymentHistory';
 import { fetchDocumentPaymentHistory } from '@/api/documentPaymentApi';
-import { normalizeInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
+import { resolveInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 
@@ -256,7 +256,7 @@ export default function PublicInvoice() {
     
     const ownerCurrency = invoice.owner_currency || invoice.currency || 'ZAR';
     const templateKey =
-      normalizeInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
+      resolveInvoiceTemplateKey(invoice.invoice_template) || DEFAULT_INVOICE_TEMPLATE;
     const issuerBrand = resolveIssuerBrand({
         document: invoice,
         company: invoice.company,
