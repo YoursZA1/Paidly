@@ -332,7 +332,7 @@ const getNavigationItems = (userPlan, userRole, featureCheck) => {
   }
 };
 
-const NAV_SECTION_STORAGE_KEY = "paidly_nav_sections_open_v2";
+const NAV_SECTION_STORAGE_KEY = "paidly_nav_sections_open_v3";
 /** Sections that can collapse in the expanded sidebar / mobile dock. */
 const COLLAPSIBLE_NAV_SECTION_IDS = new Set([
   "nav-section-overview",
@@ -340,6 +340,12 @@ const COLLAPSIBLE_NAV_SECTION_IDS = new Set([
   "nav-section-finance",
   "nav-section-workspace",
 ]);
+/** Overview stays open so Invoices / POS / Clients stay findable after login. */
+const DEFAULT_OPEN_NAV_SECTION_IDS = new Set(["nav-section-overview"]);
+
+function isNavSectionOpenByDefault(sectionId) {
+  return DEFAULT_OPEN_NAV_SECTION_IDS.has(sectionId);
+}
 
 function readNavSectionOpenState() {
   if (typeof window === "undefined") return {};
@@ -893,7 +899,10 @@ export default function Layout({ children, currentPageName }) {
   const toggleNavSection = useCallback((sectionId) => {
     if (!sectionId) return;
     setNavSectionOpen((prev) => {
-      const currentlyOpen = prev[sectionId] === true;
+      const currentlyOpen =
+        typeof prev[sectionId] === "boolean"
+          ? prev[sectionId]
+          : isNavSectionOpenByDefault(sectionId);
       const next = { ...prev, [sectionId]: !currentlyOpen };
       try {
         window.localStorage.setItem(NAV_SECTION_STORAGE_KEY, JSON.stringify(next));
@@ -909,8 +918,10 @@ export default function Layout({ children, currentPageName }) {
       // Active route still reveals its section so the current page is findable.
       if (forceOpen) return true;
       if (!sectionId || !COLLAPSIBLE_NAV_SECTION_IDS.has(sectionId)) return true;
-      // Default closed after login unless the user has opened it.
-      return navSectionOpen[sectionId] === true;
+      const stored = navSectionOpen[sectionId];
+      if (typeof stored === "boolean") return stored;
+      // Overview defaults open (POS / Invoices live here); other sections start closed.
+      return isNavSectionOpenByDefault(sectionId);
     },
     [navSectionOpen]
   );
