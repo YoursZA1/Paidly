@@ -2,6 +2,7 @@ import { PERMISSIONS, hasCompanyPermission, buildCompanyAccessContext } from "@/
 import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 import {
   WORKFORCE_NAV_ID,
+  isWorkforceNavRow,
 } from "@/lib/workforceNav.js";
 import {
   WORKFORCE_EXPERIENCES,
@@ -11,11 +12,14 @@ import {
 
 function keepNavItem(item, allowed) {
   if (!item) return false;
-  if (item.type === "section") return true;
+  if (item.type === "section") {
+    if (isWorkforceNavRow(item)) return allowed.has(WORKFORCE_NAV_ID);
+    return true;
+  }
   if (!item.id) return true;
   if (item.id.startsWith("nav-admin-")) return false;
   if (item.id === "nav-team-members") return false;
-  if (item.id === WORKFORCE_NAV_ID) return allowed.has(WORKFORCE_NAV_ID);
+  if (isWorkforceNavRow(item)) return allowed.has(WORKFORCE_NAV_ID);
   return allowed.has(item.id);
 }
 
@@ -74,7 +78,7 @@ export function filterNavigationForCompanyRole(items, membership) {
   if (isPosOnlyStaff({ ...membership, jobFunction: ctx.jobFunction })) {
     return dropEmptySections(
       items.filter(
-        (item) => item.type === "section" || item.id === "nav-pos" || item.id === WORKFORCE_NAV_ID
+        (item) => item.type === "section" || item.id === "nav-pos" || isWorkforceNavRow(item)
       )
     );
   }

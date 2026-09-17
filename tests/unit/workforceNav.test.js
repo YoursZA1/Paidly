@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCompanyAccessContext, PERMISSIONS } from "@/lib/companyPermissions";
-import { getWorkforceNavChildren } from "@/lib/workforceNav.js";
+import { getWorkforceNavChildren, isPosOnlyStaffAllowedPath } from "@/lib/workforceNav.js";
 import { resolveWorkforceExperience } from "@/lib/workforceExperience.js";
 
 function childrenFor(partial) {
@@ -104,5 +104,31 @@ describe("getWorkforceNavChildren", () => {
     const ids = idsFor({ companyRole: "admin" });
     expect(ids).toContain("nav-workforce-employees");
     expect(ids).not.toContain("nav-workforce-settings");
+  });
+});
+
+describe("isPosOnlyStaffAllowedPath", () => {
+  it("allows POS-only staff into the Employee Portal (their own profile/leave/payslips)", () => {
+    expect(isPosOnlyStaffAllowedPath("/Workforce")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/workforce")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/MyPayroll")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/mypayroll?tab=leave")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/employees/11111111-1111-4111-8111-111111111111")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/Documents")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/documents/some-doc-id")).toBe(true);
+  });
+
+  it("still allows the pre-existing auth/invite/pos-join whitelist", () => {
+    expect(isPosOnlyStaffAllowedPath("/login")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/signup")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/invite/abc123")).toBe(true);
+    expect(isPosOnlyStaffAllowedPath("/pos/join")).toBe(true);
+  });
+
+  it("does not open unrelated company-admin surfaces", () => {
+    expect(isPosOnlyStaffAllowedPath("/Clients")).toBe(false);
+    expect(isPosOnlyStaffAllowedPath("/Settings")).toBe(false);
+    expect(isPosOnlyStaffAllowedPath("/Invoices")).toBe(false);
+    expect(isPosOnlyStaffAllowedPath("/Dashboard")).toBe(false);
   });
 });

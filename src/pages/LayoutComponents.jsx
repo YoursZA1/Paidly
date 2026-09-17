@@ -2,18 +2,40 @@
 import { useLocation, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useState } from "react";
-// Placeholder for LockedNavItem to prevent errors
-const LockedNavItem = ({ title, requiredPlan }) => (
-  <div className="px-4 py-2 text-[13px] text-gray-400">{title} (Upgrade to {requiredPlan})</div>
-);
-LockedNavItem.propTypes = {
-  title: PropTypes.string.isRequired,
-  requiredPlan: PropTypes.string
-};
 import { Button } from "@/components/ui/button";
-import { X, LogOut } from "lucide-react";
+import { X, LogOut, ArrowUpCircle } from "lucide-react";
 import PropTypes from "prop-types";
 import { createPageUrl } from "@/utils";
+
+// Plan-gated nav: upgrade icon instead of “(Upgrade to …)” text.
+const LockedNavItem = ({ title, requiredPlan, icon: Icon, collapsed = false }) => {
+  const upgradeUrl = `${createPageUrl("Settings")}?tab=subscription`;
+  const upgradeLabel = requiredPlan ? `Upgrade to ${requiredPlan}` : "Upgrade plan";
+  return (
+    <Link
+      to={upgradeUrl}
+      aria-label={`${title} — ${upgradeLabel}`}
+      title={upgradeLabel}
+      className={`group flex items-center py-2 transition-all ${collapsed ? "justify-center px-2" : "gap-3 px-4"}`}
+    >
+      <span className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-white/10 text-white/50 group-hover:bg-white/15 group-hover:text-white/70">
+        {Icon ? <Icon className="h-5 w-5" /> : <ArrowUpCircle className="h-5 w-5" />}
+      </span>
+      {!collapsed ? (
+        <>
+          <span className="ml-2 text-[15px] font-medium text-white/50 group-hover:text-white/70">{title}</span>
+          <ArrowUpCircle className="ml-auto h-4 w-4 text-amber-400/90 shrink-0" aria-hidden />
+        </>
+      ) : null}
+    </Link>
+  );
+};
+LockedNavItem.propTypes = {
+  title: PropTypes.string.isRequired,
+  requiredPlan: PropTypes.string,
+  icon: PropTypes.elementType,
+  collapsed: PropTypes.bool,
+};
 
 export const NavLink = ({ item, onClick, collapsed = false }) => {
   const location = useLocation();
@@ -69,7 +91,7 @@ export const NavLink = ({ item, onClick, collapsed = false }) => {
   const isActive = item.url && location.pathname === item.url.split("?")[0];
 
   if (item.hasAccess === false) {
-    return <LockedNavItem title={item.title} requiredPlan={item.requiredPlan} />;
+    return <LockedNavItem title={item.title} requiredPlan={item.requiredPlan} icon={item.icon} collapsed={collapsed} />;
   }
 
   if (item.hasRoleAccess === false) {

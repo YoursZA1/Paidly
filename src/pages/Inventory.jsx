@@ -232,12 +232,18 @@ export default function Inventory() {
 
   useEffect(() => {
     const code = String(searchParams.get("barcode") || "").trim();
-    if (!code) return;
+    const wantsNew = ["1", "product", "true"].includes(
+      String(searchParams.get("new") || "").trim().toLowerCase()
+    );
+    if (!code && !wantsNew) return;
+
     setEditingProduct(null);
-    setPrefillBarcode(code);
+    if (code) setPrefillBarcode(code);
     setProductDialogOpen(true);
+
     const next = new URLSearchParams(searchParams);
     next.delete("barcode");
+    next.delete("new");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 

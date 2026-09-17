@@ -25,6 +25,7 @@ import OnboardingTour from "@/components/OnboardingTour";
 import SetupWizard from "@/components/SetupWizard";
 import FastActivationOnboarding from "@/components/onboarding/FastActivationOnboarding";
 import MobileBottomNav from "@/components/ui/MobileBottomNav";
+import CreateSplitButton from "@/components/ui/CreateSplitButton";
 import SyncStatus from "@/components/common/SyncStatus.jsx";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsCompactLayout } from "@/hooks/use-mobile";
@@ -55,7 +56,12 @@ import usePostAuthHomeRedirect from "@/hooks/usePostAuthHomeRedirect";
 import { tryAcceptStoredInviteToken } from "@/services/TenantRoleService";
 import { filterNavigationForCompanyRole } from "@/lib/companyNavFilter";
 import { hasCompanyPermission } from "@/lib/companyPermissions";
-import { getWorkforceNavChildren, isWorkforceSectionPath, WORKFORCE_NAV_ID } from "@/lib/workforceNav";
+import {
+  getWorkforceNavChildren,
+  isPosOnlyStaffAllowedPath,
+  isWorkforceSectionPath,
+  WORKFORCE_SECTION_ID,
+} from "@/lib/workforceNav";
 import { canSeeWorkforceNav, resolveWorkforceExperience } from "@/lib/workforceExperience.js";
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
@@ -65,7 +71,6 @@ import UpgradeScreen from "@/components/subscription/UpgradeScreen";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
 import {
-  Plus,
   ChevronsRight,
   ChevronsLeft,
   LayoutDashboard,
@@ -87,7 +92,8 @@ import {
   Layers,
   ShoppingCart,
   Store,
-  Contact,
+  ArrowUpCircle,
+  ChevronDown,
 } from "lucide-react";
 
 // PropTypes shape for navigation items
@@ -237,16 +243,8 @@ const allNavigationItems = [
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-purchase-orders",
   },
-  { type: "section", title: "People", id: "nav-section-people" },
-  {
-    title: "Workforce",
-    url: createPageUrl("Workforce"),
-    icon: Contact,
-    feature: null,
-    roles: MAIN_APP_NAV_ROLES,
-    id: "nav-workforce",
-    children: [],
-  },
+  // Workforce is a peer section of Overview / Finance (same parent-tab chrome).
+  { type: "section", title: "Workforce", id: "nav-section-workforce" },
   { type: "section", title: "Finance", id: "nav-section-finance" },
   {
     title: "Cash Flow",
@@ -333,33 +331,246 @@ const getNavigationItems = (userPlan, userRole, featureCheck) => {
     }));
   }
 };
-// Placeholder for LockedNavItem to prevent errors
-const LockedNavItem = ({ title, requiredPlan }) => (
-  <div className="px-4 py-2 text-[13px] text-white/65">{title} (Upgrade to {requiredPlan})</div>
-);
+
+const NAV_SECTION_STORAGE_KEY = "paidly_nav_sections_open_v2";
+/** Sections that can collapse in the expanded sidebar / mobile dock. */
+const COLLAPSIBLE_NAV_SECTION_IDS = new Set([
+  "nav-section-overview",
+  "nav-section-workforce",
+  "nav-section-finance",
+  "nav-section-workspace",
+]);
+
+function readNavSectionOpenState() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(NAV_SECTION_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Flattened nav (section markers + items) → grouped sections for collapsible dock.
+ * @param {Array} items
+ * @param {{ excludeTitles?: string[] }} [opts]
+ */
+function groupNavItemsBySection(items, { excludeTitles = ["Dashboard"] } = {}) {
+  const groups = [];
+  let current = null;
+  const adminItems = [];
+  for (const item of items || []) {
+    if (!item) continue;
+    if (item.type === "section") {
+      current = { id: item.id || `section-${item.title}`, title: item.title, items: [] };
+      groups.push(current);
+      continue;
+    }
+    if (!item.id) continue;
+    if (excludeTitles.includes(item.title)) continue;
+    if (String(item.id).startsWith("nav-admin-")) {
+      adminItems.push(item);
+      continue;
+    }
+    if (!current) {
+      current = { id: "nav-section-unlabeled", title: null, items: [] };
+      groups.push(current);
+    }
+    current.items.push(item);
+  }
+  if (adminItems.length) {
+    groups.push({ id: "nav-section-administration", title: "Administration", items: adminItems });
+  }
+  return groups.filter((group) => group.items.length > 0);
+}
+
+function navItemMatchesPath(item, pathname) {
+  if (!item) return false;
+  const path = String(item.url || "").split("?")[0];
+  if (path && (pathname === path || (path !== "/" && pathname.startsWith(`${path}/`)))) return true;
+  if (Array.isArray(item.children)) {
+    return item.children.some((child) => navItemMatchesPath(child, pathname));
+  }
+  return false;
+}
+
+function sectionHasActiveRoute(group, pathname) {
+  if (group?.id === WORKFORCE_SECTION_ID && isWorkforceSectionPath(pathname)) return true;
+  return (group?.items || []).some((item) => navItemMatchesPath(item, pathname));
+}
+
+function NavSection({
+  group,
+  collapsed = false,
+  mobile = false,
+  open = true,
+  collapsible = false,
+  onToggle,
+  children,
+}) {
+  if (!group?.title) {
+    return <div className={collapsed && !mobile ? "space-y-2.5" : "space-y-1"}>{children}</div>;
+  }
+
+  if (collapsed && !mobile) {
+    return (
+      <div className="space-y-2.5">
+        <div className="my-2.5 mx-2 h-px bg-sidebar-border/50" aria-hidden />
+        {children}
+      </div>
+    );
+  }
+
+  if (!collapsible) {
+    return (
+      <div className={mobile ? "space-y-1" : "mt-5 first:mt-1 space-y-1"}>
+        <div
+          className={`px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${
+            mobile ? "text-muted-foreground/50" : "text-sidebar-foreground/28"
+          }`}
+        >
+          {group.title}
+        </div>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div className={mobile ? "" : "mt-5 first:mt-1"}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={`group flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-colors ${
+          mobile
+            ? "hover:bg-muted/60"
+            : "hover:bg-white/[0.06]"
+        }`}
+      >
+        <span
+          className={`flex-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${
+            mobile ? "text-muted-foreground/60" : "text-sidebar-foreground/35 group-hover:text-sidebar-foreground/55"
+          }`}
+        >
+          {group.title}
+        </span>
+        <ChevronDown
+          className={`size-3.5 shrink-0 transition-transform duration-200 ${
+            open ? "rotate-0" : "-rotate-90"
+          } ${mobile ? "text-muted-foreground/50" : "text-sidebar-foreground/30"}`}
+          aria-hidden
+        />
+      </button>
+      {open ? <div className="space-y-1 mt-0.5">{children}</div> : null}
+    </div>
+  );
+}
+
+NavSection.propTypes = {
+  group: PropTypes.shape({
+    id: PropTypes.string,
+    title: PropTypes.string,
+    items: PropTypes.array,
+  }).isRequired,
+  collapsed: PropTypes.bool,
+  mobile: PropTypes.bool,
+  open: PropTypes.bool,
+  collapsible: PropTypes.bool,
+  onToggle: PropTypes.func,
+  children: PropTypes.node,
+};
+
+// Plan-gated nav: keep the label clean and show an upgrade icon + tooltip instead of “(Upgrade to …)”.
+const LockedNavItem = ({ title, requiredPlan, icon: Icon, collapsed = false, mobile = false }) => {
+  const upgradeUrl = `${createPageUrl("Settings")}?tab=subscription`;
+  const upgradeLabel = requiredPlan ? `Upgrade to ${requiredPlan}` : "Upgrade plan";
+  const isCollapsedRail = collapsed && !mobile;
+
+  const row = (
+    <Link
+      to={upgradeUrl}
+      aria-label={`${title} — ${upgradeLabel}`}
+      className={`group flex items-center transition-all duration-150 ${
+        isCollapsedRail
+          ? "justify-center px-2 py-2 rounded-xl hover:bg-white/[0.06]"
+          : mobile
+            ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl hover:bg-muted/60"
+            : "py-2 gap-3 px-3 rounded-xl hover:bg-white/[0.06]"
+      }`}
+    >
+      <span
+        className={`sidebar-nav-icon relative inline-flex items-center justify-center rounded-lg transition-colors shrink-0 [&_svg]:size-[18px] ${
+          isCollapsedRail ? "h-9 w-9" : "h-8 w-8"
+        } ${mobile ? "text-foreground/45 group-hover:text-foreground/70" : "text-sidebar-foreground/35 group-hover:text-sidebar-foreground/60"}`}
+      >
+        {Icon ? <Icon className="size-[18px]" strokeWidth={2} /> : null}
+        {isCollapsedRail ? (
+          <ArrowUpCircle
+            className="absolute -right-0.5 -bottom-0.5 size-3.5 text-amber-400"
+            strokeWidth={2.5}
+            aria-hidden
+          />
+        ) : null}
+      </span>
+      {!isCollapsedRail ? (
+        <>
+          <span
+            className={`text-[13px] flex-1 text-left font-normal ${
+              mobile ? "text-foreground/55" : "text-sidebar-foreground/45 group-hover:text-sidebar-foreground/70"
+            }`}
+          >
+            {title}
+          </span>
+          <ArrowUpCircle
+            className={`size-3.5 shrink-0 ${mobile ? "text-amber-500" : "text-amber-400/90"}`}
+            strokeWidth={2.25}
+            aria-hidden
+          />
+        </>
+      ) : null}
+    </Link>
+  );
+
+  return (
+    <div className={`sidebar-nav-item relative opacity-80 ${isCollapsedRail ? "rounded-xl" : "rounded-lg"}`}>
+      {isCollapsedRail ? (
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>{row}</TooltipTrigger>
+          <TooltipContent side="right" sideOffset={10} className="font-medium">
+            {title}
+            <span className="block text-xs font-normal text-muted-foreground">{upgradeLabel}</span>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>{row}</TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8} className="font-medium">
+            {upgradeLabel}
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+};
 LockedNavItem.propTypes = {
   title: PropTypes.string.isRequired,
-  requiredPlan: PropTypes.string
+  requiredPlan: PropTypes.string,
+  icon: PropTypes.elementType,
+  collapsed: PropTypes.bool,
+  mobile: PropTypes.bool,
 };
 
 const PRIMARY_NAV_PREFETCH_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-clients"]);
 
 const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   const location = useLocation();
-  const childActive =
-    Array.isArray(item?.children) &&
-    item.children.some((child) => {
-      const path = String(child?.url || "").split("?")[0];
-      if (!path) return false;
-      return location.pathname === path || (path !== "/" && location.pathname.startsWith(`${path}/`));
-    });
-  const workforceSectionActive =
-    item?.id === WORKFORCE_NAV_ID && isWorkforceSectionPath(location.pathname);
-  const [open, setOpen] = useState(Boolean(childActive || workforceSectionActive));
+  const [open, setOpen] = useState(false);
   const isCollapsedRail = collapsed && !mobile;
-  useEffect(() => {
-    if (childActive || workforceSectionActive) setOpen(true);
-  }, [childActive, workforceSectionActive]);
+  // Stay closed by default after login; only open when the user expands it.
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -439,7 +650,7 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   if (item.hasAccess === false) {
     // POS is plan-gated: hide rather than showing “Upgrade to Business” in the sidebar.
     if (item.id === "nav-pos") return null;
-    return <LockedNavItem title={item.title} requiredPlan={item.requiredPlan} />;
+    return <LockedNavItem title={item.title} requiredPlan={item.requiredPlan} icon={item.icon} collapsed={collapsed} mobile={mobile} />;
   }
 
   if (item.hasRoleAccess === false) {
@@ -510,31 +721,20 @@ NavLink.propTypes = {
   mobile: PropTypes.bool
 };
 
-function groupMobileNavItems(items) {
-  const groups = [];
-  let current = { title: "Overview", items: [] };
-  groups.push(current);
-  const adminItems = [];
-  for (const item of items) {
-    if (item?.id?.startsWith("nav-admin-")) {
-      adminItems.push(item);
-      continue;
-    }
-    if (item.type === "section") {
-      if (current.title === item.title) continue;
-      current = { title: item.title, items: [] };
-      groups.push(current);
-      continue;
-    }
-    if (!item?.id) continue;
-    current.items.push(item);
-  }
-  if (adminItems.length) groups.push({ title: "Administration", items: adminItems });
-  return groups.filter((group) => group.items.length > 0);
-}
-
-const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme, setTheme }) => {
-  const groups = groupMobileNavItems(items);
+const MobileNav = ({
+  items,
+  onClose,
+  user,
+  brand,
+  navigate,
+  handleLogout,
+  theme,
+  setTheme,
+  pathname = "",
+  isNavSectionOpen,
+  toggleNavSection,
+}) => {
+  const groups = useMemo(() => groupNavItemsBySection(items, { excludeTitles: [] }), [items]);
 
   /* Panel only — used inside Sheet drawer on mobile */
   return (
@@ -554,20 +754,27 @@ const MobileNav = ({ items, onClose, user, brand, navigate, handleLogout, theme,
         </div>
       </div>
 
-      {/* 2. NAVIGATION — all sidebar groups, scrollable so footer stays visible */}
-      <nav className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden -mx-1 space-y-8" aria-label="App navigation">
-        {groups.map((group) => (
-          <div key={group.title}>
-            <p className="px-4 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-muted-foreground mb-3">
-              {group.title}
-            </p>
-            <div className="space-y-1">
+      {/* 2. NAVIGATION — collapsible Overview / Workforce / Finance / Workspace */}
+      <nav className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden -mx-1 space-y-4" aria-label="App navigation">
+        {groups.map((group) => {
+          const active = sectionHasActiveRoute(group, pathname);
+          const collapsible = COLLAPSIBLE_NAV_SECTION_IDS.has(group.id);
+          const open = typeof isNavSectionOpen === "function" ? isNavSectionOpen(group.id, active) : true;
+          return (
+            <NavSection
+              key={group.id}
+              group={group}
+              mobile
+              open={open}
+              collapsible={collapsible}
+              onToggle={() => toggleNavSection?.(group.id)}
+            >
               {group.items.map((item) => (
                 <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile />
               ))}
-            </div>
-          </div>
-        ))}
+            </NavSection>
+          );
+        })}
       </nav>
 
       {/* 3. FOOTER — account (profile dropdown) then logout */}
@@ -643,7 +850,10 @@ MobileNav.propTypes = {
   navigate: PropTypes.func,
   handleLogout: PropTypes.func,
   theme: PropTypes.string,
-  setTheme: PropTypes.func
+  setTheme: PropTypes.func,
+  pathname: PropTypes.string,
+  isNavSectionOpen: PropTypes.func,
+  toggleNavSection: PropTypes.func,
 };
 
 /** Routes without app chrome use document scroll and hash sections (e.g. /Signup#sign-up). */
@@ -678,6 +888,33 @@ export default function Layout({ children, currentPageName }) {
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);
   // Default to expanded sidebar (especially after login/signup) so nav items are visible
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [navSectionOpen, setNavSectionOpen] = useState(readNavSectionOpenState);
+
+  const toggleNavSection = useCallback((sectionId) => {
+    if (!sectionId) return;
+    setNavSectionOpen((prev) => {
+      const currentlyOpen = prev[sectionId] === true;
+      const next = { ...prev, [sectionId]: !currentlyOpen };
+      try {
+        window.localStorage.setItem(NAV_SECTION_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore quota */
+      }
+      return next;
+    });
+  }, []);
+
+  const isNavSectionOpen = useCallback(
+    (sectionId, forceOpen = false) => {
+      // Active route still reveals its section so the current page is findable.
+      if (forceOpen) return true;
+      if (!sectionId || !COLLAPSIBLE_NAV_SECTION_IDS.has(sectionId)) return true;
+      // Default closed after login unless the user has opened it.
+      return navSectionOpen[sectionId] === true;
+    },
+    [navSectionOpen]
+  );
+
   const [showTour, setShowTour] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [showActivationOnboarding, setShowActivationOnboarding] = useState(false);
@@ -735,9 +972,7 @@ export default function Layout({ children, currentPageName }) {
 
   const posOnlyBlockedPath = (() => {
     if (companyContextLoading || !posOnlyStaff || isPosTerminal || isAdminV2Route) return false;
-    const path = String(location.pathname || "").toLowerCase();
-    if (/\/(login|signup|forgotpassword|resetpassword|home|invite|pos\/join)(\/|$)/i.test(path)) return false;
-    return true;
+    return !isPosOnlyStaffAllowedPath(location.pathname);
   })();
 
   useEffect(() => {
@@ -749,8 +984,7 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     if (companyContextLoading || !posOnlyStaff) return;
     if (isPosTerminal || isAdminV2Route) return;
-    const path = String(location.pathname || "").toLowerCase();
-    if (/\/(login|signup|forgotpassword|resetpassword|home|invite|pos\/join)(\/|$)/i.test(path)) return;
+    if (isPosOnlyStaffAllowedPath(location.pathname)) return;
     navigate(createPageUrl("POS"), { replace: true });
   }, [
     companyContextLoading,
@@ -764,13 +998,11 @@ export default function Layout({ children, currentPageName }) {
   const navigationItems = useMemo(() => {
     let items = getNavigationItems(planForNavFeatures, user?.role, navHasFeature);
     const experience = resolveWorkforceExperience(companyCtx);
-    items = items.map((item) => {
-      if (item.id !== WORKFORCE_NAV_ID) return item;
-      const has = (permission) =>
-        companyCtx ? hasCompanyPermission(companyCtx, permission) : true;
-      return {
-        ...item,
-        children: getWorkforceNavChildren(has, {
+    const canSeeWorkforce = !companyCtx || canSeeWorkforceNav(companyCtx);
+    const has = (permission) =>
+      companyCtx ? hasCompanyPermission(companyCtx, permission) : true;
+    const workforceChildren = canSeeWorkforce
+      ? getWorkforceNavChildren(has, {
           experience,
           membershipId: companyCtx?.membershipId || null,
           posEnabled: membershipIsPosEnabled(companyCtx),
@@ -779,12 +1011,15 @@ export default function Layout({ children, currentPageName }) {
           hasAccess: true,
           hasRoleAccess: true,
           roles: MAIN_APP_NAV_ROLES,
-        })),
-      };
+        }))
+      : [];
+
+    items = items.flatMap((item) => {
+      if (item.id !== WORKFORCE_SECTION_ID) return [item];
+      if (!canSeeWorkforce) return [];
+      return [item, ...workforceChildren];
     });
-    if (companyCtx && !canSeeWorkforceNav(companyCtx)) {
-      items = items.filter((item) => item.id !== WORKFORCE_NAV_ID);
-    }
+
     if (companyCtx) {
       items = filterNavigationForCompanyRole(items, {
         companyRole: companyCtx.companyRole,
@@ -799,6 +1034,11 @@ export default function Layout({ children, currentPageName }) {
     }
     return items;
   }, [planForNavFeatures, user?.role, companyCtx, showPosNav, navHasFeature]);
+
+  const navSections = useMemo(
+    () => groupNavItemsBySection(navigationItems, { excludeTitles: ["Dashboard"] }),
+    [navigationItems]
+  );
 
   useEffect(() => {
     if (!user?.id || !layoutProfile?.id) return;
@@ -1128,49 +1368,44 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Navigation */}
           <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-0 pr-9" : "pl-4 pr-12"}`}>
-            <nav className={isSidebarCollapsed ? "space-y-2.5" : "space-y-1"}>
-              {navigationItems
-                .filter(item => item.title && item.id && item.title !== "Dashboard")
-                .map(item => {
-                  // Add data-tour for Accounts/Clients and Reports
-                  let extraProps = {};
-                  if (item.title === "Accounts" || item.title === "Businesses" || item.title === "Clients") {
-                    extraProps['data-tour'] = 'accounts-section';
-                  }
-                  if (item.title === "Reports") {
-                    extraProps['data-tour'] = 'reports-section';
-                  }
-                  return (
-                    <div key={item.id} {...extraProps}>
-                      <NavLink item={item} collapsed={isSidebarCollapsed} />
-                    </div>
-                  );
-                })}
+            <nav className={isSidebarCollapsed ? "space-y-2.5" : "space-y-0.5"} aria-label="App navigation">
+              {navSections.map((group) => {
+                const active = sectionHasActiveRoute(group, location.pathname);
+                const collapsible = COLLAPSIBLE_NAV_SECTION_IDS.has(group.id);
+                const open = isNavSectionOpen(group.id, active);
+                return (
+                  <NavSection
+                    key={group.id}
+                    group={group}
+                    collapsed={isSidebarCollapsed}
+                    open={open}
+                    collapsible={collapsible}
+                    onToggle={() => toggleNavSection(group.id)}
+                  >
+                    {group.items.map((item) => {
+                      let extraProps = {};
+                      if (item.title === "Accounts" || item.title === "Businesses" || item.title === "Clients") {
+                        extraProps["data-tour"] = "accounts-section";
+                      }
+                      if (item.title === "Reports") {
+                        extraProps["data-tour"] = "reports-section";
+                      }
+                      return (
+                        <div key={item.id} {...extraProps}>
+                          <NavLink item={item} collapsed={isSidebarCollapsed} />
+                        </div>
+                      );
+                    })}
+                  </NavSection>
+                );
+              })}
             </nav>
           </div>
 
-          {/* Create Invoice CTA — solo org owners only */}
+          {/* Create CTA — solo org owners only (Invoice / Quote / Client / Product) */}
           {(!companyCtx?.companyId || isOrgOwner) && (
           <div className={`mt-auto ${isSidebarCollapsed ? "px-2 py-3" : "p-4"}`}>
-            <Link
-              to={createPageUrl("CreateInvoice")}
-              title={isSidebarCollapsed ? "Create Invoice" : undefined}
-              aria-label={isSidebarCollapsed ? "Create Invoice" : undefined}
-            >
-              {isSidebarCollapsed ? (
-                <Button
-                  id="create-invoice-btn"
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold rounded-xl shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30 focus-visible:ring-2 focus-visible:ring-primary-foreground/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  size="icon"
-                >
-                  <Plus className="size-5" strokeWidth={2} />
-                </Button>
-              ) : (
-              <Button id="create-invoice-btn" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-2.5 px-4 rounded-xl text-sm gap-2 shadow-lg shadow-primary/25 transition-all hover:shadow-primary/30 focus-visible:ring-2 focus-visible:ring-primary-foreground/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                <Plus className="size-5" strokeWidth={2} /> Create Invoice
-              </Button>
-              )}
-            </Link>
+            <CreateSplitButton collapsed={isSidebarCollapsed} />
           </div>
           )}
 
@@ -1233,6 +1468,9 @@ export default function Layout({ children, currentPageName }) {
             handleLogout={handleLogout}
             theme={theme}
             setTheme={setTheme}
+            pathname={location.pathname}
+            isNavSectionOpen={isNavSectionOpen}
+            toggleNavSection={toggleNavSection}
           />
         </SheetContent>
       </Sheet>

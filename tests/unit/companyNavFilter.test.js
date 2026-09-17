@@ -6,15 +6,9 @@ const NAV = [
   { id: "nav-dashboard", title: "Dashboard" },
   { id: "nav-invoices", title: "Invoices" },
   { id: "nav-pos", title: "POS" },
-  { type: "section", title: "People", id: "nav-section-people" },
-  {
-    id: "nav-workforce",
-    title: "Workforce",
-    children: [
-      { id: "nav-workforce-overview", title: "Overview" },
-      { id: "nav-workforce-payroll", title: "Payroll" },
-    ],
-  },
+  { type: "section", title: "Workforce", id: "nav-section-workforce" },
+  { id: "nav-workforce-overview", title: "Overview" },
+  { id: "nav-workforce-payroll", title: "Payroll" },
   { id: "nav-documents", title: "Documents" },
   { id: "nav-calendar", title: "Calendar" },
   { id: "nav-messages", title: "Messages" },
@@ -42,17 +36,15 @@ describe("filterNavigationForCompanyRole", () => {
       companyId: "o1",
     });
     const ids = filtered.map((row) => row.id);
-    expect(ids).toContain("nav-workforce");
+    expect(ids).toContain("nav-section-workforce");
+    expect(ids).toContain("nav-workforce-overview");
+    expect(ids).toContain("nav-workforce-payroll");
     expect(ids).not.toContain("nav-dashboard");
     expect(ids).not.toContain("nav-documents");
     expect(ids).not.toContain("nav-settings");
     expect(ids).not.toContain("nav-pos");
     expect(ids).not.toContain("nav-invoices");
     expect(ids).not.toContain("nav-reports");
-    expect(filtered.find((row) => row.id === "nav-workforce")?.children?.map((row) => row.id)).toEqual([
-      "nav-workforce-overview",
-      "nav-workforce-payroll",
-    ]);
   });
 
   it("gives line managers Workforce only, without calendar or messages", () => {
@@ -63,7 +55,8 @@ describe("filterNavigationForCompanyRole", () => {
       companyId: "o1",
     });
     const ids = filtered.map((row) => row.id);
-    expect(ids).toContain("nav-workforce");
+    expect(ids).toContain("nav-section-workforce");
+    expect(ids).toContain("nav-workforce-overview");
     expect(ids).not.toContain("nav-dashboard");
     expect(ids).not.toContain("nav-documents");
     expect(ids).not.toContain("nav-calendar");
@@ -80,7 +73,8 @@ describe("filterNavigationForCompanyRole", () => {
       companyId: "o1",
     });
     const ids = filtered.map((row) => row.id);
-    expect(ids).toContain("nav-workforce");
+    expect(ids).toContain("nav-section-workforce");
+    expect(ids).toContain("nav-workforce-overview");
     expect(ids).toContain("nav-settings");
     expect(ids).not.toContain("nav-invoices");
     expect(ids).not.toContain("nav-dashboard");

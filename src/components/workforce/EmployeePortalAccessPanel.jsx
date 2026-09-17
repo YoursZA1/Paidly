@@ -206,7 +206,7 @@ export default function EmployeePortalAccessPanel({ employee, canManage, onUpdat
                 </span>
               </div>
               <p className="text-muted-foreground">
-                Opens Paidly POS (`/pos`). Does not open Employee Portal.
+                Opens Paidly POS (/pos). Does not open Employee Portal.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" className="rounded-xl" onClick={() => void copyPosLink()}>
