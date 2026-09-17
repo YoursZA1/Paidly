@@ -154,23 +154,38 @@ function shapeEmployeeRow({
   };
 }
 
+/**
+ * Latest non-revoked pending portal invite per membership (includes expired).
+ * Expired rows still drive portal_status = expired in derivePortalStatus.
+ */
 async function loadPendingInvitesByMembership(orgId, membershipIds) {
   const map = new Map();
   if (!membershipIds.length) return map;
   try {
     const { data, error } = await supabaseAdmin
       .from("company_invites")
-      .select("id, membership_id, status, revoked_at, expires_at, token, email")
+      .select("id, membership_id, status, revoked_at, expires_at, token, email, created_at")
       .eq("org_id", orgId)
       .in("membership_id", membershipIds)
       .eq("status", "pending")
-      .is("revoked_at", null);
+      .is("revoked_at", null)
+      .order("created_at", { ascending: false });
     if (error) return map;
     const now = Date.now();
     for (const row of data || []) {
+      if (!row.membership_id || map.has(row.membership_id)) continue;
+      map.set(row.membership_id, row);
+    }
+    // Prefer a still-valid invite when both valid and expired exist for the same member.
+    for (const row of data || []) {
       if (!row.membership_id) continue;
-      if (row.expires_at && new Date(row.expires_at).getTime() <= now) continue;
-      if (!map.has(row.membership_id)) map.set(row.membership_id, row);
+      const expires = row.expires_at ? new Date(row.expires_at).getTime() : NaN;
+      const valid = !Number.isFinite(expires) || expires > now;
+      if (!valid) continue;
+      const current = map.get(row.membership_id);
+      const currentExpires = current?.expires_at ? new Date(current.expires_at).getTime() : NaN;
+      const currentValid = current && (!Number.isFinite(currentExpires) || currentExpires > now);
+      if (!currentValid) map.set(row.membership_id, row);
     }
   } catch {
     return map;

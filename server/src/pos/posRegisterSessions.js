@@ -268,7 +268,8 @@ export async function handlePosSessionOpen(req, res) {
 
     const membershipId = gate.membership.id || null;
     const posEnabled = membershipIsPosEnabled(gate.membership);
-    if (posEnabled && membershipId && gate.user?.id) {
+    // Access pass identifies the employee; PIN authenticates — required even without Auth user.id.
+    if (posEnabled && membershipId) {
       const pinCheck = await verifyMembershipPosPin(orgId, membershipId, body.pos_pin);
       if (!pinCheck.ok) {
         return jsonError(res, pinCheck.status, pinCheck.error, { code: pinCheck.code });

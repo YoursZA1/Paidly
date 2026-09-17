@@ -7,12 +7,11 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { createPageUrl } from "@/utils";
-import { openPosSession, listPosRegisters } from "@/services/PosIntegrationService";
 import { getPosPinStatus, setPosPin } from "@/services/PosPinService";
 import { membershipIsPosEnabled } from "@shared/posStaffInvite.js";
 
 /**
- * Employee portal POS section: PIN settings + start shift (reuses existing POS APIs).
+ * Employee portal POS settings only (PIN). Shift entry stays on /pos — separate from portal.
  */
 export default function WorkforcePosPanel() {
   const { toast } = useToast();
@@ -22,10 +21,6 @@ export default function WorkforcePosPanel() {
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [currentPin, setCurrentPin] = useState("");
-  const [shiftPin, setShiftPin] = useState("");
-  const [registers, setRegisters] = useState([]);
-  const [registerId, setRegisterId] = useState("");
-  const [openingBalance, setOpeningBalance] = useState("0");
   const [busy, setBusy] = useState("");
 
   useEffect(() => {
@@ -38,23 +33,10 @@ export default function WorkforcePosPanel() {
       .catch(() => {
         if (!cancelled) setStatus({ pos_pin_set: false, pos_pin_locked: false });
       });
-    listPosRegisters()
-      .then((rows) => {
-        if (cancelled) return;
-        const list = Array.isArray(rows?.registers) ? rows.registers : Array.isArray(rows) ? rows : [];
-        setRegisters(list);
-        const assigned = ctx?.posRegisterId || list[0]?.id || "";
-        setRegisterId(assigned);
-        const match = list.find((row) => row.id === assigned);
-        if (match?.opening_balance != null) setOpeningBalance(String(match.opening_balance));
-      })
-      .catch(() => {
-        if (!cancelled) setRegisters([]);
-      });
     return () => {
       cancelled = true;
     };
-  }, [posEnabled, ctx?.posRegisterId]);
+  }, [posEnabled]);
 
   if (!posEnabled) {
     return (
@@ -91,28 +73,6 @@ export default function WorkforcePosPanel() {
     }
   };
 
-  const startShift = async () => {
-    if (busy) return;
-    setBusy("shift");
-    try {
-      await openPosSession({
-        register_id: registerId,
-        opening_balance: Number(openingBalance) || 0,
-        pos_pin: shiftPin,
-      });
-      setShiftPin("");
-      toast({ title: "Shift started" });
-    } catch (err) {
-      toast({
-        title: "Could not start shift",
-        description: err?.message || "Try again",
-        variant: "destructive",
-      });
-    } finally {
-      setBusy("");
-    }
-  };
-
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card className="rounded-xl">
@@ -121,7 +81,7 @@ export default function WorkforcePosPanel() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p className="text-muted-foreground">
-            Your POS PIN is separate from your Paidly password. Use it to start a shift.
+            Your POS PIN authenticates you on the till. It is separate from your Employee Portal password.
           </p>
           {status?.pos_pin_locked ? (
             <p className="text-amber-800 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
@@ -168,57 +128,16 @@ export default function WorkforcePosPanel() {
 
       <Card className="rounded-xl">
         <CardHeader>
-          <CardTitle className="text-base">Start Shift</CardTitle>
+          <CardTitle className="text-base">POS Terminal</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <div className="space-y-2">
-            <Label>Register</Label>
-            <select
-              className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-              value={registerId}
-              onChange={(e) => setRegisterId(e.target.value)}
-              disabled={Boolean(ctx?.posRegisterId)}
-            >
-              {registers.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name || row.id}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label>Opening balance</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={openingBalance}
-              onChange={(e) => setOpeningBalance(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>POS PIN</Label>
-            <Input
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              value={shiftPin}
-              onChange={(e) => setShiftPin(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              className="rounded-xl"
-              disabled={Boolean(busy) || !registerId}
-              onClick={() => void startShift()}
-            >
-              {busy === "shift" ? "Starting…" : "Start Shift"}
-            </Button>
-            <Button size="sm" variant="outline" className="rounded-xl" asChild>
-              <Link to={createPageUrl("POS")}>Open till</Link>
-            </Button>
-          </div>
+          <p className="text-muted-foreground">
+            Open the POS app to enter your PIN, start a shift, and use your assigned till. This stays separate from
+            Employee Portal.
+          </p>
+          <Button size="sm" className="rounded-xl" asChild>
+            <Link to={createPageUrl("POS")}>Open POS</Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

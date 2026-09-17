@@ -2,7 +2,7 @@
 
 export const INVITE_ACCEPT_ERRORS = Object.freeze({
   email_mismatch: "This invitation was issued to a different email address.",
-  expired: "This invitation has expired. Ask your administrator to send a new invite.",
+  expired: "This activation link has expired. Please request a new Employee Portal invitation.",
   revoked: "This invitation has been revoked.",
   not_pending: "This invitation is no longer active.",
   already_accepted: "Invitation has already been accepted.",

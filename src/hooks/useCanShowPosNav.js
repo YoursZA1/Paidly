@@ -3,13 +3,15 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import { canShowPosNav } from "@/lib/posNavAccess";
 import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
+import { membershipCanEnterPos } from "@shared/posStaffInvite.js";
 
 /**
  * Whether back-office chrome should offer a POS / till entry.
- * Org opted into POS (retail/mixed) + subscription `pos` feature + pos_access.
+ * Org opted into POS (retail/mixed) + subscription `pos` feature + POS-enabled membership
+ * (or owner/manager). Generic employee `pos_access` RBAC alone is not enough.
  */
 export function useCanShowPosNav() {
-  const { hasPermission, isOrgOwner, ctx, posEnabled } = useCompanyContext();
+  const { hasPermission, isOrgOwner, companyRole, jobFunction, ctx, posEnabled } = useCompanyContext();
   const { hasFeature, isEntitlementReady, isLoading } = useEntitlementAccess({
     enabled: Boolean(ctx?.companyId || isOrgOwner),
   });
@@ -21,10 +23,18 @@ export function useCanShowPosNav() {
       : isLoading
         ? false
         : hasFeature("pos");
+    const mayEnterPos =
+      hasPermission(PERMISSIONS.POS_ACCESS) &&
+      membershipCanEnterPos({
+        isOrgOwner,
+        companyRole,
+        jobFunction,
+        posRegisterId: ctx?.posRegisterId,
+      });
     return canShowPosNav({
       hasPosCapability: posEnabled === true,
       hasPosEntitlement,
-      hasPosAccess: hasPermission(PERMISSIONS.POS_ACCESS),
+      hasPosAccess: mayEnterPos,
       isOrgOwner: Boolean(isOrgOwner),
       isCompanyMember: Boolean(ctx?.companyId) && !isOrgOwner,
     });
@@ -35,6 +45,9 @@ export function useCanShowPosNav() {
     isLoading,
     hasPermission,
     isOrgOwner,
+    companyRole,
+    jobFunction,
     ctx?.companyId,
+    ctx?.posRegisterId,
   ]);
 }

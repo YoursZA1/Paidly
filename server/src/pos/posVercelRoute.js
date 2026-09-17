@@ -181,6 +181,9 @@ export function resolvePosRoute(req) {
   if (urlPath.endsWith("/access") || /\/access$/i.test(urlPath)) {
     return { route: "access" };
   }
+  if (urlPath.endsWith("/pin-verify") || /\/pin-verify$/i.test(urlPath)) {
+    return { route: "pin-verify" };
+  }
   if (urlPath.endsWith("/pin") || /\/pin$/i.test(urlPath)) {
     return { route: "pin" };
   }

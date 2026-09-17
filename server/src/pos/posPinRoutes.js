@@ -126,6 +126,32 @@ export async function verifyMembershipPosPin(orgId, membershipId, pin) {
   return { ok: true };
 }
 
+/**
+ * POST /api/pos/pin-verify — authenticate employee before Start/Resume Shift.
+ * Access pass identifies; PIN authenticates. Does not open a register session.
+ */
+export async function handlePosPinVerify(req, res) {
+  const gate = await requirePosPermission(req, res, PERMISSIONS.POS_ACCESS);
+  if (!gate.ok) return gate.response;
+  if (!gate.membership?.id) return jsonError(res, 403, "No company membership");
+
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  try {
+    assertPosEnabledMembership(gate.membership);
+    const pinCheck = await verifyMembershipPosPin(
+      gate.membership.orgId,
+      gate.membership.id,
+      body.pos_pin ?? body.pin
+    );
+    if (!pinCheck.ok) {
+      return jsonError(res, pinCheck.status, pinCheck.error, { code: pinCheck.code });
+    }
+    return res.status(200).json({ ok: true, verified: true });
+  } catch (err) {
+    return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+  }
+}
+
 export async function handlePosPinGet(req, res) {
   const gate = await requirePosPermission(req, res, PERMISSIONS.POS_ACCESS);
   if (!gate.ok) return gate.response;

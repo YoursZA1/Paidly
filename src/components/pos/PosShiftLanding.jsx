@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { greetingForHour, firstNameFromEmployee } from "@/lib/pos/posAccessCopy";
 
 /**
- * POS entry after a valid access pass. Does not start the shift until the employee confirms.
+ * POS entry after a valid access pass / Auth. Identification is already done;
+ * PIN authenticates before Start/Resume Shift. Never routes to Employee Portal.
  */
 export default function PosShiftLanding({
   employeeName = "",
@@ -17,13 +18,16 @@ export default function PosShiftLanding({
   openingBalance = 0,
   busy = false,
   error = "",
+  requirePin = true,
   onStartShift,
   onResumeShift,
 } = {}) {
   const [openingDraft, setOpeningDraft] = useState(String(openingBalance ?? 0));
+  const [pinDraft, setPinDraft] = useState("");
   const firstName = firstNameFromEmployee(employeeName, employeeEmail);
   const greeting = greetingForHour();
   const hasOpenShift = Boolean(openShift?.id);
+  const pinOk = !requirePin || String(pinDraft || "").trim().length >= 4;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -39,6 +43,22 @@ export default function PosShiftLanding({
         </h1>
         <p className="mt-2 text-base text-muted-foreground">{businessName || "Your store"}</p>
         <p className="mt-4 text-sm font-medium text-foreground">{tillName || "Assigned till"}</p>
+
+        {requirePin ? (
+          <div className="mt-6 space-y-2 text-left">
+            <Label htmlFor="pos-landing-pin">POS PIN</Label>
+            <Input
+              id="pos-landing-pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={pinDraft}
+              onChange={(e) => setPinDraft(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              className="h-12 tracking-widest"
+              placeholder="Enter your PIN"
+            />
+          </div>
+        ) : null}
 
         {hasOpenShift ? (
           <p className="mt-3 text-sm text-muted-foreground">You already have an active shift on this till.</p>
@@ -64,10 +84,11 @@ export default function PosShiftLanding({
         <Button
           type="button"
           className="mt-6 h-14 w-full text-base font-semibold uppercase tracking-wide"
-          disabled={busy || (!hasOpenShift && (openingDraft === "" || Number(openingDraft) < 0))}
+          disabled={busy || !pinOk || (!hasOpenShift && (openingDraft === "" || Number(openingDraft) < 0))}
           onClick={() => {
-            if (hasOpenShift) onResumeShift?.();
-            else onStartShift?.(Number(openingDraft));
+            const pin = String(pinDraft || "").trim();
+            if (hasOpenShift) onResumeShift?.(pin);
+            else onStartShift?.(Number(openingDraft), pin);
           }}
         >
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}

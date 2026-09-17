@@ -3,6 +3,7 @@
 /**
  * Employee portal access status derived from memberships + company_invites.
  * Canonical identity remains memberships.id — no second portal account table.
+ * Distinct from POS access (till link + PIN).
  */
 
 /**
@@ -19,16 +20,21 @@
  */
 
 export const PORTAL_STATUS = Object.freeze({
-  NOT_INVITED: "not_invited",
+  NOT_ACTIVATED: "not_activated",
+  /** @deprecated use NOT_ACTIVATED — kept for older API clients */
+  NOT_INVITED: "not_activated",
   INVITATION_SENT: "invitation_sent",
   ACTIVATED: "activated",
+  EXPIRED: "expired",
   REVOKED: "revoked",
 });
 
 export const PORTAL_STATUS_LABELS = Object.freeze({
-  [PORTAL_STATUS.NOT_INVITED]: "Not invited",
-  [PORTAL_STATUS.INVITATION_SENT]: "Invitation sent",
+  not_activated: "Not Activated",
+  not_invited: "Not Activated",
+  [PORTAL_STATUS.INVITATION_SENT]: "Invitation Sent",
   [PORTAL_STATUS.ACTIVATED]: "Active",
+  [PORTAL_STATUS.EXPIRED]: "Expired",
   [PORTAL_STATUS.REVOKED]: "Revoked",
 });
 
@@ -49,14 +55,30 @@ export function isPendingPortalInvite(invite, now = new Date()) {
 }
 
 /**
- * @param {PortalMembershipFields} membership
- * @param {PortalInviteRow | null | undefined} [pendingInvite]
+ * Pending-status invite whose expires_at is in the past (not revoked).
+ * @param {PortalInviteRow | null | undefined} invite
+ * @param {Date} [now]
  */
-export function derivePortalStatus(membership = {}, pendingInvite = null) {
+export function isExpiredPortalInvite(invite, now = new Date()) {
+  if (!invite) return false;
+  if (invite.revoked_at) return false;
+  const status = String(invite.status || "").trim().toLowerCase();
+  if (status && status !== "pending") return false;
+  if (!invite.expires_at) return false;
+  const expires = new Date(invite.expires_at).getTime();
+  return Number.isFinite(expires) && expires <= now.getTime();
+}
+
+/**
+ * @param {PortalMembershipFields} membership
+ * @param {PortalInviteRow | null | undefined} [invite]
+ */
+export function derivePortalStatus(membership = {}, invite = null) {
   if (membership?.portal_revoked_at) return PORTAL_STATUS.REVOKED;
   if (membership?.user_id) return PORTAL_STATUS.ACTIVATED;
-  if (isPendingPortalInvite(pendingInvite)) return PORTAL_STATUS.INVITATION_SENT;
-  return PORTAL_STATUS.NOT_INVITED;
+  if (isPendingPortalInvite(invite)) return PORTAL_STATUS.INVITATION_SENT;
+  if (isExpiredPortalInvite(invite)) return PORTAL_STATUS.EXPIRED;
+  return PORTAL_STATUS.NOT_ACTIVATED;
 }
 
 /**
@@ -65,6 +87,19 @@ export function derivePortalStatus(membership = {}, pendingInvite = null) {
 export function portalStatusLabel(status) {
   const key = String(status || "").trim().toLowerCase();
   return PORTAL_STATUS_LABELS[key] || "Unknown";
+}
+
+/**
+ * Admin Overview action label for Employee Portal row.
+ * @param {string | null | undefined} status
+ */
+export function portalAccessActionLabel(status) {
+  const key = String(status || "").trim().toLowerCase();
+  if (key === PORTAL_STATUS.ACTIVATED) return "Copy Portal Link";
+  if (key === PORTAL_STATUS.INVITATION_SENT) return "Copy Activation Link";
+  if (key === PORTAL_STATUS.EXPIRED) return "Send New Activation Link";
+  if (key === PORTAL_STATUS.REVOKED) return "Send Employee Portal Invite";
+  return "Send Employee Portal Invite";
 }
 
 /**
@@ -78,7 +113,7 @@ export function portalStatusLabel(status) {
  */
 export function publicPortalAccessView(opts = {}) {
   return {
-    portal_status: opts.portal_status || PORTAL_STATUS.NOT_INVITED,
+    portal_status: opts.portal_status || PORTAL_STATUS.NOT_ACTIVATED,
     portal_status_label: portalStatusLabel(opts.portal_status),
     pos_access: Boolean(opts.pos_access),
     pos_pin_set: Boolean(opts.pos_pin_set),

@@ -10,9 +10,10 @@ import PosAccessSignIn from "@/components/pos/PosAccessSignIn";
 import PosErrorBoundary from "@/components/pos/PosErrorBoundary";
 import PosShiftLanding from "@/components/pos/PosShiftLanding";
 import { PosLoadError, PosLoading } from "@/components/pos/PosShellStates";
-import { isPosOnlyStaff, normalizePosTillId } from "@shared/posStaffInvite.js";
+import { isPosOnlyStaff, normalizePosTillId, membershipCanEnterPos } from "@shared/posStaffInvite.js";
 import { fetchPosAccess } from "@/lib/pos/posAccessClient";
 import { openPosSession, listPosSessions } from "@/services/PosIntegrationService";
+import { verifyPosPin } from "@/services/PosPinService";
 import { writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
 
 const POS = lazy(() => import("./POS"));
@@ -108,7 +109,7 @@ function PosPassTill({ access, requestedTillId, tillLinkInvalid }) {
     );
   }
 
-  const startOrResume = async (openingBalance) => {
+  const startOrResume = async (openingBalance, posPin) => {
     setShiftBusy(true);
     setShiftError("");
     try {
@@ -118,7 +119,10 @@ function PosPassTill({ access, requestedTillId, tillLinkInvalid }) {
         await openPosSession({
           register_id: registerId,
           opening_balance: openingBalance,
+          pos_pin: posPin,
         });
+      } else {
+        await verifyPosPin({ pos_pin: posPin });
       }
       setEntered(true);
     } catch (err) {
@@ -139,8 +143,8 @@ function PosPassTill({ access, requestedTillId, tillLinkInvalid }) {
         openingBalance={0}
         busy={shiftBusy}
         error={shiftError}
-        onStartShift={(opening) => void startOrResume(opening)}
-        onResumeShift={() => void startOrResume(0)}
+        onStartShift={(opening, pin) => void startOrResume(opening, pin)}
+        onResumeShift={(pin) => void startOrResume(0, pin)}
       />
     );
   }
@@ -201,7 +205,7 @@ function AuthenticatedPosTill({ requestedTillId, tillLinkInvalid }) {
     );
   }
 
-  if (!hasPermission(PERMISSIONS.POS_ACCESS)) {
+  if (!hasPermission(PERMISSIONS.POS_ACCESS) || !membershipCanEnterPos({ isOrgOwner, companyRole, jobFunction, posRegisterId: ctx?.posRegisterId })) {
     return (
       <PosAccessSignIn
         activationOnly
@@ -263,7 +267,7 @@ function AuthenticatedShiftLanding({ user, registerId, orgId, busy, error, onEnt
     };
   }, [registerId]);
 
-  const start = async (openingBalance) => {
+  const start = async (openingBalance, posPin) => {
     setBusy(true);
     setError("");
     try {
@@ -272,13 +276,22 @@ function AuthenticatedShiftLanding({ user, registerId, orgId, busy, error, onEnt
         await openPosSession({
           register_id: registerId,
           opening_balance: openingBalance,
+          pos_pin: posPin,
         });
+      } else {
+        await verifyPosPin({ pos_pin: posPin });
       }
       onEnter();
     } catch (err) {
       if (/already has an open shift|SESSION_OPEN/i.test(String(err?.message || ""))) {
-        onEnter();
-        return;
+        try {
+          await verifyPosPin({ pos_pin: posPin });
+          onEnter();
+          return;
+        } catch (pinErr) {
+          setError(pinErr?.message || "Could not verify POS PIN");
+          return;
+        }
       }
       setError(err?.message || "Could not start shift");
     } finally {
@@ -295,8 +308,8 @@ function AuthenticatedShiftLanding({ user, registerId, orgId, busy, error, onEnt
       openShift={openShift}
       busy={busy}
       error={error}
-      onStartShift={(opening) => void start(opening)}
-      onResumeShift={() => onEnter()}
+      onStartShift={(opening, pin) => void start(opening, pin)}
+      onResumeShift={(pin) => void start(0, pin)}
     />
   );
 }

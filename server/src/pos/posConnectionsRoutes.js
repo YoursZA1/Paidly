@@ -14,7 +14,7 @@ import { decryptPosSecret } from "./posSecretCrypto.js";
 import { requirePosCapability, orgHasPosCapability } from "./posBusinessType.js";
 import { requirePosPlan, requirePosPlanForOrg } from "./posEntitlement.js";
 import { resolvePosAccessGate } from "./posInviteActivate.js";
-import { POS_ACCESS_BEARER_PREFIX } from "../../../shared/posStaffInvite.js";
+import { POS_ACCESS_BEARER_PREFIX, membershipCanEnterPos } from "../../../shared/posStaffInvite.js";
 import { deleteYocoWebhook } from "./yocoConnect.js";
 
 function jsonError(res, status, message, extra = {}) {
@@ -317,6 +317,8 @@ export async function requireOrgMember(req, res) {
 /**
  * Org membership plus a company-role POS grant.
  * Accepts a Paidly Auth session or a scoped POS access-pass session.
+ * Auth employees without POS enablement (job_function / till) are denied even if
+ * the generic role matrix includes `pos_access`.
  */
 export async function requirePosPermission(req, res, permission) {
   const gate = await requireOrgMember(req, res);
@@ -327,6 +329,14 @@ export async function requirePosPermission(req, res, permission) {
       response: jsonError(res, 403, "Forbidden — POS permission required", {
         code: "POS_FORBIDDEN",
         permission,
+      }),
+    };
+  }
+  if (!gate.posAccess && !membershipCanEnterPos(gate.membership)) {
+    return {
+      ok: false,
+      response: jsonError(res, 403, "This Paidly account is not activated for POS", {
+        code: "POS_NOT_ENABLED",
       }),
     };
   }
@@ -368,6 +378,11 @@ export async function handlePosSalesList(req, res) {
     return jsonError(res, 403, "Forbidden — POS permission required", {
       code: "POS_FORBIDDEN",
       permission: todayOnly ? PERMISSIONS.POS_ACCESS : PERMISSIONS.POS_VIEW_REPORTS,
+    });
+  }
+  if (!gate.posAccess && !canReports && !membershipCanEnterPos(gate.membership)) {
+    return jsonError(res, 403, "This Paidly account is not activated for POS", {
+      code: "POS_NOT_ENABLED",
     });
   }
 

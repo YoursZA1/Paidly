@@ -177,6 +177,7 @@ export function buildEmployeeProfile(input, opts = {}) {
     portal_status_label: portalStatusLabel(portalStatus),
     portal_revoked_at: membership.portal_revoked_at || null,
     pos_access: Boolean(input.posAccess),
+    pos_register_id: membership.pos_register_id || null,
     pos_pin_set: pinState.pos_pin_set,
     pos_pin_locked: pinState.pos_pin_locked,
     disabled_at: membership.disabled_at || null,

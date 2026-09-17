@@ -207,7 +207,11 @@ export default function InvitePage() {
             <Store className="size-8 text-primary-foreground" />
           </div>
           <CardTitle className="font-display text-2xl font-bold">
-            {posInviteCopy || showJoinForm ? "POS Access" : "You're invited to Paidly"}
+            {posInviteCopy || showJoinForm
+              ? "POS Access"
+              : invite && String(invite.role || "").toLowerCase() === "employee" && !invite.pos_only
+                ? "Employee Portal Activation"
+                : "You're invited to Paidly"}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             {showJoinForm
@@ -216,7 +220,11 @@ export default function InvitePage() {
                 ? invite?.company_name
                   ? `You've been invited to use the POS for ${invite.company_name}.`
                   : "You've been invited to use the POS."
-                : "Join your team on Paidly with the role assigned by your administrator."}
+                : invite && String(invite.role || "").toLowerCase() === "employee" && !invite.pos_only
+                  ? invite?.company_name
+                    ? `Activate your Employee Portal for ${invite.company_name} and create your password.`
+                    : "Activate your Employee Portal and create your password."
+                  : "Join your team on Paidly with the role assigned by your administrator."}
           </p>
         </CardHeader>
         <CardContent className="space-y-4">

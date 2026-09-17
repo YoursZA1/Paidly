@@ -59,6 +59,22 @@ export function membershipIsPosEnabled(membership) {
 }
 
 /**
+ * Who may enter the POS terminal experience (`/pos`).
+ * Owners/managers retain back-office till access. Role=`employee` requires
+ * {@link membershipIsPosEnabled} — generic `pos_access` RBAC alone is not enough.
+ * @param {{ isOrgOwner?: boolean, companyRole?: string | null, role?: string | null, membershipRole?: string | null, jobFunction?: string | null, job_function?: string | null, pos_register_id?: unknown, posRegisterId?: unknown } | null | undefined} membership
+ */
+export function membershipCanEnterPos(membership) {
+  if (!membership) return false;
+  if (membership.isOrgOwner === true) return true;
+  const role = String(membership.companyRole || membership.role || membership.membershipRole || "")
+    .trim()
+    .toLowerCase();
+  if (role === "owner" || role === "admin" || role === "manager") return true;
+  return membershipIsPosEnabled(membership);
+}
+
+/**
  * Company (non-POS) invite URL. Query-string `/invite?token=` still validates.
  * @param {string} token
  * @param {string} [origin]
