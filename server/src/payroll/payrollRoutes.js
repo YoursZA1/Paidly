@@ -21,6 +21,9 @@ import {
   upsertStatutoryRule,
   publishPayslip,
   sendEmployeePayslip,
+  getPayrollReports,
+  getEmployerPayrollSettings,
+  updateEmployerPayrollSettings,
 } from "./payrollService.js";
 
 function originFromReq(req) {
@@ -160,6 +163,33 @@ export async function handlePayrollRoute(req, res, resolved) {
     return jsonError(res, 405, "Method not allowed");
   }
 
+  if (route === "reports") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
+    const q = req.query || {};
+    return handle(res, () =>
+      getPayrollReports(gate.membership.companyId, {
+        type: q.type,
+        pay_run_id: q.pay_run_id || q.payRunId,
+        period_start: q.period_start || q.periodStart,
+        period_end: q.period_end || q.periodEnd,
+      })
+    );
+  }
+
+  if (route === "employer-settings") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method === "GET") {
+      return handle(res, () => getEmployerPayrollSettings(gate.membership.companyId));
+    }
+    if (req.method === "POST" || req.method === "PATCH" || req.method === "PUT") {
+      return handle(res, () => updateEmployerPayrollSettings(gate.membership.companyId, gate.user.id, body));
+    }
+    return jsonError(res, 405, "Method not allowed");
+  }
+
   if (route === "payslip-publish") {
     const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
     if (!gate.ok) return gate.response;
@@ -245,6 +275,8 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "preview") return { route: "preview" };
   if (segs[0] === "profiles") return { route: "profiles" };
   if (segs[0] === "statutory") return { route: "statutory" };
+  if (segs[0] === "reports") return { route: "reports" };
+  if (segs[0] === "employer-settings") return { route: "employer-settings" };
   if (segs[0] === "me") return { route: "me" };
   if (segs[0] === "run-calculate") return { route: "run-calculate", id: qid || segs[1] };
   if (segs[0] === "run-submit") return { route: "run-submit", id: qid || segs[1] };

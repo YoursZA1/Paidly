@@ -19,11 +19,17 @@ import EmployeeSelect from "@/components/workforce/EmployeeSelect";
 import { parseUuid } from "@shared/ids/uuid.js";
 import { buildPayslipNumber } from "@shared/payroll/payslipNumber.js";
 import { requirePayslipMembershipId } from "@shared/payroll/payslipWriteGuard.js";
+import { buildEmployerSnapshot } from "@shared/payroll/employerSnapshot.js";
+import { fetchOrganizationProfile } from "@/services/OrganizationProfileService";
+import { useCompanyContext } from "@/contexts/CompanyContext";
+import { useAppStore } from "@/stores/useAppStore";
 
 export default function CreatePayslip() {
     const navigate = useNavigate();
     const { toast } = useToast();
     const { authUserId } = useAuth();
+    const { companyId } = useCompanyContext();
+    const userProfile = useAppStore((s) => s.userProfile);
     const lastDraftNoticeIdRef = useRef(null);
     const [employees, setEmployees] = useState([]);
     const [employeeUuid, setEmployeeUuid] = useState("");
@@ -333,6 +339,15 @@ export default function CreatePayslip() {
                 return;
             }
 
+            let orgProfile = null;
+            if (companyId) {
+                try {
+                    orgProfile = await fetchOrganizationProfile(companyId);
+                } catch {
+                    orgProfile = null;
+                }
+            }
+
             await Payroll.create({
                 ...payslipData,
                 payslip_number: payslipNumber,
@@ -354,6 +369,7 @@ export default function CreatePayslip() {
                 medical_aid_deduction: parseFloat(payslipData.medical_aid_deduction) || 0,
                 allowances: payslipData.allowances.map(a => ({...a, amount: parseFloat(a.amount) || 0})),
                 other_deductions: payslipData.other_deductions.map(d => ({...d, amount: parseFloat(d.amount) || 0})),
+                employer_snapshot: buildEmployerSnapshot(orgProfile || {}, userProfile),
             });
             await clearDraft();
 

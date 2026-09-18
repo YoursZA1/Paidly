@@ -45,6 +45,13 @@ export const workforceApi = {
       `/api/company/employees?id=${encodeURIComponent(requireUuid(id, "employee id"))}&sections=${encodeURIComponent(sections)}`
     ),
   summary: () => payrollRequest("/api/company/workforce-summary"),
+  organogram: () => payrollRequest("/api/company/workforce-organogram"),
+  peopleCalendar: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.daysAhead != null) q.set("days_ahead", String(params.daysAhead));
+    const qs = q.toString();
+    return payrollRequest(`/api/company/workforce-people-calendar${qs ? `?${qs}` : ""}`);
+  },
   update: (id, payload) =>
     payrollRequest("/api/company/employees", {
       method: "PATCH",

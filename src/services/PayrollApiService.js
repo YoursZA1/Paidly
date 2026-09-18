@@ -71,6 +71,18 @@ export const payrollApi = {
     }),
   statutory: () => payrollRequest("/api/payroll/statutory"),
   saveStatutory: (payload) => payrollRequest("/api/payroll/statutory", { method: "POST", body: payload }),
+  reports: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.type) q.set("type", String(params.type));
+    if (params.pay_run_id) q.set("pay_run_id", String(params.pay_run_id));
+    if (params.period_start) q.set("period_start", String(params.period_start).slice(0, 10));
+    if (params.period_end) q.set("period_end", String(params.period_end).slice(0, 10));
+    const qs = q.toString();
+    return payrollRequest(`/api/payroll/reports${qs ? `?${qs}` : ""}`);
+  },
+  employerSettings: () => payrollRequest("/api/payroll/employer-settings"),
+  saveEmployerSettings: (payload) =>
+    payrollRequest("/api/payroll/employer-settings", { method: "POST", body: payload || {} }),
   me: () => payrollRequest("/api/payroll/me"),
   validateRun: (id) => payrollRequest(`/api/payroll/runs/${requireRecordUuid(id, "pay run id")}/validate`),
   publishPayslip: (id) =>

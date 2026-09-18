@@ -169,6 +169,10 @@ function CompanyProfileSettings() {
         business_branch_code: "",
         vat_number: "",
         business_type: "",
+        registration_number: "",
+        paye_reference: "",
+        uif_reference: "",
+        sdl_reference: "",
     }));
     const [logoFile, setLogoFile] = useState(null);
     const pendingLogoChangeRef = useRef(false);
@@ -273,6 +277,10 @@ function CompanyProfileSettings() {
                             setFormData((prev) => ({
                                 ...prev,
                                 business_type: normalizeBusinessType(org.business_type) || prev.business_type || "",
+                                registration_number: org.registration_number || prev.registration_number || "",
+                                paye_reference: org.payroll_settings?.paye_reference || prev.paye_reference || "",
+                                uif_reference: org.payroll_settings?.uif_reference || prev.uif_reference || "",
+                                sdl_reference: org.payroll_settings?.sdl_reference || prev.sdl_reference || "",
                             }));
                         }
                     } catch {
@@ -429,6 +437,15 @@ function CompanyProfileSettings() {
                 const type = normalizeBusinessType(updatedData.business_type);
                 await updateOrganizationProfile(companyId, {
                     name: (updatedData.company_name || "").trim() || undefined,
+                    registration_number: (updatedData.registration_number || "").trim() || null,
+                    address: (updatedData.company_address || "").trim() || null,
+                    phone: (updatedData.phone || "").trim() || null,
+                    company_email: (updatedData.email || authUser?.email || "").trim() || null,
+                    payroll_settings: {
+                        paye_reference: (updatedData.paye_reference || "").trim() || null,
+                        uif_reference: (updatedData.uif_reference || "").trim() || null,
+                        sdl_reference: (updatedData.sdl_reference || "").trim() || null,
+                    },
                     ...(type ? { business_type: type } : {}),
                 }).catch(() => {});
                 await refreshCompanyContext?.({ invalidateCache: true }).catch(() => {});
@@ -811,6 +828,62 @@ function CompanyProfileSettings() {
                             className="h-11 rounded-lg"
                         />
                         <p className="text-xs text-muted-foreground">Used for new invoices.</p>
+                    </div>
+                </div>
+            </SettingsCard>
+
+            <SettingsCard
+                title="Employer payroll details"
+                description="These references print on payslips and payroll compliance reports. Updating them affects future payslips only — issued payslips keep their snapshot."
+            >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="registration_number" className="text-sm font-medium text-foreground">
+                            Company registration number
+                        </Label>
+                        <Input
+                            id="registration_number"
+                            value={formData.registration_number}
+                            onChange={(e) => handleInputChange("registration_number", e.target.value)}
+                            placeholder="e.g., 2020/123456/07"
+                            className="h-11 rounded-lg"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="paye_reference" className="text-sm font-medium text-foreground">
+                            PAYE reference
+                        </Label>
+                        <Input
+                            id="paye_reference"
+                            value={formData.paye_reference}
+                            onChange={(e) => handleInputChange("paye_reference", e.target.value)}
+                            placeholder="SARS PAYE reference"
+                            className="h-11 rounded-lg"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="uif_reference" className="text-sm font-medium text-foreground">
+                            UIF reference
+                        </Label>
+                        <Input
+                            id="uif_reference"
+                            value={formData.uif_reference}
+                            onChange={(e) => handleInputChange("uif_reference", e.target.value)}
+                            placeholder="UIF employer reference"
+                            className="h-11 rounded-lg"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="sdl_reference" className="text-sm font-medium text-foreground">
+                            SDL reference
+                        </Label>
+                        <Input
+                            id="sdl_reference"
+                            value={formData.sdl_reference}
+                            onChange={(e) => handleInputChange("sdl_reference", e.target.value)}
+                            placeholder="Optional SDL reference"
+                            className="h-11 rounded-lg"
+                        />
                     </div>
                 </div>
             </SettingsCard>

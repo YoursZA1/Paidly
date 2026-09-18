@@ -48,6 +48,8 @@ const ManagerPortal = lazy(() => import("./ManagerPortal"));
 const Workforce = lazy(() => import("./Workforce"));
 const WorkforceAttendance = lazy(() => import("./WorkforceAttendance"));
 const WorkforceReports = lazy(() => import("./WorkforceReports"));
+const WorkforceOrganisation = lazy(() => import("./WorkforceOrganisation"));
+const WorkforcePeopleCalendar = lazy(() => import("./WorkforcePeopleCalendar"));
 const PublicLeaveApproval = lazy(() => import("./PublicLeaveApproval"));
 const CreateExpenseClaim = lazy(() => import("./CreateExpenseClaim"));
 const CreateTypedDocument = lazy(() => import("./CreateTypedDocument"));

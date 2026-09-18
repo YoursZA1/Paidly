@@ -1,5 +1,6 @@
 import { formatCurrency } from "@/components/CurrencySelector";
 import LogoImage from "@/components/shared/LogoImage";
+import { resolvePayslipEmployerDisplay } from "@shared/payroll/employerSnapshot.js";
 
 function valueOrDash(value) {
   const text = String(value ?? "").trim();
@@ -36,25 +37,46 @@ export default function PayslipDocument({
   const allowances = normalizeList(payslip?.allowances);
   const otherDeductions = normalizeList(payslip?.other_deductions);
   const overtimePay = Number(payslip?.overtime_hours || 0) * Number(payslip?.overtime_rate || 0);
+  const employer = resolvePayslipEmployerDisplay(payslip, user);
+  const hasEmployerRefs = Boolean(employer.registration_number || employer.paye_reference || employer.uif_reference || employer.email || employer.phone);
 
   return (
     <article className={`w-full max-w-[800px] mx-auto rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm ${className}`}>
       <header className="border-b border-border pb-6">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            {(user?.logo_url || user?.company_logo_url || payslip?.owner_logo_url) ? (
+            {employer.logo_url ? (
               <LogoImage
-                src={user?.logo_url || user?.company_logo_url || payslip?.owner_logo_url}
+                src={employer.logo_url}
                 alt="Company logo"
                 className="h-12 w-auto object-contain"
               />
             ) : (
-              <p className="text-xl font-bold text-slate-900">{valueOrDash(user?.company_name || payslip?.owner_company_name)}</p>
+              <p className="text-xl font-bold text-slate-900">{valueOrDash(employer.company_name)}</p>
             )}
-            <p className="mt-3 text-sm font-semibold text-slate-900">{valueOrDash(user?.company_name || payslip?.owner_company_name)}</p>
+            <p className="mt-3 text-sm font-semibold text-slate-900">{valueOrDash(employer.company_name)}</p>
             <p className="mt-1 whitespace-pre-line text-[13px] leading-5 text-slate-600">
-              {valueOrDash(user?.company_address || payslip?.owner_company_address)}
+              {valueOrDash(employer.address)}
             </p>
+            {hasEmployerRefs ? (
+              <div className="mt-2 space-y-0.5 text-[12px] leading-5 text-slate-600">
+                {employer.registration_number ? (
+                  <p><span className="font-medium text-slate-800">Reg:</span> {employer.registration_number}</p>
+                ) : null}
+                {employer.paye_reference ? (
+                  <p><span className="font-medium text-slate-800">PAYE:</span> {employer.paye_reference}</p>
+                ) : null}
+                {employer.uif_reference ? (
+                  <p><span className="font-medium text-slate-800">UIF:</span> {employer.uif_reference}</p>
+                ) : null}
+                {employer.email ? (
+                  <p><span className="font-medium text-slate-800">Email:</span> {employer.email}</p>
+                ) : null}
+                {employer.phone ? (
+                  <p><span className="font-medium text-slate-800">Tel:</span> {employer.phone}</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="shrink-0 text-left sm:text-right">

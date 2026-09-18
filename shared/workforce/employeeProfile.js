@@ -156,6 +156,7 @@ export function buildEmployeeProfile(input, opts = {}) {
     employment_status: membership.employment_status || "active",
     employment_start_date: membership.employment_start_date || null,
     employment_end_date: membership.employment_end_date || null,
+    date_of_birth: membership.date_of_birth || null,
     manager_membership_id: membership.manager_membership_id || null,
     manager_name: input.manager?.full_name || input.manager?.label || null,
     email,

@@ -122,9 +122,24 @@ Locked statuses (`approved`, `paid`) cannot be silently rewritten. Corrections u
 | `POST runs/:id/paid` | Mark paid |
 | `POST runs/:id/send` | Resend payslip emails |
 | `GET/POST statutory` | List / insert a new statutory version (no in-place rate rewrite) |
+| `GET reports` | Compliance reports (`type=uif\|paye\|summary\|net_pay`) over **finalized** pay runs — aggregates `pay_run_items` snapshots; never recalculates |
+| `GET/POST employer-settings` | Employer PAYE/UIF/SDL refs on `organizations.payroll_settings` (+ registration) |
 | `GET me` | Employee self-service payslips |
 
-Code: `server/src/payroll/payrollRoutes.js` → `payrollService.js`. Client: `src/pages/Payroll.jsx`, `src/services/PayrollApiService.js`.
+Code: `server/src/payroll/payrollRoutes.js` → `payrollService.js`. Client: `src/pages/Payroll.jsx`, `src/pages/WorkforceReports.jsx`, `src/services/PayrollApiService.js`. Pure aggregators: `shared/payroll/payrollReports.js`.
+
+### Payroll compliance reports
+
+Workforce → Reports (`/Workforce/reports`) keeps headcount KPIs for team viewers. Payroll admins (`manage_payroll`) also get period-picker reports:
+
+| Report | Source |
+|---|---|
+| **UIF** | Employee `UIF` + employer `UIF_EMPLOYER` from `pay_run_items.statutory_deductions` |
+| **PAYE** | Employee PAYE from the same snapshots |
+| **Payroll Summary** | Gross, deductions, PAYE, UIF, other deductions, employer cost (`gross + employer statutory`), net |
+| **Net Pay Register** | Per-employee `net_pay` + TOTAL (finance verifies bank salary payments manually) |
+
+Only runs with `finalized_at` appear. Adjustment runs are included when finalized. CSV export is available on the page.
 
 ---
 
@@ -139,18 +154,20 @@ Do not dual-write payslips into `documents`. The Documents Hub is not a second s
 ```
 approved pay run
   → finalizePayRun
-  → insert payslips (locked: true)
+  → insert payslips (locked: true, employer_snapshot)
   → link pay_run_items.payslip_id
   → send email with /PublicPayslip?token=
 ```
 
-The row copies the pay-run item: basic, overtime, allowances, statutory, net, `calculation_breakdown`, `leave_summary`.
+The row copies the pay-run item: basic, overtime, allowances, statutory, net, `calculation_breakdown`, `leave_summary`, plus **`employer_snapshot`** (company name, registration, address, contact, PAYE/UIF/SDL refs) from the live organization profile at issue time. Employee name/dept/position come from the payroll profile at finalize. Updating Settings / employee profile affects **future** payslips only — locked rows keep their snapshot (`prevent_locked_payroll_mutation` also blocks rewriting `employer_snapshot`).
+
+Employer refs live on `organizations.payroll_settings` (`paye_reference`, `uif_reference`, `sdl_reference`) and are edited under Settings → Employer payroll details. Helpers: `shared/payroll/employerSnapshot.js`.
 
 Email is a secure `/PublicPayslip?token=` link — **never** an unencrypted payroll PDF attachment and never a `/view/` public invoice URL.
 
 ### Secondary path
 
-Standalone compose (`CreatePayslip`) still exists for out-of-band drafts and **must** attach `membership_id`. It is not the normal issue path.
+Standalone compose (`CreatePayslip`) still exists for out-of-band drafts and **must** attach `membership_id`. It also freezes `employer_snapshot` from the live org profile at create time. It is not the normal issue path.
 
 ### Document Engine (delivery only)
 

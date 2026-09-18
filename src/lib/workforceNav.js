@@ -4,6 +4,7 @@ import {
   CalendarOff,
   ClipboardList,
   FileText,
+  Network,
   Receipt,
   Store,
   User,
@@ -114,6 +115,11 @@ function hrChildren(can) {
   if (can(PERMISSIONS.MANAGE_EMPLOYEES) || can(PERMISSIONS.MANAGE_LEAVE) || can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     children.push(item("nav-workforce-employees", "Employees", createPageUrl("Workforce/employees"), Users));
   }
+  if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
+    children.push(
+      item("nav-workforce-organisation", "Organisation", createPageUrl("Workforce/organisation"), Network)
+    );
+  }
   if (can(PERMISSIONS.MANAGE_PAYROLL)) {
     children.push(item("nav-workforce-payroll", "Payroll", createPageUrl("Workforce/payroll"), Wallet));
   }
@@ -121,6 +127,11 @@ function hrChildren(can) {
     children.push(item("nav-workforce-leave", "Leave", createPageUrl("Leave"), CalendarOff));
   } else if (can(PERMISSIONS.VIEW_OWN_LEAVE)) {
     children.push(item("nav-workforce-leave", "Leave", `${createPageUrl("MyPayroll")}?tab=leave`, CalendarOff));
+  }
+  if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
+    children.push(
+      item("nav-workforce-people-calendar", "People calendar", createPageUrl("Workforce/people-calendar"), CalendarDays)
+    );
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     children.push(item("nav-workforce-attendance", "Attendance", createPageUrl("Workforce/attendance"), ClipboardList));

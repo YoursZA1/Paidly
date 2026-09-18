@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { normalizeBusinessType } from "@shared/businessType.js";
+import { mergeEmployerPayrollSettings } from "@shared/payroll/employerSnapshot.js";
 
 /**
  * Update tenant company profile on organizations (company_id = org_id).
@@ -30,6 +31,20 @@ export async function updateOrganizationProfile(orgId, patch) {
 
   if (payload.business_type !== undefined) {
     payload.business_type = normalizeBusinessType(payload.business_type);
+  }
+
+  if (payload.payroll_settings !== undefined) {
+    const { data: existing } = await supabase
+      .from("organizations")
+      .select("payroll_settings")
+      .eq("id", orgId)
+      .maybeSingle();
+    payload.payroll_settings = mergeEmployerPayrollSettings(
+      existing?.payroll_settings,
+      payload.payroll_settings && typeof payload.payroll_settings === "object"
+        ? payload.payroll_settings
+        : {}
+    );
   }
 
   if (!Object.keys(payload).length) return null;

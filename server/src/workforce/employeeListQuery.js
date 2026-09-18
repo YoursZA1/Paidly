@@ -24,7 +24,7 @@ import { membershipIsPosEnabled } from "../../../shared/posStaffInvite.js";
 import { PORTAL_STATUS } from "../../../shared/workforce/portalAccess.js";
 
 const MEMBER_EXPANDED_COLS =
-  "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, employment_end_date, manager_membership_id, invited_email, invited_name, job_title, disabled_at, portal_revoked_at, pos_pin_hash, pos_pin_locked_until, pos_register_id, created_at";
+  "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, employment_end_date, manager_membership_id, invited_email, invited_name, job_title, disabled_at, portal_revoked_at, pos_pin_hash, pos_pin_locked_until, pos_register_id, date_of_birth, created_at";
 const MEMBER_LEGACY_COLS =
   "id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, invited_email, disabled_at, created_at";
 const PAYROLL_LIST_COLS =
@@ -48,7 +48,7 @@ async function loadOrgMemberships(orgId) {
     .select(MEMBER_EXPANDED_COLS)
     .eq("org_id", orgId)
     .order("created_at", { ascending: true });
-  if (membersQuery.error && /invited_name|job_title|employment_end_date|manager_membership_id|portal_revoked_at|pos_pin|pos_register_id|schema cache|column/i.test(membersQuery.error.message || "")) {
+  if (membersQuery.error && /invited_name|job_title|employment_end_date|manager_membership_id|portal_revoked_at|pos_pin|pos_register_id|date_of_birth|schema cache|column/i.test(membersQuery.error.message || "")) {
     membersQuery = await supabaseAdmin
       .from("memberships")
       .select(MEMBER_LEGACY_COLS)
@@ -66,7 +66,7 @@ async function loadMembershipById(orgId, employeeId) {
     .eq("org_id", orgId)
     .eq("id", employeeId)
     .maybeSingle();
-  if (query.error && /invited_name|job_title|employment_end_date|manager_membership_id|portal_revoked_at|pos_pin|pos_register_id|schema cache|column/i.test(query.error.message || "")) {
+  if (query.error && /invited_name|job_title|employment_end_date|manager_membership_id|portal_revoked_at|pos_pin|pos_register_id|date_of_birth|schema cache|column/i.test(query.error.message || "")) {
     query = await supabaseAdmin
       .from("memberships")
       .select(MEMBER_LEGACY_COLS)
@@ -680,3 +680,42 @@ export async function workforceSummary(orgId, { managerScopeId = null, includePe
     facets: listed.facets,
   };
 }
+
+/**
+ * Visualise existing manager_membership_id links — no second hierarchy table.
+ */
+export async function getWorkforceOrganogram(orgId, { managerScopeId = null } = {}) {
+  const listed = await listEmployees(orgId, {
+    managerScopeId,
+    pageAll: true,
+    includeLeaveStatus: false,
+    includeAttendance: false,
+    status: "",
+    limit: 500,
+  });
+  const { buildOrganogramTree } = await import("../../../shared/workforce/organogram.js");
+  const tree = buildOrganogramTree(listed.items || []);
+  return tree;
+}
+
+/**
+ * Birthdays + work anniversaries for the People Calendar.
+ */
+export async function getPeopleCalendar(orgId, { managerScopeId = null, daysAhead = 30 } = {}) {
+  const listed = await listEmployees(orgId, {
+    managerScopeId,
+    pageAll: true,
+    includeLeaveStatus: false,
+    includeAttendance: false,
+    status: "active",
+    limit: 500,
+  });
+  const { buildPeopleCalendarEvents } = await import("../../../shared/workforce/peopleCalendar.js");
+  const { johannesburgYmd } = await import("../../../shared/payroll/dates.js");
+  return buildPeopleCalendarEvents(listed.items || [], {
+    todayIso: johannesburgYmd().iso,
+    daysAhead: Number(daysAhead) || 30,
+    includeAge: true,
+  });
+}
+

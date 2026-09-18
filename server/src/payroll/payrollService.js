@@ -26,6 +26,8 @@ import { throwIfMissingWorkforceColumn } from "../workforce/schemaGuard.js";
 import { isPayrollParticipationActive } from "../../../shared/workforce/employeeLifecycle.js";
 import { validatePayRunItem } from "../../../shared/payroll/payRunValidation.js";
 import { canPublishPayslip, displayPayslipStatus, publishedPayslipWrite } from "../../../shared/payroll/payslipStatus.js";
+import { buildEmployerSnapshot, mergeEmployerPayrollSettings, normalizeEmployerPayrollSettings } from "../../../shared/payroll/employerSnapshot.js";
+import { PAYROLL_REPORT_TYPES, buildPayrollReport } from "../../../shared/payroll/payrollReports.js";
 
 const DEFAULT_COMPONENTS = [
   { kind: "earning", code: "ALLOWANCE", name: "Allowance", taxable: true, recurring: true },
@@ -937,6 +939,13 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
     throw err;
   }
 
+  const { data: orgRow } = await supabaseAdmin
+    .from("organizations")
+    .select("name, registration_number, company_email, phone, address, payroll_settings")
+    .eq("id", orgId)
+    .maybeSingle();
+  const employerSnapshot = buildEmployerSnapshot(orgRow || {});
+
   for (const item of run.items || []) {
     if (item.payslip_id) continue;
     const profile = (
@@ -984,6 +993,7 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
       public_share_token: token,
       calculation_breakdown: item.calculation,
       leave_summary: leaveSummary,
+      employer_snapshot: employerSnapshot,
       locked: true,
       finalized_at: new Date().toISOString(),
       created_by_id: actorId,
@@ -991,7 +1001,7 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
     };
     const { data: payslip, error } = await supabaseAdmin.from("payslips").insert(payslipRow).select("id").maybeSingle();
     if (error) {
-      throwIfMissingWorkforceColumn(error, "membership_id");
+      throwIfMissingWorkforceColumn(error, ["membership_id", "employer_snapshot"]);
       throw error;
     }
     await recordPayslipCreatedEvent({ orgId, payslipId: payslip.id });
@@ -1281,6 +1291,191 @@ export async function listStatutoryRules(orgId) {
   const { data: platform } = await supabaseAdmin.from("payroll_statutory_rules").select("*").is("org_id", null);
   const { data: orgRules } = await supabaseAdmin.from("payroll_statutory_rules").select("*").eq("org_id", orgId);
   return { platform: platform || [], org: orgRules || [] };
+}
+
+export async function getEmployerPayrollSettings(orgId) {
+  const { data: org, error } = await supabaseAdmin
+    .from("organizations")
+    .select("name, registration_number, company_email, phone, address, payroll_settings")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error) throw error;
+  const refs = normalizeEmployerPayrollSettings(org?.payroll_settings);
+  return {
+    company_name: org?.name || null,
+    registration_number: org?.registration_number || null,
+    company_email: org?.company_email || null,
+    phone: org?.phone || null,
+    address: org?.address || null,
+    ...refs,
+  };
+}
+
+export async function updateEmployerPayrollSettings(orgId, actorId, payload = {}) {
+  const { data: org, error: loadErr } = await supabaseAdmin
+    .from("organizations")
+    .select("payroll_settings, registration_number")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (loadErr) throw loadErr;
+
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(payload, "registration_number")) {
+    patch.registration_number = String(payload.registration_number || "").trim() || null;
+  }
+  const hasRefPatch =
+    Object.prototype.hasOwnProperty.call(payload, "paye_reference") ||
+    Object.prototype.hasOwnProperty.call(payload, "uif_reference") ||
+    Object.prototype.hasOwnProperty.call(payload, "sdl_reference");
+  if (hasRefPatch) {
+    patch.payroll_settings = mergeEmployerPayrollSettings(org?.payroll_settings, payload);
+  }
+  if (!Object.keys(patch).length) {
+    return getEmployerPayrollSettings(orgId);
+  }
+
+  const { error } = await supabaseAdmin.from("organizations").update(patch).eq("id", orgId);
+  if (error) throw error;
+  await writePayrollAudit({
+    orgId,
+    actorId,
+    action: "EMPLOYER_PAYROLL_SETTINGS_UPDATED",
+    recordType: "organizations",
+    recordId: orgId,
+    metadata: {
+      keys: Object.keys(patch),
+    },
+  });
+  return getEmployerPayrollSettings(orgId);
+}
+
+/**
+ * Compliance reports over finalized pay runs — aggregates stored item snapshots.
+ * @param {string} orgId
+ * @param {{ type?: string, pay_run_id?: string, period_start?: string, period_end?: string }} query
+ */
+export async function getPayrollReports(orgId, query = {}) {
+  const type = String(query.type || "summary").toLowerCase();
+  if (!PAYROLL_REPORT_TYPES.includes(type)) {
+    const err = new Error(`Report type must be one of: ${PAYROLL_REPORT_TYPES.join(", ")}`);
+    err.status = 400;
+    throw err;
+  }
+
+  const payRunId = parseUuid(query.pay_run_id);
+  let runsQuery = supabaseAdmin
+    .from("pay_runs")
+    .select("id, period_label, period_start, period_end, pay_date, status, finalized_at, net_total, gross_total, run_type")
+    .eq("org_id", orgId)
+    .not("finalized_at", "is", null)
+    .order("period_start", { ascending: false })
+    .limit(120);
+
+  if (payRunId) {
+    runsQuery = runsQuery.eq("id", payRunId);
+  } else if (query.period_start && query.period_end) {
+    runsQuery = runsQuery
+      .gte("period_start", String(query.period_start).slice(0, 10))
+      .lte("period_end", String(query.period_end).slice(0, 10));
+  } else {
+    // Default: latest finalized run only (period picker supplies explicit ids).
+    runsQuery = runsQuery.limit(1);
+  }
+
+  const { data: runs, error: runsErr } = await runsQuery;
+  if (runsErr) throw runsErr;
+  const runList = runs || [];
+
+  const periods = (
+    await supabaseAdmin
+      .from("pay_runs")
+      .select("id, period_label, period_start, period_end, pay_date, status, finalized_at, net_total, run_type")
+      .eq("org_id", orgId)
+      .not("finalized_at", "is", null)
+      .order("period_start", { ascending: false })
+      .limit(120)
+  ).data || [];
+
+  if (!runList.length) {
+    return {
+      type,
+      period: null,
+      pay_runs: [],
+      periods,
+      report: buildPayrollReport(type, []),
+    };
+  }
+
+  const runIds = runList.map((r) => r.id);
+  const { data: items, error: itemsErr } = await supabaseAdmin
+    .from("pay_run_items")
+    .select(
+      "id, pay_run_id, membership_id, employee_number, employee_name, gross_pay, net_pay, total_deductions, statutory_deductions, other_deductions"
+    )
+    .in("pay_run_id", runIds)
+    .eq("org_id", orgId);
+  if (itemsErr) {
+    // Some deployments may not have org_id on items — retry without it.
+    if (/org_id|schema cache|column/i.test(itemsErr.message || "")) {
+      const retry = await supabaseAdmin
+        .from("pay_run_items")
+        .select(
+          "id, pay_run_id, membership_id, employee_number, employee_name, gross_pay, net_pay, total_deductions, statutory_deductions, other_deductions"
+        )
+        .in("pay_run_id", runIds);
+      if (retry.error) throw retry.error;
+      return assemblePayrollReportResponse(type, runList, periods, retry.data || []);
+    }
+    throw itemsErr;
+  }
+
+  return assemblePayrollReportResponse(type, runList, periods, items || []);
+}
+
+function assemblePayrollReportResponse(type, runList, periods, items) {
+  const primary = runList.length === 1 ? runList[0] : null;
+  const periodLabel =
+    primary?.period_label ||
+    (runList.length > 1
+      ? `${runList[runList.length - 1]?.period_label || runList[runList.length - 1]?.period_start} – ${runList[0]?.period_label || runList[0]?.period_end}`
+      : null);
+  return {
+    type,
+    period: primary
+      ? {
+          pay_run_id: primary.id,
+          label: primary.period_label,
+          period_start: primary.period_start,
+          period_end: primary.period_end,
+          pay_date: primary.pay_date,
+          status: primary.status,
+          net_total: primary.net_total,
+          gross_total: primary.gross_total,
+          run_type: primary.run_type,
+        }
+      : {
+          pay_run_id: null,
+          label: periodLabel,
+          period_start: runList[runList.length - 1]?.period_start || null,
+          period_end: runList[0]?.period_end || null,
+          pay_date: null,
+          status: null,
+          net_total: null,
+          gross_total: null,
+          run_type: null,
+        },
+    pay_runs: runList.map((r) => ({
+      id: r.id,
+      period_label: r.period_label,
+      period_start: r.period_start,
+      period_end: r.period_end,
+      status: r.status,
+      net_total: r.net_total,
+      run_type: r.run_type,
+    })),
+    periods,
+    report: buildPayrollReport(type, items),
+  };
 }
 
 export async function upsertStatutoryRule(orgId, actorId, payload) {

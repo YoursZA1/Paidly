@@ -15,6 +15,8 @@ import {
   revokeEmployeePortalAccess,
   updateEmployee,
   workforceSummary,
+  getWorkforceOrganogram,
+  getPeopleCalendar,
 } from "./employeeService.js";
 import { requireWorkforcePermission } from "./workforceAuth.js";
 import { canSeeOrgWorkforce } from "../leave/leaveAuthz.js";
@@ -44,6 +46,36 @@ export async function handleWorkforceEmployees(req, res) {
       const data = await workforceSummary(gate.membership.companyId, {
         managerScopeId: managerScope(gate.membership),
         includePendingInvites: membershipHasPermission(gate.membership, PERMISSIONS.MANAGE_EMPLOYEES),
+      });
+      return res.status(200).json({ ok: true, data });
+    } catch (err) {
+      return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+    }
+  }
+
+  if (resolved?.route === "workforce-organogram") {
+    const gate = await requireWorkforcePermission(req, res, PERMISSIONS.VIEW_TEAM_MEMBERS);
+    if (!gate.ok) return gate.response;
+    if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
+    try {
+      const data = await getWorkforceOrganogram(gate.membership.companyId, {
+        managerScopeId: managerScope(gate.membership),
+      });
+      return res.status(200).json({ ok: true, data });
+    } catch (err) {
+      return jsonError(res, Number(err.status) || 500, err.message, { code: err.code });
+    }
+  }
+
+  if (resolved?.route === "workforce-people-calendar") {
+    const gate = await requireWorkforcePermission(req, res, PERMISSIONS.VIEW_TEAM_MEMBERS);
+    if (!gate.ok) return gate.response;
+    if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
+    try {
+      const daysAhead = Number(req.query?.days_ahead || req.query?.daysAhead || 30);
+      const data = await getPeopleCalendar(gate.membership.companyId, {
+        managerScopeId: managerScope(gate.membership),
+        daysAhead: Number.isFinite(daysAhead) ? daysAhead : 30,
       });
       return res.status(200).json({ ok: true, data });
     } catch (err) {
@@ -224,8 +256,12 @@ export function resolveWorkforceRoute(req) {
   const head = parts[0] || "";
   if (head === "employees") return { route: "employees" };
   if (head === "workforce-summary") return { route: "workforce-summary" };
+  if (head === "workforce-organogram") return { route: "workforce-organogram" };
+  if (head === "workforce-people-calendar") return { route: "workforce-people-calendar" };
   const urlPath = String(req.url || "").split("?")[0] || "";
   if (/\/employees\/?$/i.test(urlPath)) return { route: "employees" };
   if (/\/workforce-summary\/?$/i.test(urlPath)) return { route: "workforce-summary" };
+  if (/\/workforce-organogram\/?$/i.test(urlPath)) return { route: "workforce-organogram" };
+  if (/\/workforce-people-calendar\/?$/i.test(urlPath)) return { route: "workforce-people-calendar" };
   return null;
 }

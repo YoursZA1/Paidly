@@ -23,6 +23,8 @@ import {
   listEligibleManagers,
   listEmployees,
   workforceSummary,
+  getWorkforceOrganogram,
+  getPeopleCalendar,
 } from "./employeeListQuery.js";
 import {
   isEligibleWorkforceManager,
@@ -39,6 +41,8 @@ export {
   listEligibleManagers,
   listEmployees,
   workforceSummary,
+  getWorkforceOrganogram,
+  getPeopleCalendar,
 };
 
 registerWorkforceSubscribers();
@@ -450,6 +454,9 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
   if (safe.employment_start_date !== undefined) {
     patch.employment_start_date = safe.employment_start_date || null;
   }
+  if (safe.date_of_birth !== undefined || safe.dateOfBirth !== undefined) {
+    patch.date_of_birth = safe.date_of_birth || safe.dateOfBirth || null;
+  }
   if (safe.employment_end_date !== undefined && !lifecycleAction) {
     patch.employment_end_date = safe.employment_end_date || null;
   }
@@ -468,11 +475,12 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
 
   if (Object.keys(patch).length) {
     const { error } = await supabaseAdmin.from("memberships").update(patch).eq("id", id).eq("org_id", orgId);
-    if (error && /job_title|invited_name|disabled_at/i.test(error.message || "")) {
+    if (error && /job_title|invited_name|disabled_at|date_of_birth/i.test(error.message || "")) {
       const fallback = { ...patch };
       if (/job_title/i.test(error.message || "")) delete fallback.job_title;
       if (/invited_name/i.test(error.message || "")) delete fallback.invited_name;
       if (/disabled_at/i.test(error.message || "")) delete fallback.disabled_at;
+      if (/date_of_birth/i.test(error.message || "")) delete fallback.date_of_birth;
       const retry = await supabaseAdmin.from("memberships").update(fallback).eq("id", id).eq("org_id", orgId);
       if (retry.error) throw retry.error;
     } else if (error) {
