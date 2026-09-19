@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ChevronRight } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
+import PlanSwitchButton from "@/components/subscription/PlanSwitchButton";
 import DashboardSubscriptionBanner from "@/components/dashboard/DashboardSubscriptionBanner";
 import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
@@ -83,6 +84,27 @@ export default function SubscriptionSettings() {
     const showActivePlanHeader =
         bannerCopy.kind === "active" || bannerCopy.kind === "admin_granted" || bannerCopy.kind === "past_due";
     const currentPlanId = normalizePaidPackageKey(billingProfile);
+    // Live PayFast recurring agreement → change plans on that token instead of a new checkout.
+    const payfastManaged = Boolean(billingStatus?.payfastManaged);
+    const currentTierIndex = TIERS.findIndex((t) => t.family === currentPlanId);
+    const scheduledDate = billingStatus?.scheduledChangeAt
+        ? new Date(billingStatus.scheduledChangeAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
+        : null;
+    const updateCardUrl = (() => {
+        const raw = billingStatus?.updateCardUrl;
+        if (!raw) return null;
+        try {
+            const url = new URL(raw);
+            if (typeof window !== "undefined") url.searchParams.set("return", window.location.href);
+            return url.toString();
+        } catch {
+            return raw;
+        }
+    })();
+    const refreshBilling = () => {
+        void refetchProfile();
+        void refetchBilling();
+    };
 
     const handleContactSales = () => {
         window.location.href = `mailto:${CONTACT_SALES_EMAIL}`;
@@ -173,7 +195,25 @@ export default function SubscriptionSettings() {
             <div>
                 <div className="mb-8">
                     <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Change your plan</h3>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">Select the plan that best fits your current team size.</p>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">
+                        {payfastManaged
+                            ? "Changes apply to your existing PayFast subscription — same card, no new checkout."
+                            : "Select the plan that best fits your current team size."}
+                    </p>
+                    {billingStatus?.scheduledPlan ? (
+                        <p className="mt-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-foreground">
+                            Your plan changes to <span className="font-semibold">{billingStatus.scheduledPlanName || billingStatus.scheduledPlan}</span>
+                            {scheduledDate ? ` on ${scheduledDate}` : " at your next billing date"}. You keep your current features until then.
+                        </p>
+                    ) : null}
+                    {updateCardUrl ? (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                            {bannerCopy.kind === "past_due" ? "Your last payment failed. " : ""}
+                            <a href={updateCardUrl} className="font-medium text-primary underline underline-offset-2">
+                                Update the card on your PayFast subscription
+                            </a>
+                        </p>
+                    ) : null}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -225,7 +265,20 @@ export default function SubscriptionSettings() {
                                     ))}
                                 </ul>
 
-                                {!isCurrent &&
+                                {!isCurrent && payfastManaged ? (
+                                    <PlanSwitchButton
+                                        planSlug={tier.id}
+                                        planName={tier.name}
+                                        priceLabel={`${tier.price} / month`}
+                                        direction={
+                                            currentTierIndex >= 0 && TIERS.indexOf(tier) < currentTierIndex
+                                                ? "downgrade"
+                                                : "upgrade"
+                                        }
+                                        nextBillingDate={billingStatus?.nextBillingDate || null}
+                                        onChanged={refreshBilling}
+                                    />
+                                ) : !isCurrent &&
                                 (tier.id === "starter_monthly" ||
                                   tier.id === "business_monthly" ||
                                   tier.id === "growth_monthly") ? (

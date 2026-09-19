@@ -1,12 +1,19 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { abandonPendingCheckout } from "@/services/subscriptionCheckoutService";
 
 /**
  * PayFast cancel_url landing — user cancelled before completing payment.
  */
 export default function PayfastCancel() {
+  // Clear the unpaid pending checkout so "Waiting for payment confirmation" doesn't linger.
+  useEffect(() => {
+    void abandonPendingCheckout();
+  }, []);
+
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4 py-16 bg-gradient-to-b from-slate-50 to-background dark:from-slate-900/40">
       <div className="max-w-md w-full text-center space-y-6 rounded-3xl border bg-card p-8 shadow-lg">

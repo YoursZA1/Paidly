@@ -307,7 +307,13 @@ export function getSubscriptionCheckoutUrls() {
  *
  * @param {{ planSlug: string, returnUrl?: string, cancelUrl?: string, notifyUrl?: string }} opts
  */
-export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cancelUrl, notifyUrl } = {}) {
+export async function createSubscriptionAndRedirect({
+  planSlug,
+  returnUrl,
+  cancelUrl,
+  notifyUrl,
+  endpoint = "create",
+} = {}) {
   if (checkoutInFlight) {
     throw new SubscriptionCheckoutError("A checkout is already in progress. Please wait.", {
       code: "CHECKOUT_IN_PROGRESS",
@@ -336,7 +342,7 @@ export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cance
 
     let response;
     try {
-      response = await fetch(`${getApiBase()}/api/subscriptions/create`, {
+      response = await fetch(`${getApiBase()}/api/subscriptions/${endpoint === "change" ? "change" : "create"}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -381,6 +387,11 @@ export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cance
 
     logSubscription(requestId, "API success");
 
+    // Plan change applied to the existing PayFast agreement (PATCH update) — no checkout.
+    if (data?.changed && !data?.checkout) {
+      return { ...data, redirected: false, requestId };
+    }
+
     const checkoutUrl = data?.checkout?.url || data?.redirectUrl || data?.payfastUrl;
     const fields = data?.checkout?.fields || data?.fields;
     const fieldOrder = data?.checkout?.fieldOrder || data?.fieldOrder;
@@ -413,6 +424,34 @@ export async function createSubscriptionAndRedirect({ planSlug, returnUrl, cance
   } finally {
     clearTimeout(timeoutId);
     if (!redirected) checkoutInFlight = false;
+  }
+}
+
+/**
+ * POST /api/subscriptions/change — switch plans on the existing PayFast recurring agreement.
+ * Resolves with `{ changed: true, mode: "immediate"|"scheduled", ... }` when PayFast was
+ * updated in place, or redirects to PayFast checkout when there is no live agreement yet.
+ * @param {{ planSlug: string, returnUrl?: string, cancelUrl?: string }} opts
+ */
+export function changeSubscriptionPlan(opts = {}) {
+  return createSubscriptionAndRedirect({ ...opts, endpoint: "change" });
+}
+
+/**
+ * Drop an unpaid pending checkout (customer cancelled on PayFast). Never touches a paid agreement.
+ */
+export async function abandonPendingCheckout() {
+  try {
+    const accessToken = await getCheckoutAccessToken();
+    await fetch(`${getApiBase()}/api/subscriptions/abandon`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: "{}",
+    });
+  } catch {
+    /* best effort — pending rows also expire server-side */
+  } finally {
+    clearPendingSubscription();
   }
 }
 

@@ -24,6 +24,8 @@ import {
 import { SUBSCRIPTION_STATUS } from "../../../shared/subscriptionStatuses.js";
 import { PAYMENT_HISTORY_STATUS } from "../../../shared/paymentHistoryStatuses.js";
 import { SUBSCRIPTION_EVENT_TYPE } from "../../../shared/subscriptionEventTypes.js";
+import { scheduledPlanChangeDue } from "../../../shared/subscriptionPlanChange.js";
+import { familyForSlug } from "../subscriptionPlans.js";
 import {
   checkPayfastAmount,
   checkPayfastCurrency,
@@ -107,6 +109,22 @@ async function loadSubscriptionForItn(supabase, payload) {
     if (data?.id) return data;
   }
 
+  // Recurring Billing: `token` is PayFast's canonical id for the agreement and is sent on
+  // every recurring charge and on cancellation.
+  const token = sanitizeOneLine(String(payload.token || ""), 128);
+  if (token) {
+    const { data } = await supabase
+      .from("subscriptions")
+      .select(
+        "id, user_id, created_by, company_id, plan_id, plan_slug, plan, amount, currency, status, m_payment_id"
+      )
+      .eq("payfast_token", token)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data?.id) return data;
+  }
+
   const userId = resolvePayfastSubscriptionUserIdForExport(payload);
   if (!isValidUuid(userId)) return null;
 
@@ -127,6 +145,20 @@ async function loadSubscriptionForItn(supabase, payload) {
     .limit(1);
 
   return rows?.[0] || null;
+}
+
+/**
+ * Queued downgrade that should apply on this successful charge. Tolerates the columns
+ * not existing yet (older databases) by returning null.
+ */
+async function loadDueScheduledChange(supabase, sub) {
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("scheduled_plan_slug, scheduled_plan_id, scheduled_change_at")
+    .eq("id", sub.id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return scheduledPlanChangeDue(data) ? data : null;
 }
 
 async function resolveExpectedAmount(supabase, sub) {
@@ -332,6 +364,38 @@ export function createPayfastItnProductionHandler(deps) {
       pf_payment_id: payload.pf_payment_id || null,
     });
 
+    // 7a) Agreement cancelled on PayFast (buyer, merchant dashboard, or our cancel API call).
+    // Not a payment: no amount check, no failure count — just end the agreement here.
+    const statusUpperEarly = String(payload.payment_status || "").toUpperCase();
+    if (statusUpperEarly === "CANCELLED" || statusUpperEarly === "CANCELED") {
+      await updateItnLog(supabase, itnLogId, { verified: true });
+      if (sub.status !== SUBSCRIPTION_STATUS.CANCELLED) {
+        const nowIso = new Date().toISOString();
+        await supabase
+          .from("subscriptions")
+          .update({
+            status: SUBSCRIPTION_STATUS.CANCELLED,
+            cancelled_at: nowIso,
+            canceled_at: nowIso,
+            next_billing_date: null,
+            next_retry_at: null,
+            updated_at: nowIso,
+          })
+          .eq("id", sub.id);
+        await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.CANCELLED, {
+          source: "payfast_itn",
+          previous_status: sub.status || null,
+        });
+      }
+      await logWebhook(supabase, {
+        path: "/api/payfast/itn",
+        response: { ok: true, cancelled: true, subscription_id: sub.id },
+        status_code: 200,
+        duration_ms: Date.now() - started,
+      });
+      return res.status(200).send("OK");
+    }
+
     // 7) Amount + currency validation (against pending/catalog — never trust client)
     const expectedAmount = await resolveExpectedAmount(supabase, sub);
     const amountCheck = checkPayfastAmount(payload, expectedAmount);
@@ -399,13 +463,20 @@ export function createPayfastItnProductionHandler(deps) {
       let phRowId = null;
       let appliedDuplicate = false;
 
+      // Downgrade queued via PATCH /subscriptions/{token}/update takes effect on the first
+      // successful charge at the new amount.
+      const scheduledChange =
+        phStatus === PAYMENT_HISTORY_STATUS.COMPLETED ? await loadDueScheduledChange(supabase, sub) : null;
+      const planHints = scheduledChange
+        ? { planIdHint: scheduledChange.scheduled_plan_id || null, planSlugHint: scheduledChange.scheduled_plan_slug }
+        : { planIdHint: sub.plan_id, planSlugHint: sub.plan_slug };
+
       if (useAtomic && phStatus === PAYMENT_HISTORY_STATUS.COMPLETED) {
         // Still run upsert for profile sync / token fields not covered by RPC alone
         await upsertSubscriptionFromItn(supabase, payload, {
           subscriptionIdHint: sub.id,
           companyIdHint: sub.company_id,
-          planIdHint: sub.plan_id,
-          planSlugHint: sub.plan_slug,
+          ...planHints,
           userIdHint: sub.user_id,
         });
 
@@ -439,8 +510,7 @@ export function createPayfastItnProductionHandler(deps) {
         await upsertSubscriptionFromItn(supabase, payload, {
           subscriptionIdHint: sub.id,
           companyIdHint: sub.company_id,
-          planIdHint: sub.plan_id,
-          planSlugHint: sub.plan_slug,
+          ...planHints,
           userIdHint: sub.user_id,
         });
 
@@ -481,6 +551,24 @@ export function createPayfastItnProductionHandler(deps) {
           duration_ms: Date.now() - started,
         });
         return res.status(200).send("OK");
+      }
+
+      if (scheduledChange) {
+        await supabase
+          .from("subscriptions")
+          .update({
+            plan_family: familyForSlug(scheduledChange.scheduled_plan_slug) || null,
+            scheduled_plan_slug: null,
+            scheduled_plan_id: null,
+            scheduled_change_at: null,
+          })
+          .eq("id", sub.id);
+        await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.PLAN_CHANGED, {
+          from: sub.plan_slug || null,
+          to: scheduledChange.scheduled_plan_slug,
+          source: "scheduled_downgrade",
+          payfast_payment_id: pfPaymentId || null,
+        });
       }
 
       if (phStatus === PAYMENT_HISTORY_STATUS.COMPLETED) {

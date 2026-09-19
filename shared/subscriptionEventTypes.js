@@ -4,7 +4,7 @@
  */
 
 /**
- * @typedef {'subscription_created'|'redirected'|'payment_pending'|'payment_verified'|'payment_failed'|'activated'|'cancelled'|'renewed'|'webhook_received'|'webhook_verified'|'webhook_failed'} SubscriptionEventType
+ * @typedef {'subscription_created'|'redirected'|'payment_pending'|'payment_verified'|'payment_failed'|'activated'|'cancelled'|'renewed'|'webhook_received'|'webhook_verified'|'webhook_failed'|'plan_changed'|'plan_change_scheduled'} SubscriptionEventType
  */
 
 /** @type {readonly SubscriptionEventType[]} */
@@ -20,6 +20,8 @@ export const SUBSCRIPTION_EVENT_TYPES = Object.freeze([
   "webhook_received",
   "webhook_verified",
   "webhook_failed",
+  "plan_changed",
+  "plan_change_scheduled",
 ]);
 
 export const SUBSCRIPTION_EVENT_TYPE = Object.freeze({
@@ -34,6 +36,8 @@ export const SUBSCRIPTION_EVENT_TYPE = Object.freeze({
   WEBHOOK_RECEIVED: "webhook_received",
   WEBHOOK_VERIFIED: "webhook_verified",
   WEBHOOK_FAILED: "webhook_failed",
+  PLAN_CHANGED: "plan_changed",
+  PLAN_CHANGE_SCHEDULED: "plan_change_scheduled",
 });
 
 /** Human labels for admin / logs */
@@ -49,6 +53,8 @@ export const SUBSCRIPTION_EVENT_LABELS = Object.freeze({
   renewed: "Renewed",
   cancelled: "Cancelled",
   webhook_failed: "Webhook Failed",
+  plan_changed: "Plan Changed",
+  plan_change_scheduled: "Plan Change Scheduled",
 });
 
 /**

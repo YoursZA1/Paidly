@@ -1,5 +1,5 @@
 /**
- * Vercel: /api/subscriptions/create | status | cancel | current | plans | change
+ * Vercel: /api/subscriptions/create | status | cancel | current | plans | change | abandon
  */
 import { applyPaidlyServerlessCors } from "../../server/src/vercelPaidlyCors.js";
 import { normalizeRequestBody } from "../../server/src/validateBody.js";
@@ -10,6 +10,7 @@ import {
   handleSubscriptionCurrent,
   handleSubscriptionPlans,
   handleSubscriptionStatus,
+  handleSubscriptionAbandon,
   handlePayfastDiagnose,
 } from "../../server/src/billing/subscriptionApi.js";
 
@@ -52,6 +53,9 @@ export default async function handler(req, res) {
   if (action === "cancel" && req.method === "POST") {
     return handleSubscriptionCancel(req, res);
   }
+  if (action === "abandon" && req.method === "POST") {
+    return handleSubscriptionAbandon(req, res);
+  }
   if ((action === "payfast-diagnose" || action === "diagnose") && req.method === "POST") {
     return handlePayfastDiagnose(req, res);
   }
@@ -66,6 +70,7 @@ export default async function handler(req, res) {
         "GET /api/subscriptions/status",
         "GET /api/subscriptions/current",
         "POST /api/subscriptions/cancel",
+        "POST /api/subscriptions/abandon",
       ],
     });
   }

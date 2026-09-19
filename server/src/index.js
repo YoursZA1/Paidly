@@ -94,6 +94,7 @@ import payfastOnceHandler from "./payfastOnceApi.js";
 import {
   handlePayfastDiagnose,
   handleSubscriptionCancel,
+  handleSubscriptionAbandon,
   handleSubscriptionChange,
   handleSubscriptionCreate,
   handleSubscriptionCurrent,
@@ -1015,6 +1016,7 @@ app.post("/api/subscriptions/change", handleSubscriptionChange);
 app.get("/api/subscriptions/status", handleSubscriptionStatus);
 app.get("/api/subscriptions/current", handleSubscriptionCurrent);
 app.post("/api/subscriptions/cancel", handleSubscriptionCancel);
+app.post("/api/subscriptions/abandon", handleSubscriptionAbandon);
 app.post("/api/subscriptions/payfast-diagnose", handlePayfastDiagnose);
 
 app.get("/api/admin/subscriptions", handleAdminSubscriptionsList);

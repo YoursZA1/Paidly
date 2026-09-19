@@ -19,7 +19,13 @@ import { loadActivePlan, listPublicPlans } from "./plansCatalog.js";
 import { familyForSlug } from "../subscriptionPlans.js";
 import { SUBSCRIPTION_STATUS } from "../../../shared/subscriptionStatuses.js";
 import { SUBSCRIPTION_EVENT_TYPE } from "../../../shared/subscriptionEventTypes.js";
-import { cancelPayfastRecurringBilling } from "./payfastRecurringApi.js";
+import {
+  cancelPayfastRecurringBilling,
+  fetchPayfastSubscription,
+  payfastUpdateCardUrl,
+  updatePayfastSubscription,
+} from "./payfastRecurringApi.js";
+import { PLAN_CHANGE_DIRECTION, planChangeDirection } from "../../../shared/subscriptionPlanChange.js";
 import { hasPaidAccessIncludingGrace } from "./entitlements.js";
 import {
   pickAccessSubscriptionRow,
@@ -271,6 +277,20 @@ export async function handleSubscriptionCreate(req, res) {
   const companyId = await resolveUserCompanyId(supabase, user.id);
   if (!companyId) {
     return json(res, 400, { error: "No company context for user" });
+  }
+
+  // One PayFast agreement per company. A second checkout would start a second recurring
+  // debit on the customer's card while the first keeps billing — plan changes go through
+  // PATCH /subscriptions/{token}/update instead (POST /api/subscriptions/change).
+  const existingAgreement = await loadPayfastAgreementRow(supabase, { userId: user.id, companyId });
+  if (existingAgreement) {
+    return json(res, 409, {
+      success: false,
+      code: "PAYFAST_AGREEMENT_EXISTS",
+      error: "You already have an active PayFast subscription. Change plans instead of subscribing again.",
+      changeEndpoint: "/api/subscriptions/change",
+      currentPlan: existingAgreement.plan_slug || existingAgreement.plan || null,
+    });
   }
 
   const mode = String(process.env.PAYFAST_MODE || "sandbox").trim().toLowerCase();
@@ -589,7 +609,7 @@ export async function handleSubscriptionCreate(req, res) {
  * Shape for GET /api/subscriptions/status — poll after PayFast; never activate from client.
  * Returns: Current Plan, Current Status, Expiry, Renew Date.
  */
-async function buildSubscriptionStatusPayload(supabase, sub) {
+async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
   let planName = null;
   let planSlug = sub.plan_slug || sub.plan || sub.current_plan || null;
   if (sub.plan_id) {
@@ -640,8 +660,36 @@ async function buildSubscriptionStatusPayload(supabase, sub) {
     admin_override: sub.admin_override === true,
   };
 
+  // PayFast Recurring Billing state. The token itself is never returned; only the
+  // agreement owner gets PayFast's hosted "update card" link built from it.
+  const { data: tokenRow } = await supabase
+    .from("subscriptions")
+    .select("payfast_token, payfast_subscription_id, user_id, created_by")
+    .eq("id", sub.id)
+    .maybeSingle();
+  const pfToken = String(tokenRow?.payfast_token || tokenRow?.payfast_subscription_id || "").trim();
+  const viewerOwns =
+    Boolean(opts.viewerId) && (tokenRow?.user_id === opts.viewerId || tokenRow?.created_by === opts.viewerId);
+  const scheduled = await loadScheduledChange(supabase, sub.id);
+  let scheduledPlanName = null;
+  if (scheduled.scheduled_plan_slug) {
+    const { data: sp } = await supabase.from("plans").select("name").eq("slug", scheduled.scheduled_plan_slug).maybeSingle();
+    scheduledPlanName = sp?.name || scheduled.scheduled_plan_slug;
+  }
+  const payfastManaged =
+    Boolean(pfToken) &&
+    [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.PAST_DUE].includes(String(sub.status || ""));
+
   return {
     subscriptionId: sub.id,
+    payfastManaged,
+    scheduledPlan: scheduled.scheduled_plan_slug || null,
+    scheduledPlanName,
+    scheduledChangeAt: scheduled.scheduled_change_at || null,
+    updateCardUrl:
+      payfastManaged && viewerOwns
+        ? payfastUpdateCardUrl(pfToken, String(opts.returnUrl || process.env.PAYFAST_RETURN_URL || ""))
+        : null,
     /** Current Plan */
     currentPlan: planSlug,
     currentPlanName: planName,
@@ -728,7 +776,7 @@ export async function handleSubscriptionStatus(req, res) {
     (companyId && sub.company_id === companyId);
   if (!owns) return json(res, 403, { error: "Forbidden" });
 
-  const payload = await buildSubscriptionStatusPayload(supabase, sub);
+  const payload = await buildSubscriptionStatusPayload(supabase, sub, { viewerId: auth.user.id });
   return json(res, 200, payload);
 }
 
@@ -779,7 +827,7 @@ export async function handleSubscriptionCurrent(req, res) {
     });
   }
 
-  const statusPayload = await buildSubscriptionStatusPayload(supabase, sub);
+  const statusPayload = await buildSubscriptionStatusPayload(supabase, sub, { viewerId: auth.user.id });
   return json(res, 200, {
     subscription: sub,
     ...statusPayload,
@@ -866,6 +914,14 @@ export async function handleSubscriptionCancel(req, res) {
   let payfastResult = { ok: true, skipped: true, reason: "no_token" };
   if (pfToken) {
     payfastResult = await cancelPayfastRecurringBilling(pfToken);
+    if (!payfastResult.ok) {
+      // Already ended at PayFast (buyer cancelled, cycles completed)? Then only Paidly is out of date.
+      const remote = await fetchPayfastSubscription(pfToken);
+      const remoteText = String(remote.subscription?.status_text || "").toUpperCase();
+      if (remote.ok && (remoteText === "CANCELLED" || remoteText === "COMPLETE")) {
+        payfastResult = { ok: true, skipped: true, reason: `payfast_already_${remoteText.toLowerCase()}` };
+      }
+    }
     if (!payfastResult.ok) {
       const allowDbOnly =
         String(process.env.PAYFAST_CANCEL_ALLOW_DB_ONLY || "").toLowerCase() === "true";
@@ -987,9 +1043,63 @@ export async function handleSubscriptionPlans(req, res) {
   });
 }
 
+const PAYFAST_AGREEMENT_STATUSES = [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.PAST_DUE];
+
 /**
- * POST /api/subscriptions/change — cancel current token then create pending checkout for new plan.
- * Body: { planSlug, returnUrl, cancelUrl, subscriptionId? }
+ * Current company/user row that is backed by a live PayFast recurring token.
+ * @returns {Promise<object|null>}
+ */
+async function loadPayfastAgreementRow(supabase, { userId, companyId }) {
+  let q = supabase
+    .from("subscriptions")
+    .select(
+      "id, user_id, created_by, company_id, status, plan_id, plan_slug, plan, plan_family, amount, currency, billing_cycle, payfast_token, payfast_subscription_id, next_billing_date, subscription_source, admin_override, updated_at"
+    )
+    .in("status", PAYFAST_AGREEMENT_STATUSES)
+    .order("updated_at", { ascending: false })
+    .limit(5);
+  q = companyId ? q.eq("company_id", companyId) : q.eq("user_id", userId);
+  const { data } = await q;
+  return (
+    (data || []).find((row) => String(row.payfast_token || row.payfast_subscription_id || "").trim()) || null
+  );
+}
+
+/** Queued downgrade columns; `schemaReady: false` until migration 20260919140000 is applied. */
+async function loadScheduledChange(supabase, subscriptionId) {
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("scheduled_plan_slug, scheduled_plan_id, scheduled_change_at")
+    .eq("id", subscriptionId)
+    .maybeSingle();
+  if (error) return { schemaReady: false, scheduled_plan_slug: null, scheduled_plan_id: null, scheduled_change_at: null };
+  return { schemaReady: true, ...(data || {}) };
+}
+
+async function syncProfilePlan(supabase, userId, planSlug) {
+  if (!userId || !planSlug) return;
+  const { error } = await supabase
+    .from("profiles")
+    .update({ plan: planSlug, subscription_plan: planSlug, updated_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (error) console.warn("[billing/subscriptions/change] profile plan sync failed", error.message);
+}
+
+/**
+ * POST /api/subscriptions/change
+ *
+ * PayFast Recurring Billing plan change (https://developers.payfast.co.za/api#recurring-billing):
+ *   - Existing ACTIVE PayFast agreement → PATCH /subscriptions/{token}/update with the new
+ *     recurring amount (and frequency when the cycle changes). Same card, same token,
+ *     no second agreement, no new checkout.
+ *       upgrade   → access now; new amount from the next PayFast run date (no proration)
+ *       downgrade → new amount from the next run date; current access kept until then
+ *   - Agreement already cancelled/completed at PayFast → mark it cancelled here and start a
+ *     fresh checkout.
+ *   - No PayFast agreement (trial, admin grant, lapsed) → normal checkout via create.
+ *
+ * Never cancels a paid agreement before a replacement is paid for.
+ * Body: { planSlug, returnUrl, cancelUrl }
  */
 export async function handleSubscriptionChange(req, res) {
   const supabase = getBillingSupabaseAdmin();
@@ -1000,76 +1110,226 @@ export async function handleSubscriptionChange(req, res) {
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const companyId = await resolveUserCompanyId(supabase, auth.user.id);
-
-  let subscriptionId = String(body.subscriptionId || body.id || "").trim();
-  if (!subscriptionId) {
-    let q = supabase
-      .from("subscriptions")
-      .select("id, status, payfast_token, payfast_subscription_id, company_id, user_id, created_by, plan_slug")
-      .in("status", [
-        SUBSCRIPTION_STATUS.ACTIVE,
-        SUBSCRIPTION_STATUS.PAST_DUE,
-        SUBSCRIPTION_STATUS.TRIALING,
-        SUBSCRIPTION_STATUS.SUSPENDED,
-      ])
-      .order("updated_at", { ascending: false })
-      .limit(1);
-    q = companyId ? q.eq("company_id", companyId) : q.eq("user_id", auth.user.id);
-    const { data: rows } = await q;
-    subscriptionId = rows?.[0]?.id || "";
+  const planSlug = String(body.planSlug || body.plan || body.slug || "").trim();
+  const plan = await loadActivePlan(supabase, planSlug);
+  if (!plan || !Number.isFinite(plan.amount) || plan.amount <= 0) {
+    return json(res, 400, { error: "Invalid or inactive plan" });
+  }
+  if (plan.contact_sales) {
+    return json(res, 400, { error: "Enterprise plans require contacting sales", code: "CONTACT_SALES" });
   }
 
-  if (subscriptionId) {
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select(
-        "id, user_id, created_by, company_id, status, payfast_token, payfast_subscription_id, plan_slug"
-      )
-      .eq("id", subscriptionId)
-      .maybeSingle();
+  const sub = await loadPayfastAgreementRow(supabase, { userId: auth.user.id, companyId });
+  if (!sub) {
+    // Nothing billing on PayFast yet — this is a first subscription.
+    return handleSubscriptionCreate(req, res);
+  }
+  const owns =
+    sub.user_id === auth.user.id ||
+    sub.created_by === auth.user.id ||
+    (companyId && sub.company_id === companyId);
+  if (!owns) return json(res, 403, { error: "Forbidden" });
 
-    if (sub) {
-      const owns =
-        sub.user_id === auth.user.id ||
-        sub.created_by === auth.user.id ||
-        (companyId && sub.company_id === companyId);
-      if (!owns) return json(res, 403, { error: "Forbidden" });
+  const token = String(sub.payfast_token || sub.payfast_subscription_id || "").trim();
+  const remote = await fetchPayfastSubscription(token);
+  if (!remote.ok) {
+    return json(res, 502, {
+      code: "PAYFAST_UNAVAILABLE",
+      error: "Could not reach PayFast to change your plan. Please try again shortly.",
+    });
+  }
+  const remoteSub = remote.subscription || {};
+  const nowIso = new Date().toISOString();
+  await supabase
+    .from("subscriptions")
+    .update({ payfast_status_text: remoteSub.status_text, payfast_synced_at: nowIso })
+    .eq("id", sub.id)
+    .then(() => null, () => null);
 
-      const pfToken = String(sub.payfast_token || sub.payfast_subscription_id || "").trim();
-      if (pfToken && sub.status !== SUBSCRIPTION_STATUS.CANCELLED) {
-        const payfastResult = await cancelPayfastRecurringBilling(pfToken);
-        if (!payfastResult.ok) {
-          const allowDbOnly =
-            String(process.env.PAYFAST_CANCEL_ALLOW_DB_ONLY || "").toLowerCase() === "true";
-          if (!allowDbOnly) {
-            return json(res, 502, {
-              error: payfastResult.error || "Failed to cancel existing PayFast billing before change",
-              code: "PAYFAST_CANCEL_FAILED",
-            });
-          }
-        }
-        const nowIso = new Date().toISOString();
-        await supabase
-          .from("subscriptions")
-          .update({
-            status: SUBSCRIPTION_STATUS.CANCELLED,
-            cancelled_at: nowIso,
-            canceled_at: nowIso,
-            updated_at: nowIso,
-          })
-          .eq("id", sub.id);
-        await logEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.CANCELLED, {
-          reason: "plan_change",
-          previous_plan: sub.plan_slug,
-          next_plan: body.planSlug || null,
-          by: auth.user.id,
-        });
-      }
+  if (!remoteSub.active) {
+    const text = String(remoteSub.status_text || "").toUpperCase();
+    if (text === "CANCELLED" || text === "COMPLETE") {
+      // The agreement is gone at PayFast; reflect that and let the customer check out afresh.
+      await supabase
+        .from("subscriptions")
+        .update({
+          status: SUBSCRIPTION_STATUS.CANCELLED,
+          cancelled_at: nowIso,
+          canceled_at: nowIso,
+          next_billing_date: null,
+          updated_at: nowIso,
+        })
+        .eq("id", sub.id);
+      await logEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.CANCELLED, {
+        reason: "payfast_agreement_not_active",
+        payfast_status: text,
+      });
+      return handleSubscriptionCreate(req, res);
     }
+    return json(res, 409, {
+      code: "PAYFAST_AGREEMENT_NOT_ACTIVE",
+      payfastStatus: text || null,
+      error:
+        text === "PAUSED"
+          ? "Your subscription is paused on PayFast. Resume it before changing plans."
+          : "Your PayFast subscription needs attention (for example a failed card). Update your card, then change plans.",
+      updateCardUrl: payfastUpdateCardUrl(token, String(body.returnUrl || "")),
+    });
   }
 
-  // Reuse create flow for new pending checkout
-  return handleSubscriptionCreate(req, res);
+  const scheduled = await loadScheduledChange(supabase, sub.id);
+  const currentPlan =
+    (await loadActivePlan(supabase, sub.plan_slug || sub.plan)) ||
+    { slug: sub.plan_slug || sub.plan, amount: Number(sub.amount), billing_cycle: sub.billing_cycle };
+  const direction = planChangeDirection(currentPlan, plan);
+
+  if (direction === PLAN_CHANGE_DIRECTION.SAME && !scheduled.scheduled_plan_slug) {
+    return json(res, 400, { code: "SAME_PLAN", error: "You are already on this plan." });
+  }
+  if (direction === PLAN_CHANGE_DIRECTION.DOWNGRADE && !scheduled.schemaReady) {
+    // Refuse before touching PayFast so the agreement and Paidly never disagree.
+    return json(res, 503, {
+      code: "PLAN_CHANGE_SCHEMA_MISSING",
+      error: "Plan downgrades are not available yet. Apply migration 20260919140000_payfast_recurring_plan_changes.sql.",
+    });
+  }
+
+  const targetFrequency = getPayfastFrequency(String(plan.billing_cycle || "monthly").toLowerCase());
+  const change = { amount: plan.amount };
+  if (remoteSub.frequency != null && Number(remoteSub.frequency) !== targetFrequency) {
+    change.frequency = targetFrequency;
+  }
+  const updated = await updatePayfastSubscription(token, change);
+  if (!updated.ok) {
+    await logEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.WEBHOOK_FAILED, {
+      action: "plan_change_update",
+      error: updated.error || "PayFast update failed",
+      httpStatus: updated.status || null,
+    });
+    return json(res, 502, {
+      code: "PAYFAST_UPDATE_FAILED",
+      error: updated.error || "PayFast did not accept the plan change. Your current plan is unchanged.",
+    });
+  }
+
+  const nextRun =
+    (updated.data?.response && updated.data.response.run_date) || remoteSub.run_date || sub.next_billing_date || null;
+  const nextRunIso = nextRun ? new Date(`${String(nextRun).slice(0, 10)}T00:00:00+02:00`).toISOString() : null;
+  const clearScheduled = { scheduled_plan_slug: null, scheduled_plan_id: null, scheduled_change_at: null };
+
+  let effective;
+  if (direction === PLAN_CHANGE_DIRECTION.DOWNGRADE) {
+    // Keep what they paid for; PayFast charges the lower amount from the next run date.
+    // `amount` is the expected recurring charge, so the next ITN validates against it.
+    const { error } = await supabase
+      .from("subscriptions")
+      .update({
+        amount: plan.amount,
+        scheduled_plan_slug: plan.slug,
+        scheduled_plan_id: plan.id || null,
+        scheduled_change_at: nextRunIso,
+        next_billing_date: nextRunIso || sub.next_billing_date,
+        updated_at: nowIso,
+      })
+      .eq("id", sub.id);
+    if (error) {
+      console.error("[billing/subscriptions/change] schedule downgrade failed", error.message);
+      return json(res, 500, {
+        code: "PLAN_CHANGE_SAVE_FAILED",
+        error: "PayFast was updated but Paidly could not save the change. Contact support.",
+      });
+    }
+    await logEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.PLAN_CHANGE_SCHEDULED, {
+      from: sub.plan_slug,
+      to: plan.slug,
+      amount: plan.amount,
+      effective_at: nextRunIso,
+      by: auth.user.id,
+    });
+    effective = { mode: "scheduled", effectiveAt: nextRunIso };
+  } else {
+    // Upgrade (or cancelling a queued downgrade): access now, new amount from the next run.
+    const { error } = await supabase
+      .from("subscriptions")
+      .update({
+        plan_id: plan.id || sub.plan_id || null,
+        plan_slug: plan.slug,
+        plan: plan.slug,
+        current_plan: plan.slug,
+        plan_family: plan.plan_family || familyForSlug(plan.slug),
+        amount: plan.amount,
+        billing_cycle: plan.billing_cycle,
+        next_billing_date: nextRunIso || sub.next_billing_date,
+        updated_at: nowIso,
+        ...(scheduled.schemaReady ? clearScheduled : {}),
+      })
+      .eq("id", sub.id);
+    if (error) {
+      console.error("[billing/subscriptions/change] upgrade save failed", error.message);
+      return json(res, 500, {
+        code: "PLAN_CHANGE_SAVE_FAILED",
+        error: "PayFast was updated but Paidly could not save the change. Contact support.",
+      });
+    }
+    await syncProfilePlan(supabase, sub.user_id, plan.slug);
+    await logEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.PLAN_CHANGED, {
+      from: sub.plan_slug,
+      to: plan.slug,
+      amount: plan.amount,
+      next_charge_at: nextRunIso,
+      by: auth.user.id,
+    });
+    effective = { mode: "immediate", effectiveAt: nowIso };
+  }
+
+  const { data: fresh } = await supabase.from("subscriptions").select("*").eq("id", sub.id).maybeSingle();
+  const statusPayload = await buildSubscriptionStatusPayload(supabase, fresh || sub, { viewerId: auth.user.id });
+  return json(res, 200, {
+    success: true,
+    changed: true,
+    direction,
+    ...effective,
+    nextChargeAt: nextRunIso,
+    nextChargeAmount: plan.amount,
+    checkout: null,
+    ...statusPayload,
+    message:
+      effective.mode === "scheduled"
+        ? `Your plan changes to ${plan.name} on your next billing date. You keep your current features until then.`
+        : `You're now on ${plan.name}. PayFast will charge the new amount from your next billing date.`,
+  });
+}
+
+/**
+ * POST /api/subscriptions/abandon — customer returned via PayFast cancel_url.
+ * Cancels only this user's unpaid PENDING checkout rows (no PayFast token exists for them),
+ * so the "Waiting for payment confirmation" banner does not linger. Paid agreements are untouched.
+ */
+export async function handleSubscriptionAbandon(req, res) {
+  const supabase = getBillingSupabaseAdmin();
+  if (!supabase) return json(res, 503, { error: "Server configuration error (Supabase)" });
+  const auth = await requireBearerUser(req, supabase);
+  if (auth.error) return json(res, auth.status, { error: auth.error });
+
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .update({ status: SUBSCRIPTION_STATUS.CANCELLED, cancelled_at: nowIso, updated_at: nowIso })
+    .eq("user_id", auth.user.id)
+    .eq("status", SUBSCRIPTION_STATUS.PENDING)
+    .is("payfast_token", null)
+    .select("id, company_id");
+  if (error) {
+    console.error("[billing/subscriptions/abandon]", error.message);
+    return json(res, 500, { error: "Could not clear the pending checkout" });
+  }
+  for (const row of data || []) {
+    await logEvent(supabase, row.id, row.company_id, SUBSCRIPTION_EVENT_TYPE.CANCELLED, {
+      reason: "checkout_abandoned",
+      by: auth.user.id,
+    });
+  }
+  return json(res, 200, { success: true, abandoned: (data || []).length });
 }
 
 function payfastDiagnosticAllowed() {
