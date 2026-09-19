@@ -20,7 +20,8 @@ export function isKnownStaffRole(role) {
 
 /**
  * Effective app role: prefer `profiles.role` when it is a known staff role (invite + trigger),
- * else Supabase `app_metadata.role`, then `user_metadata.role` (invite payload).
+ * else Supabase `app_metadata.role`. `user_metadata.role` is user-writable and never trusted
+ * (the server ignores it too — see server/src/adminRouteAccess.js).
  */
 export function resolveUserRoleFromSessionAndProfile(supabaseUser, profileRow = {}) {
   if (!supabaseUser) return 'user';
@@ -28,8 +29,6 @@ export function resolveUserRoleFromSessionAndProfile(supabaseUser, profileRow = 
   if (isKnownStaffRole(pr)) return pr;
   const app = normalizeRoleString(supabaseUser.app_metadata?.role);
   if (isKnownStaffRole(app)) return app;
-  const meta = normalizeRoleString(supabaseUser.user_metadata?.role);
-  if (isKnownStaffRole(meta)) return meta;
   if (app) return app;
   return 'user';
 }

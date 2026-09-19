@@ -97,7 +97,6 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
       authUser.app_metadata?.role ||
         profile?.role ||
         profile?.user_role ||
-        authUser.user_metadata?.role ||
         "user"
     ).toLowerCase();
     const um = authUser.user_metadata || {};

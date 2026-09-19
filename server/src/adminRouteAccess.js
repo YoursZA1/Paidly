@@ -1,8 +1,13 @@
 /**
  * Shared authorization for /api/admin/* — used by Express and Vercel serverless routes.
  *
- * Aligns with `resolveUserRoleFromSessionAndProfile` (client): JWT may carry role in
- * `app_metadata`, `app_metadata.claims`, or `user_metadata` (e.g. invite payload).
+ * Trusted role sources ONLY:
+ *   - JWT `app_metadata.role` / `app_metadata.claims.role` (set server-side via the admin API)
+ *   - `profiles.role` (column is write-protected from end users by
+ *     guard_profile_privileged_columns; staff roles come from server-issued invites)
+ *
+ * Never `user_metadata`: any signed-in user can rewrite their own user_metadata with
+ * supabase.auth.updateUser(), so trusting it lets anyone become a platform admin.
  */
 
 export function dashboardRoleFromProfileRow(profile) {
@@ -15,17 +20,14 @@ const INTERNAL_ADMIN_READ_ROLES = ["admin", "management", "support", "sales"];
 const TEAM_INVITE_PROFILE_ROLES = ["admin", "management"];
 
 /**
- * First staff role token found on the JWT user (same sources the UI considers).
+ * Staff role from server-controlled JWT claims (`app_metadata`). `user_metadata` is
+ * deliberately excluded — it is user-writable.
  * @param {import("@supabase/auth-js").User | null | undefined} user
  * @returns {string} normalized role or ""
  */
 export function jwtKnownStaffRole(user) {
   if (!user || typeof user !== "object") return "";
-  const candidates = [
-    user.app_metadata?.role,
-    user.app_metadata?.claims?.role,
-    user.user_metadata?.role,
-  ];
+  const candidates = [user.app_metadata?.role, user.app_metadata?.claims?.role];
   for (const c of candidates) {
     const r = String(c ?? "")
       .trim()

@@ -396,7 +396,7 @@ async function handleGetSettings(res, supabase) {
 
 async function writeSettingsAudit(supabase, user, payload) {
   const actorRole =
-    user?.app_metadata?.role || user?.app_metadata?.claims?.role || user?.user_metadata?.role || null;
+    user?.app_metadata?.role || user?.app_metadata?.claims?.role || null;
   const actorName = user?.user_metadata?.full_name || null;
   const { error } = await supabase.from("audit_logs").insert({
     category: "settings",
