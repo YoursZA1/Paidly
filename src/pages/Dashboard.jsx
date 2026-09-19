@@ -54,6 +54,8 @@ import { getBusinessGoal, resolveBusinessGoalsUserId } from '@/api/businessGoals
 import { useCalendarYear } from '@/hooks/useCalendarYear';
 import SetupProgressStepper from '@/components/dashboard/SetupProgressStepper';
 import PosSalesCard from '@/components/dashboard/PosSalesCard';
+import PayrollDashboardCard from '@/components/dashboard/PayrollDashboardCard';
+import { PERMISSIONS } from "@/lib/companyPermissions";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
@@ -113,7 +115,8 @@ export default function Dashboard() {
 function DashboardMain() {
   const { user: authUser, session } = useAuth();
   const canShowPosEntry = useCanShowPosNav();
-  const { companyId, loading: companyCtxLoading, showBusinessDashboard } = useCompanyContext();
+  const { companyId, loading: companyCtxLoading, showBusinessDashboard, hasPermission } = useCompanyContext();
+  const canSeePayroll = Boolean(companyId && hasPermission?.(PERMISSIONS.MANAGE_PAYROLL));
   const { loading: appLoading, setLoading: setAppLoading } = useAppContext();
   const {
     profile: profileFromQuery,
@@ -1163,6 +1166,15 @@ function DashboardMain() {
             isLoading={isLoading}
           />
         </div>
+
+        {user && !isAdmin && canSeePayroll ? (
+          <div className="mb-8">
+            <PayrollDashboardCard
+              currency={userCurrency}
+              revenueThisMonth={Number(revenueHeroByPeriod?.month?.realized) || 0}
+            />
+          </div>
+        ) : null}
 
         {inventoryProductsState.length > 0 && (
           <div className="mb-8 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border pt-5 sm:grid-cols-4">

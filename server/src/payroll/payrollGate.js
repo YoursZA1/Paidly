@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 import {
   loadCompanyMembership,
   membershipHasPermission,
+  membershipRowHasPermission,
   PERMISSIONS,
 } from "../companyRouteAccess.js";
 import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
@@ -109,10 +110,12 @@ export async function listPayrollAdminRecipients(orgId) {
     console.warn("[payroll] admin recipient lookup failed:", error.message);
     return [];
   }
+  const { data: org } = await supabaseAdmin.from("organizations").select("owner_id").eq("id", orgId).maybeSingle();
+  // Raw rows carry `role`; the permission matrix reads `companyRole`, so map via the row helper.
   const eligible = (members || []).filter(
     (row) =>
       String(row.employment_status || "active") !== "inactive" &&
-      membershipHasPermission(row, PERMISSIONS.MANAGE_PAYROLL) &&
+      membershipRowHasPermission(row, PERMISSIONS.MANAGE_PAYROLL, { ownerId: org?.owner_id || null }) &&
       row.user_id
   );
   const userIds = [...new Set(eligible.map((row) => row.user_id))];

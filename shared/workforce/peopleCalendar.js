@@ -153,3 +153,28 @@ export function buildPeopleCalendarEvents(employees = [], opts = {}) {
     anniversaries: events.filter((e) => e.kind === "work_anniversary"),
   };
 }
+
+/**
+ * Events that should trigger an HR reminder today: the event is exactly
+ * `leadDays` away, or it is today (a second, same-day nudge). Callers keep an
+ * idempotency key per (employee, kind, event_date, stage) so a cron re-run
+ * never sends twice.
+ *
+ * @param {Array<Record<string, any>>} events buildPeopleCalendarEvents().events
+ * @param {{ todayIso: string, leadDays: number }} opts
+ */
+export function selectDuePeopleReminders(events = [], opts = {}) {
+  const todayIso = String(opts.todayIso || "").slice(0, 10);
+  const leadDays = Math.max(0, Math.round(Number(opts.leadDays) || 0));
+  const leadIso = addDaysIso(todayIso, leadDays);
+  const due = [];
+  for (const event of events || []) {
+    if (!event?.event_date) continue;
+    if (leadDays > 0 && event.event_date === leadIso) {
+      due.push({ ...event, stage: "lead", days_until: leadDays });
+    } else if (event.event_date === todayIso) {
+      due.push({ ...event, stage: "today", days_until: 0 });
+    }
+  }
+  return due;
+}

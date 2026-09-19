@@ -9,15 +9,32 @@ function text(value) {
   return s || null;
 }
 
+/** Default HR reminder lead time for birthdays / work anniversaries (days). */
+export const DEFAULT_PEOPLE_REMINDER_LEAD_DAYS = 30;
+
+/**
+ * @param {unknown} value
+ */
+export function normalizePeopleReminderLeadDays(value) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return DEFAULT_PEOPLE_REMINDER_LEAD_DAYS;
+  return Math.min(90, Math.max(0, n));
+}
+
 /**
  * @param {Record<string, unknown>|null|undefined} settings
  */
 export function normalizeEmployerPayrollSettings(settings) {
   const raw = settings && typeof settings === "object" ? settings : {};
   return {
+    trading_name: text(raw.trading_name) || "",
     paye_reference: text(raw.paye_reference) || "",
     uif_reference: text(raw.uif_reference) || "",
     sdl_reference: text(raw.sdl_reference) || "",
+    people_reminder_lead_days:
+      raw.people_reminder_lead_days == null || raw.people_reminder_lead_days === ""
+        ? DEFAULT_PEOPLE_REMINDER_LEAD_DAYS
+        : normalizePeopleReminderLeadDays(raw.people_reminder_lead_days),
   };
 }
 
@@ -38,11 +55,18 @@ export function mergeEmployerPayrollSettings(existing, patch) {
   if (patch && Object.prototype.hasOwnProperty.call(patch, "sdl_reference")) {
     base.sdl_reference = next.sdl_reference || null;
   }
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "trading_name")) {
+    base.trading_name = next.trading_name || null;
+  }
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "people_reminder_lead_days")) {
+    base.people_reminder_lead_days = next.people_reminder_lead_days;
+  }
   return base;
 }
 
 /**
  * Build frozen employer snapshot from org row (+ optional profile fallbacks).
+ * profileFallback is the org owner's profile (company branding / logo live there).
  * @param {Record<string, unknown>|null|undefined} org
  * @param {Record<string, unknown>|null|undefined} [profileFallback]
  */
@@ -65,8 +89,16 @@ export function buildEmployerSnapshot(org, profileFallback = null) {
     text(profileFallback?.phone) ||
     null;
 
+  const tradingName =
+    text(settings.trading_name) ||
+    (text(profileFallback?.company_name) && text(profileFallback?.company_name) !== name
+      ? text(profileFallback?.company_name)
+      : null);
+
   return {
     company_name: name,
+    trading_name: tradingName,
+    logo_url: text(org?.logo_url) || text(profileFallback?.logo_url) || null,
     registration_number: text(org?.registration_number),
     address,
     email,
@@ -79,6 +111,8 @@ export function buildEmployerSnapshot(org, profileFallback = null) {
 
 /**
  * Prefer issued snapshot over live user/org fields for display.
+ * Logo: snapshot → org owner branding → viewer (legacy payslips only). The viewer
+ * may be the employee, so their profile is the last resort, never the first.
  * @param {Record<string, unknown>|null|undefined} payslip
  * @param {Record<string, unknown>|null|undefined} [user]
  */
@@ -97,10 +131,12 @@ export function resolvePayslipEmployerDisplay(payslip, user = null) {
       text(user?.company_address) ||
       text(payslip?.owner_company_address) ||
       null,
+    trading_name: text(snap?.trading_name),
     logo_url:
+      text(snap?.logo_url) ||
+      text(payslip?.owner_logo_url) ||
       text(user?.logo_url) ||
       text(user?.company_logo_url) ||
-      text(payslip?.owner_logo_url) ||
       null,
     registration_number: text(snap?.registration_number),
     email: text(snap?.email) || text(user?.email) || null,

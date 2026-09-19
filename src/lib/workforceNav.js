@@ -111,17 +111,27 @@ function financeChildren(can) {
 }
 
 function hrChildren(can) {
+  // Order follows the HR flow: Employees → Payroll → Reports → Organisation → People calendar.
   const children = [item("nav-workforce-overview", "Overview", createPageUrl("Workforce"), ClipboardList)];
   if (can(PERMISSIONS.MANAGE_EMPLOYEES) || can(PERMISSIONS.MANAGE_LEAVE) || can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     children.push(item("nav-workforce-employees", "Employees", createPageUrl("Workforce/employees"), Users));
+  }
+  if (can(PERMISSIONS.MANAGE_PAYROLL)) {
+    children.push(item("nav-workforce-payroll", "Payroll", createPageUrl("Workforce/payroll"), Wallet));
+    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("Payslips"), Receipt));
+  } else if (can(PERMISSIONS.VIEW_OWN_PAYSLIPS)) {
+    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("MyPayroll"), Receipt));
+  }
+  if (can(PERMISSIONS.VIEW_TEAM_MEMBERS) || can(PERMISSIONS.MANAGE_PAYROLL)) {
+    children.push(item("nav-workforce-reports", "Reports", createPageUrl("Workforce/reports"), BarChart2));
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     children.push(
       item("nav-workforce-organisation", "Organisation", createPageUrl("Workforce/organisation"), Network)
     );
-  }
-  if (can(PERMISSIONS.MANAGE_PAYROLL)) {
-    children.push(item("nav-workforce-payroll", "Payroll", createPageUrl("Workforce/payroll"), Wallet));
+    children.push(
+      item("nav-workforce-people-calendar", "People calendar", createPageUrl("Workforce/people-calendar"), CalendarDays)
+    );
   }
   if (can(PERMISSIONS.VIEW_TEAM_LEAVE)) {
     children.push(item("nav-workforce-leave", "Leave", createPageUrl("Leave"), CalendarOff));
@@ -129,23 +139,10 @@ function hrChildren(can) {
     children.push(item("nav-workforce-leave", "Leave", `${createPageUrl("MyPayroll")}?tab=leave`, CalendarOff));
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
-    children.push(
-      item("nav-workforce-people-calendar", "People calendar", createPageUrl("Workforce/people-calendar"), CalendarDays)
-    );
-  }
-  if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     children.push(item("nav-workforce-attendance", "Attendance", createPageUrl("Workforce/attendance"), ClipboardList));
   }
   if (can(PERMISSIONS.VIEW_OWN_DOCUMENTS) || can(PERMISSIONS.MANAGE_EMPLOYEES)) {
     children.push(item("nav-workforce-documents", "Documents", createPageUrl("Documents"), FileText));
-  }
-  if (can(PERMISSIONS.MANAGE_PAYROLL)) {
-    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("Payslips"), Receipt));
-  } else if (can(PERMISSIONS.VIEW_OWN_PAYSLIPS)) {
-    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("MyPayroll"), Receipt));
-  }
-  if (can(PERMISSIONS.VIEW_TEAM_MEMBERS) || can(PERMISSIONS.MANAGE_PAYROLL)) {
-    children.push(item("nav-workforce-reports", "Reports", createPageUrl("Workforce/reports"), BarChart2));
   }
   return children;
 }

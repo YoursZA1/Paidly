@@ -169,6 +169,8 @@ export function buildEmployeeProfile(input, opts = {}) {
     daily_rate: payroll?.daily_rate ?? null,
     pay_type: payroll?.pay_type || "monthly_salary",
     pay_frequency: payroll?.pay_frequency || "monthly",
+    ...(payroll && "banking" in payroll ? { banking: payroll.banking || {} } : {}),
+    ...(payroll && "tax_identifiers" in payroll ? { tax_identifiers: payroll.tax_identifiers || {} } : {}),
     payroll_status: payroll?.payroll_status || (payroll?.id ? "active" : "unprovisioned"),
     label: formatEmployeeLabel({ full_name: name, employee_number: membership.employee_number }),
     attendance_status: input.attendance?.status || (payroll?.id ? "active" : "unprovisioned"),

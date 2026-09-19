@@ -173,6 +173,8 @@ function CompanyProfileSettings() {
         paye_reference: "",
         uif_reference: "",
         sdl_reference: "",
+        trading_name: "",
+        people_reminder_lead_days: "30",
     }));
     const [logoFile, setLogoFile] = useState(null);
     const pendingLogoChangeRef = useRef(false);
@@ -281,6 +283,10 @@ function CompanyProfileSettings() {
                                 paye_reference: org.payroll_settings?.paye_reference || prev.paye_reference || "",
                                 uif_reference: org.payroll_settings?.uif_reference || prev.uif_reference || "",
                                 sdl_reference: org.payroll_settings?.sdl_reference || prev.sdl_reference || "",
+                                trading_name: org.payroll_settings?.trading_name || prev.trading_name || "",
+                                people_reminder_lead_days: String(
+                                    org.payroll_settings?.people_reminder_lead_days ?? prev.people_reminder_lead_days ?? "30"
+                                ),
                             }));
                         }
                     } catch {
@@ -445,6 +451,8 @@ function CompanyProfileSettings() {
                         paye_reference: (updatedData.paye_reference || "").trim() || null,
                         uif_reference: (updatedData.uif_reference || "").trim() || null,
                         sdl_reference: (updatedData.sdl_reference || "").trim() || null,
+                        trading_name: (updatedData.trading_name || "").trim() || null,
+                        people_reminder_lead_days: updatedData.people_reminder_lead_days,
                     },
                     ...(type ? { business_type: type } : {}),
                 }).catch(() => {});
@@ -884,6 +892,33 @@ function CompanyProfileSettings() {
                             placeholder="Optional SDL reference"
                             className="h-11 rounded-lg"
                         />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="trading_name" className="text-sm font-medium text-foreground">
+                            Trading name
+                        </Label>
+                        <Input
+                            id="trading_name"
+                            value={formData.trading_name}
+                            onChange={(e) => handleInputChange("trading_name", e.target.value)}
+                            placeholder="Optional — shown as “Trading as” on payslips"
+                            className="h-11 rounded-lg"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="people_reminder_lead_days" className="text-sm font-medium text-foreground">
+                            Birthday &amp; anniversary reminder (days before)
+                        </Label>
+                        <Input
+                            id="people_reminder_lead_days"
+                            type="number"
+                            min="0"
+                            max="90"
+                            value={formData.people_reminder_lead_days}
+                            onChange={(e) => handleInputChange("people_reminder_lead_days", e.target.value)}
+                            className="h-11 rounded-lg"
+                        />
+                        <p className="text-xs text-muted-foreground">HR managers are notified this many days ahead, and again on the day. 0 = on the day only.</p>
                     </div>
                 </div>
             </SettingsCard>

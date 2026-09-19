@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 
 const VIEWS = [
   { id: "upcoming", label: "Next 30 days", days: 30 },
-  { id: "month", label: "This month", days: 45 },
+  { id: "month", label: "This month", days: 31 },
   { id: "extended", label: "Next 90 days", days: 90 },
 ];
 
@@ -85,6 +85,15 @@ export default function WorkforcePeopleCalendar() {
           ))}
         </div>
 
+        {data ? (
+          <p className="mb-4 text-xs text-muted-foreground">
+            HR managers get a reminder {data.reminder_lead_days ? `${data.reminder_lead_days} days before and ` : ""}on the day
+            (change the lead time in Settings → Employer payroll details).
+            {data.coverage && data.coverage.with_date_of_birth < data.coverage.employees
+              ? ` ${data.coverage.employees - data.coverage.with_date_of_birth} of ${data.coverage.employees} active employees have no date of birth on file.`
+              : ""}
+          </p>
+        ) : null}
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (

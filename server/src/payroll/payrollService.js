@@ -27,7 +27,22 @@ import { isPayrollParticipationActive } from "../../../shared/workforce/employee
 import { validatePayRunItem } from "../../../shared/payroll/payRunValidation.js";
 import { canPublishPayslip, displayPayslipStatus, publishedPayslipWrite } from "../../../shared/payroll/payslipStatus.js";
 import { buildEmployerSnapshot, mergeEmployerPayrollSettings, normalizeEmployerPayrollSettings } from "../../../shared/payroll/employerSnapshot.js";
-import { PAYROLL_REPORT_TYPES, buildPayrollReport } from "../../../shared/payroll/payrollReports.js";
+import { buildEmployeePayslipSnapshot } from "../../../shared/payroll/employeeSnapshot.js";
+import {
+  PAYROLL_REPORT_TYPES,
+  attachReportContext,
+  buildPayrollReport,
+  buildPayrollSummary,
+  filterReportItems,
+  payrollReportFilename,
+  payrollReportToCsv,
+} from "../../../shared/payroll/payrollReports.js";
+import {
+  RECONCILIATION_STATUS,
+  reconcilePayrollPayment,
+  salaryExpenseCandidates,
+  sumAmounts,
+} from "../../../shared/payroll/payrollReconciliation.js";
 
 const DEFAULT_COMPONENTS = [
   { kind: "earning", code: "ALLOWANCE", name: "Allowance", taxable: true, recurring: true },
@@ -584,6 +599,10 @@ function buildPayRunItemSnapshot(item, profile, over, result) {
       ...result.breakdown,
       profile_snapshot: {
         membership_id: profile.membership_id,
+        employee_number: profile.employee_number || item.employee_number || null,
+        department: profile.department || null,
+        job_title: profile.job_title || null,
+        employment_start_date: profile.employment_start_date || null,
         base_salary: profile.base_salary,
         pay_frequency: profile.pay_frequency,
         pay_type: profile.pay_type,
@@ -916,6 +935,35 @@ export async function validatePayRun(orgId, runId) {
   };
 }
 
+/**
+ * Employer chrome for payslips/reports: organizations row (legal identity,
+ * payroll refs) + the org owner's profile (logo / trading branding).
+ */
+async function loadEmployerBranding(orgId) {
+  let { data: orgRow, error } = await supabaseAdmin
+    .from("organizations")
+    .select("name, registration_number, company_email, phone, address, payroll_settings, owner_id, logo_url")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error && /logo_url/i.test(error.message || "")) {
+    ({ data: orgRow } = await supabaseAdmin
+      .from("organizations")
+      .select("name, registration_number, company_email, phone, address, payroll_settings, owner_id")
+      .eq("id", orgId)
+      .maybeSingle());
+  }
+  let ownerProfile = null;
+  if (orgRow?.owner_id) {
+    const { data } = await supabaseAdmin
+      .from("profiles")
+      .select("company_name, company_address, logo_url, currency")
+      .eq("id", orgRow.owner_id)
+      .maybeSingle();
+    ownerProfile = data || null;
+  }
+  return { orgRow: orgRow || null, ownerProfile };
+}
+
 export async function finalizePayRun(orgId, actorId, runId, origin = "") {
   const run = await getPayRun(orgId, runId);
   if (run.status !== "approved") {
@@ -939,12 +987,8 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
     throw err;
   }
 
-  const { data: orgRow } = await supabaseAdmin
-    .from("organizations")
-    .select("name, registration_number, company_email, phone, address, payroll_settings")
-    .eq("id", orgId)
-    .maybeSingle();
-  const employerSnapshot = buildEmployerSnapshot(orgRow || {});
+  const { orgRow, ownerProfile } = await loadEmployerBranding(orgId);
+  const employerSnapshot = buildEmployerSnapshot(orgRow || {}, ownerProfile);
 
   for (const item of run.items || []) {
     if (item.payslip_id) continue;
@@ -994,6 +1038,7 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
       calculation_breakdown: item.calculation,
       leave_summary: leaveSummary,
       employer_snapshot: employerSnapshot,
+      employee_snapshot: buildEmployeePayslipSnapshot(profile || {}),
       locked: true,
       finalized_at: new Date().toISOString(),
       created_by_id: actorId,
@@ -1001,7 +1046,7 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
     };
     const { data: payslip, error } = await supabaseAdmin.from("payslips").insert(payslipRow).select("id").maybeSingle();
     if (error) {
-      throwIfMissingWorkforceColumn(error, ["membership_id", "employer_snapshot"]);
+      throwIfMissingWorkforceColumn(error, ["membership_id", "employer_snapshot", "employee_snapshot"]);
       throw error;
     }
     await recordPayslipCreatedEvent({ orgId, payslipId: payslip.id });
@@ -1323,10 +1368,13 @@ export async function updateEmployerPayrollSettings(orgId, actorId, payload = {}
   if (Object.prototype.hasOwnProperty.call(payload, "registration_number")) {
     patch.registration_number = String(payload.registration_number || "").trim() || null;
   }
-  const hasRefPatch =
-    Object.prototype.hasOwnProperty.call(payload, "paye_reference") ||
-    Object.prototype.hasOwnProperty.call(payload, "uif_reference") ||
-    Object.prototype.hasOwnProperty.call(payload, "sdl_reference");
+  const hasRefPatch = [
+    "paye_reference",
+    "uif_reference",
+    "sdl_reference",
+    "trading_name",
+    "people_reminder_lead_days",
+  ].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   if (hasRefPatch) {
     patch.payroll_settings = mergeEmployerPayrollSettings(org?.payroll_settings, payload);
   }
@@ -1349,98 +1397,191 @@ export async function updateEmployerPayrollSettings(orgId, actorId, payload = {}
   return getEmployerPayrollSettings(orgId);
 }
 
+const REPORT_RUN_COLUMNS =
+  "id, period_label, period_start, period_end, pay_date, status, finalized_at, net_total, gross_total, deductions_total, employee_count, run_type, original_pay_run_id";
+const REPORT_ITEM_COLUMNS =
+  "id, pay_run_id, membership_id, employee_number, employee_name, status, gross_pay, net_pay, total_deductions, statutory_deductions, other_deductions, calculation, payslip_id";
+/** 20 years of monthly runs — the full Paidly payroll history for a company. */
+const REPORT_HISTORY_LIMIT = 240;
+
+function monthRange(month) {
+  const m = String(month || "").match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  const bounds = monthBounds(Number(m[1]), Number(m[2]));
+  return bounds?.start && bounds?.end ? { start: bounds.start, end: bounds.end } : null;
+}
+
+function labelForMonth(month) {
+  const m = String(month || "").match(/^(\d{4})-(\d{2})$/);
+  return m ? monthLabel(Number(m[1]), Number(m[2])) : month || null;
+}
+
+function isoDateOrNull(value) {
+  const s = String(value || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+async function listFinalizedRuns(orgId) {
+  const { data, error } = await supabaseAdmin
+    .from("pay_runs")
+    .select(REPORT_RUN_COLUMNS)
+    .eq("org_id", orgId)
+    .not("finalized_at", "is", null)
+    .order("period_start", { ascending: false })
+    .limit(REPORT_HISTORY_LIMIT);
+  if (error) throw error;
+  return data || [];
+}
+
+async function loadRunItems(orgId, runIds) {
+  if (!runIds.length) return [];
+  const { data, error } = await supabaseAdmin
+    .from("pay_run_items")
+    .select(REPORT_ITEM_COLUMNS)
+    .in("pay_run_id", runIds)
+    .eq("org_id", orgId);
+  if (error) throw error;
+  return data || [];
+}
+
+async function loadPayslipContext(orgId, payslipIds) {
+  const byId = new Map();
+  const ids = [...new Set(payslipIds.filter(Boolean).map(String))];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await supabaseAdmin
+      .from("payslips")
+      .select("id, payslip_number, status, department, position")
+      .eq("org_id", orgId)
+      .in("id", ids.slice(i, i + 200));
+    for (const row of data || []) byId.set(String(row.id), row);
+  }
+  return byId;
+}
+
+/**
+ * Select finalized runs for a report query. Historical: never recalculates.
+ * @param {Array<Record<string, any>>} periods finalized runs, newest first
+ * @param {{ pay_run_id?: string|null, month?: string|null, period_start?: string|null, period_end?: string|null, allHistory?: boolean }} q
+ */
+function selectReportRuns(periods, q) {
+  const runId = parseUuid(q.pay_run_id);
+  if (runId) return periods.filter((r) => r.id === runId);
+  const month = monthRange(q.month);
+  if (month) {
+    return periods.filter((r) => {
+      const anchor = String(r.pay_date || r.period_end || "").slice(0, 10);
+      const start = String(r.period_start || "").slice(0, 10);
+      return (start >= month.start && start <= month.end) || (anchor >= month.start && anchor <= month.end);
+    });
+  }
+  const from = isoDateOrNull(q.period_start);
+  const to = isoDateOrNull(q.period_end);
+  if (from || to) {
+    return periods.filter((r) => {
+      if (from && String(r.period_end || "") < from) return false;
+      if (to && String(r.period_start || "") > to) return false;
+      return true;
+    });
+  }
+  if (q.allHistory) return periods;
+  return periods.slice(0, 1);
+}
+
+function describeReportPeriod(runList, q) {
+  if (runList.length === 1) return runList[0].period_label || `${runList[0].period_start} – ${runList[0].period_end}`;
+  if (q.month) return labelForMonth(q.month);
+  if (!runList.length) return null;
+  const oldest = runList[runList.length - 1];
+  const newest = runList[0];
+  return `${oldest.period_label || oldest.period_start} – ${newest.period_label || newest.period_end}`;
+}
+
+function companyForReports(orgRow, ownerProfile) {
+  const snap = buildEmployerSnapshot(orgRow || {}, ownerProfile);
+  return {
+    company_name: snap.company_name,
+    trading_name: snap.trading_name,
+    registration_number: snap.registration_number,
+    paye_reference: snap.paye_reference,
+    uif_reference: snap.uif_reference,
+    sdl_reference: snap.sdl_reference,
+    currency: ownerProfile?.currency || "ZAR",
+  };
+}
+
 /**
  * Compliance reports over finalized pay runs — aggregates stored item snapshots.
+ * Company scope is the caller's membership org (server-resolved, never from the client).
+ *
  * @param {string} orgId
- * @param {{ type?: string, pay_run_id?: string, period_start?: string, period_end?: string }} query
+ * @param {{ type?: string, pay_run_id?: string, month?: string, period_start?: string, period_end?: string, department?: string, membership_id?: string, format?: string }} query
+ * @param {{ actorId?: string|null }} [actor]
  */
-export async function getPayrollReports(orgId, query = {}) {
+export async function getPayrollReports(orgId, query = {}, actor = {}) {
   const type = String(query.type || "summary").toLowerCase();
   if (!PAYROLL_REPORT_TYPES.includes(type)) {
     const err = new Error(`Report type must be one of: ${PAYROLL_REPORT_TYPES.join(", ")}`);
     err.status = 400;
     throw err;
   }
-
-  const payRunId = parseUuid(query.pay_run_id);
-  let runsQuery = supabaseAdmin
-    .from("pay_runs")
-    .select("id, period_label, period_start, period_end, pay_date, status, finalized_at, net_total, gross_total, run_type")
-    .eq("org_id", orgId)
-    .not("finalized_at", "is", null)
-    .order("period_start", { ascending: false })
-    .limit(120);
-
-  if (payRunId) {
-    runsQuery = runsQuery.eq("id", payRunId);
-  } else if (query.period_start && query.period_end) {
-    runsQuery = runsQuery
-      .gte("period_start", String(query.period_start).slice(0, 10))
-      .lte("period_end", String(query.period_end).slice(0, 10));
-  } else {
-    // Default: latest finalized run only (period picker supplies explicit ids).
-    runsQuery = runsQuery.limit(1);
+  const membershipId = parseUuid(query.membership_id);
+  if (type === "employee_history" && !membershipId) {
+    const err = new Error("Select an employee for the payroll history report.");
+    err.status = 400;
+    throw err;
   }
+  const format = String(query.format || "").toLowerCase() === "csv" ? "csv" : "json";
+  const department = String(query.department || "").trim().slice(0, 120) || null;
+  const month = monthRange(query.month) ? String(query.month) : null;
 
-  const { data: runs, error: runsErr } = await runsQuery;
-  if (runsErr) throw runsErr;
-  const runList = runs || [];
+  const periods = await listFinalizedRuns(orgId);
+  const runList = selectReportRuns(periods, {
+    pay_run_id: query.pay_run_id,
+    month,
+    period_start: query.period_start,
+    period_end: query.period_end,
+    allHistory: type === "employee_history",
+  });
 
-  const periods = (
-    await supabaseAdmin
-      .from("pay_runs")
-      .select("id, period_label, period_start, period_end, pay_date, status, finalized_at, net_total, run_type")
-      .eq("org_id", orgId)
-      .not("finalized_at", "is", null)
-      .order("period_start", { ascending: false })
-      .limit(120)
-  ).data || [];
+  const runsById = new Map(runList.map((r) => [String(r.id), r]));
+  const rawItems = await loadRunItems(orgId, runList.map((r) => r.id));
+  const payslipsById = await loadPayslipContext(orgId, rawItems.map((i) => i.payslip_id));
+  const contextual = attachReportContext(rawItems, { runsById, payslipsById });
+  const items = filterReportItems(contextual, { department, membership_id: membershipId });
 
-  if (!runList.length) {
-    return {
-      type,
-      period: null,
-      pay_runs: [],
-      periods,
-      report: buildPayrollReport(type, []),
-    };
-  }
-
-  const runIds = runList.map((r) => r.id);
-  const { data: items, error: itemsErr } = await supabaseAdmin
-    .from("pay_run_items")
-    .select(
-      "id, pay_run_id, membership_id, employee_number, employee_name, gross_pay, net_pay, total_deductions, statutory_deductions, other_deductions"
-    )
-    .in("pay_run_id", runIds)
-    .eq("org_id", orgId);
-  if (itemsErr) {
-    // Some deployments may not have org_id on items — retry without it.
-    if (/org_id|schema cache|column/i.test(itemsErr.message || "")) {
-      const retry = await supabaseAdmin
-        .from("pay_run_items")
-        .select(
-          "id, pay_run_id, membership_id, employee_number, employee_name, gross_pay, net_pay, total_deductions, statutory_deductions, other_deductions"
-        )
-        .in("pay_run_id", runIds);
-      if (retry.error) throw retry.error;
-      return assemblePayrollReportResponse(type, runList, periods, retry.data || []);
+  const departments = [...new Set(contextual.map((i) => i.department).filter(Boolean))].sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { sensitivity: "base" })
+  );
+  const employeeMap = new Map();
+  for (const item of contextual) {
+    if (item.membership_id && !employeeMap.has(item.membership_id)) {
+      employeeMap.set(item.membership_id, {
+        membership_id: item.membership_id,
+        employee_name: item.employee_name,
+        employee_number: item.employee_number,
+      });
     }
-    throw itemsErr;
   }
 
-  return assemblePayrollReportResponse(type, runList, periods, items || []);
-}
-
-function assemblePayrollReportResponse(type, runList, periods, items) {
+  const report = buildPayrollReport(type, items);
+  const { orgRow, ownerProfile } = await loadEmployerBranding(orgId);
+  const company = companyForReports(orgRow, ownerProfile);
+  const periodLabel = describeReportPeriod(runList, { month });
+  const generatedAt = new Date().toISOString();
   const primary = runList.length === 1 ? runList[0] : null;
-  const periodLabel =
-    primary?.period_label ||
-    (runList.length > 1
-      ? `${runList[runList.length - 1]?.period_label || runList[runList.length - 1]?.period_start} – ${runList[0]?.period_label || runList[0]?.period_end}`
-      : null);
-  return {
+
+  const response = {
     type,
+    generated_at: generatedAt,
+    company,
+    filters: {
+      pay_run_id: primary?.id || null,
+      month,
+      period_start: isoDateOrNull(query.period_start),
+      period_end: isoDateOrNull(query.period_end),
+      department,
+      membership_id: membershipId,
+    },
     period: primary
       ? {
           pay_run_id: primary.id,
@@ -1469,12 +1610,398 @@ function assemblePayrollReportResponse(type, runList, periods, items) {
       period_label: r.period_label,
       period_start: r.period_start,
       period_end: r.period_end,
+      pay_date: r.pay_date,
       status: r.status,
       net_total: r.net_total,
       run_type: r.run_type,
     })),
-    periods,
-    report: buildPayrollReport(type, items),
+    periods: periods.map((r) => ({
+      id: r.id,
+      period_label: r.period_label,
+      period_start: r.period_start,
+      period_end: r.period_end,
+      pay_date: r.pay_date,
+      status: r.status,
+      finalized_at: r.finalized_at,
+      net_total: r.net_total,
+      run_type: r.run_type,
+    })),
+    departments,
+    employees: [...employeeMap.values()].sort((a, b) =>
+      String(a.employee_name).localeCompare(String(b.employee_name), undefined, { sensitivity: "base" })
+    ),
+    report,
+  };
+
+  // Net Pay Register: the collective total must match the locked run header.
+  if (type === "net_pay" && primary && !department && !membershipId) {
+    response.integrity = {
+      run_net_total: money(primary.net_total),
+      register_net_total: report.totals.net_pay,
+      matches: Math.abs(money(primary.net_total) - report.totals.net_pay) < 0.005,
+    };
+    response.reconciliation = await getPayRunReconciliation(orgId, primary.id);
+  }
+
+  if (format === "csv") {
+    response.export = {
+      filename: payrollReportFilename(type, periodLabel),
+      content_type: "text/csv;charset=utf-8",
+      csv: payrollReportToCsv(report, {
+        companyName: company.trading_name ? `${company.company_name} t/a ${company.trading_name}` : company.company_name,
+        registrationNumber: company.registration_number,
+        payeReference: company.paye_reference,
+        uifReference: company.uif_reference,
+        periodLabel,
+        generatedAt,
+        currency: company.currency,
+        filters: {
+          Department: department,
+          Employee: membershipId ? employeeMap.get(membershipId)?.employee_name || null : null,
+        },
+      }),
+    };
+  }
+
+  await writePayrollAudit({
+    orgId,
+    actorId: actor.actorId || null,
+    action: format === "csv" ? "PAYROLL_REPORT_EXPORTED" : "PAYROLL_REPORT_GENERATED",
+    recordType: "pay_runs",
+    recordId: primary?.id || null,
+    // Report parameters only — no salaries or personal data in the audit trail.
+    metadata: {
+      type,
+      format,
+      pay_run_count: runList.length,
+      month,
+      department: department ? true : false,
+      employee_scoped: Boolean(membershipId),
+    },
+  });
+
+  return response;
+}
+
+// ── Payroll → bank reconciliation ───────────────────────────────────────────
+
+async function linkedExpenseIdsForOrg(orgId, exceptRunId = null) {
+  const { data } = await supabaseAdmin
+    .from("pay_runs")
+    .select("id, bank_payment_expense_ids")
+    .eq("org_id", orgId)
+    .not("finalized_at", "is", null)
+    .limit(REPORT_HISTORY_LIMIT);
+  const ids = new Set();
+  for (const row of data || []) {
+    if (exceptRunId && row.id === exceptRunId) continue;
+    for (const id of row.bank_payment_expense_ids || []) ids.add(String(id));
+  }
+  return ids;
+}
+
+/**
+ * Expected (locked net_total) vs actual bank salary payment for one run.
+ * @param {string} orgId
+ * @param {string} runId
+ */
+export async function getPayRunReconciliation(orgId, runId) {
+  const id = parseUuid(runId);
+  if (!id) {
+    const err = new Error("Pay run id is required.");
+    err.status = 400;
+    throw err;
+  }
+  const { data: run, error } = await supabaseAdmin
+    .from("pay_runs")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    throwIfMissingWorkforceColumn(error, ["bank_payment_amount", "bank_payment_expense_ids"]);
+    throw error;
+  }
+  if (!run) {
+    const err = new Error("Pay run not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  const { data: items } = await supabaseAdmin
+    .from("pay_run_items")
+    .select("net_pay")
+    .eq("pay_run_id", run.id)
+    .eq("org_id", orgId);
+  const itemsNet = sumAmounts((items || []).map((i) => ({ amount: i.net_pay })));
+
+  const linkedIds = (run.bank_payment_expense_ids || []).map(String);
+  let linked = [];
+  if (linkedIds.length) {
+    const { data } = await supabaseAdmin
+      .from("expenses")
+      .select("id, date, amount, description, vendor, category")
+      .eq("org_id", orgId)
+      .in("id", linkedIds);
+    linked = (data || []).map((row) => ({
+      id: row.id,
+      date: String(row.date || "").slice(0, 10),
+      amount: money(row.amount),
+      description: row.description || row.vendor || null,
+      vendor: row.vendor || null,
+    }));
+  }
+
+  let candidates = [];
+  if (run.finalized_at) {
+    const windowStart = String(run.period_start || "").slice(0, 10);
+    const { data: expenseRows } = await supabaseAdmin
+      .from("expenses")
+      .select("id, date, amount, description, vendor, category")
+      .eq("org_id", orgId)
+      .gte("date", windowStart)
+      .order("date", { ascending: true })
+      .limit(200);
+    const taken = await linkedExpenseIdsForOrg(orgId, run.id);
+    for (const idLinked of linkedIds) taken.add(idLinked);
+    candidates = salaryExpenseCandidates(expenseRows || [], run, { excludeIds: taken });
+  }
+
+  const recon = reconcilePayrollPayment({
+    expected: run.net_total,
+    actual: run.bank_payment_amount,
+    finalised: Boolean(run.finalized_at),
+  });
+
+  return {
+    pay_run_id: run.id,
+    period_label: run.period_label,
+    period_start: run.period_start,
+    period_end: run.period_end,
+    pay_date: run.pay_date,
+    run_status: run.status,
+    finalized_at: run.finalized_at,
+    employee_count: run.employee_count,
+    ...recon,
+    items_net_total: itemsNet,
+    totals_match: Math.abs(itemsNet - money(run.net_total)) < 0.005,
+    bank_payment_date: run.bank_payment_date || null,
+    bank_payment_reference: run.bank_payment_reference || null,
+    reconciled_at: run.bank_reconciled_at || null,
+    linked_expenses: linked,
+    candidate_expenses: candidates,
+  };
+}
+
+/**
+ * Record the actual salary payment for a finalized run (amount and/or matched
+ * Cash Flow expenses). Does not touch locked payroll amounts.
+ * @param {string} orgId
+ * @param {string} actorId
+ * @param {string} runId
+ * @param {{ amount?: number|string|null, payment_date?: string|null, reference?: string|null, expense_ids?: string[], clear?: boolean, mark_paid?: boolean }} body
+ */
+export async function recordPayRunBankPayment(orgId, actorId, runId, body = {}) {
+  const current = await getPayRunReconciliation(orgId, runId);
+  if (!current.finalized_at) {
+    const err = new Error("Finalize payroll before recording the bank salary payment.");
+    err.status = 409;
+    throw err;
+  }
+
+  let patch;
+  if (body.clear === true) {
+    patch = {
+      bank_payment_amount: null,
+      bank_payment_date: null,
+      bank_payment_reference: null,
+      bank_payment_expense_ids: [],
+      bank_reconciled_at: null,
+      bank_reconciled_by: null,
+    };
+  } else {
+    const requestedIds = Array.isArray(body.expense_ids) ? body.expense_ids.map(parseUuid).filter(Boolean) : [];
+    const expenseIds = [...new Set(requestedIds)].slice(0, 200);
+    let expenseTotal = null;
+    if (expenseIds.length) {
+      const { data: owned, error } = await supabaseAdmin
+        .from("expenses")
+        .select("id, amount")
+        .eq("org_id", orgId)
+        .in("id", expenseIds);
+      if (error) throw error;
+      if ((owned || []).length !== expenseIds.length) {
+        const err = new Error("One or more bank transactions are not in your company.");
+        err.status = 403;
+        throw err;
+      }
+      const taken = await linkedExpenseIdsForOrg(orgId, current.pay_run_id);
+      if (expenseIds.some((eid) => taken.has(eid))) {
+        const err = new Error("A selected bank transaction is already matched to another pay run.");
+        err.status = 409;
+        throw err;
+      }
+      expenseTotal = sumAmounts(owned);
+    }
+
+    const hasAmount = body.amount !== undefined && body.amount !== null && String(body.amount).trim() !== "";
+    const amount = hasAmount ? Number(body.amount) : expenseTotal;
+    if (amount == null || !Number.isFinite(amount) || amount < 0) {
+      const err = new Error("Enter the actual bank payment amount or select the matching bank transactions.");
+      err.status = 400;
+      throw err;
+    }
+    const paymentDate = isoDateOrNull(body.payment_date) || isoDateOrNull(current.bank_payment_date) || null;
+    const reference = String(body.reference ?? current.bank_payment_reference ?? "").trim().slice(0, 120) || null;
+    const recon = reconcilePayrollPayment({ expected: current.expected, actual: amount, finalised: true });
+    patch = {
+      bank_payment_amount: money(amount),
+      bank_payment_date: paymentDate,
+      bank_payment_reference: reference,
+      bank_payment_expense_ids: expenseIds,
+      bank_reconciled_at: recon.status === RECONCILIATION_STATUS.RECONCILED ? new Date().toISOString() : null,
+      bank_reconciled_by: recon.status === RECONCILIATION_STATUS.RECONCILED ? actorId || null : null,
+    };
+  }
+
+  const { error: upErr } = await supabaseAdmin
+    .from("pay_runs")
+    .update(patch)
+    .eq("id", current.pay_run_id)
+    .eq("org_id", orgId);
+  if (upErr) {
+    throwIfMissingWorkforceColumn(upErr, ["bank_payment_amount", "bank_payment_expense_ids"]);
+    throw upErr;
+  }
+
+  const next = await getPayRunReconciliation(orgId, current.pay_run_id);
+  await writePayrollAudit({
+    orgId,
+    actorId,
+    action: body.clear === true ? "PAY_RUN_BANK_PAYMENT_CLEARED" : "PAY_RUN_BANK_PAYMENT_RECORDED",
+    recordType: "pay_runs",
+    recordId: current.pay_run_id,
+    metadata: {
+      status: next.status,
+      difference: next.difference,
+      matched_transactions: (patch.bank_payment_expense_ids || []).length,
+    },
+  });
+
+  if (body.mark_paid === true && next.run_status !== "paid") {
+    await markPayRunPaid(orgId, actorId, current.pay_run_id);
+    return getPayRunReconciliation(orgId, current.pay_run_id);
+  }
+  return next;
+}
+
+// ── Dashboard: payroll's share of the company financial picture ─────────────
+
+/**
+ * Payroll metrics for the current Johannesburg calendar month, from finalized
+ * runs only. Expenses already matched to a pay run are reported separately so
+ * the dashboard never counts salaries twice.
+ * @param {string} orgId
+ */
+export async function getPayrollDashboard(orgId) {
+  const today = johannesburgYmd();
+  const bounds = monthBounds(today.year, today.month);
+  const month = `${today.year}-${String(today.month).padStart(2, "0")}`;
+  const periods = await listFinalizedRuns(orgId);
+  const monthRuns = selectReportRuns(periods, { month });
+  const items = await loadRunItems(orgId, monthRuns.map((r) => r.id));
+  const summary = buildPayrollSummary(items);
+
+  const { data: openRuns } = await supabaseAdmin
+    .from("pay_runs")
+    .select("id, period_label, period_start, period_end, status, employee_count, net_total")
+    .eq("org_id", orgId)
+    .is("finalized_at", null)
+    .neq("status", "cancelled")
+    .order("period_start", { ascending: false })
+    .limit(5);
+
+  let openRunWarnings = 0;
+  const openRun = (openRuns || [])[0] || null;
+  if (openRun) {
+    const { data: openItems } = await supabaseAdmin
+      .from("pay_run_items")
+      .select("warnings")
+      .eq("pay_run_id", openRun.id)
+      .eq("org_id", orgId);
+    openRunWarnings = (openItems || []).filter((i) => Array.isArray(i.warnings) && i.warnings.length).length;
+  }
+
+  const linkedIds = await linkedExpenseIdsForOrg(orgId);
+  const { data: expenseRows } = await supabaseAdmin
+    .from("expenses")
+    .select("id, amount, category")
+    .eq("org_id", orgId)
+    .gte("date", bounds.start)
+    .lte("date", bounds.end)
+    .limit(2000);
+  let operatingExpenses = 0;
+  let payrollMatchedExpenses = 0;
+  let unmatchedSalaryExpenses = 0;
+  for (const row of expenseRows || []) {
+    const amt = money(row.amount);
+    if (linkedIds.has(String(row.id))) {
+      payrollMatchedExpenses += amt;
+      continue;
+    }
+    if (String(row.category || "").toLowerCase() === "salary") unmatchedSalaryExpenses += amt;
+    operatingExpenses += amt;
+  }
+
+  const reconciliations = monthRuns.map((run) =>
+    reconcilePayrollPayment({ expected: run.net_total, actual: run.bank_payment_amount, finalised: true })
+  );
+
+  return {
+    month,
+    month_label: labelForMonth(month),
+    period: { start: bounds.start, end: bounds.end },
+    finalized_runs: monthRuns.map((r) => ({
+      id: r.id,
+      period_label: r.period_label,
+      status: r.status,
+      net_total: money(r.net_total),
+      run_type: r.run_type,
+    })),
+    gross_payroll: summary.gross_payroll,
+    net_payroll: summary.net_payroll,
+    paye: summary.paye,
+    uif_employee: summary.uif_employee,
+    uif_employer: summary.uif_employer,
+    uif_total: summary.uif_total,
+    sdl_employer: summary.sdl_employer,
+    employer_statutory: summary.employer_statutory,
+    total_employer_cost: summary.total_employer_cost,
+    employee_count: summary.employee_count,
+    open_run: openRun
+      ? {
+          id: openRun.id,
+          period_label: openRun.period_label,
+          status: openRun.status,
+          employee_count: openRun.employee_count,
+          warnings: openRunWarnings,
+        }
+      : null,
+    exceptions: openRunWarnings + reconciliations.filter((r) => r.status === RECONCILIATION_STATUS.VARIANCE).length,
+    reconciliation: {
+      expected: sumAmounts(reconciliations.map((r) => ({ amount: r.expected }))),
+      actual: reconciliations.every((r) => r.actual != null)
+        ? sumAmounts(reconciliations.map((r) => ({ amount: r.actual })))
+        : null,
+      reconciled: reconciliations.filter((r) => r.status === RECONCILIATION_STATUS.RECONCILED).length,
+      variance: reconciliations.filter((r) => r.status === RECONCILIATION_STATUS.VARIANCE).length,
+      awaiting: reconciliations.filter((r) => r.status === RECONCILIATION_STATUS.AWAITING_PAYMENT).length,
+    },
+    expenses: {
+      operating: money(operatingExpenses),
+      payroll_matched: money(payrollMatchedExpenses),
+      unmatched_salary: money(unmatchedSalaryExpenses),
+    },
   };
 }
 

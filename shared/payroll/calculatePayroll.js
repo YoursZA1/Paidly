@@ -26,6 +26,9 @@ export function applyStatutoryRule(rule, bases) {
   const type = String(rule?.calculation_type || "").toLowerCase();
   const value = rule?.value && typeof rule.value === "object" ? rule.value : {};
   const employeePortion = rule?.employee_portion !== false;
+  // Period remuneration the rule was applied to (e.g. UIF base) — kept for compliance reports.
+  // Bracket tax works on annualised income, so no period base is recorded for it.
+  const baseAmount = type === "tax_brackets" ? null : ROUND_MONEY(ruleBase(value, bases));
   if (!employeePortion) {
     const employerCost = computeRuleAmount(type, value, bases);
     return {
@@ -34,6 +37,7 @@ export function applyStatutoryRule(rule, bases) {
       amount: 0,
       employer_amount: ROUND_MONEY(employerCost),
       employee_portion: false,
+      base_amount: baseAmount,
     };
   }
   const amount = computeRuleAmount(type, value, bases);
@@ -43,16 +47,20 @@ export function applyStatutoryRule(rule, bases) {
     amount: ROUND_MONEY(amount),
     employer_amount: 0,
     employee_portion: true,
+    base_amount: baseAmount,
   };
 }
 
-function computeRuleAmount(type, value, bases) {
-  const gross = asNumber(bases.gross);
-  const taxable = asNumber(bases.taxableIncome);
-  const basic = asNumber(bases.basic);
+function ruleBase(value, bases) {
   const baseKey = String(value.base || "gross").toLowerCase();
-  const base =
-    baseKey === "taxable" ? taxable : baseKey === "basic" ? basic : gross;
+  if (baseKey === "taxable") return asNumber(bases.taxableIncome);
+  if (baseKey === "basic") return asNumber(bases.basic);
+  return asNumber(bases.gross);
+}
+
+function computeRuleAmount(type, value, bases) {
+  const taxable = asNumber(bases.taxableIncome);
+  const base = ruleBase(value, bases);
 
   if (type === "fixed") {
     return asNumber(value.amount);

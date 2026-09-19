@@ -38,6 +38,8 @@ export default function PayslipDocument({
   const otherDeductions = normalizeList(payslip?.other_deductions);
   const overtimePay = Number(payslip?.overtime_hours || 0) * Number(payslip?.overtime_rate || 0);
   const employer = resolvePayslipEmployerDisplay(payslip, user);
+  const employeeSnap =
+    payslip?.employee_snapshot && typeof payslip.employee_snapshot === "object" ? payslip.employee_snapshot : {};
   const hasEmployerRefs = Boolean(employer.registration_number || employer.paye_reference || employer.uif_reference || employer.email || employer.phone);
 
   return (
@@ -55,6 +57,9 @@ export default function PayslipDocument({
               <p className="text-xl font-bold text-slate-900">{valueOrDash(employer.company_name)}</p>
             )}
             <p className="mt-3 text-sm font-semibold text-slate-900">{valueOrDash(employer.company_name)}</p>
+            {employer.trading_name && employer.trading_name !== employer.company_name ? (
+              <p className="text-[12px] text-slate-600">Trading as {employer.trading_name}</p>
+            ) : null}
             <p className="mt-1 whitespace-pre-line text-[13px] leading-5 text-slate-600">
               {valueOrDash(employer.address)}
             </p>
@@ -98,6 +103,21 @@ export default function PayslipDocument({
           <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Employee ID:</span> {valueOrDash(payslip?.employee_id)}</p>
           <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Position:</span> {valueOrDash(payslip?.position)}</p>
           <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Department:</span> {valueOrDash(payslip?.department)}</p>
+          {employeeSnap.employment_start_date ? (
+            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Start date:</span> {employeeSnap.employment_start_date}</p>
+          ) : null}
+          {employeeSnap.tax_number ? (
+            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Tax number:</span> {employeeSnap.tax_number}</p>
+          ) : null}
+          {employeeSnap.id_number_masked || employeeSnap.passport_number_masked ? (
+            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">ID / passport:</span> {employeeSnap.id_number_masked || employeeSnap.passport_number_masked}</p>
+          ) : null}
+          {employeeSnap.uif_number ? (
+            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">UIF number:</span> {employeeSnap.uif_number}</p>
+          ) : null}
+          {employeeSnap.bank_account_masked ? (
+            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Paid to:</span> {[employeeSnap.bank_name, employeeSnap.bank_account_masked].filter(Boolean).join(" ")}</p>
+          ) : null}
           <p className="text-sm text-slate-700 sm:col-span-2"><span className="font-semibold text-slate-900">Pay Period:</span> {valueOrDash(payPeriodLabel)}</p>
         </div>
       </section>

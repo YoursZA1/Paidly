@@ -24,6 +24,9 @@ import {
   getPayrollReports,
   getEmployerPayrollSettings,
   updateEmployerPayrollSettings,
+  getPayRunReconciliation,
+  recordPayRunBankPayment,
+  getPayrollDashboard,
 } from "./payrollService.js";
 
 function originFromReq(req) {
@@ -169,13 +172,40 @@ export async function handlePayrollRoute(req, res, resolved) {
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
     const q = req.query || {};
     return handle(res, () =>
-      getPayrollReports(gate.membership.companyId, {
-        type: q.type,
-        pay_run_id: q.pay_run_id || q.payRunId,
-        period_start: q.period_start || q.periodStart,
-        period_end: q.period_end || q.periodEnd,
-      })
+      getPayrollReports(
+        gate.membership.companyId,
+        {
+          type: q.type,
+          pay_run_id: q.pay_run_id || q.payRunId,
+          month: q.month,
+          period_start: q.period_start || q.periodStart,
+          period_end: q.period_end || q.periodEnd,
+          department: q.department,
+          membership_id: q.membership_id || q.employee_id,
+          format: q.format,
+        },
+        { actorId: gate.user.id }
+      )
     );
+  }
+
+  if (route === "dashboard") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
+    return handle(res, () => getPayrollDashboard(gate.membership.companyId));
+  }
+
+  if (route === "run-reconciliation") {
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method === "GET") {
+      return handle(res, () => getPayRunReconciliation(gate.membership.companyId, id));
+    }
+    if (req.method === "POST" || req.method === "PUT") {
+      return handle(res, () => recordPayRunBankPayment(gate.membership.companyId, gate.user.id, id, body));
+    }
+    return jsonError(res, 405, "Method not allowed");
   }
 
   if (route === "employer-settings") {
@@ -277,6 +307,8 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "statutory") return { route: "statutory" };
   if (segs[0] === "reports") return { route: "reports" };
   if (segs[0] === "employer-settings") return { route: "employer-settings" };
+  if (segs[0] === "dashboard") return { route: "dashboard" };
+  if (segs[0] === "run-reconciliation") return { route: "run-reconciliation", id: qid || segs[1] };
   if (segs[0] === "me") return { route: "me" };
   if (segs[0] === "run-calculate") return { route: "run-calculate", id: qid || segs[1] };
   if (segs[0] === "run-submit") return { route: "run-submit", id: qid || segs[1] };
@@ -298,6 +330,7 @@ export function resolvePayrollRoute(req) {
   if (segs[0] === "runs" && segs[1] && segs[2] === "send") return { route: "run-send", id: segs[1] };
   if (segs[0] === "runs" && segs[1] && segs[2] === "refresh") return { route: "run-refresh", id: segs[1] };
   if (segs[0] === "runs" && segs[1] && segs[2] === "validate") return { route: "run-validate", id: segs[1] };
+  if (segs[0] === "runs" && segs[1] && segs[2] === "reconciliation") return { route: "run-reconciliation", id: segs[1] };
   if (segs[0] === "runs" && segs[1]) return { route: "run-by-id", id: segs[1] };
 
   if (segs[0] === "payslips" && segs[1] && segs[2] === "publish") return { route: "payslip-publish", id: segs[1] };

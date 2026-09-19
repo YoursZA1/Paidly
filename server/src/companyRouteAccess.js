@@ -148,6 +148,30 @@ export function membershipHasPermission(membership, permission) {
   return membershipGrantsPermission(membership, permission, companyRoleHasPermission);
 }
 
+/**
+ * Permission check for a raw `memberships` row (cron/fan-out code paths that do
+ * not go through loadCompanyMembership). The org owner is always an admin.
+ * @param {Record<string, any>} row
+ * @param {string} permission
+ * @param {{ ownerId?: string|null }} [opts]
+ */
+export function membershipRowHasPermission(row, permission, opts = {}) {
+  if (!row) return false;
+  const isOwner = Boolean(opts.ownerId && row.user_id && row.user_id === opts.ownerId);
+  const roleRaw = isOwner ? "owner" : row.role;
+  if (!roleRaw) return false;
+  return membershipHasPermission(
+    {
+      ...row,
+      companyRole: normalizeCompanyRole(roleRaw),
+      membershipRole: roleRaw,
+      jobFunction: normalizeJobFunction(row.job_function),
+      posRegisterId: row.pos_register_id || null,
+    },
+    permission
+  );
+}
+
 export function forbidUnlessPermission(res, membership, permission, message = "Forbidden — POS permission required") {
   if (membershipHasPermission(membership, permission)) return false;
   res.status(403).json({ error: message, code: "POS_FORBIDDEN", permission });

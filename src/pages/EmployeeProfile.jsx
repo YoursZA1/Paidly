@@ -45,6 +45,9 @@ export default function EmployeeProfile() {
   const [startDate, setStartDate] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [taxIds, setTaxIds] = useState({ tax_number: "", id_number: "", uif_number: "" });
+  const [banking, setBanking] = useState({ bank_name: "", account_number: "", account_type: "", branch_code: "" });
   const [savingManager, setSavingManager] = useState(false);
   const [savingEmployment, setSavingEmployment] = useState(false);
   const [savingPersonal, setSavingPersonal] = useState(false);
@@ -77,6 +80,22 @@ export default function EmployeeProfile() {
     setStartDate(next.employment_start_date || "");
     setFullName(next.full_name || next.label || "");
     setPhone(next.phone || "");
+    setDateOfBirth(next.date_of_birth || "");
+    if (next.tax_identifiers) {
+      setTaxIds({
+        tax_number: next.tax_identifiers.tax_number || "",
+        id_number: next.tax_identifiers.id_number || "",
+        uif_number: next.tax_identifiers.uif_number || "",
+      });
+    }
+    if (next.banking) {
+      setBanking({
+        bank_name: next.banking.bank_name || "",
+        account_number: next.banking.account_number || "",
+        account_type: next.banking.account_type || "",
+        branch_code: next.banking.branch_code || "",
+      });
+    }
     setPayType(next.pay_type || "monthly_salary");
     setPayFrequency(next.pay_frequency || "monthly");
     setBaseSalary(next.base_salary ?? "");
@@ -175,6 +194,7 @@ export default function EmployeeProfile() {
       const updated = await workforceApi.update(id, {
         full_name: fullName.trim() || null,
         phone: phone.trim() || null,
+        date_of_birth: dateOfBirth || null,
       });
       syncEmployee(updated);
       toast({ title: "Personal details updated" });
@@ -196,6 +216,24 @@ export default function EmployeeProfile() {
         pay_type: payType,
         pay_frequency: payFrequency,
       };
+      // Only send identifiers the viewer was allowed to load, so a save never blanks them.
+      if (employee?.tax_identifiers) {
+        payload.tax_identifiers = {
+          ...employee.tax_identifiers,
+          tax_number: taxIds.tax_number.trim() || null,
+          id_number: taxIds.id_number.trim() || null,
+          uif_number: taxIds.uif_number.trim() || null,
+        };
+      }
+      if (employee?.banking) {
+        payload.banking = {
+          ...employee.banking,
+          bank_name: banking.bank_name.trim() || null,
+          account_number: banking.account_number.replace(/\s+/g, "") || null,
+          account_type: banking.account_type.trim() || null,
+          branch_code: banking.branch_code.trim() || null,
+        };
+      }
       if (payType === "hourly") payload.hourly_rate = Number(hourlyRate) || 0;
       else if (payType === "daily") payload.daily_rate = Number(dailyRate) || 0;
       else payload.base_salary = Number(baseSalary) || 0;
@@ -325,6 +363,11 @@ export default function EmployeeProfile() {
                           <Label>Phone</Label>
                           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
                         </div>
+                        <div className="space-y-2">
+                          <Label>Date of birth</Label>
+                          <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
+                          <p className="text-xs text-muted-foreground">Used for People calendar birthday reminders.</p>
+                        </div>
                       </div>
                       <p>Email: {employee.email || employee.invited_email || "—"}</p>
                       <p>Employee number: {employee.employee_number || "—"}</p>
@@ -337,6 +380,7 @@ export default function EmployeeProfile() {
                       <p>Name: {employee.full_name || employee.label || "—"}</p>
                       <p>Email: {employee.email || employee.invited_email || "—"}</p>
                       <p>Phone: {employee.phone || "—"}</p>
+                      <p>Date of birth: {employee.date_of_birth || "—"}</p>
                       <p>Employee number: {employee.employee_number || "—"}</p>
                     </>
                   )}
@@ -440,6 +484,39 @@ export default function EmployeeProfile() {
                           </div>
                         )}
                       </div>
+                      {employee.tax_identifiers || employee.banking ? (
+                        <div className="space-y-3 border-t border-border pt-3">
+                          <p className="text-xs text-muted-foreground">
+                            Printed on future payslips (bank and ID numbers are masked). Finalised payslips keep the details they were issued with.
+                          </p>
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <div className="space-y-2">
+                              <Label>Income tax number</Label>
+                              <Input value={taxIds.tax_number} onChange={(e) => setTaxIds((p) => ({ ...p, tax_number: e.target.value }))} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>ID / passport number</Label>
+                              <Input value={taxIds.id_number} onChange={(e) => setTaxIds((p) => ({ ...p, id_number: e.target.value }))} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>UIF number</Label>
+                              <Input value={taxIds.uif_number} onChange={(e) => setTaxIds((p) => ({ ...p, uif_number: e.target.value }))} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Bank</Label>
+                              <Input value={banking.bank_name} onChange={(e) => setBanking((p) => ({ ...p, bank_name: e.target.value }))} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Account number</Label>
+                              <Input inputMode="numeric" value={banking.account_number} onChange={(e) => setBanking((p) => ({ ...p, account_number: e.target.value }))} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Branch code</Label>
+                              <Input value={banking.branch_code} onChange={(e) => setBanking((p) => ({ ...p, branch_code: e.target.value }))} />
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                       {!employee.pay_rate_complete ? (
                         <p className="text-sm text-amber-800">This employee is in the pay run with a zero rate. Enter a salary or rate before the next calculate.</p>
                       ) : null}

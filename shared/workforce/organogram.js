@@ -68,6 +68,7 @@ export function buildOrganogramTree(employees = []) {
     roots,
     unassigned,
     cycles,
+    departments: summarizeDepartments(byId),
     stats: {
       total: list.length,
       active: list.filter((r) => isWorkforceEmployeeActive(r)).length,
@@ -94,4 +95,32 @@ function wouldCreateCycle(byId, nodeId, managerId) {
     cursor = byId.get(cursor)?.manager_membership_id || null;
   }
   return false;
+}
+
+/**
+ * Department view of the same manager links: headcount, managers (people with
+ * direct reports) and leadership (active roots with reports). Derived — no store.
+ * @param {Map<string, Record<string, any>>} byId
+ */
+function summarizeDepartments(byId) {
+  const depts = new Map();
+  for (const node of byId.values()) {
+    if (!node.active) continue;
+    const name = node.department || "Unassigned";
+    if (!depts.has(name)) depts.set(name, { name, headcount: 0, managers: [], members: [] });
+    const d = depts.get(name);
+    d.headcount += 1;
+    const reports = node.children.filter((c) => c.active).length;
+    const entry = { id: node.id, full_name: node.full_name, job_title: node.job_title, direct_reports: reports };
+    if (reports > 0) d.managers.push(entry);
+    d.members.push(entry);
+  }
+  const byName = (a, b) => String(a.full_name).localeCompare(String(b.full_name), undefined, { sensitivity: "base" });
+  return [...depts.values()]
+    .map((d) => ({ ...d, managers: d.managers.sort(byName), members: d.members.sort(byName) }))
+    .sort((a, b) => {
+      if (a.name === "Unassigned") return 1;
+      if (b.name === "Unassigned") return -1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
 }

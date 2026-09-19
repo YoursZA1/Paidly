@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import { useAuth } from "@/contexts/AuthContext";
 import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
+import PayrollReconciliationPanel from "@/components/payroll/PayrollReconciliationPanel";
 
 const STATUS_LABEL = {
   draft: "Draft",
@@ -237,6 +238,17 @@ export default function PayRunPage() {
             <Card className="rounded-xl"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Deductions</p><p className="text-xl font-semibold tabular-nums">{totals.deductions}</p></CardContent></Card>
             <Card className="rounded-xl"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Net</p><p className="text-xl font-semibold tabular-nums">{totals.net}</p></CardContent></Card>
           </div>
+          {run?.finalized_at ? (
+            <div className="mb-6">
+              <PayrollReconciliationPanel
+                payRunId={run.id}
+                currency={currency}
+                onChange={(next) => {
+                  if (next?.run_status && next.run_status !== run.status) load();
+                }}
+              />
+            </div>
+          ) : null}
           <Card className="rounded-xl overflow-hidden">
             <CardHeader>
               <CardTitle className="text-base">Employees</CardTitle>

@@ -379,7 +379,12 @@ export async function getEmployee(orgId, employeeId, { actorUserId, actorMembers
     loadPeopleByUserIds(userIds),
     supabaseAdmin
       .from("payroll_profiles")
-      .select(PAYROLL_LIST_COLS)
+      // Tax / banking identifiers only for payroll managers or the employee themself.
+      .select(
+        canManagePayroll || (actorMembershipId && actorMembershipId === membership.id)
+          ? `${PAYROLL_LIST_COLS}, banking, tax_identifiers`
+          : PAYROLL_LIST_COLS
+      )
       .eq("org_id", orgId)
       .eq("membership_id", membership.id)
       .maybeSingle(),
@@ -695,7 +700,8 @@ export async function getWorkforceOrganogram(orgId, { managerScopeId = null } = 
   });
   const { buildOrganogramTree } = await import("../../../shared/workforce/organogram.js");
   const tree = buildOrganogramTree(listed.items || []);
-  return tree;
+  const { data: org } = await supabaseAdmin.from("organizations").select("name").eq("id", orgId).maybeSingle();
+  return { ...tree, company: { name: org?.name || null }, scoped: Boolean(managerScopeId) };
 }
 
 /**
@@ -712,10 +718,27 @@ export async function getPeopleCalendar(orgId, { managerScopeId = null, daysAhea
   });
   const { buildPeopleCalendarEvents } = await import("../../../shared/workforce/peopleCalendar.js");
   const { johannesburgYmd } = await import("../../../shared/payroll/dates.js");
-  return buildPeopleCalendarEvents(listed.items || [], {
+  const { normalizeEmployerPayrollSettings } = await import("../../../shared/payroll/employerSnapshot.js");
+  const { data: org } = await supabaseAdmin
+    .from("organizations")
+    .select("payroll_settings")
+    .eq("id", orgId)
+    .maybeSingle();
+  const window = Math.min(366, Math.max(1, Number(daysAhead) || 30));
+  const calendar = buildPeopleCalendarEvents(listed.items || [], {
     todayIso: johannesburgYmd().iso,
-    daysAhead: Number(daysAhead) || 30,
+    daysAhead: window,
     includeAge: true,
   });
+  const withDob = (listed.items || []).filter((row) => row.date_of_birth).length;
+  return {
+    ...calendar,
+    reminder_lead_days: normalizeEmployerPayrollSettings(org?.payroll_settings).people_reminder_lead_days,
+    coverage: {
+      employees: (listed.items || []).length,
+      with_date_of_birth: withDob,
+      with_start_date: (listed.items || []).filter((row) => row.employment_start_date).length,
+    },
+  };
 }
 

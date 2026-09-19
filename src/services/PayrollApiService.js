@@ -77,9 +77,22 @@ export const payrollApi = {
     if (params.pay_run_id) q.set("pay_run_id", String(params.pay_run_id));
     if (params.period_start) q.set("period_start", String(params.period_start).slice(0, 10));
     if (params.period_end) q.set("period_end", String(params.period_end).slice(0, 10));
+    if (params.month && /^\d{4}-\d{2}$/.test(String(params.month))) q.set("month", String(params.month));
+    if (params.department) q.set("department", String(params.department));
+    const membershipId = parseUuid(params.membership_id);
+    if (membershipId) q.set("membership_id", membershipId);
+    if (params.format === "csv") q.set("format", "csv");
     const qs = q.toString();
     return payrollRequest(`/api/payroll/reports${qs ? `?${qs}` : ""}`);
   },
+  dashboard: () => payrollRequest("/api/payroll/dashboard"),
+  reconciliation: (id) =>
+    payrollRequest(`/api/payroll/runs/${requireRecordUuid(id, "pay run id")}/reconciliation`),
+  recordBankPayment: (id, payload) =>
+    payrollRequest(`/api/payroll/runs/${requireRecordUuid(id, "pay run id")}/reconciliation`, {
+      method: "POST",
+      body: payload || {},
+    }),
   employerSettings: () => payrollRequest("/api/payroll/employer-settings"),
   saveEmployerSettings: (payload) =>
     payrollRequest("/api/payroll/employer-settings", { method: "POST", body: payload || {} }),

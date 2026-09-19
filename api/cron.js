@@ -447,6 +447,14 @@ export default async function handler(req, res) {
         adjustmentRuns = { error: err?.message || String(err) };
         payslipAccess = { error: err?.message || String(err) };
       }
+      // HR birthday / work-anniversary reminders ride the same daily job.
+      let peopleReminders = null;
+      try {
+        const { runPeopleReminders } = await import("../server/src/workforce/peopleReminderCron.js");
+        peopleReminders = await runPeopleReminders();
+      } catch (err) {
+        peopleReminders = { error: err?.message || String(err) };
+      }
       return res.status(200).json({
         ok: true,
         at: new Date().toISOString(),
@@ -455,6 +463,7 @@ export default async function handler(req, res) {
         workforceEvents,
         adjustmentRuns,
         payslipAccess,
+        peopleReminders,
       });
     }
     if (job === "subscription-dunning") {

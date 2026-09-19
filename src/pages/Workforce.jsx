@@ -54,10 +54,13 @@ function EmployeeWorkforcePortal() {
 function WorkforceOverview() {
   const { hasPermission, ctx } = useCompanyContext();
   const canPayroll = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
+  const canViewTeam = hasPermission(PERMISSIONS.VIEW_TEAM_MEMBERS);
   const experience = resolveWorkforceExperience(ctx);
   const currency = useAppStore((s) => s.userProfile)?.currency || "ZAR";
   const [summary, setSummary] = useState(null);
   const [payrollOverview, setPayrollOverview] = useState(null);
+  const [payrollMonth, setPayrollMonth] = useState(null);
+  const [people, setPeople] = useState(null);
   const links = getWorkforceNavChildren(hasPermission, { experience }).filter(
     (row) => row.id !== "nav-workforce-overview"
   );
@@ -67,81 +70,116 @@ function WorkforceOverview() {
       .summary()
       .then(setSummary)
       .catch(() => setSummary(null));
+    if (canViewTeam) {
+      workforceApi
+        .peopleCalendar({ daysAhead: 30 })
+        .then(setPeople)
+        .catch(() => setPeople(null));
+    }
     if (!canPayroll) {
       setPayrollOverview(null);
+      setPayrollMonth(null);
       return;
     }
     payrollApi
       .overview()
       .then(setPayrollOverview)
       .catch(() => setPayrollOverview(null));
-  }, [canPayroll]);
+    payrollApi
+      .dashboard()
+      .then(setPayrollMonth)
+      .catch(() => setPayrollMonth(null));
+  }, [canPayroll, canViewTeam]);
 
+  const money = (n) => formatCurrency(Number(n || 0), currency);
   const lastFinalized = (payrollOverview?.runs || []).find((row) => row.finalized_at);
   const pendingInvites = summary?.workforce?.pending_invites;
   const inviteCount =
     pendingInvites == null ? summary?.workforce?.pending_onboarding ?? 0 : pendingInvites;
+  const upcomingBirthdays = (people?.upcoming || []).filter((e) => e.kind === "birthday");
+  const upcomingAnniversaries = (people?.upcoming || []).filter((e) => e.kind === "work_anniversary");
+  const facets = summary?.facets || {};
+  const runStatus =
+    payrollOverview?.current_run?.status ||
+    (payrollOverview?.current_period_covered ? "finalized" : null);
+  const payrollExceptions =
+    Number(payrollMonth?.exceptions || 0) + Number(summary?.workforce?.incomplete_payroll || 0);
 
   return (
     <PageTemplate>
       <PageTemplate.Header>
         <PageHeader
           title="Workforce"
-          description="People, leave, and payroll for this organization — one membership ID."
+          description="People, payroll, and organisation for this company — one employee record per membership."
           icon={<Contact className="h-4 w-4" />}
         />
       </PageTemplate.Header>
       <PageTemplate.Body>
         <WorkforceSubnav />
         {summary ? (
-          <div className="mb-6 space-y-4">
-            <div>
-              <h2 className="mb-2 text-sm font-medium text-muted-foreground">Workforce</h2>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                <Kpi label="Total employees" value={summary.workforce?.total ?? 0} />
-                <Kpi label="Active" value={summary.workforce?.active ?? 0} />
-                <Kpi label="Inactive" value={summary.workforce?.inactive ?? 0} />
-                <Kpi label="Needs attention" value={summary.workforce?.needs_attention ?? 0} />
-                <Kpi label="Pending invitations" value={inviteCount} />
-                <Kpi label="New employees" value={summary.workforce?.new_employees ?? 0} />
-                <Kpi label="On leave today" value={summary.leave?.on_leave_today ?? 0} />
-                <Kpi label="Pending leave" value={summary.leave?.pending ?? 0} />
-                <Kpi label="Upcoming leave" value={summary.leave?.upcoming ?? 0} />
-                <Kpi label="Payslips issued" value={summary.payroll?.payslips_generated ?? 0} />
-              </div>
-            </div>
+          <div className="mb-6 space-y-5">
+            <Section title="People" link={canViewTeam ? createPageUrl("Workforce/people-calendar") : null} linkLabel="People calendar">
+              <Kpi label="Total employees" value={summary.workforce?.total ?? 0} />
+              <Kpi label="Active" value={summary.workforce?.active ?? 0} />
+              <Kpi label="New (30 days)" value={summary.workforce?.new_employees ?? 0} />
+              <Kpi label="Pending invitations" value={inviteCount} />
+              {canViewTeam ? (
+                <Kpi
+                  label="Birthdays (30 days)"
+                  value={upcomingBirthdays.length}
+                  hint={upcomingBirthdays[0] ? `Next: ${upcomingBirthdays[0].employee_name} · ${upcomingBirthdays[0].event_date}` : null}
+                />
+              ) : null}
+              {canViewTeam ? (
+                <Kpi
+                  label="Work anniversaries (30 days)"
+                  value={upcomingAnniversaries.length}
+                  hint={
+                    upcomingAnniversaries[0]
+                      ? `Next: ${upcomingAnniversaries[0].employee_name} · ${upcomingAnniversaries[0].years} yr`
+                      : null
+                  }
+                />
+              ) : null}
+              <Kpi label="On leave today" value={summary.leave?.on_leave_today ?? 0} />
+              <Kpi label="Pending leave" value={summary.leave?.pending ?? 0} />
+            </Section>
+
             {canPayroll && payrollOverview ? (
-              <div>
-                <h2 className="mb-2 text-sm font-medium text-muted-foreground">Payroll</h2>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <Kpi label="Pay period" value={payrollOverview.current_period?.label || "—"} />
-                  <Kpi
-                    label="Current run"
-                    value={
-                      payrollOverview.current_run?.status ||
-                      (payrollOverview.current_period_covered ? "Finalized" : "Not started")
-                    }
-                  />
-                  <Kpi
-                    label="Employees in run"
-                    value={
-                      payrollOverview.current_run?.employee_count ?? payrollOverview.employees ?? "—"
-                    }
-                  />
-                  <Kpi label="Gross payroll" value={formatCurrency(Number(payrollOverview.gross_payroll || 0), currency)} />
-                  <Kpi
-                    label="Deductions"
-                    value={formatCurrency(Number(payrollOverview.total_deductions || 0), currency)}
-                  />
-                  <Kpi label="Net payroll" value={formatCurrency(Number(payrollOverview.total_net || 0), currency)} />
-                  <Kpi label="Pending approval" value={payrollOverview.pending_payroll ?? 0} />
-                  <Kpi
-                    label="Last finalized"
-                    value={lastFinalized?.period_label || lastFinalized?.finalized_at?.slice(0, 10) || "—"}
-                  />
-                  <Kpi label="Period end" value={payrollOverview.current_period?.end || "—"} />
-                </div>
-              </div>
+              <Section title="Payroll" link={createPageUrl("Workforce/reports")} linkLabel="Payroll reports">
+                <Kpi
+                  label="Current payroll"
+                  value={runStatus ? String(runStatus).replace(/_/g, " ") : "Not started"}
+                  hint={payrollOverview.current_period?.label || null}
+                />
+                <Kpi
+                  label="Gross payroll"
+                  value={money(payrollMonth?.gross_payroll ?? payrollOverview.gross_payroll)}
+                  hint={payrollMonth?.finalized_runs?.length ? `Finalised · ${payrollMonth.month_label}` : "Current run"}
+                />
+                <Kpi label="Net payroll" value={money(payrollMonth?.net_payroll ?? payrollOverview.total_net)} />
+                <Kpi label="PAYE" value={money(payrollMonth?.paye)} />
+                <Kpi label="UIF (EE + ER)" value={money(payrollMonth?.uif_total)} />
+                <Kpi
+                  label="Payroll exceptions"
+                  value={payrollExceptions}
+                  hint={payrollExceptions ? "Warnings, variances or missing pay rates" : "Nothing to review"}
+                />
+                <Kpi label="Pending approval" value={payrollOverview.pending_payroll ?? 0} />
+                <Kpi
+                  label="Last finalised"
+                  value={lastFinalized?.period_label || lastFinalized?.finalized_at?.slice(0, 10) || "—"}
+                />
+              </Section>
+            ) : null}
+
+            {canViewTeam ? (
+              <Section title="Organisation" link={createPageUrl("Workforce/organisation")} linkLabel="Organogram">
+                <Kpi label="Departments" value={(facets.departments || []).length} />
+                <Kpi label="Managers" value={(facets.managers || []).length} />
+                <Kpi label="Needs attention" value={summary.workforce?.needs_attention ?? 0} />
+                <Kpi label="Awaiting reassignment" value={summary.workforce?.awaiting_reassignment ?? 0} />
+              </Section>
             ) : null}
           </div>
         ) : null}
@@ -169,12 +207,29 @@ function WorkforceOverview() {
   );
 }
 
-function Kpi({ label, value }) {
+function Section({ title, link, linkLabel, children }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-medium text-muted-foreground">{title}</h2>
+        {link ? (
+          <Link to={link} className="text-xs text-muted-foreground hover:text-foreground hover:underline">
+            {linkLabel}
+          </Link>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">{children}</div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, hint = null }) {
   return (
     <Card className="rounded-xl">
       <CardContent className="p-4">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-xl font-semibold tabular-nums">{value}</p>
+        <p className="truncate text-xl font-semibold capitalize tabular-nums">{value}</p>
+        {hint ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p> : null}
       </CardContent>
     </Card>
   );

@@ -115,7 +115,8 @@ export default function PayslipActions({
                         Download PDF
                     </DropdownMenuItem>
                     ) : null}
-                    {canManagePayroll ? (
+                    {/* Finalised (locked) payslips are payroll history — corrections go through an adjustment run. */}
+                    {canManagePayroll && !payslip.locked ? (
                     <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600 focus:text-red-700 focus:bg-red-50">

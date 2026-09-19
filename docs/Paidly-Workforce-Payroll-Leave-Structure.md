@@ -333,3 +333,23 @@ Open pay runs pick up new hires via `syncPayRunEmployees` (calculate + refresh).
 7. Statutory org rates are append-only versions. Calculate/leave overlap uses `FOR UPDATE` RPCs; math stays in JS.
 
 A new payable module needs a `source_kind` + settlement adapter on the Payment Engine. It does not need its own payment system. Payroll / payslips / leave is the failure mode that rule exists to prevent.
+
+---
+
+## HR + payroll reporting extension (2026-09-19)
+
+Extends the tables above; no new employee, payroll or banking tables. Migration: `20260919120000_payroll_reconciliation_and_immutability.sql`.
+
+| Concern | Source of truth | Where |
+| --- | --- | --- |
+| Employee → payslip | `memberships` (HR) → mirrored `payroll_profiles` (+ `tax_identifiers`, `banking`) | Frozen at finalise into `payslips.employee_snapshot` (masked ID/bank) and `pay_run_items.calculation.profile_snapshot` (department, job title) |
+| Employer on payslip | `organizations` + `payroll_settings` (PAYE/UIF/SDL refs, `trading_name`) + owner profile logo | Frozen into `payslips.employer_snapshot` |
+| UIF / PAYE / Net Pay / Summary / Employee history | Finalised `pay_run_items` only | `GET /api/payroll/reports?type=&pay_run_id=&month=&period_start=&period_end=&department=&membership_id=&format=csv` |
+| Bank reconciliation | Expected = locked `pay_runs.net_total`; actual = `pay_runs.bank_payment_*`, optionally matched to Cash Flow `expenses` (category `salary`, e.g. bank-statement import) | `GET/POST /api/payroll/runs/:id/reconciliation` |
+| Dashboard payroll | Finalised runs this month; expenses matched to a pay run excluded to avoid double counting | `GET /api/payroll/dashboard` → `PayrollDashboardCard` (cash view, not profit) |
+| Organogram | `memberships.manager_membership_id` + `department` | `/api/company/workforce-organogram` (adds `departments`, `company`) |
+| Birthdays / anniversaries | `memberships.date_of_birth`, `employment_start_date` | `/api/company/workforce-people-calendar`; reminders via `runPeopleReminders()` inside the daily `payment-reminders` cron, lead time `payroll_settings.people_reminder_lead_days` (default 30), idempotent `workforce_events` (`people.reminder`) |
+
+Immutability: `prevent_locked_payroll_mutation` now also locks statutory lines (PAYE/UIF), deductions, identity and snapshots on finalised items/locked payslips, and blocks deleting finalised payroll (FK cascades still allowed). Corrections remain adjustment runs.
+
+RBAC: all payroll reports, reconciliation and the dashboard card require `manage_payroll` server-side (owner/admin, manager + finance). HR (manager + hr) sees people/organisation; department managers see only their reports; employees only their own payslips via `/api/payroll/me`. Report views and exports write `PAYROLL_REPORT_GENERATED` / `PAYROLL_REPORT_EXPORTED` audit rows with parameters only (no salaries).
