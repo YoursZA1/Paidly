@@ -28,11 +28,13 @@ describe("admin platform directory helpers", () => {
     expect(percentChange(10, 0)).toBeNull();
   });
 
-  it("resolves a monthly comparison window in UTC", () => {
+  it("resolves a monthly comparison window on Africa/Johannesburg boundaries", () => {
     const now = new Date(Date.UTC(2026, 8, 8, 12));
     const window = resolvePeriodWindow("monthly", now);
-    expect(window.from.toISOString()).toBe("2026-09-01T00:00:00.000Z");
-    expect(window.prevFrom.toISOString()).toBe("2026-08-01T00:00:00.000Z");
+    // Admin months start at 00:00 SAST (= 22:00 UTC the previous day), so
+    // activity in the 00:00–02:00 SAST window is counted in the right month.
+    expect(window.from.toISOString()).toBe("2026-08-31T22:00:00.000Z");
+    expect(window.prevFrom.toISOString()).toBe("2026-07-31T22:00:00.000Z");
     expect(window.compareLabel).toBe("vs last month");
   });
 

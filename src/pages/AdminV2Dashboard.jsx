@@ -10,7 +10,7 @@ import ActivityFeed from "@/components/admin/ui/ActivityFeed";
 import AdminDataTable from "@/components/admin/ui/AdminDataTable";
 import ChartCard from "@/components/admin/ui/ChartCard";
 import { AdminErrorState, AdminLoadingState } from "@/components/admin/ui/AdminStates";
-import { greetingForHour } from "@/components/admin/ui/adminFormat";
+import { formatAdminZar, greetingForHour } from "@/components/admin/ui/adminFormat";
 import { cn } from "@/lib/utils";
 
 function healthLabel(status) {
@@ -29,10 +29,9 @@ export default function AdminV2Dashboard() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["admin-overview", period],
+    queryKey: ["admin-overview", period, null, null],
     queryFn: () => fetchAdminPlatformOverview(period),
     staleTime: 60000,
-    refetchInterval: 120000,
     refetchOnWindowFocus: false,
   });
 
@@ -44,8 +43,9 @@ export default function AdminV2Dashboard() {
   const health = overview?.health || {};
   const kpis = overview?.kpis || {};
   const usage = overview?.usage || {};
-  const growth = overview?.growth || {};
   const subscriptions = overview?.subscriptions || {};
+  const definitions = overview?.definitions || {};
+  const contracted = kpis.contractedMrr || {};
 
   return (
     <div>
@@ -56,15 +56,61 @@ export default function AdminV2Dashboard() {
           </h1>
           <p className="mt-1 text-sm text-slate-500">Platform overview for Paidly — not a customer account.</p>
         </div>
+        <Link to="/admin-v2/analytics" className="text-xs font-medium text-primary hover:underline">
+          Open analytics →
+        </Link>
       </div>
 
       {isError ? <AdminErrorState message={error?.message} onRetry={() => refetch()} /> : null}
       {isLoading && !overview ? <AdminLoadingState rows={3} className="mb-6" /> : null}
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <MetricCard title="Total users" value={kpis.totalUsers?.value ?? kpis.platformUsers?.value} change={kpis.totalUsers?.change} compareLabel={overview?.compareLabel} unavailable={kpis.totalUsers?.unavailable} unavailableReason={kpis.totalUsers?.unavailableReason} />
-        <MetricCard title="Active businesses" value={kpis.activeBusinesses?.value} change={kpis.activeBusinesses?.change} compareLabel="new this period" unavailable={kpis.activeBusinesses?.unavailable} unavailableReason={kpis.activeBusinesses?.unavailableReason} />
-        <MetricCard title="MRR" value={kpis.mrr?.value} isMoney unavailable={kpis.mrr?.unavailable} unavailableReason={kpis.mrr?.unavailableReason} />
+      {/* Who is on Paidly, and what is actually being earned. */}
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Total users"
+          value={kpis.totalUsers?.value}
+          change={kpis.totalUsers?.change}
+          compareLabel={overview?.compareLabel}
+          hint={definitions.totalUsers}
+          unavailable={kpis.totalUsers?.unavailable}
+          unavailableReason={kpis.totalUsers?.unavailableReason}
+        />
+        <MetricCard
+          title="Active businesses"
+          value={kpis.activeBusinesses?.value}
+          change={kpis.activeBusinesses?.change}
+          compareLabel={overview?.compareLabel}
+          hint={definitions.activeBusinesses}
+          footnote={
+            kpis.totalBusinesses?.value != null
+              ? `${kpis.totalBusinesses.value} businesses registered`
+              : null
+          }
+          unavailable={kpis.activeBusinesses?.unavailable}
+          unavailableReason={kpis.activeBusinesses?.unavailableReason}
+        />
+        <MetricCard
+          title="MRR"
+          value={kpis.mrr?.value}
+          isMoney
+          hint={definitions.mrr}
+          footnote={
+            contracted.value
+              ? `${formatAdminZar(contracted.value)} contracted${contracted.note ? ` · ${contracted.note}` : ""}`
+              : null
+          }
+          unavailable={kpis.mrr?.unavailable}
+          unavailableReason={kpis.mrr?.unavailableReason}
+        />
+        <MetricCard
+          title="Revenue this period"
+          value={overview?.revenue?.total}
+          isMoney
+          change={overview?.revenue?.change}
+          compareLabel={overview?.compareLabel}
+          hint={definitions.revenue}
+          sparkline={overview?.revenue?.sparkline}
+        />
       </div>
 
       <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -86,6 +132,8 @@ export default function AdminV2Dashboard() {
             <div className="flex justify-between"><dt className="text-muted-foreground">Failed SaaS payments</dt><dd className="tabular-nums">{health.failedPayments ?? "—"}</dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">Pending intents</dt><dd className="tabular-nums">{health.pendingPaymentIntents ?? "—"}</dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">Subscriptions at risk</dt><dd className="tabular-nums">{health.businessesAtRisk ?? "—"}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">Active subscriptions</dt><dd className="tabular-nums">{subscriptions.active ?? "—"}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">On trial</dt><dd className="tabular-nums">{subscriptions.trial ?? "—"}</dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">POS adoption</dt><dd className="tabular-nums">{usage.pos?.adoptionRate == null ? "—" : `${usage.pos.adoptionRate}%`}</dd></div>
           </dl>
           <Link to="/admin-v2/system-health" className="mt-4 inline-block text-xs font-medium text-primary hover:underline">
@@ -97,40 +145,30 @@ export default function AdminV2Dashboard() {
         </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <RevenueBreakdown
-            revenue={overview?.revenue}
-            period={period}
-            onPeriodChange={setPeriod}
-            compareLabel={overview?.compareLabel}
-          />
-        </div>
-        <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">User & business growth</h2>
-          </div>
-          <dl className="mt-4 space-y-2 text-sm">
-            <div className="flex justify-between"><dt className="text-muted-foreground">New users</dt><dd className="tabular-nums">{growth.newUsers ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">New businesses</dt><dd className="tabular-nums">{growth.newBusinesses ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">On trial</dt><dd className="tabular-nums">{subscriptions.trial ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Cancelled this period</dt><dd className="tabular-nums">{growth.cancelled ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Trial conversion</dt><dd className="text-right text-xs text-muted-foreground">{growth.trialConversionReason || "—"}</dd></div>
-          </dl>
-          <Link to="/admin-v2/reports/platform" className="mt-4 inline-block text-xs font-medium text-primary hover:underline">
-            Open platform analytics →
-          </Link>
-        </section>
+      <div className="mb-5">
+        <RevenueBreakdown
+          revenue={overview?.revenue}
+          period={period}
+          onPeriodChange={setPeriod}
+          compareLabel={overview?.compareLabel}
+        />
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard title="Active subscriptions" value={kpis.activeSubscriptions?.value} unavailable={kpis.activeSubscriptions?.unavailable} unavailableReason={kpis.activeSubscriptions?.unavailableReason} />
-        <MetricCard title="Platform usage" value={kpis.platformUsage?.value} change={kpis.platformUsage?.change} compareLabel={overview?.compareLabel} unavailable={kpis.platformUsage?.unavailable} unavailableReason={kpis.platformUsage?.unavailableReason} />
+      {/* Product usage — one row, no repeats of the same underlying count. */}
+      <div className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard title="Invoices created" value={usage.invoices?.period} change={usage.invoices?.change} compareLabel={overview?.compareLabel} />
         <MetricCard title="Quotes created" value={usage.quotes?.period} change={usage.quotes?.change} compareLabel={overview?.compareLabel} />
-        <MetricCard title="POS transactions" value={usage.pos?.period} />
-        <MetricCard title="SaaS payments" value={kpis.paymentsProcessed?.value} change={kpis.paymentsProcessed?.change} compareLabel={overview?.compareLabel} />
-        <MetricCard title="Workforce records" value={usage.workforce?.employees} />
+        <MetricCard title="POS transactions" value={usage.pos?.period} compareLabel={overview?.compareLabel} />
+        <MetricCard
+          title="Employees managed"
+          value={usage.workforce?.employees}
+          hint={definitions.employees}
+          footnote={
+            usage.workforce?.companiesWithEmployees != null
+              ? `across ${usage.workforce.companiesWithEmployees} businesses`
+              : null
+          }
+        />
       </div>
 
       <div className="mb-5">
@@ -173,7 +211,6 @@ export default function AdminV2Dashboard() {
             columns={[
               { key: "title", label: "Transaction" },
               { key: "business", label: "Business" },
-              { key: "type", label: "Type" },
               { key: "amount", label: "Amount", type: "money" },
               { key: "status", label: "Status", type: "status" },
               { key: "extra", label: "Method" },

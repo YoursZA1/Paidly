@@ -58,6 +58,15 @@ export function authEmailVerificationFields(authUser) {
   };
 }
 
+/** Live subscription = paid access right now (same rule as the entitlement layer). */
+function subscriptionIsLive(row) {
+  const status = String(row?.status || "").trim().toLowerCase();
+  if (status === "active") return true;
+  if (status === "trialing") return !row?.trial_ends_at || new Date(row.trial_ends_at).getTime() > Date.now();
+  if (status === "past_due") return Boolean(row?.grace_ends_at) && new Date(row.grace_ends_at).getTime() > Date.now();
+  return false;
+}
+
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
  * @param {number} limit
@@ -78,6 +87,26 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
   }
 
   const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+
+  // Billing truth is the subscriptions table. profiles.plan is a mirror that can lag
+  // (or be stale from an abandoned checkout), so admin must not present it as the plan.
+  const subscriptionMap = new Map();
+  if (userIds.length) {
+    const { data: subs } = await supabaseAdmin
+      .from("subscriptions")
+      .select("user_id, status, plan_slug, plan_family, plan, amount, trial_ends_at, grace_ends_at, updated_at")
+      .in("user_id", userIds)
+      .order("updated_at", { ascending: false });
+    for (const row of subs || []) {
+      const key = String(row.user_id);
+      const current = subscriptionMap.get(key);
+      const live = subscriptionIsLive(row);
+      // Prefer a live agreement, else the most recently updated row.
+      if (!current || (live && !current.live)) {
+        subscriptionMap.set(key, { ...row, live });
+      }
+    }
+  }
   const nowMs = Date.now();
   const ONLINE_WINDOW_MS = 2 * 60 * 1000;
   const users = authUsers.map((authUser) => {
@@ -91,7 +120,14 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
         authUser.user_metadata?.name ||
         ""
     ).trim();
-    const plan = profile?.subscription_plan || authUser.user_metadata?.plan || "free";
+    const subscription = subscriptionMap.get(String(authUser.id)) || null;
+    /** Plan shown in Admin comes from the subscription; the profile mirror is only a fallback label. */
+    const plan =
+      subscription?.plan_family ||
+      subscription?.plan_slug ||
+      subscription?.plan ||
+      profile?.subscription_plan ||
+      "free";
     const status = profile?.status ?? "active";
     const role = String(
       authUser.app_metadata?.role ||
@@ -127,7 +163,16 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
       status,
       company_name: profile?.company_name || "",
       company: profile?.company_name || "",
-      subscription_plan: profile?.subscription_plan,
+      subscription_plan: plan,
+      profile_plan: profile?.subscription_plan || profile?.plan || null,
+      subscription_status: subscription?.status || null,
+      subscription_is_live: Boolean(subscription?.live),
+      subscription_amount: subscription?.amount ?? null,
+      plan_matches_profile:
+        subscription == null
+          ? null
+          : String(plan || "").toLowerCase() ===
+            String(profile?.subscription_plan || profile?.plan || "").toLowerCase(),
       invoices_sent: Number(profile?.invoices_sent ?? profile?.invoices_count ?? 0),
       updated_at: profile?.updated_at || null,
       last_active_at: lastActiveAt,

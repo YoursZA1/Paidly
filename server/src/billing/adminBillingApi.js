@@ -4,6 +4,7 @@ import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
 import { isValidEmail, isValidUuid } from "../inputValidation.js";
 import { resolveCurrentCatalogAssignment, isLegacyPlanSlug } from "../subscriptionPlans.js";
 import { PAYMENT_HISTORY_STATUS } from "../../../shared/paymentHistoryStatuses.js";
+import { startOfBusinessDay, startOfBusinessMonth } from "../../../shared/admin/adminPlatformDirectory.js";
 import {
   SUBSCRIPTION_STATUS,
   coerceSubscriptionStatus,
@@ -186,8 +187,10 @@ async function requireBillingAdmin(req, res) {
     json(res, auth.status, { error: auth.error });
     return null;
   }
+  // Billing data is admin / management / sales only — the nav hid it from support,
+  // but the API accepted them.
   const denied = await assertCallerForAdminRoute(supabase, auth.user, {
-    allowInternalTeam: true,
+    allowBillingTeam: true,
   });
   if (denied) {
     json(res, denied.status, denied.body);
@@ -990,14 +993,6 @@ function amountToMonthly(amount, billingCycle) {
   return a;
 }
 
-function startOfUtcDay(d = new Date()) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
-}
-
-function startOfUtcMonth(d = new Date()) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0));
-}
-
 /**
  * Page through payment_history amount rows (append-only ledger).
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase
@@ -1044,8 +1039,9 @@ function sumAmountsInWindow(rows, { from, to }) {
  */
 export async function buildRevenueMetrics(supabase) {
   const now = new Date();
-  const todayStart = startOfUtcDay(now);
-  const monthStart = startOfUtcMonth(now);
+  // Africa/Johannesburg so "today" and "this month" match the dashboard.
+  const todayStart = startOfBusinessDay(now);
+  const monthStart = startOfBusinessMonth(now);
   const lookbackIso = new Date(monthStart.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
   let activeSubsResult = await supabase

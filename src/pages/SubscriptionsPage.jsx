@@ -23,11 +23,9 @@ import { fetchAdminSubscriptionOverview } from '@/api/fetchAdminSubscriptionOver
 import { fetchAdminSubscriptionsList } from '@/api/fetchAdminSubscriptionsList';
 import { updateAdminSubscription } from '@/api/mutateAdminSubscription';
 import SubscriptionFormDialog, {
-  mapProfilePlanToSubPlan,
 } from '@/components/subscriptions/SubscriptionFormDialog';
 import { pickPreferredSubscriptionRow, normalizePaidPackageKey } from '@/lib/subscriptionPlan';
 import { isLegacyPlanSlug } from '@/lib/plans.js';
-import { PLAN_DEFAULT_AMOUNT } from '@/data/paidlySubscriptionPlans';
 import { MARKETING_PLAN_ORDER, MARKETING_PLANS, formatMarketingZar } from '@shared/planMarketing.js';
 import TablePagination from '@/components/ui/TablePagination';
 
@@ -76,7 +74,8 @@ function buildSubscriptionRows(users, subscriptions) {
         _rowKey: sub.id,
       });
     } else {
-      const plan = mapProfilePlanToSubPlan(u.plan || u.subscription_plan);
+      // No subscription row: show that plainly. Do NOT infer a plan from the profile
+      // mirror or price it from a static table — subscriptions are the billing source of truth.
       rows.push({
         id: null,
         user_id: u.id,
@@ -85,9 +84,9 @@ function buildSubscriptionRows(users, subscriptions) {
         company_name: u.company_name || u.company || '',
         company_address: u.company_address || '',
         phone: u.phone || '',
-        plan,
-        amount: PLAN_DEFAULT_AMOUNT[plan] ?? 0,
-        billing_cycle: 'monthly',
+        plan: null,
+        amount: null,
+        billing_cycle: null,
         status: 'none',
         next_billing_date: null,
         _isSynthetic: true,
@@ -310,9 +309,11 @@ export default function SubscriptionsPage() {
               <div className="mt-2 flex items-center justify-between gap-2 text-sm">
                 <PlanBadge plan={sub.plan} />
                 <span className="font-medium tabular-nums">
-                  {sub._isSynthetic
-                    ? `R ${PLAN_DEFAULT_AMOUNT[sub.plan] ?? PLAN_DEFAULT_AMOUNT[normalizePaidPackageKey(sub.plan)] ?? 0}`
-                    : `R ${Number(sub.amount ?? 0).toFixed(2)}`}
+                  {sub._isSynthetic ? (
+                    <span className="text-muted-foreground">No subscription</span>
+                  ) : (
+                    `R ${Number(sub.amount ?? 0).toFixed(2)}`
+                  )}
                 </span>
               </div>
             </article>
@@ -355,10 +356,7 @@ export default function SubscriptionsPage() {
                   </td>
                   <td className="px-4 py-2.5 text-sm font-medium tabular-nums">
                     {sub._isSynthetic ? (
-                      <span className="text-muted-foreground">
-                        R {PLAN_DEFAULT_AMOUNT[sub.plan] ?? PLAN_DEFAULT_AMOUNT[normalizePaidPackageKey(sub.plan)] ?? 0}{' '}
-                        <span className="text-[10px]">(profile)</span>
-                      </span>
+                      <span className="text-muted-foreground">—</span>
                     ) : (
                       <>R {Number(sub.amount ?? 0).toFixed(2)}</>
                     )}

@@ -7,8 +7,8 @@ import {
   money,
   normalizeAdminPeriod,
   resolveDirectoryLimit,
-  startOfUtcDay,
-  startOfUtcMonth,
+  startOfBusinessDay,
+  startOfBusinessMonth,
 } from "../../shared/admin/adminPlatformDirectory.js";
 import {
   planFamilyLabel,
@@ -86,8 +86,8 @@ async function countInRange(supabase, table, column, from, to, apply = (q) => q)
 
 async function usageSnapshot(supabase, table, column = "created_at") {
   const now = new Date();
-  const today = startOfUtcDay(now);
-  const month = startOfUtcMonth(now);
+  const today = startOfBusinessDay(now);
+  const month = startOfBusinessMonth(now);
   const [total, todayCount, monthCount] = await Promise.all([
     countTable(supabase, table),
     countInRange(supabase, table, column, today, null),

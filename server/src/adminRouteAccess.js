@@ -18,6 +18,8 @@ export function dashboardRoleFromProfileRow(profile) {
 
 const INTERNAL_ADMIN_READ_ROLES = ["admin", "management", "support", "sales"];
 const TEAM_INVITE_PROFILE_ROLES = ["admin", "management"];
+/** Money surfaces (revenue, payments, subscriptions): support has no business reason to read these. */
+const BILLING_PROFILE_ROLES = ["admin", "management", "sales"];
 
 /**
  * Staff role from server-controlled JWT claims (`app_metadata`). `user_metadata` is
@@ -54,12 +56,14 @@ function adminBypassAllowed(email) {
  * @param {{
  *   allowInternalTeam?: boolean,
  *   allowTeamManagement?: boolean,
+ *   allowBillingTeam?: boolean,
  * }} opts
  * @returns {Promise<null | { status: number, body: { error: string } }>}
  */
 export async function assertCallerForAdminRoute(supabaseAdmin, user, opts = {}) {
   const allowInternalTeam = opts.allowInternalTeam === true;
   const allowTeamManagement = opts.allowTeamManagement === true;
+  const allowBillingTeam = opts.allowBillingTeam === true;
 
   const jwtRole = jwtKnownStaffRole(user);
 
@@ -67,7 +71,7 @@ export async function assertCallerForAdminRoute(supabaseAdmin, user, opts = {}) 
   if (adminBypassAllowed(user?.email)) return null;
 
   // Strict admin-only routes (e.g. clean-orphaned-users): JWT or profile must be admin.
-  if (!allowInternalTeam && !allowTeamManagement) {
+  if (!allowInternalTeam && !allowTeamManagement && !allowBillingTeam) {
     if (!user?.id) {
       return { status: 403, body: { error: "Admin access required" } };
     }
@@ -87,6 +91,7 @@ export async function assertCallerForAdminRoute(supabaseAdmin, user, opts = {}) 
 
   if (allowInternalTeam && jwtRole && INTERNAL_ADMIN_READ_ROLES.includes(jwtRole)) return null;
   if (allowTeamManagement && jwtRole && TEAM_INVITE_PROFILE_ROLES.includes(jwtRole)) return null;
+  if (allowBillingTeam && jwtRole && BILLING_PROFILE_ROLES.includes(jwtRole)) return null;
 
   const { data: profile } = await supabaseAdmin
     .from("profiles")
@@ -97,6 +102,7 @@ export async function assertCallerForAdminRoute(supabaseAdmin, user, opts = {}) 
   const pr = dashboardRoleFromProfileRow(profile);
   if (allowInternalTeam && INTERNAL_ADMIN_READ_ROLES.includes(pr)) return null;
   if (allowTeamManagement && TEAM_INVITE_PROFILE_ROLES.includes(pr)) return null;
+  if (allowBillingTeam && BILLING_PROFILE_ROLES.includes(pr)) return null;
 
   return { status: 403, body: { error: "Admin access required" } };
 }

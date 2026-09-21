@@ -1030,7 +1030,11 @@ app.get("/api/admin/overview", async (req, res) => {
     const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
     if (!adminUser) return;
     const { buildAdminPlatformOverview } = await import("./adminPlatformDirectory.js");
-    const overview = await buildAdminPlatformOverview(supabaseAdmin, { period: req.query?.period });
+    const overview = await buildAdminPlatformOverview(supabaseAdmin, {
+      period: req.query?.period,
+      seriesDays: req.query?.days,
+      seriesMonths: req.query?.months,
+    });
     return res.json({ ok: true, overview });
   } catch (err) {
     logAdminApi(req.method, req.path, 500, err?.message);

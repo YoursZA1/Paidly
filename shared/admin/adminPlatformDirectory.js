@@ -67,6 +67,43 @@ export function normalizeAdminPeriod(raw) {
   return ADMIN_REVENUE_PERIODS.includes(p) ? p : "monthly";
 }
 
+/**
+ * Paidly trades in South Africa, so admin "today" / "this month" must be
+ * Africa/Johannesburg boundaries — not UTC, which would put 00:00–02:00 SAST
+ * activity on the previous day and shift month totals.
+ */
+export const ADMIN_TIMEZONE = "Africa/Johannesburg";
+
+/** Y-M-D parts of `date` as seen in Johannesburg. */
+export function businessDateParts(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ADMIN_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return { year: Number(map.year), month: Number(map.month), day: Number(map.day) };
+}
+
+/** UTC instant of 00:00 Johannesburg on the given day (SAST is a fixed +02:00). */
+export function startOfBusinessDay(date = new Date()) {
+  const { year, month, day } = businessDateParts(date);
+  return new Date(Date.UTC(year, month - 1, day, -2, 0, 0, 0));
+}
+
+export function startOfBusinessMonth(date = new Date()) {
+  const { year, month } = businessDateParts(date);
+  return new Date(Date.UTC(year, month - 1, 1, -2, 0, 0, 0));
+}
+
+export function startOfBusinessYear(date = new Date()) {
+  const { year } = businessDateParts(date);
+  return new Date(Date.UTC(year, 0, 1, -2, 0, 0, 0));
+}
+
+/** @deprecated Use startOfBusinessDay — kept for callers that genuinely want UTC. */
 export function startOfUtcDay(date) {
   const d = date instanceof Date ? date : new Date(date);
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -96,7 +133,7 @@ export function resolvePeriodWindow(period, now = new Date()) {
   const normalized = normalizeAdminPeriod(period);
   const to = now;
   if (normalized === "daily") {
-    const from = startOfUtcDay(now);
+    const from = startOfBusinessDay(now);
     const prevFrom = addUtcDays(from, -1);
     return {
       period: normalized,
@@ -108,7 +145,7 @@ export function resolvePeriodWindow(period, now = new Date()) {
     };
   }
   if (normalized === "weekly") {
-    const from = addUtcDays(startOfUtcDay(now), -7);
+    const from = addUtcDays(startOfBusinessDay(now), -7);
     return {
       period: normalized,
       from,
@@ -119,8 +156,11 @@ export function resolvePeriodWindow(period, now = new Date()) {
     };
   }
   if (normalized === "yearly") {
-    const from = startOfUtcYear(now);
-    const prevFrom = new Date(Date.UTC(from.getUTCFullYear() - 1, 0, 1));
+    const { year } = businessDateParts(now);
+    const from = startOfBusinessYear(now);
+    // Derive the previous window from the SAST calendar — `from` is already shifted
+    // back two hours, so its UTC month/year would be one period early.
+    const prevFrom = new Date(Date.UTC(year - 1, 0, 1, -2, 0, 0, 0));
     return {
       period: normalized,
       from,
@@ -130,8 +170,9 @@ export function resolvePeriodWindow(period, now = new Date()) {
       compareLabel: "vs last year",
     };
   }
-  const from = startOfUtcMonth(now);
-  const prevFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - 1, 1));
+  const { year: y, month: m } = businessDateParts(now);
+  const from = startOfBusinessMonth(now);
+  const prevFrom = new Date(Date.UTC(y, m - 2, 1, -2, 0, 0, 0));
   return {
     period: normalized,
     from,

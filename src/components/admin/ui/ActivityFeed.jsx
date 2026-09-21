@@ -7,7 +7,7 @@ export default function ActivityFeed({
   isLoading = false,
   errorMessage = null,
   onRetry,
-  viewAllTo = "/admin-v2/activity",
+  viewAllTo = "/admin-v2/audit-log",
 }) {
   return (
     <section className="rounded-2xl border border-border/80 bg-card shadow-[0_10px_30px_rgba(15,23,42,0.04)]">

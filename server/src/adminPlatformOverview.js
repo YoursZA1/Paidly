@@ -15,7 +15,7 @@ import {
   money,
   percentChange,
   resolvePeriodWindow,
-  startOfUtcDay,
+  startOfBusinessDay,
   sumField,
 } from "../../shared/admin/adminPlatformDirectory.js";
 import {
@@ -26,6 +26,7 @@ import {
   metricSource,
   planFamilyLabel,
 } from "../../shared/admin/adminPlatformMetrics.js";
+import { buildAdminPlatformOverviewFromRpc } from "./adminPlatformMetrics.js";
 import {
   buildBillingReporting,
   buildRevenueMetrics,
@@ -94,10 +95,26 @@ function orgName(org) {
   return String(org?.name || org?.company_name || "Untitled business").trim();
 }
 
+/**
+ * Admin overview. Prefers the single-round-trip aggregate
+ * (`admin_platform_metrics`, migration 20260921120000); falls back to the legacy
+ * ~45-query builder below when that function is not installed.
+ */
 export async function buildAdminPlatformOverview(supabase, opts = {}) {
+  try {
+    const fast = await buildAdminPlatformOverviewFromRpc(supabase, opts);
+    if (fast) return fast;
+  } catch (e) {
+    console.warn("[admin-overview] aggregate path failed, using legacy queries:", e?.message || e);
+  }
+  return buildAdminPlatformOverviewLegacy(supabase, opts);
+}
+
+/** @deprecated Kept as a fallback until admin_platform_metrics is applied everywhere. */
+export async function buildAdminPlatformOverviewLegacy(supabase, opts = {}) {
   const window = resolvePeriodWindow(opts.period);
   const now = new Date();
-  const today = startOfUtcDay(now);
+  const today = startOfBusinessDay(now);
   const sparkFrom = addUtcDays(today, -6);
 
   const [

@@ -3,11 +3,18 @@ import { apiRequest } from "@/utils/apiRequest";
 import { getSessionAccessTokenOrHandleUnauthorized } from "@/lib/rpcSessionPolicy";
 import { buildAdminApiUrls } from "@/api/adminApiUrls";
 
-export async function fetchAdminPlatformOverview(period = "monthly") {
+/**
+ * @param {string} period daily | weekly | monthly | yearly (KPI window)
+ * @param {{ days?: number, months?: number }} [series] analytics series length
+ */
+export async function fetchAdminPlatformOverview(period = "monthly", series = {}) {
   const token = await getSessionAccessTokenOrHandleUnauthorized();
   if (!token) throw new Error("Sign in required");
 
-  const q = `period=${encodeURIComponent(String(period || "monthly"))}`;
+  const params = new URLSearchParams({ period: String(period || "monthly") });
+  if (series?.days) params.set("days", String(series.days));
+  if (series?.months) params.set("months", String(series.months));
+  const q = params.toString();
   let lastError = null;
   for (const url of buildAdminApiUrls("overview", q)) {
     let res;

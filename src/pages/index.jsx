@@ -93,12 +93,10 @@ const PayfastReturn = lazy(() => import("./PayfastReturn"));
 const PayfastCancel = lazy(() => import("./PayfastCancel"));
 const AdminLayout = lazy(() => import("@/components/layout/AdminLayout"));
 const AdminDirectoryPage = lazy(() => import("./admin/AdminDirectoryPage"));
-const AdminActivityPage = lazy(() => import("./admin/AdminActivityPage"));
+const AdminAnalyticsPage = lazy(() => import("./admin/AdminAnalyticsPage"));
 const AdminRevenuePage = lazy(() => import("./admin/AdminRevenuePage"));
 const AdminSystemHealthPage = lazy(() => import("./admin/AdminSystemHealthPage"));
 const AdminRolesPage = lazy(() => import("./admin/AdminRolesPage"));
-const AdminReportsPage = lazy(() => import("./admin/AdminReportsPage"));
-const AdminAutomationsPage = lazy(() => import("./admin/AdminAutomationsPage"));
 const AdminFailedPaymentsPage = lazy(() => import("./admin/AdminFailedPaymentsPage"));
 const AdminStaffUsersPage = lazy(() => import("./admin/AdminStaffUsersPage"));
 const NotFoundPage = lazy(() =>
@@ -402,9 +400,11 @@ const ADMIN_ROUTES = [
         element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminV2Dashboard /></AdminLayout></RequireAuth>,
     },
     {
-        path: "/admin-v2/activity",
-        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminActivityPage /></AdminLayout></RequireAuth>,
+        path: "/admin-v2/analytics",
+        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminAnalyticsPage /></AdminLayout></RequireAuth>,
     },
+    // Removed 2026-09-21: the Activity page repeated the dashboard feed; the audit log is the full history.
+    { path: "/admin-v2/activity", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/audit-log" replace /></RequireAuth> },
     {
         path: "/admin-v2/users",
         element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><UsersPage /></AdminLayout></RequireAuth>,
@@ -501,10 +501,8 @@ const ADMIN_ROUTES = [
         path: "/admin-v2/refunds",
         element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminDirectoryPage kind="refunds" /></AdminLayout></RequireAuth>,
     },
-    {
-        path: "/admin-v2/automations",
-        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminAutomationsPage /></AdminLayout></RequireAuth>,
-    },
+    // Removed 2026-09-21: Paidly has no automations registry to list; cron jobs surface in System Health.
+    { path: "/admin-v2/automations", element: <RequireAuth roles={["admin", "management"]}><Navigate to="/admin-v2/system-health" replace /></RequireAuth> },
     {
         path: "/admin-v2/templates",
         element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminDirectoryPage kind="templates" /></AdminLayout></RequireAuth>,
@@ -517,26 +515,13 @@ const ADMIN_ROUTES = [
         path: "/admin-v2/system-health",
         element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AdminSystemHealthPage /></AdminLayout></RequireAuth>,
     },
-    {
-        path: "/admin-v2/reports/business",
-        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminReportsPage report="business" /></AdminLayout></RequireAuth>,
-    },
-    {
-        path: "/admin-v2/reports/revenue",
-        element: <RequireAuth roles={["admin", "management", "sales"]}><AdminLayout><AdminReportsPage report="revenue" /></AdminLayout></RequireAuth>,
-    },
-    {
-        path: "/admin-v2/reports/documents",
-        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminReportsPage report="documents" /></AdminLayout></RequireAuth>,
-    },
-    {
-        path: "/admin-v2/reports/workforce",
-        element: <RequireAuth roles={["admin", "management", "sales", "support"]}><AdminLayout><AdminReportsPage report="workforce" /></AdminLayout></RequireAuth>,
-    },
-    {
-        path: "/admin-v2/reports/platform",
-        element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AdminReportsPage report="platform" /></AdminLayout></RequireAuth>,
-    },
+    // Removed 2026-09-21: the five report pages were four KPI cards each from the same
+    // overview query. Analytics now carries the charts, filters and definitions.
+    { path: "/admin-v2/reports/business", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/analytics" replace /></RequireAuth> },
+    { path: "/admin-v2/reports/revenue", element: <RequireAuth roles={["admin", "management", "sales"]}><Navigate to="/admin-v2/revenue" replace /></RequireAuth> },
+    { path: "/admin-v2/reports/documents", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/analytics" replace /></RequireAuth> },
+    { path: "/admin-v2/reports/workforce", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/analytics" replace /></RequireAuth> },
+    { path: "/admin-v2/reports/platform", element: <RequireAuth roles={["admin", "management", "sales", "support"]}><Navigate to="/admin-v2/analytics" replace /></RequireAuth> },
     {
         path: "/admin-v2/admin-users",
         element: <RequireAuth roles={["admin", "management"]}><AdminLayout><AdminStaffUsersPage /></AdminLayout></RequireAuth>,

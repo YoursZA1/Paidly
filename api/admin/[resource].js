@@ -888,9 +888,17 @@ export default async function handler(req, res) {
     const { data: authData, error: authErr } = await supabase.auth.getUser(token);
     if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Invalid or expired token" });
 
+    // Money surfaces stay admin / management / sales. Support keeps operational reads.
+    const BILLING_RESOURCES = new Set(["revenue", "payments", "failed-payments", "subscriptions"]);
+    const BILLING_DIRECTORY_KINDS = new Set(["payments", "transactions", "refunds", "payment-intents", "plans"]);
+    const isBillingRead =
+      BILLING_RESOURCES.has(resource) ||
+      (resource === "directory" && BILLING_DIRECTORY_KINDS.has(String(req.query?.kind || "").trim().toLowerCase()));
     const authOpts = resource === "settings"
       ? { allowTeamManagement: true }
-      : { allowInternalTeam: true };
+      : isBillingRead
+        ? { allowBillingTeam: true }
+        : { allowInternalTeam: true };
     const deny = await assertCallerForAdminRoute(supabase, authData.user, authOpts);
     if (deny) return res.status(deny.status).json(deny.body);
 
@@ -977,6 +985,8 @@ export default async function handler(req, res) {
       try {
         const overview = await buildAdminPlatformOverview(supabase, {
           period: req.query?.period,
+          seriesDays: req.query?.days,
+          seriesMonths: req.query?.months,
         });
         return res.status(200).json({ ok: true, overview });
       } catch (e) {
