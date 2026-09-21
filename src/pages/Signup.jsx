@@ -540,9 +540,10 @@ export default function Signup() {
       }
 
       const sessionWrapAfterLogin = await SupabaseAuthService.getSession().catch(() => null);
-      const profileUserId = sessionWrapAfterLogin?.user?.id || createdUserId;
+      // profiles RLS only accepts writes for auth.uid(); createdUserId without a session would be rejected.
+      const profileUserId = sessionWrapAfterLogin?.user?.id;
       if (!profileUserId) {
-        throw new Error("Could not resolve signed-in user id for profile persistence.");
+        throw new Error("Please sign in with your verified account to finish setup.");
       }
       await persistSignupProfilePlan({
         userId: profileUserId,

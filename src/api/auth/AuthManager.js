@@ -522,9 +522,9 @@ export class AuthManager {
     }
 
     const { data: sessionData } = await getSessionDataForProfileWrite(this.user);
-    // Same fallback as me(): avoid skipping DB writes when getSession is slow/empty but we already have the auth id.
-    const rawAuth =
-      sessionData?.session?.user?.id ?? this.user?.supabase_id ?? this.user?.id ?? null;
+    // Only the live session's id: without a JWT the write goes out as anon and RLS rejects it
+    // ("new row violates row-level security policy for table profiles").
+    const rawAuth = sessionData?.session?.user?.id ?? null;
     const authUserId = isSupabaseAuthUuid(rawAuth) ? rawAuth : null;
 
     // Keep id as auth user id when available so all consumers get the real user id
@@ -549,7 +549,17 @@ export class AuthManager {
     this.saveUserToStorage();
 
     // Persist to Supabase profiles table (per-user row keyed by auth user id)
-    if (!authUserId) {
+    // The session store can outlive the Supabase client's token (tab-only storage, sign-out races),
+    // so confirm the client will actually send this user's JWT before writing.
+    let clientSessionUserId = null;
+    try {
+      const { data: live } = await retryOnAbort(() => supabase.auth.getSession(), 3, 300);
+      clientSessionUserId = live?.session?.user?.id ?? null;
+    } catch (e) {
+      if (!isAbortError(e)) throw e;
+      clientSessionUserId = authUserId; // lock contention only; the request itself will wait for the token
+    }
+    if (!authUserId || clientSessionUserId !== authUserId) {
       throw new Error("Not signed in — cannot save profile. Sign in again and retry.");
     }
 
