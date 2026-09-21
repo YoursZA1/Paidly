@@ -145,6 +145,54 @@ export async function resolveEntitlement(supabase, userId, knownCompanyId = null
   };
 }
 
+const FAMILY_LABEL = Object.freeze({
+  starter: "Starter",
+  business: "Business",
+  growth: "Growth",
+  enterprise: "Enterprise",
+});
+
+/**
+ * The single access result the UI consumes (GET /api/subscriptions/current → `entitlement`).
+ * Built from resolveEntitlement(), so nav, badges, plan page and server gates cannot disagree.
+ * `plan` is the subscribed package even without access (e.g. an expired Growth trial), so the UI can
+ * say "Growth — trial expired"; `features` is empty whenever access is not granted.
+ * @param {Awaited<ReturnType<typeof resolveEntitlement>>} ent
+ * @param {Date} [now]
+ */
+export function buildEntitlementSnapshot(ent, now = new Date()) {
+  const sub = ent?.subscription || null;
+  const plan = ent?.family || null;
+  const access = Boolean(ent?.access);
+  const limits = plan ? FAMILY_LIMITS[plan] : { seats: null, companies: null };
+  const status = coerceSubscriptionStatus(sub?.status) || null;
+  const trialEndsAt = sub?.trial_ends_at || null;
+  const trialing = status === "trialing" && access;
+  let trialDaysRemaining = null;
+  if (trialing && trialEndsAt) {
+    const ms = new Date(trialEndsAt).getTime() - now.getTime();
+    trialDaysRemaining = Number.isFinite(ms) ? Math.max(0, Math.ceil(ms / 86_400_000)) : null;
+  }
+  return {
+    plan,
+    planName: plan ? FAMILY_LABEL[plan] : null,
+    tierRank: plan ? FAMILY_TIER_RANK[plan] : 0,
+    status,
+    accessGranted: access,
+    inGrace: Boolean(ent?.inGrace),
+    trialing,
+    trialEndsAt,
+    trialDaysRemaining,
+    companyId: ent?.companyId || null,
+    subscriptionId: ent?.subscriptionId || null,
+    features: access && plan ? [...FAMILY_FEATURES[plan]] : [],
+    limits: {
+      seats: access ? limits.seats : 0,
+      companies: access ? limits.companies : 0,
+    },
+  };
+}
+
 /**
  * @param {import('http').IncomingMessage & { __paidlyEntitlement?: object }} req
  * @param {import('http').ServerResponse} res

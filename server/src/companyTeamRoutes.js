@@ -27,6 +27,7 @@ import {
   sendCompanyTeamInviteEmail,
 } from "./companyTeamInviteDelivery.js";
 import { companyInviteShareUrl } from "./companyInviteAppUrl.js";
+import { entitlementsEnforceEnabled, resolveEntitlementForCompany } from "./billing/entitlements.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -310,6 +311,63 @@ async function upsertCompanyMembership(orgId, userId, role, jobFunction, posRegi
 /**
  * POST /api/company/team/invite
  */
+/**
+ * Plan seat limit for a company invite (FAMILY_LIMITS via the company subscription).
+ * A seat is a login: members with a user_id plus pending invites. Employee records without a
+ * login (payroll-only staff) are not seats. Re-inviting an existing member never needs a new seat.
+ * @returns {Promise<null | { status: number, message: string, extra: object }>}
+ */
+export async function checkCompanyInviteSeat(companyId, email) {
+  const ent = await resolveEntitlementForCompany(supabaseAdmin, companyId);
+  if (!ent.access) {
+    if (!entitlementsEnforceEnabled()) {
+      console.warn("[entitlements] report-only would block team invite", { companyId, status: ent.status });
+    } else {
+      return { status: 402, message: "Active subscription required", extra: { code: "SUBSCRIPTION_REQUIRED" } };
+    }
+  }
+  const seats = ent.access ? ent.seats : null;
+  if (seats == null) return null;
+
+  const { data: existing } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+  if (existing?.id) {
+    const { data: already } = await supabaseAdmin
+      .from("memberships")
+      .select("id")
+      .eq("org_id", companyId)
+      .eq("user_id", existing.id)
+      .maybeSingle();
+    if (already?.id) return null;
+  }
+
+  const [{ count: members }, { count: pending }] = await Promise.all([
+    supabaseAdmin
+      .from("memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", companyId)
+      .not("user_id", "is", null),
+    supabaseAdmin
+      .from("company_invites")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", companyId)
+      .eq("status", "pending")
+      .neq("email", email),
+  ]);
+  const used = Number(members || 0) + Number(pending || 0);
+  if (used >= Number(seats)) {
+    return {
+      status: 409,
+      message: `Your ${ent.family} plan includes ${seats} user${seats === 1 ? "" : "s"}. Upgrade to add more.`,
+      extra: { code: "SEAT_LIMIT_REACHED", seats, used },
+    };
+  }
+  return null;
+}
+
 export async function handleCompanyTeamInvite(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -329,6 +387,9 @@ export async function handleCompanyTeamInvite(req, res) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return jsonError(res, 400, "Enter a valid email address");
     }
+
+    const seatBlock = await checkCompanyInviteSeat(gate.membership.companyId, email);
+    if (seatBlock) return jsonError(res, seatBlock.status, seatBlock.message, seatBlock.extra);
 
     let role = normalizeCompanyRole(body.role);
     let jobFunction = normalizeJobFunction(body.job_function ?? body.jobFunction ?? "general");

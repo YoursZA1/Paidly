@@ -1,6 +1,4 @@
 import { useEffect, useMemo } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
 import {
   clientHasFeature,
@@ -10,31 +8,18 @@ import {
 } from "@/lib/clientEntitlement";
 
 /**
- * Subscription-backed entitlement for UI / EntityManager cache.
- * Server gates remain authoritative.
+ * The one client source for "which package is this company on and what may it do".
+ * Backed by GET /api/subscriptions/current → `entitlement`, built by the same resolver as the
+ * server feature gates. Never reads profiles.plan. Server gates remain authoritative.
  */
 export function useEntitlementAccess({ enabled = true } = {}) {
-  const { user } = useAuth();
-  const { profile } = useUserProfileQuery();
-  const profileSlug =
-    profile?.subscription_plan ||
-    profile?.plan ||
-    user?.subscription_plan ||
-    user?.plan ||
-    null;
-
   const query = useCurrentSubscriptionQuery({ enabled });
   const { data, isFetched, isError, isLoading } = query;
 
   const entitlement = useMemo(() => {
-    if (!enabled) {
-      return deriveEntitlementFromSubscriptionCurrent(null, { profileSlug });
-    }
-    if (!isFetched || isError) {
-      return deriveEntitlementFromSubscriptionCurrent(null, { profileSlug });
-    }
-    return deriveEntitlementFromSubscriptionCurrent(data, { profileSlug });
-  }, [enabled, isFetched, isError, data, profileSlug]);
+    if (!enabled || !isFetched || isError) return deriveEntitlementFromSubscriptionCurrent(null);
+    return deriveEntitlementFromSubscriptionCurrent(data);
+  }, [enabled, isFetched, isError, data]);
 
   useEffect(() => {
     publishClientEntitlement(entitlement);
@@ -47,8 +32,15 @@ export function useEntitlementAccess({ enabled = true } = {}) {
     entitlement,
     isEntitlementReady: entitlement.ready,
     accessGranted: entitlement.accessGranted,
+    /** Family with access ("starter" | "business" | "growth" | "enterprise"), else "none". */
     planSlug,
     planFamily: entitlement.planFamily,
+    /** Package on the subscription row even when access has lapsed (for "Growth — expired" copy). */
+    subscribedPlan: entitlement.subscribedPlan,
+    subscriptionStatus: entitlement.status,
+    trialing: entitlement.trialing,
+    trialDaysRemaining: entitlement.trialDaysRemaining,
+    limits: entitlement.limits,
     source: entitlement.source,
     isLoading: Boolean(enabled && isLoading),
     hasFeature: (feature) => clientHasFeature(feature, { snapshot: entitlement }),

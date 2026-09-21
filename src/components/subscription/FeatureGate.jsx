@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Lock, Crown } from 'lucide-react';
 import Button from '@/components/ui/button';
-import { hasFeature, familyForSlug } from '@/lib/plans';
+import { hasFeature } from '@/lib/plans';
+import { requiredTierForFeature } from '@shared/planFeatures.js';
+import { useEntitlementAccess } from '@/hooks/useEntitlementAccess';
+import { describeEntitlementBadge } from '@/lib/clientEntitlement';
 
 /** Map UI feature keys → canonical plan feature keys (default-deny). */
 const FEATURE_ALIASES = {
@@ -47,21 +50,6 @@ const FEATURE_ALIASES = {
   api_access: 'api_access',
 };
 
-export const FEATURE_TIERS = {
-  invoices: ["Starter", "Business", "Growth", "Enterprise"],
-  quotes: ["Starter", "Business", "Growth", "Enterprise"],
-  clients: ["Starter", "Business", "Growth", "Enterprise"],
-  inventory: ["Business", "Growth", "Enterprise"],
-  pos: ["Business", "Growth", "Enterprise"],
-  recurring: ["Business", "Growth", "Enterprise"],
-  payroll: ["Business", "Growth", "Enterprise"],
-  advancedReports: ["Growth", "Enterprise"],
-  apiAccess: ["Growth", "Enterprise"],
-  multi_company: ["Growth", "Enterprise"],
-  ssoIntegration: ["Enterprise"],
-  customBranding: ["Enterprise"],
-};
-
 const FAMILY_LABEL = {
   starter: 'Starter',
   business: 'Business',
@@ -69,32 +57,13 @@ const FAMILY_LABEL = {
   enterprise: 'Enterprise',
 };
 
+const FAMILY_BY_RANK = ['', 'starter', 'business', 'growth', 'enterprise'];
+
+/** Lowest package that includes the feature, from the shared catalog (shared/planFeatures.js). */
 export const getRequiredPlan = (feature) => {
   const key = FEATURE_ALIASES[feature] || feature;
-  if (['invoices', 'quotes', 'clients', 'reports_basic', 'email_send'].includes(key)) {
-    return 'Starter';
-  }
-  if (
-    [
-      'inventory',
-      'pos',
-      'expenses',
-      'purchase_orders',
-      'payslips',
-      'vat_reports',
-      'email_templates',
-      'recurring_invoices',
-      'support_priority',
-    ].includes(key)
-  ) {
-    return 'Business';
-  }
-  if (
-    ["sso", "dedicated_support", "custom_contract", "white_label"].includes(key)
-  ) {
-    return "Enterprise";
-  }
-  return "Growth";
+  const family = FAMILY_BY_RANK[requiredTierForFeature(key)];
+  return family ? FAMILY_LABEL[family] : 'Enterprise';
 };
 
 export const hasFeatureAccess = (userPlan, feature) => {
@@ -104,30 +73,14 @@ export const hasFeatureAccess = (userPlan, feature) => {
 };
 
 /**
- * Prefer subscription-backed access when SoR is ready.
- * @param {{ ready?: boolean, accessGranted?: boolean | null, planSlug?: string | null, hasFeature?: (f: string) => boolean } | null} ent
- * @param {string} feature
- * @param {string} [profilePlanFallback]
+ * Gate on the company subscription (useEntitlementAccess). `userPlan` / `entitlement` props are
+ * ignored for the decision — kept only so existing callers keep compiling. Server gates still enforce.
  */
-export const hasEntitlementFeatureAccess = (ent, feature, profilePlanFallback) => {
+export default function FeatureGate({ children, feature, fallback }) {
+  const ent = useEntitlementAccess();
   const key = FEATURE_ALIASES[feature] || feature;
-  if (!key) return false;
-  if (ent && typeof ent.hasFeature === "function") {
-    return ent.hasFeature(key);
-  }
-  if (ent?.ready) {
-    if (!ent.accessGranted) return false;
-    return hasFeature(ent.planSlug || ent.planFamily || "none", key);
-  }
-  return hasFeatureAccess(profilePlanFallback || "none", key);
-};
 
-export default function FeatureGate({ children, feature, userPlan, entitlement, fallback }) {
-  const hasAccess = entitlement
-    ? hasEntitlementFeatureAccess(entitlement, feature, userPlan)
-    : hasFeatureAccess(userPlan, feature);
-
-  if (hasAccess) {
+  if (ent.hasFeature(key)) {
     return children;
   }
 
@@ -136,13 +89,10 @@ export default function FeatureGate({ children, feature, userPlan, entitlement, 
   }
 
   const required = getRequiredPlan(feature);
-  const displayPlan = entitlement?.ready
-    ? entitlement.accessGranted
-      ? entitlement.planSlug || entitlement.planFamily || userPlan
-      : "none"
-    : userPlan;
-  const fam = familyForSlug(displayPlan);
-  const currentLabel = fam ? FAMILY_LABEL[fam] : displayPlan || "Free";
+  const badge = describeEntitlementBadge(ent.entitlement);
+  const currentLabel = badge.plan
+    ? `${badge.planLabel}${ent.accessGranted ? '' : ` (${badge.statusLabel.toLowerCase()})`}`
+    : 'no active plan';
 
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center dark:border-zinc-700 dark:bg-zinc-900/40">

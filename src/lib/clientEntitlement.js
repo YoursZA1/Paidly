@@ -48,43 +48,52 @@ export function resetClientEntitlementForTests() {
 
 /**
  * Derive UI/write entitlement from /api/subscriptions/current payload.
+ * Reads the server-built `entitlement` block (same resolver as the server feature gates).
+ * profiles.plan is never an input: before the subscription loads the snapshot is simply not ready.
  * @param {object | null | undefined} data
- * @param {{ profileSlug?: string | null }} [opts]
  */
-export function deriveEntitlementFromSubscriptionCurrent(data, opts = {}) {
-  const profileSlug = String(opts.profileSlug || "").trim() || null;
-
+export function deriveEntitlementFromSubscriptionCurrent(data) {
   if (!data || typeof data !== "object") {
-    return {
-      ready: false,
-      accessGranted: null,
-      planSlug: profileSlug,
-      planFamily: profileSlug ? familyForSlug(profileSlug) : null,
-      source: "profile_provisional",
-    };
+    return { ...EMPTY_DETAIL, ready: false, accessGranted: null, planSlug: null, planFamily: null, source: "loading" };
   }
 
-  const accessGranted = data.accessGranted === true;
-  const planSlug = accessGranted
-    ? String(data.currentPlan || data.plan || data.planFamily || "").trim() || null
-    : null;
-  const planFamily = accessGranted
-    ? String(data.planFamily || familyForSlug(planSlug) || "").trim() || null
-    : null;
+  const e = data.entitlement && typeof data.entitlement === "object" ? data.entitlement : null;
+  const accessGranted = e ? e.accessGranted === true : data.accessGranted === true;
+  // Subscribed package, shown even without access ("Growth — trial expired").
+  const subscribedFamily = e
+    ? e.plan || null
+    : familyForSlug(data.planFamily || data.currentPlan || data.plan) || null;
 
   return {
     ready: true,
     accessGranted,
-    planSlug,
-    planFamily,
+    planSlug: accessGranted ? subscribedFamily : null,
+    planFamily: accessGranted ? subscribedFamily : null,
     source: "subscription",
+    subscribedPlan: subscribedFamily,
+    status: e?.status ?? data.currentStatus ?? data.status ?? null,
+    trialing: Boolean(e?.trialing),
+    trialEndsAt: e?.trialEndsAt ?? data.trialEndsAt ?? null,
+    trialDaysRemaining: e?.trialDaysRemaining ?? null,
+    inGrace: Boolean(e?.inGrace),
+    limits: e?.limits ?? null,
   };
 }
+
+const EMPTY_DETAIL = Object.freeze({
+  subscribedPlan: null,
+  status: null,
+  trialing: false,
+  trialEndsAt: null,
+  trialDaysRemaining: null,
+  inGrace: false,
+  limits: null,
+});
 
 /**
  * Same rule as server assertUserHasFeature once SoR is ready:
  * no access → deny; with access → family/slug features.
- * While provisional (not ready), use profile slug via hasFeature (boot UX only).
+ * While not ready, return true (no lock flash); never falls back to profiles.plan.
  * @param {string} feature
  * @param {{ snapshot?: typeof snapshot }} [opts]
  */
@@ -93,10 +102,8 @@ export function clientHasFeature(feature, opts = {}) {
   const key = String(feature || "").trim();
   if (!key) return false;
 
-  if (!s.ready) {
-    if (!s.planSlug) return true;
-    return hasFeature(s.planSlug, key);
-  }
+  // Not loaded yet: don't flash locks. The server gates enforce regardless of this answer.
+  if (!s.ready) return true;
 
   if (!s.accessGranted) return false;
   const slug = s.planSlug || s.planFamily;
@@ -111,7 +118,46 @@ export function clientHasFeature(feature, opts = {}) {
  */
 export function clientPlanSlugForDisplay(opts = {}) {
   const s = opts.snapshot || snapshot;
-  if (!s.ready) return s.planSlug || "none";
-  if (!s.accessGranted) return "none";
+  if (!s.ready || !s.accessGranted) return "none";
   return s.planSlug || s.planFamily || "none";
+}
+
+const FAMILY_LABEL = { starter: "Starter", business: "Business", growth: "Growth", enterprise: "Enterprise" };
+
+/**
+ * Package label + status line for badges (sidebar account, plan page, billing page).
+ * @param {ReturnType<typeof deriveEntitlementFromSubscriptionCurrent>} e
+ * @returns {{ plan: string | null, planLabel: string, statusLabel: string }}
+ */
+export function describeEntitlementBadge(e) {
+  if (!e?.ready) return { plan: null, planLabel: "", statusLabel: "" };
+  const plan = e.subscribedPlan || null;
+  const planLabel = plan ? FAMILY_LABEL[plan] || plan : "No subscription";
+  if (!plan) return { plan, planLabel, statusLabel: "Choose a plan" };
+  if (e.accessGranted && e.trialing) {
+    const d = e.trialDaysRemaining;
+    return { plan, planLabel, statusLabel: d == null ? "Trial" : `Trial — ${d} day${d === 1 ? "" : "s"} left` };
+  }
+  if (e.accessGranted && e.inGrace) return { plan, planLabel, statusLabel: "Payment overdue" };
+  if (e.accessGranted) {
+    return { plan, planLabel, statusLabel: e.status === "cancelled" ? "Cancelled — active until period end" : "Active" };
+  }
+  const st = String(e.status || "");
+  if (st === "trialing" || st === "expired") return { plan, planLabel, statusLabel: "Trial expired" };
+  if (st === "pending" || st === "processing") return { plan, planLabel, statusLabel: "Awaiting payment" };
+  if (st === "suspended") return { plan, planLabel, statusLabel: "Suspended" };
+  if (st === "cancelled") return { plan, planLabel, statusLabel: "Cancelled" };
+  if (st === "failed" || st === "past_due") return { plan, planLabel, statusLabel: "Payment failed" };
+  return { plan, planLabel, statusLabel: "Inactive" };
+}
+
+/**
+ * Full-app lock: the company has a subscription and it no longer grants access.
+ * No subscription row (legacy accounts) and pending checkouts are not locked here.
+ * @param {ReturnType<typeof deriveEntitlementFromSubscriptionCurrent>} e
+ */
+export function isEntitlementLapsed(e) {
+  if (!e?.ready || e.accessGranted) return false;
+  if (!e.subscribedPlan) return false;
+  return ["trialing", "expired", "suspended", "failed", "cancelled", "past_due"].includes(String(e.status || ""));
 }

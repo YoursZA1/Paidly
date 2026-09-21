@@ -276,19 +276,6 @@ function DashboardMain() {
   const payments = isAdmin ? paymentsState : storePayments;
   const quotes = isAdmin ? [] : (Array.isArray(storeQuotes) ? storeQuotes : []);
   const user = isAdmin ? userState : profileFromQuery ?? authUser;
-  useEffect(() => {
-    if (isAdmin || !authUser?.id || !profileFromQuery) return;
-    const fromSignupOrSession = String(authUser?.plan || authUser?.subscription_plan || "").trim().toLowerCase();
-    const fromProfile = String(profileFromQuery?.subscription_plan || profileFromQuery?.plan || "").trim().toLowerCase();
-    if (fromSignupOrSession && fromProfile && fromSignupOrSession !== fromProfile) {
-      console.error("[dashboard-plan-mismatch] auth user plan differs from DB profile plan", {
-        userId: authUser.id,
-        authPlan: fromSignupOrSession,
-        profilePlan: fromProfile,
-      });
-    }
-  }, [isAdmin, authUser?.id, authUser?.plan, authUser?.subscription_plan, profileFromQuery]);
-
   const isLoading = isAdmin
     ? isLoadingState
     : storeIsLoading || appLoading || dashboardInvoicesQuery.isLoading || dashboardPayslipsQuery.isLoading;
@@ -1014,14 +1001,6 @@ function DashboardMain() {
     [resolvedInvoices]
   );
 
-  const billingProfileFallback = useMemo(
-    () => ({
-      ...(authUser || {}),
-      ...(profileFromQuery || {}),
-    }),
-    [authUser, profileFromQuery]
-  );
-
   // ADMIN DASHBOARD — platform staff use /admin-v2. Do not show tenant-scoped or localStorage KPIs here.
   if (isAdmin) {
     return <Navigate to="/admin-v2" replace />;
@@ -1135,7 +1114,6 @@ function DashboardMain() {
 
         <DashboardSubscriptionBanner
           serverStatus={currentSubscriptionQuery.data || null}
-          profileFallback={billingProfileFallback}
           isLoading={currentSubscriptionQuery.isLoading && !currentSubscriptionQuery.data}
         />
 

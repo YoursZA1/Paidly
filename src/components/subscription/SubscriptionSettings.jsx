@@ -1,16 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Rocket, Globe, ChevronRight } from "lucide-react";
 import PayFastSubscriptionForm from "@/components/subscription/PayFastSubscriptionForm";
 import PlanSwitchButton from "@/components/subscription/PlanSwitchButton";
 import DashboardSubscriptionBanner from "@/components/dashboard/DashboardSubscriptionBanner";
-import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
+import { describeEntitlementBadge } from "@/lib/clientEntitlement";
+import { FAMILY_TIER_RANK } from "@/lib/plans";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
-import { describeSubscriptionState, normalizePaidPackageKey } from "@/lib/subscriptionPlan";
 import { describeDashboardSubscriptionBanner } from "../../../shared/subscriptionDashboardCopy.js";
 import {
   MARKETING_PLANS,
@@ -41,52 +40,37 @@ const TIERS = marketingSelfServeFamilies().map((family) => {
 
 export default function SubscriptionSettings() {
     const navigate = useNavigate();
-    const { user: authUser } = useAuth();
-    const { profile: profileFromQuery, refetch: refetchProfile } = useUserProfileQuery();
-    const { data: billingStatus, refetch: refetchBilling } = useCurrentSubscriptionQuery();
-    const [isLoading, setIsLoading] = useState(true);
+    // Company subscription is the only source for CURRENT / Upgrade / Downgrade (never profiles.plan).
+    const ent = useEntitlementAccess();
+    const { data: billingStatus, refetch: refetchBilling, isEntitlementReady } = ent;
+    const isLoading = !isEntitlementReady && ent.isLoading;
 
     useEffect(() => {
-        void refetchProfile();
         void refetchBilling();
-    }, [refetchProfile, refetchBilling]);
+    }, [refetchBilling]);
 
     useEffect(() => {
         const onVis = () => {
-            if (document.visibilityState === "visible") {
-                void refetchProfile();
-                void refetchBilling();
-            }
+            if (document.visibilityState === "visible") void refetchBilling();
         };
         document.addEventListener("visibilitychange", onVis);
         return () => document.removeEventListener("visibilitychange", onVis);
-    }, [refetchProfile, refetchBilling]);
+    }, [refetchBilling]);
 
-    useEffect(() => {
-        setIsLoading(false);
-    }, [
-        authUser?.id,
-        authUser?.subscription_plan,
-        authUser?.plan,
-        profileFromQuery?.id,
-    ]);
-
-    const billingProfile = useMemo(
-        () => ({
-            ...(authUser || {}),
-            ...(profileFromQuery || {}),
-        }),
-        [authUser, profileFromQuery]
-    );
-
-    const accountState = describeSubscriptionState(billingProfile);
-    const bannerCopy = describeDashboardSubscriptionBanner(billingStatus || billingProfile);
-    const showActivePlanHeader =
-        bannerCopy.kind === "active" || bannerCopy.kind === "admin_granted" || bannerCopy.kind === "past_due";
-    const currentPlanId = normalizePaidPackageKey(billingProfile);
+    const badge = describeEntitlementBadge(ent.entitlement);
+    const bannerCopy = describeDashboardSubscriptionBanner(billingStatus || null);
+    const showActivePlanHeader = Boolean(ent.accessGranted && badge.plan);
+    // CURRENT only when the company's subscription grants access on that package.
+    const currentPlanId = ent.accessGranted ? ent.subscribedPlan : null;
+    const currentRank = currentPlanId ? FAMILY_TIER_RANK[currentPlanId] || 0 : 0;
+    const tierDirection = (tier) => {
+        if (!currentRank) return "subscribe";
+        const rank = FAMILY_TIER_RANK[tier.family] || 0;
+        if (rank === currentRank) return "current";
+        return rank > currentRank ? "upgrade" : "downgrade";
+    };
     // Live PayFast recurring agreement → change plans on that token instead of a new checkout.
     const payfastManaged = Boolean(billingStatus?.payfastManaged);
-    const currentTierIndex = TIERS.findIndex((t) => t.family === currentPlanId);
     const scheduledDate = billingStatus?.scheduledChangeAt
         ? new Date(billingStatus.scheduledChangeAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
         : null;
@@ -102,7 +86,6 @@ export default function SubscriptionSettings() {
         }
     })();
     const refreshBilling = () => {
-        void refetchProfile();
         void refetchBilling();
     };
 
@@ -142,7 +125,6 @@ export default function SubscriptionSettings() {
         <div className="space-y-10 pb-[max(2.5rem,calc(1.5rem+env(safe-area-inset-bottom,0px)))] lg:pb-0">
             <DashboardSubscriptionBanner
                 serverStatus={billingStatus || null}
-                profileFallback={billingProfile}
                 className="mb-0"
             />
 
@@ -155,15 +137,9 @@ export default function SubscriptionSettings() {
                     <div>
                         <p className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest">Active Plan</p>
                         <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100">
-                            {accountState.packageLabel}
-                            {accountState.packageLabel !== "Free" ? " Tier" : ""}
+                            {badge.planLabel}
                         </h2>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                            {accountState.statusLabel}
-                            {accountState.rawSlug && accountState.rawSlug !== accountState.packageKey ? (
-                                <span className="text-slate-400 dark:text-slate-500"> · Plan: {accountState.rawSlug}</span>
-                            ) : null}
-                        </p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{badge.statusLabel}</p>
                     </div>
                 </div>
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
@@ -218,7 +194,8 @@ export default function SubscriptionSettings() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {TIERS.map((tier) => {
-                        const isCurrent = tier.family === currentPlanId;
+                        const direction = tierDirection(tier);
+                        const isCurrent = direction === "current";
                         return (
                             <div
                                 key={tier.id}
@@ -270,11 +247,7 @@ export default function SubscriptionSettings() {
                                         planSlug={tier.id}
                                         planName={tier.name}
                                         priceLabel={`${tier.price} / month`}
-                                        direction={
-                                            currentTierIndex >= 0 && TIERS.indexOf(tier) < currentTierIndex
-                                                ? "downgrade"
-                                                : "upgrade"
-                                        }
+                                        direction={direction === "downgrade" ? "downgrade" : "upgrade"}
                                         nextBillingDate={billingStatus?.nextBillingDate || null}
                                         onChanged={refreshBilling}
                                     />
@@ -286,7 +259,9 @@ export default function SubscriptionSettings() {
                                         planSlug={tier.id}
                                         planName={tier.name}
                                         itemDescription={tier.description}
-                                        ctaLabel="Subscribe"
+                                        ctaLabel={
+                                            direction === "upgrade" ? "Upgrade" : direction === "downgrade" ? "Downgrade" : "Subscribe"
+                                        }
                                         className="mt-0"
                                     />
                                 ) : (

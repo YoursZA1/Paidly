@@ -1,16 +1,8 @@
 import { DEFAULT_PLANS, FEATURE_CATALOG, PLAN_ORDER } from "@/data/planDefaults";
 
-const STORAGE_KEY = "breakapi_plan_definitions";
-
-const loadStoredState = () => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : null;
-  } catch (error) {
-    console.error("Error loading plan definitions:", error);
-    return null;
-  }
-};
+// Display list derived from the canonical catalog (planDefaults ← shared/planFeatures.js).
+// The old localStorage override ("breakapi_plan_definitions") is ignored: plans are not editable client-side.
+const loadStoredState = () => null;
 
 const mergePlan = (basePlan, overridePlan) => {
   if (!basePlan) return overridePlan;
@@ -83,11 +75,6 @@ export function getPlan(planKey) {
     refreshPlanLimits();
   }
   return PLANS[planKey] || PLANS.free;
-}
-
-// Get user's current plan (default to free)
-export function getUserPlan(user) {
-  return user?.plan || "free";
 }
 
 export function getPlanOrder() {

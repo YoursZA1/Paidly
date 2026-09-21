@@ -14,17 +14,14 @@ import { leaveApi, payrollApi } from "@/services/PayrollApiService";
 import { workforceApi } from "@/services/WorkforceApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
-import { useAuth } from "@/contexts/AuthContext";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
 
 export default function MyPayrollPage({ embedded = false, variant = "default" }) {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { profile } = useAuth();
   const { membershipId } = useCompanyContext();
   const { profile: userProfile } = useUserProfileQuery();
-  const userPlan = profile?.subscription_plan || profile?.plan || "starter";
   const tabParam = new URLSearchParams(useLocation().search).get("tab") || (variant === "portal" ? "overview" : "overview");
   const currency = useAppStore((s) => s.userProfile)?.currency || "ZAR";
   const [payroll, setPayroll] = useState(null);
@@ -306,7 +303,7 @@ export default function MyPayrollPage({ embedded = false, variant = "default" })
   );
 
   return (
-    <FeatureGate feature="payroll" userPlan={userPlan}>
+    <FeatureGate feature="payroll">
       {embedded ? (
         <div className="space-y-4">
           {header}

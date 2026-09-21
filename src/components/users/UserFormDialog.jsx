@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { paidly } from '@/api/paidlyClient';
 import {
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { adminRowPrimaryId } from '@/utils/stableListKey';
+import { setCompanyPlan } from '@/api/userManagement';
 import {
   ASSIGNABLE_PROFILE_PLAN_SLUGS,
   coerceAssignableProfilePlan,
@@ -42,6 +43,8 @@ export default function UserFormDialog({ open, onClose, user }) {
   const [legacyStoredPlan, setLegacyStoredPlan] = useState('');
   const editId = adminRowPrimaryId(user);
   const isEdit = Boolean(editId);
+  // Package shown when the dialog opened; only an explicit change calls setCompanyPlan.
+  const initialPlanRef = useRef('none');
 
   useEffect(() => {
     if (!open) return;
@@ -61,9 +64,11 @@ export default function UserFormDialog({ open, onClose, user }) {
         status: user.status || 'active',
         plan: mapped === 'free' ? 'none' : mapped,
       });
+      initialPlanRef.current = mapped === 'free' ? 'none' : mapped;
     } else {
       setLegacyStoredPlan('');
       setForm(emptyForm());
+      initialPlanRef.current = 'none';
     }
   }, [open, user]);
 
@@ -81,22 +86,23 @@ export default function UserFormDialog({ open, onClose, user }) {
       company_address: form.company_address.trim(),
       company_website: form.company_website.trim(),
       status: form.status,
-      plan: billingPlan || "free",
-      subscription_plan: billingPlan || "free",
     };
-    if (billingPlan && billingPlan !== "free") {
-      payload.subscription_status = "active";
-      payload.trial_ends_at = null;
-      payload.is_pro = true;
-    } else {
-      payload.subscription_status = "inactive";
-      payload.is_pro = false;
-    }
-    return payload;
+    // Package is not a profile field: it is applied to the company subscription (setCompanyPlan).
+    return { payload, plan: billingPlan && billingPlan !== "free" ? billingPlan : "none" };
+  };
+
+  const applyPlanIfChanged = async (userId, plan) => {
+    if (!userId || plan === initialPlanRef.current) return;
+    await setCompanyPlan(userId, plan, `Admin set package to ${plan}`);
+    queryClient.invalidateQueries({ queryKey: ['subscription-current'] });
   };
 
   const createMutation = useMutation({
-    mutationFn: (payload) => paidly.entities.PlatformUser.create(payload),
+    mutationFn: async ({ payload, plan }) => {
+      const created = await paidly.entities.PlatformUser.create(payload);
+      await applyPlanIfChanged(adminRowPrimaryId(created) || created?.id, plan);
+      return created;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
@@ -107,7 +113,11 @@ export default function UserFormDialog({ open, onClose, user }) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => paidly.entities.PlatformUser.update(id, data),
+    mutationFn: async ({ id, data: { payload, plan } }) => {
+      const updated = await paidly.entities.PlatformUser.update(id, payload);
+      await applyPlanIfChanged(id, plan);
+      return updated;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });

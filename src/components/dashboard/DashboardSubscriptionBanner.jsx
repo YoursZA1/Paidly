@@ -23,7 +23,6 @@ const TONE_CLASS = {
  */
 export default function DashboardSubscriptionBanner({
   serverStatus = null,
-  profileFallback = null,
   isLoading = false,
   className = "",
 }) {
@@ -39,23 +38,8 @@ export default function DashboardSubscriptionBanner({
     );
   }
 
-  const source = serverStatus && typeof serverStatus === "object"
-    ? serverStatus
-    : profileFallback && typeof profileFallback === "object"
-      ? {
-          status: profileFallback.subscription_status || profileFallback.status,
-          plan: profileFallback.subscription_plan || profileFallback.plan,
-          trialStartAt: profileFallback.trial_started_at || profileFallback.trialStartAt,
-          trialEndAt: profileFallback.trial_ends_at || profileFallback.trialEndAt,
-          trial_ends_at: profileFallback.trial_ends_at,
-          subscription_source: profileFallback.subscription_source,
-          admin_override: profileFallback.admin_override,
-          managedByAdministrator:
-            profileFallback.subscription_source === "admin" ||
-            profileFallback.admin_override === true,
-          nextBillingDate: profileFallback.next_billing_date,
-        }
-      : null;
+  // Company subscription only (GET /api/subscriptions/current); profiles.* is not a billing source.
+  const source = serverStatus && typeof serverStatus === "object" ? serverStatus : null;
 
   if (!source) return null;
 

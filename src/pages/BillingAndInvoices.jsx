@@ -9,18 +9,15 @@ import {
   Sparkles,
   CalendarClock,
 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { EmptyState } from "@/components/ui/empty-state";
-import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
+import { describeEntitlementBadge, isEntitlementLapsed } from "@/lib/clientEntitlement";
 import { useMySubscriptionsQuery } from "@/hooks/useMySubscriptionsQuery";
 import { createPageUrl, getBillingPortalUrl } from "@/utils";
 import { PLANS, normalizePlanSlug } from "@/lib/plans.js";
 import { priceForSlug } from "@/data/paidlySubscriptionPlans";
 import {
-  describeSubscriptionState,
   pickPreferredSubscriptionRow,
-  isOnTrialSubscription,
-  hasActivePaidSubscription,
 } from "@/lib/subscriptionPlan";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,24 +65,14 @@ function planDisplayName(rawPlan) {
 }
 
 export default function BillingAndInvoices() {
-  const { user: authUser } = useAuth();
-  const { profile, isLoading: profileLoading } = useUserProfileQuery();
+  // Company subscription only (useEntitlementAccess); profiles.plan is not a billing source.
+  const ent = useEntitlementAccess();
   const { data: subsRows = [], isLoading: subsLoading, isError: subsError } = useMySubscriptionsQuery();
-
-  const billingProfile = useMemo(
-    () => ({
-      ...(authUser || {}),
-      ...(profile || {}),
-    }),
-    [authUser, profile]
-  );
-
-  const accountState = describeSubscriptionState(billingProfile);
-  const planSlug = normalizePlanSlug(
-    billingProfile.plan || billingProfile.subscription_plan || accountState.packageKey
-  );
-  const planDef = planSlug && PLANS[planSlug] ? PLANS[planSlug] : null;
+  const badge = describeEntitlementBadge(ent.entitlement);
+  const planSlug = badge.plan ? normalizePlanSlug(badge.plan) : null;
+  const planDef = ent.accessGranted && planSlug && PLANS[planSlug] ? PLANS[planSlug] : null;
   const listPriceZar = planSlug ? priceForSlug(planSlug) : null;
+  const trialEndsAt = ent.entitlement.trialEndsAt;
 
   const preferredSub = useMemo(() => pickPreferredSubscriptionRow(subsRows), [subsRows]);
 
@@ -97,7 +84,7 @@ export default function BillingAndInvoices() {
     /^https?:\/\//i.test(portalUrl) &&
     (!appOrigin || portalNorm !== appOrigin);
 
-  const loading = profileLoading;
+  const loading = !ent.isEntitlementReady;
 
   return (
     <div className="min-h-screen bg-background">
@@ -131,7 +118,7 @@ export default function BillingAndInvoices() {
                   </div>
                 </div>
                 <Badge variant="secondary" className="w-fit shrink-0 font-medium capitalize">
-                  {accountState.statusLabel}
+                  {badge.statusLabel}
                 </Badge>
               </div>
             </CardHeader>
@@ -146,7 +133,7 @@ export default function BillingAndInvoices() {
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Plan</p>
                     <p className="mt-1 text-xl font-semibold text-foreground">
-                      {accountState.packageLabel}
+                      {badge.planLabel}
                       {listPriceZar != null ? (
                         <span className="text-base font-normal text-muted-foreground">
                           {" "}
@@ -154,36 +141,28 @@ export default function BillingAndInvoices() {
                         </span>
                       ) : null}
                     </p>
-                    {billingProfile.plan || billingProfile.subscription_plan ? (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Billing slug:{" "}
-                        <span className="font-mono text-xs">
-                          {String(billingProfile.plan || billingProfile.subscription_plan || "—")}
-                        </span>
-                      </p>
-                    ) : null}
                   </div>
                   <div className="space-y-3 text-sm">
-                    {isOnTrialSubscription(billingProfile) && billingProfile.trial_ends_at ? (
+                    {ent.trialing && trialEndsAt ? (
                       <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
                         <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                         <div>
-                          <p className="font-medium text-foreground">{accountState.statusLabel}</p>
+                          <p className="font-medium text-foreground">{badge.statusLabel}</p>
                           <p className="text-muted-foreground">
-                            Ends {formatWhen(billingProfile.trial_ends_at)} (UTC stored; shown in local time).
+                            Ends {formatWhen(trialEndsAt)} (UTC stored; shown in local time).
                           </p>
                         </div>
                       </div>
-                    ) : String(billingProfile.subscription_status || "").toLowerCase() === "expired" ? (
+                    ) : isEntitlementLapsed(ent.entitlement) ? (
                       <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
                         <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                         <div>
-                          <p className="font-medium text-foreground">Trial expired</p>
+                          <p className="font-medium text-foreground">{badge.statusLabel}</p>
                           <p className="text-muted-foreground">Subscribe to continue.</p>
                         </div>
                       </div>
                     ) : null}
-                    {hasActivePaidSubscription(billingProfile) && preferredSub?.next_billing_date ? (
+                    {ent.accessGranted && !ent.trialing && preferredSub?.next_billing_date ? (
                       <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
                         <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                         <div>

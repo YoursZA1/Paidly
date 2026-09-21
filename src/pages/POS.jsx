@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Crown, Lock, Store } from "lucide-react";
 import FeatureGate from "@/components/subscription/FeatureGate";
@@ -62,13 +61,9 @@ function PosBusinessTypeLock({ posOnlyStaff = false }) {
 }
 
 export default function POS({ requestedTillId = null, posPass = false } = {}) {
-  const { profile, authReady } = useAuth();
+  const { authReady } = useAuth();
   const { loading, posEnabled, isOrgOwner, companyRole, jobFunction } = useCompanyContext();
   const posOnlyStaff = posPass || isPosOnlyStaff({ isOrgOwner, companyRole, jobFunction });
-  const userPlan = useMemo(
-    () => profile?.subscription_plan || profile?.plan || "starter",
-    [profile]
-  );
 
   if (loading || (!posOnlyStaff && !authReady)) {
     return <PosLoading />;
@@ -82,7 +77,7 @@ export default function POS({ requestedTillId = null, posPass = false } = {}) {
   if (posOnlyStaff) return till;
 
   return (
-    <FeatureGate feature="pos" userPlan={userPlan} fallback={<PosPlanLock />}>
+    <FeatureGate feature="pos" fallback={<PosPlanLock />}>
       {till}
     </FeatureGate>
   );

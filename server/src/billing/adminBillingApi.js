@@ -1,5 +1,5 @@
 import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
-import { requireBearerUser } from "./httpAuth.js";
+import { requireBearerUser, resolveUserCompanyId } from "./httpAuth.js";
 import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
 import { isValidEmail, isValidUuid } from "../inputValidation.js";
 import { resolveCurrentCatalogAssignment, isLegacyPlanSlug } from "../subscriptionPlans.js";
@@ -17,6 +17,8 @@ import {
 import {
   PAYMENT_REPORTING_START_ISO,
   SUBSCRIPTION_SOURCE,
+  hasSubscriptionAccess,
+  pickAccessSubscriptionRow,
 } from "../../../shared/subscriptionAccess.js";
 import {
   getRevenueSince,
@@ -387,13 +389,9 @@ async function attachPlanId(supabase, row) {
 
 async function attachCompanyId(supabase, row) {
   if (row.company_id || !row.user_id) return row;
-  const { data: mem } = await supabase
-    .from("memberships")
-    .select("org_id")
-    .eq("user_id", row.user_id)
-    .limit(1)
-    .maybeSingle();
-  if (mem?.org_id) row.company_id = mem.org_id;
+  // Same company the entitlement resolver reads (owned org first, then membership).
+  const companyId = await resolveUserCompanyId(supabase, row.user_id);
+  if (companyId) row.company_id = companyId;
   return row;
 }
 
@@ -799,6 +797,9 @@ export async function handleAdminSubscriptionCreate(req, res) {
 
   const body = parseJsonBody(req);
   if (body == null) return json(res, 400, { error: "Invalid JSON body" });
+  if (String(body.action || "").trim().toLowerCase() === "set_company_plan") {
+    return handleAdminSetCompanyPlan(res, supabase, user, body);
+  }
 
   let row;
   try {
@@ -842,6 +843,128 @@ export async function handleAdminSubscriptionCreate(req, res) {
     });
   }
 
+  return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
+}
+
+/**
+ * POST /api/admin/subscriptions { action: "set_company_plan", user_id, plan, reason? }
+ *
+ * Admin package change for the company a user belongs to. Changes the company's canonical
+ * subscription row (the one the entitlement resolver picks) instead of profiles.plan; creates an
+ * admin-managed row only when the company has none. plan "none"/"free" cancels admin access.
+ * The subscriptions → profiles trigger refreshes the display mirror for every member.
+ */
+export async function handleAdminSetCompanyPlan(res, supabase, actor, body) {
+  const userId = String(body.user_id || "").trim();
+  if (!isValidUuid(userId)) return json(res, 400, { error: "user_id required" });
+  const planRaw = String(body.plan || "").trim().toLowerCase();
+  const removeAccess = !planRaw || planRaw === "none" || planRaw === "free";
+  const reason = String(body.reason || "").trim().slice(0, 500) || null;
+
+  const companyId = await resolveUserCompanyId(supabase, userId);
+  let q = supabase.from("subscriptions").select("*").order("updated_at", { ascending: false }).limit(20);
+  q = companyId ? q.eq("company_id", companyId) : q.eq("user_id", userId);
+  const { data: rows, error: loadErr } = await q;
+  if (loadErr) return json(res, 500, { error: "Failed to load subscription" });
+
+  const now = new Date();
+  const existing = pickAccessSubscriptionRow(rows || [], now);
+  const reusable =
+    existing &&
+    ![SUBSCRIPTION_STATUS.PENDING, SUBSCRIPTION_STATUS.PROCESSING].includes(coerceSubscriptionStatus(existing.status));
+
+  if (removeAccess) {
+    if (!reusable || !hasSubscriptionAccess(existing, now)) {
+      return json(res, 200, { subscription: existing ? normalizeAdminSubscriptionListRow(existing) : null, unchanged: true });
+    }
+    const built = buildAdminOverridePatch(existing, { action: "cancel", reason }, { actorId: actor?.id || null, now });
+    return applyAdminPlanPatch(res, supabase, actor, existing, built.patch, "cancel", built.description);
+  }
+
+  if (reusable) {
+    let built;
+    try {
+      built = buildAdminOverridePatch(existing, { action: "change_plan", plan: planRaw, reason }, { actorId: actor?.id || null, now });
+    } catch (e) {
+      return json(res, e.status || 400, { error: e.message || "Invalid plan" });
+    }
+    const patch = { ...built.patch };
+    // A lapsed row (expired trial, cancelled, suspended) must actually grant the new package.
+    if (!hasSubscriptionAccess(existing, now)) {
+      patch.status = SUBSCRIPTION_STATUS.ACTIVE;
+      if (!existing.activated_at) patch.activated_at = now.toISOString();
+    }
+    return applyAdminPlanPatch(res, supabase, actor, existing, patch, "change_plan", built.description);
+  }
+
+  const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+  const email = String(authUser?.user?.email || "").trim().toLowerCase();
+  let row;
+  try {
+    row = buildAdminSubscriptionWriteRow(
+      { user_id: userId, company_id: companyId, email, plan: planRaw, status: SUBSCRIPTION_STATUS.ACTIVE },
+      { isCreate: true }
+    );
+  } catch (e) {
+    return json(res, e.status || 400, { error: e.message || "Invalid plan" });
+  }
+  const nowIso = now.toISOString();
+  Object.assign(row, {
+    created_at: nowIso,
+    updated_at: nowIso,
+    activated_at: nowIso,
+    created_by: actor?.id || null,
+    admin_override: true,
+    subscription_source: SUBSCRIPTION_SOURCE.ADMIN,
+    admin_override_at: nowIso,
+    admin_override_by: actor?.id || null,
+    admin_override_reason: reason,
+  });
+  await attachPlanId(supabase, row);
+  const { data, error } = await supabase.from("subscriptions").insert(row).select("*").single();
+  if (error || !data) return json(res, 500, { error: error?.message || "Failed to create subscription" });
+  await logAdminSubscriptionEvent(supabase, data.id, data.company_id, SUBSCRIPTION_EVENT_TYPE.SUBSCRIPTION_CREATED, {
+    source: "admin",
+    actor_id: actor?.id || null,
+    plan: data.plan_family,
+  });
+  await writeAdminSubscriptionAudit(supabase, {
+    actor,
+    target: data,
+    action: "set_company_plan",
+    description: reason || `Admin set package to ${data.plan_family}`,
+    before: { status: null, plan: null },
+    after: { status: data.status, plan: data.plan_family },
+  });
+  return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
+}
+
+async function applyAdminPlanPatch(res, supabase, actor, existing, patch, action, description) {
+  await attachPlanId(supabase, patch);
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .update(patch)
+    .eq("id", existing.id)
+    .select("*")
+    .maybeSingle();
+  if (error || !data) return json(res, 500, { error: error?.message || "Failed to update subscription" });
+  const eventType =
+    action === "cancel" ? SUBSCRIPTION_EVENT_TYPE.CANCELLED : SUBSCRIPTION_EVENT_TYPE.ACTIVATED;
+  await logAdminSubscriptionEvent(supabase, data.id, data.company_id, eventType, {
+    source: "admin",
+    actor_id: actor?.id || null,
+    action,
+    from: existing.plan_family || existing.plan,
+    to: data.plan_family || data.plan,
+  });
+  await writeAdminSubscriptionAudit(supabase, {
+    actor,
+    target: data,
+    action,
+    description,
+    before: { status: existing.status, plan: existing.plan_family || existing.plan, trial_ends_at: existing.trial_ends_at || null },
+    after: { status: data.status, plan: data.plan_family || data.plan, trial_ends_at: data.trial_ends_at || null },
+  });
   return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
 }
 

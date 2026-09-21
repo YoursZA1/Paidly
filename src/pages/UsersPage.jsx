@@ -40,7 +40,7 @@ import { useCurrentUser } from '@/lib/useCurrentUser';
 import { isKnownStaffRole } from '@/lib/staffDashboard';
 import { adminRowPrimaryId, stableDirectoryRowKey } from '@/utils/stableListKey';
 import { normalizePlanSlug, PLANS, isLegacyPlanSlug, familyForSlug } from '@/lib/plans.js';
-import { bulkUpdateUsers } from '@/api/userManagement';
+import { bulkUpdateUsers, setCompanyPlan } from '@/api/userManagement';
 import TablePagination from '@/components/ui/TablePagination';
 
 const EMPTY_PLAN = '__empty__';
@@ -68,25 +68,6 @@ function packageTierKey(u) {
   const n = normalizePlanSlug(raw);
   if (n && PLANS[n] && !isLegacyPlanSlug(n)) return familyForSlug(n) || n;
   return 'other';
-}
-
-/** Matches UserFormDialog plan → profile payload for bulk updates. */
-function planFieldsForBulk(planSelectValue) {
-  const slug = String(planSelectValue || 'none').trim().toLowerCase();
-  const billingPlan = slug === 'none' ? 'free' : slug;
-  const payload = {
-    plan: billingPlan,
-    subscription_plan: billingPlan,
-  };
-  if (['starter', 'business', 'growth', 'enterprise'].includes(slug)) {
-    payload.subscription_status = 'active';
-    payload.trial_ends_at = null;
-    payload.is_pro = true;
-  } else {
-    payload.subscription_status = 'inactive';
-    payload.is_pro = false;
-  }
-  return payload;
 }
 
 /** For profile filter dropdown + row display. */
@@ -394,6 +375,40 @@ export default function UsersPage({ staffOnly = false } = {}) {
     setBulkSuspendIds([]);
   };
 
+  const bulkPlanMutation = useMutation({
+    mutationFn: async ({ ids, planValue }) => {
+      const failedItems = [];
+      for (const id of ids) {
+        try {
+          await setCompanyPlan(id, planValue, `Bulk package change to ${planValue}`);
+        } catch (err) {
+          failedItems.push({ id, error: err?.response?.data?.error || err?.message || 'failed' });
+        }
+      }
+      return { count: ids.length - failedItems.length, failedItems, planValue, ids };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] });
+      if (result.failedItems.length > 0) {
+        toast.warning(`Changed ${result.count} compan${result.count === 1 ? 'y' : 'ies'}, ${result.failedItems.length} failed.`);
+      } else {
+        toast.success(`Package → ${result.planValue} for ${result.count} compan${result.count === 1 ? 'y' : 'ies'}`);
+      }
+      logAction({
+        actor: currentUser,
+        action: AUDIT_ACTIONS.SUBSCRIPTION_STATUS_CHANGED,
+        category: 'users',
+        entity: 'platform_user',
+        description: `Bulk package → ${result.planValue} for ${result.count} user(s)' companies`,
+        after: { userIds: result.ids, plan: result.planValue },
+      });
+      clearSelection();
+    },
+    onError: (err) => toast.error(err?.message || 'Bulk package change failed'),
+  });
+
+  // Package changes go to the company subscription (server), never to profiles.plan.
   const runBulkPlan = (planValue) => {
     const ids = bulkEligibleUsers.map((u) => adminRowPrimaryId(u)).filter(Boolean);
     if (!ids.length) {
@@ -404,43 +419,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
       );
       return;
     }
-    const data = planFieldsForBulk(planValue);
-    bulkMutation.mutate({
-      ids,
-      data,
-      label: `plan → ${planValue}`,
-      audit: {
-        action: AUDIT_ACTIONS.SUBSCRIPTION_STATUS_CHANGED,
-        category: 'users',
-        entity: 'platform_user',
-        description: `Bulk plan update for ${ids.length} user(s)`,
-        after: { userIds: ids, ...data },
-      },
-    });
-  };
-
-  const runBulkProfileSubscriptionStatus = (subscriptionStatus) => {
-    const ids = bulkEligibleUsers.map((u) => adminRowPrimaryId(u)).filter(Boolean);
-    if (!ids.length) {
-      toast.error(
-        adminSelfId && selectedUsers.length > 0
-          ? 'Your account is excluded from bulk actions. Select other users.'
-          : 'Select at least one user'
-      );
-      return;
-    }
-    bulkMutation.mutate({
-      ids,
-      data: { subscription_status: subscriptionStatus },
-      label: `subscription_status → ${subscriptionStatus}`,
-      audit: {
-        action: AUDIT_ACTIONS.SUBSCRIPTION_STATUS_CHANGED,
-        category: 'users',
-        entity: 'platform_user',
-        description: `Bulk subscription_status → ${subscriptionStatus} for ${ids.length} user(s)`,
-        after: { userIds: ids, subscription_status: subscriptionStatus },
-      },
-    });
+    bulkPlanMutation.mutate({ ids, planValue });
   };
 
   useEffect(() => { setUsersPage(0); }, [search, statusFilter, confirmationFilter, packageFilter, planSlugFilter, profileFilter, roleFilter]);
@@ -675,23 +654,6 @@ export default function UsersPage({ staffOnly = false } = {}) {
                 <SelectItem value="business">→ Business</SelectItem>
                 <SelectItem value="growth">→ Growth</SelectItem>
                 <SelectItem value="enterprise">→ Enterprise</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
-              key={`bulk-sub-${bulkSelectEpoch}`}
-              onValueChange={(v) => runBulkProfileSubscriptionStatus(v)}
-            >
-              <SelectTrigger className="h-9 w-[220px] bg-card">
-                <SelectValue placeholder="Set subscription status…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="trial">→ trial</SelectItem>
-                <SelectItem value="active">→ active</SelectItem>
-                <SelectItem value="expired">→ expired</SelectItem>
-                <SelectItem value="inactive">→ inactive</SelectItem>
-                <SelectItem value="cancelled">→ cancelled</SelectItem>
-                <SelectItem value="past_due">→ past_due</SelectItem>
               </SelectContent>
             </Select>
 

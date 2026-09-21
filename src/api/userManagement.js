@@ -39,24 +39,28 @@ export async function syncAndCleanUsers() {
   return supabaseUsers;
 }
 
-// Update user profile subscription plan and metadata
-export async function updateUserSubscription(userId, plan, user_metadata = {}) {
-  const headers = await adminAuthHeaders();
-  return backendApi.put(
-    `/api/admin/users/${userId}`,
-    {
-      plan,
-      user_metadata,
-    },
-    { headers }
-  );
-}
-
 export async function bulkUpdateUsers(ids, data) {
   const headers = await adminAuthHeaders();
   const response = await backendApi.post(
     "/api/admin/users/bulk-update",
     { ids, data },
+    { headers }
+  );
+  return response.data;
+}
+
+/**
+ * Admin package change for the user's company. Changes the company subscription (the billing
+ * source of truth) server-side; profiles.plan is refreshed by the subscriptions → profiles trigger.
+ * @param {string} userId
+ * @param {"none"|"starter"|"business"|"growth"|"enterprise"} plan
+ * @param {string} [reason]
+ */
+export async function setCompanyPlan(userId, plan, reason) {
+  const headers = await adminAuthHeaders();
+  const response = await backendApi.post(
+    "/api/admin/subscriptions",
+    { action: "set_company_plan", user_id: userId, plan, reason },
     { headers }
   );
   return response.data;

@@ -383,21 +383,13 @@ export const batchMapCatalogToLineItems = (catalogItems, options = {}) => {
 };
 
 /**
- * Get plan-based rate adjustment limit
- * @param {string} plan - User's subscription plan
- * @returns {number|null} Max percent change allowed (null = unlimited)
+ * Rate adjustment limit per package. The canonical catalog (shared/planFeatures.js) defines no
+ * rate-adjustment limit for any package, so every plan may adjust rates freely; only a catalog
+ * item's price lock restricts edits. (The old free/basic/pro table never matched real plan slugs
+ * and blocked every Starter/Business/Growth company from editing a line-item price.)
+ * @returns {null} unlimited
  */
-export const getPlanRateLimit = (plan) => {
-    const limits = {
-        'free': 0,        // Cannot edit rates
-        'basic': 10,      // 10% adjustment
-        'pro': 50,        // 50% adjustment
-        'premium': 100,   // 100% adjustment
-        'enterprise': null // Unlimited
-    };
-    
-    return limits[plan?.toLowerCase()] ?? limits['free'];
-};
+export const getPlanRateLimit = () => null;
 
 /**
  * Check if a user can edit the rate/price on a line item
@@ -407,7 +399,7 @@ export const getPlanRateLimit = (plan) => {
  * @param {object} user - User object with plan info
  * @returns {object} { canEdit: boolean, reason: string, maxChange: number|null }
  */
-export const canEditLineItemRate = (catalogItem, user) => {
+export const canEditLineItemRate = (catalogItem, _user) => {
     // Validate inputs
     if (!catalogItem) {
         return {
@@ -427,18 +419,7 @@ export const canEditLineItemRate = (catalogItem, user) => {
         };
     }
     
-    // Get plan-based limit
-    const userPlan = user?.subscription_plan || user?.plan || 'free';
-    const maxChange = getPlanRateLimit(userPlan);
-    
-    if (maxChange === 0) {
-        return {
-            canEdit: false,
-            reason: `${userPlan} plan does not allow rate adjustments. Upgrade to Basic or higher.`,
-            maxChange: 0,
-            planRestriction: true
-        };
-    }
+    const maxChange = getPlanRateLimit();
     
     return {
         canEdit: true,
@@ -534,8 +515,7 @@ export const validateRateAdjustment = (catalogItem, originalRate, newRate, user 
                 message: editCheck.reason,
                 code: editCheck.planRestriction ? 'PLAN_RESTRICTION' : 'CANNOT_EDIT',
                 isLocked: editCheck.isLocked || false,
-                planRestriction: true,
-                userPlan: user?.subscription_plan || user?.plan || 'free'
+                planRestriction: true
             };
         }
         
@@ -546,7 +526,7 @@ export const validateRateAdjustment = (catalogItem, originalRate, newRate, user 
             if (percentChange > editCheck.maxChange) {
                 return {
                     allowed: false,
-                    message: `Rate adjustment exceeds plan limit. ${user?.plan || 'Your plan'} allows up to ${editCheck.maxChange}% change.`,
+                    message: `Rate adjustment exceeds your plan limit of ${editCheck.maxChange}% change.`,
                     code: 'EXCEEDS_PLAN_LIMIT',
                     isLocked: false,
                     percentChange: parseFloat(percentChange.toFixed(2)),

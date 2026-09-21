@@ -74,7 +74,6 @@ import {
   generatePdfHtmlBodySchema,
   trackOpenBodySchema,
 } from "./schemas/mutationSchemas.js";
-import { coerceAssignableProfilePlan } from "./subscriptionPlans.js";
 import { sendUnexpectedError } from "./apiResponse.js";
 import { assertCallerForAdminRoute } from "./adminRouteAccess.js";
 import { createPayfastSubscriptionItnHandler } from "./payfastSubscriptionItn.js";
@@ -1272,12 +1271,11 @@ app.put("/api/admin/users/:userId", async (req, res) => {
 
     const updates = {};
     if (parsed.plan) {
-      const plan = coerceAssignableProfilePlan(parsed.plan);
-      if (!plan) {
-        return res.status(400).json({ error: "Invalid plan value" });
-      }
-      updates.subscription_plan = plan;
-      updates.plan = plan;
+      // Packages live on the company subscription, not profiles.plan.
+      return res.status(400).json({
+        error: "Change packages with POST /api/admin/subscriptions { action: \"set_company_plan\" }",
+        code: "PLAN_IS_SUBSCRIPTION_MANAGED",
+      });
     }
 
     if (parsed.full_name) {
@@ -1342,23 +1340,14 @@ app.post("/api/admin/users/bulk-update", async (req, res) => {
     }
 
     // Whitelist the profile fields that bulk-update is permitted to set.
-    const BULK_ALLOWED_FIELDS = new Set(["subscription_plan", "full_name"]);
+    // subscription_plan is not accepted: packages are changed on the company subscription
+    // (POST /api/admin/subscriptions { action: "set_company_plan" }).
+    const BULK_ALLOWED_FIELDS = new Set(["full_name"]);
     const data = Object.fromEntries(
       Object.entries(rawData).filter(([k]) => BULK_ALLOWED_FIELDS.has(k))
     );
     if (Object.keys(data).length === 0) {
-      return res.status(400).json({ error: "No permitted fields provided (allowed: subscription_plan, full_name)" });
-    }
-
-    if (data.subscription_plan != null) {
-      const plan = coerceAssignableProfilePlan(data.subscription_plan);
-      if (!plan) {
-        return res.status(400).json({
-          error: "subscription_plan must be a current catalog plan (starter, business, growth, enterprise) or free",
-        });
-      }
-      data.subscription_plan = plan;
-      data.plan = plan;
+      return res.status(400).json({ error: "No permitted fields provided (allowed: full_name)" });
     }
 
     const uniqueIds = [...new Set(ids.map((v) => String(v || "").trim()).filter(Boolean))];

@@ -66,7 +66,8 @@ import { canSeeWorkforceNav, resolveWorkforceExperience } from "@/lib/workforceE
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff, membershipIsPosEnabled } from "@shared/posStaffInvite.js";
-import { isSubscriptionExpired, shouldShowExpiredSubscriptionLock } from "@/lib/subscriptionPlan";
+import { shouldShowExpiredSubscriptionLock } from "@/lib/subscriptionPlan";
+import { describeEntitlementBadge, isEntitlementLapsed } from "@/lib/clientEntitlement";
 import UpgradeScreen from "@/components/subscription/UpgradeScreen";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
@@ -941,31 +942,15 @@ export default function Layout({ children, currentPageName }) {
   const {
     planSlug: entitlementPlanSlug,
     hasFeature: entitlementHasFeature,
-    isEntitlementReady,
+    entitlement: companyEntitlement,
   } = useEntitlementAccess({ enabled: Boolean(user) });
   const planForNavFeatures = entitlementPlanSlug || "none";
+  const planBadge = describeEntitlementBadge(companyEntitlement);
 
+  // Company subscription only (via /api/subscriptions/current). Never profiles.plan.
   const navHasFeature = useCallback(
-    (feature) => {
-      if (!feature) return true;
-      if (isEntitlementReady) return entitlementHasFeature(feature);
-      return hasFeatureAccess(
-        layoutProfile?.subscription_plan ||
-          layoutProfile?.plan ||
-          user?.subscription_plan ||
-          user?.plan ||
-          "none",
-        feature
-      );
-    },
-    [
-      isEntitlementReady,
-      entitlementHasFeature,
-      layoutProfile?.subscription_plan,
-      layoutProfile?.plan,
-      user?.subscription_plan,
-      user?.plan,
-    ]
+    (feature) => !feature || entitlementHasFeature(feature),
+    [entitlementHasFeature]
   );
 
   const {
@@ -1257,8 +1242,8 @@ export default function Layout({ children, currentPageName }) {
     }
   };
 
-  const profileForBilling = userProfile || user;
-  const expired = user?.id && isSubscriptionExpired(profileForBilling);
+  // Lapsed company subscription (trial ended, expired, suspended, failed, cancelled past period end).
+  const expired = Boolean(user?.id) && isEntitlementLapsed(companyEntitlement);
   const billingBypassRole =
     isStaffDashboardRole(user?.role) || String(user?.role || "").toLowerCase() === "admin";
   const settingsPathLower = createPageUrl("Settings").toLowerCase();
@@ -1447,7 +1432,7 @@ export default function Layout({ children, currentPageName }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-semibold text-sidebar-foreground/90 truncate leading-tight">{user?.company_name || user?.full_name || "My Business"}</p>
-                  <p className="text-[10px] text-sidebar-foreground/35 truncate leading-tight capitalize mt-px">{planForNavFeatures === "none" ? "Free plan" : `${planForNavFeatures} plan`}</p>
+                  <p className="text-[10px] text-sidebar-foreground/35 truncate leading-tight capitalize mt-px">{planBadge.planLabel}{planBadge.statusLabel ? ` · ${planBadge.statusLabel}` : ""}</p>
                 </div>
                 <button
                   onClick={handleLogout}

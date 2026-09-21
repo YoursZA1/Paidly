@@ -13,7 +13,6 @@ import { useAppStore } from "@/stores/useAppStore";
 import { payrollApi } from "@/services/PayrollApiService";
 import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
-import { useAuth } from "@/contexts/AuthContext";
 import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
 import PayrollReconciliationPanel from "@/components/payroll/PayrollReconciliationPanel";
 
@@ -30,8 +29,6 @@ const STATUS_LABEL = {
 export default function PayRunPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { profile } = useAuth();
-  const userPlan = profile?.subscription_plan || profile?.plan || "starter";
   const id = new URLSearchParams(useLocation().search).get("id");
   const currency = useAppStore((s) => s.userProfile)?.currency || "ZAR";
   const [run, setRun] = useState(null);
@@ -90,7 +87,7 @@ export default function PayRunPage() {
   );
 
   return (
-    <FeatureGate feature="payroll" userPlan={userPlan}>
+    <FeatureGate feature="payroll">
       <PageTemplate>
         <PageTemplate.Header>
           <PageHeader

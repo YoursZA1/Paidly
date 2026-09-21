@@ -26,7 +26,7 @@ import {
   updatePayfastSubscription,
 } from "./payfastRecurringApi.js";
 import { PLAN_CHANGE_DIRECTION, planChangeDirection } from "../../../shared/subscriptionPlanChange.js";
-import { hasPaidAccessIncludingGrace } from "./entitlements.js";
+import { buildEntitlementSnapshot, hasPaidAccessIncludingGrace, resolveEntitlement } from "./entitlements.js";
 import {
   pickAccessSubscriptionRow,
   trialDaysRemaining,
@@ -787,32 +787,14 @@ export async function handleSubscriptionCurrent(req, res) {
   const auth = await requireBearerUser(req, supabase);
   if (auth.error) return json(res, auth.status, { error: auth.error });
 
-  const companyId = await resolveUserCompanyId(supabase, auth.user.id);
-
-  let query = supabase
-    .from("subscriptions")
-    .select(
-      "id, status, plan_slug, plan_id, plan_family, amount, currency, company_id, activated_at, next_billing_date, current_period_end, cancelled_at, grace_ends_at, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
-    )
-    .order("updated_at", { ascending: false })
-    .limit(10);
-
-  if (companyId) {
-    query = query.eq("company_id", companyId);
-  } else {
-    query = query.eq("user_id", auth.user.id);
-  }
-
-  const { data: rows, error } = await query;
-  if (error) {
-    console.error("[billing/subscriptions/current]", error);
-    return json(res, 500, { error: "Failed to load subscription" });
-  }
-
-  const sub = pickAccessSubscriptionRow(rows || []) || rows?.[0] || null;
+  // Same resolver as requireFeature / assertUserHasFeature: company subscription → access row.
+  const ent = await resolveEntitlement(supabase, auth.user.id);
+  const entitlement = buildEntitlementSnapshot(ent);
+  const sub = ent.subscription || null;
   if (!sub) {
     return json(res, 200, {
       subscription: null,
+      entitlement,
       currentPlan: null,
       currentStatus: null,
       expiry: null,
@@ -831,6 +813,8 @@ export async function handleSubscriptionCurrent(req, res) {
   return json(res, 200, {
     subscription: sub,
     ...statusPayload,
+    accessGranted: entitlement.accessGranted,
+    entitlement,
   });
 }
 

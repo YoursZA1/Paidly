@@ -392,17 +392,7 @@ export const checkPlanPermission = (user, action) => {
  * @param {object} user - User object with plan info
  * @returns {number} Maximum allowed percent change (null = unlimited)
  */
-export const getRateAdjustmentLimit = (user) => {
-    const planLimits = {
-        free: 0,        // Cannot adjust rates
-        basic: 10,      // 10% adjustment
-        pro: 50,        // 50% adjustment
-        enterprise: null // Unlimited
-    };
-    
-    const userPlan = user?.plan || 'free';
-    return planLimits[userPlan] ?? 0;
-};
+export const getRateAdjustmentLimit = () => null; // no package defines a rate limit (see CatalogSyncService.getPlanRateLimit)
 
 export default {
     // Price lock functions

@@ -36,13 +36,20 @@ describe("clientEntitlement", () => {
     expect(clientHasFeature("leave_management")).toBe(false);
   });
 
-  it("profile provisional still used before ready", () => {
-    const ent = deriveEntitlementFromSubscriptionCurrent(null, {
-      profileSlug: "business_monthly",
-    });
+  it("never falls back to profiles.plan before the subscription loads", () => {
+    const ent = deriveEntitlementFromSubscriptionCurrent(null, { profileSlug: "business_monthly" });
     expect(ent.ready).toBe(false);
+    expect(ent.planSlug).toBeNull();
     publishClientEntitlement(ent);
-    expect(getClientEntitlementSnapshot().source).toBe("profile_provisional");
-    expect(clientHasFeature("payslips")).toBe(true);
+    expect(getClientEntitlementSnapshot().source).toBe("loading");
+  });
+
+  it("prefers the server entitlement block", () => {
+    const ent = deriveEntitlementFromSubscriptionCurrent({
+      accessGranted: true,
+      currentPlan: "starter_monthly",
+      entitlement: { plan: "growth", accessGranted: true, status: "active" },
+    });
+    expect(ent.planSlug).toBe("growth");
   });
 });
