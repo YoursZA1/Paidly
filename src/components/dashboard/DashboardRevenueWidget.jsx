@@ -1,5 +1,12 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { REVENUE_SERIES } from "@/lib/dashboard/revenueComposition";
 import DocumentEngagementWidget from "@/components/dashboard/DocumentEngagementWidget";
@@ -34,17 +41,17 @@ export default function DashboardRevenueWidget({
   compact = false,
   className = "",
 }) {
-  const [activityOpen, setActivityOpen] = useState(false);
-  const activityRef = useRef(null);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [selectedPoint, setSelectedPoint] = useState(null);
   const showQuotes = Boolean(breakdown?.hasQuotePoints || breakdown?.quotes);
   const empty = Boolean(breakdown?.empty);
 
-  const openActivity = () => setActivityOpen(true);
-
-  useEffect(() => {
-    if (!activityOpen) return;
-    activityRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [activityOpen]);
+  // Opens in a dialog rather than inline: this widget sits in a stretched grid cell, and
+  // rendering extra content beside the chart made the row and the chart grow each other.
+  const openBreakdown = (point = null) => {
+    setSelectedPoint(point);
+    setBreakdownOpen(true);
+  };
 
   return (
     <div className={`space-y-6 ${compact ? "h-full min-h-0" : ""} ${className}`.trim()}>
@@ -113,7 +120,7 @@ export default function DashboardRevenueWidget({
                     chart={breakdown?.chart || []}
                     userCurrency={currency}
                     showQuotes={showQuotes}
-                    onChartClick={openActivity}
+                    onChartClick={openBreakdown}
                     compact={compact}
                   />
                 </Suspense>
@@ -140,7 +147,7 @@ export default function DashboardRevenueWidget({
               ) : null}
             </ul>
             {compact ? null : (
-              <p className="mt-2 text-[11px] text-muted-foreground">Click the chart to open quote and invoice activity.</p>
+              <p className="mt-2 text-[11px] text-muted-foreground">Click the chart for a breakdown of that day and your quote and invoice activity.</p>
             )}
           </div>
 
@@ -189,20 +196,78 @@ export default function DashboardRevenueWidget({
       {compact ? null : (
       <button
         type="button"
-        onClick={openActivity}
-        aria-expanded={activityOpen}
-        aria-controls="quote-invoice-activity"
+        onClick={() => openBreakdown()}
+        aria-haspopup="dialog"
         className="mt-5 text-sm font-medium text-primary hover:text-primary/80"
       >
         View quote and invoice activity →
       </button>
       )}
     </section>
-    {activityOpen ? (
-      <div ref={activityRef}>
-        <DocumentEngagementWidget onClose={() => setActivityOpen(false)} />
-      </div>
-    ) : null}
+    <Dialog open={breakdownOpen} onOpenChange={setBreakdownOpen}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Revenue breakdown</DialogTitle>
+          <DialogDescription>
+            {selectedPoint?.dateLabel
+              ? `Revenue for ${selectedPoint.dateLabel}, with totals for the last ${rangeDays} days.`
+              : `Totals for the last ${rangeDays} days.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        {selectedPoint ? (
+          <div className="rounded-lg border border-border px-4 py-2">
+            <p className="pt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              {selectedPoint.dateLabel}
+            </p>
+            <SourceRow label="Invoices" amount={Number(selectedPoint.invoices) || 0} currency={currency} />
+            <SourceRow label="POS" amount={Number(selectedPoint.pos) || 0} currency={currency} />
+            <SourceRow label="Other" amount={Number(selectedPoint.other) || 0} currency={currency} />
+            {showQuotes ? (
+              <SourceRow
+                label="Potential quotes"
+                amount={Number(selectedPoint.quotes) || 0}
+                hint="Not included in realized revenue"
+                currency={currency}
+                muted
+              />
+            ) : null}
+            <div className="border-t border-border">
+              <SourceRow label="Total" amount={Number(selectedPoint.total) || 0} currency={currency} />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rounded-lg border border-border px-4 py-2">
+          <p className="pt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Last {rangeDays} days
+          </p>
+          {(breakdown?.sources || []).map((source) => (
+            <SourceRow
+              key={source.key}
+              label={source.label}
+              amount={source.amount}
+              percent={source.percent}
+              currency={currency}
+            />
+          ))}
+          {showQuotes ? (
+            <SourceRow
+              label="Potential quotes"
+              amount={breakdown?.quotes || 0}
+              hint="Not included in realized revenue"
+              currency={currency}
+              muted
+            />
+          ) : null}
+          <div className="border-t border-border">
+            <SourceRow label="Total realized" amount={breakdown?.realized || 0} currency={currency} />
+          </div>
+        </div>
+
+        {breakdownOpen ? <DocumentEngagementWidget /> : null}
+      </DialogContent>
+    </Dialog>
     </div>
   );
 }

@@ -51,13 +51,23 @@ export default function DashboardRevenueChart({
   onChartClick,
   compact = false,
 }) {
+  // Pass the clicked bucket so the caller can show that day's breakdown.
+  const handleClick = onChartClick
+    ? (state) => {
+        const index = state?.activeTooltipIndex;
+        onChartClick(Number.isInteger(index) ? chart[index] ?? null : null);
+      }
+    : undefined;
+
+  // In compact mode the chart fills a stretched grid cell. Positioning it absolutely keeps the
+  // SVG out of the cell's intrinsic height; otherwise ResponsiveContainer and the grid row keep
+  // resizing each other and the page grows without limit.
   return (
     <div
-      className={`${compact ? "h-full min-h-[148px] w-full" : "h-[220px] w-full sm:h-[240px]"} ${onChartClick ? "cursor-pointer" : ""}`}
-      onClick={onChartClick || undefined}
+      className={`${compact ? "relative h-full min-h-[148px] w-full" : "h-[220px] w-full sm:h-[240px]"} ${onChartClick ? "cursor-pointer" : ""}`}
     >
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height="100%" className={compact ? "absolute inset-0" : undefined}>
+        <LineChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} onClick={handleClick}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
           <XAxis
             dataKey="label"
