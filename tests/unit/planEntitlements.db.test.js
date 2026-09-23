@@ -10,10 +10,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 
-const MIGRATION = path.resolve(
-  __dirname,
-  "../../supabase/migrations/20260921140000_canonical_plan_entitlements.sql"
-);
+const MIGRATIONS = [
+  "../../supabase/migrations/20260921140000_canonical_plan_entitlements.sql",
+  "../../supabase/migrations/20260923120000_finite_admin_trials_expire.sql",
+].map((rel) => path.resolve(__dirname, rel));
 
 const STUB = `
 create role service_role; create role authenticated; create role anon;
@@ -63,7 +63,7 @@ async function signup(plan) {
 beforeAll(async () => {
   db = new PGlite();
   await db.exec(STUB);
-  await db.exec(readFileSync(MIGRATION, "utf8"));
+  for (const file of MIGRATIONS) await db.exec(readFileSync(file, "utf8"));
   await db.exec(
     `create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();`
   );
@@ -117,5 +117,54 @@ describe("profiles mirror the company access row", () => {
     await q(`select public.start_owner_system_trial($1, $2, 'growth')`, [id, org]);
     const rows = await q(`select plan_family from public.subscriptions where company_id = $1`, [org]);
     expect(rows).toEqual([{ plan_family: "business" }]);
+  });
+});
+
+describe("finite trials expire, indefinite admin access does not", () => {
+  const addRow = (email, cols) =>
+    q(
+      `insert into public.subscriptions
+         (email, status, plan_family, plan_slug, trial_ends_at, admin_override, subscription_source)
+       values ($1, $2, 'growth', 'growth_monthly', $3, $4, $5)`,
+      [email, cols.status, cols.trialEndsAt ?? null, cols.adminOverride ?? false, cols.source ?? "payfast"]
+    );
+  const accessOf = async (email) =>
+    (await q(`select public.subscription_row_has_access(s) as a from public.subscriptions s where email = $1`, [email]))[0].a;
+
+  it("access rule matches the JS rule for every trial shape", async () => {
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    await addRow("t-admin-overdue", { status: "trialing", trialEndsAt: past, adminOverride: true, source: "admin" });
+    await addRow("t-admin-running", { status: "trialing", trialEndsAt: future, adminOverride: true, source: "admin" });
+    await addRow("t-admin-indefinite", { status: "trialing", trialEndsAt: null, adminOverride: true, source: "admin" });
+    await addRow("t-admin-active", { status: "active", trialEndsAt: null, adminOverride: true, source: "admin" });
+    await addRow("t-self-overdue", { status: "trialing", trialEndsAt: past, source: "system_trial" });
+    await addRow("t-self-nodate", { status: "trialing", trialEndsAt: null, source: "system_trial" });
+    await addRow("t-payfast", { status: "active", trialEndsAt: null, source: "payfast" });
+
+    expect(await accessOf("t-admin-overdue")).toBe(false);
+    expect(await accessOf("t-admin-running")).toBe(true);
+    expect(await accessOf("t-admin-indefinite")).toBe(true);
+    expect(await accessOf("t-admin-active")).toBe(true);
+    expect(await accessOf("t-self-overdue")).toBe(false);
+    expect(await accessOf("t-self-nodate")).toBe(false);
+    expect(await accessOf("t-payfast")).toBe(true);
+  });
+
+  it("cron expires overdue finite trials (admin included) and leaves everything else alone", async () => {
+    const expired = await q(`select public.expire_all_overdue_trials() as n`);
+    expect(expired[0].n).toBe(2);
+    const rows = await q(
+      `select email, status from public.subscriptions where email like 't-%' order by email`
+    );
+    expect(rows).toEqual([
+      { email: "t-admin-active", status: "active" },
+      { email: "t-admin-indefinite", status: "trialing" },
+      { email: "t-admin-overdue", status: "expired" },
+      { email: "t-admin-running", status: "trialing" },
+      { email: "t-payfast", status: "active" },
+      { email: "t-self-nodate", status: "trialing" },
+      { email: "t-self-overdue", status: "expired" },
+    ]);
   });
 });

@@ -162,6 +162,9 @@ export class EntityManager {
    */
   static assertSupabaseTableFeatureGate(supabaseTable) {
     if (!isSupabaseConfigured || !supabaseTable) return;
+    // Paid tables written straight to PostgREST from the browser. Server gates cover payroll,
+    // email, POS and integrations; these are the ones only the client can stop today, so an
+    // account without access (expired trial, suspended) cannot create through the read-only UI.
     const featureByTable = {
       invoices: "invoices",
       quotes: "quotes",
@@ -169,6 +172,17 @@ export class EntityManager {
       recurring_invoices: "recurring_invoices",
       payments: "invoices",
       purchase_orders: "purchase_orders",
+      purchase_order_items: "purchase_orders",
+      expenses: "expenses",
+      products: "inventory",
+      stock_transactions: "inventory",
+      services: "inventory",
+      suppliers: "purchase_orders",
+      payslips: "payslips",
+      packages: "invoices",
+      banking_details: "invoices",
+      tasks: "invoices",
+      notes: "invoices",
     };
     const feature = featureByTable[supabaseTable];
     if (!feature) return;

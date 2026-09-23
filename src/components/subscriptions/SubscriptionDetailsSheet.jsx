@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Check, Loader2 } from "lucide-react";
@@ -15,6 +16,7 @@ import StatusBadge from "@/components/dashboard/StatusBadge";
 import PlanBadge from "@/components/dashboard/PlanBadge";
 import { fetchAdminSubscriptionDetail } from "@/api/fetchAdminSubscriptionDetail";
 import { updateAdminSubscription } from "@/api/mutateAdminSubscription";
+import { familyForSlug } from "@/lib/plans.js";
 import {
   SUBSCRIPTION_EVENT_LABELS,
   SUBSCRIPTION_TIMELINE_STAGES,
@@ -40,6 +42,105 @@ function formatZar(amount, currency = "ZAR") {
     minimumFractionDigits: n % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+const GRANT_PACKAGES = ["starter", "business", "growth", "enterprise"];
+/** Access duration: a finite trial, or indefinite administrative activation. */
+const GRANT_DURATIONS = [
+  { value: "7", label: "7 days" },
+  { value: "15", label: "15 days" },
+  { value: "30", label: "30 days" },
+  { value: "custom", label: "Custom end date" },
+  { value: "indefinite", label: "Indefinite" },
+];
+
+/**
+ * Package + duration + action. Duration decides the action, so indefinite access is never inferred
+ * from a missing date: "Indefinite" activates (status active, no trial end), any other duration
+ * starts a finite trial that expires on its end date.
+ */
+function GrantAccessPanel({ currentPlan, pending, onSubmit }) {
+  const [plan, setPlan] = useState(familyForSlug(currentPlan) || "growth");
+  const [duration, setDuration] = useState("30");
+  const [customEnd, setCustomEnd] = useState("");
+  const indefinite = duration === "indefinite";
+  const customInvalid = duration === "custom" && !customEnd;
+
+  const submit = () => {
+    if (customInvalid) return;
+    if (indefinite) {
+      onSubmit({
+        action: "activate_indefinite",
+        extra: { plan, reason: `Admin activated ${plan} indefinitely` },
+      });
+      return;
+    }
+    const extra =
+      duration === "custom"
+        ? { plan, trial_end_at: new Date(`${customEnd}T23:59:59Z`).toISOString() }
+        : { plan, days: Number(duration) };
+    onSubmit({
+      action: "start_trial",
+      extra: { ...extra, reason: `Admin started a ${plan} trial` },
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <h3 className="mb-1 text-sm font-semibold">Grant access</h3>
+      <p className="mb-3 text-xs text-muted-foreground">
+        The package applies for the whole duration. A finite trial expires on its end date, including
+        one granted here; only “Indefinite” keeps access until an administrator changes it.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-xs">
+          <span className="text-muted-foreground">Package</span>
+          <select
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            value={plan}
+            onChange={(e) => setPlan(e.target.value)}
+          >
+            {GRANT_PACKAGES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs">
+          <span className="text-muted-foreground">Access duration</span>
+          <select
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+          >
+            {GRANT_DURATIONS.map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {duration === "custom" ? (
+          <label className="grid gap-1 text-xs">
+            <span className="text-muted-foreground">Ends on</span>
+            <input
+              type="date"
+              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+            />
+          </label>
+        ) : null}
+        <Button size="sm" disabled={pending || customInvalid} onClick={submit}>
+          {indefinite ? "Activate indefinitely" : "Start trial"}
+        </Button>
+      </div>
+      {customInvalid ? (
+        <p className="mt-2 text-xs text-destructive">Choose the date the access should end.</p>
+      ) : null}
+    </div>
+  );
 }
 
 function DetailField({ label, children }) {
@@ -210,6 +311,12 @@ export default function SubscriptionDetailsSheet({
                   : ""}
               </DetailField>
             </div>
+
+            <GrantAccessPanel
+              currentPlan={sub.planFamily || sub.plan || sub.planSlug}
+              pending={overrideMutation.isPending}
+              onSubmit={(payload) => overrideMutation.mutate(payload)}
+            />
 
             <div className="rounded-xl border border-border p-4">
               <h3 className="mb-3 text-sm font-semibold">Administrative controls</h3>

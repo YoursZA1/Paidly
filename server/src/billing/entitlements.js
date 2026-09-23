@@ -66,9 +66,9 @@ export function hasPaidAccessIncludingGrace(sub, now = new Date()) {
  * @param {string} userId
  */
 const ENTITLEMENT_SELECT_RICH =
-  "id, status, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, expires_at, cancelled_at, trial_ends_at, trial_started_at, admin_override, subscription_source, updated_at, created_at";
+  "id, status, plan, current_plan, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, expires_at, cancelled_at, trial_ends_at, trial_started_at, admin_override, subscription_source, updated_at, created_at";
 const ENTITLEMENT_SELECT_LEAN =
-  "id, status, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, updated_at, created_at";
+  "id, status, plan, current_plan, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, updated_at, created_at";
 
 export async function resolveEntitlementForCompany(supabase, companyId) {
   return resolveEntitlement(supabase, null, companyId);
@@ -107,7 +107,8 @@ export async function resolveEntitlement(supabase, userId, knownCompanyId = null
         .update({ status: "expired", updated_at: expiredAt })
         .eq("id", sub.id)
         .eq("status", "trialing")
-        .eq("admin_override", false)
+        // Finite admin trials expire too (shouldExpireTrialRow already excluded indefinite ones).
+        .not("trial_ends_at", "is", null)
         .select(ENTITLEMENT_SELECT_LEAN)
         .maybeSingle();
       sub = expiredRow ? { ...sub, ...expiredRow, status: "expired" } : { ...sub, status: "expired" };
@@ -117,9 +118,13 @@ export async function resolveEntitlement(supabase, userId, knownCompanyId = null
     }
   }
 
+  // plan_family → plan_slug → plan/current_plan. No "starter" default: an unknown package must not
+  // silently hand out Starter, and a valid row must never be downgraded because one column is unset.
   const family =
     normalizePlanFamily(sub?.plan_family) ||
     familyForSlug(sub?.plan_slug) ||
+    familyForSlug(sub?.plan) ||
+    familyForSlug(sub?.current_plan) ||
     null;
   const tierRank = family ? FAMILY_TIER_RANK[family] : 0;
   const limits = family ? FAMILY_LIMITS[family] : { seats: 1, companies: 1 };

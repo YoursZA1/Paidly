@@ -11,6 +11,10 @@ import {
 } from "lucide-react";
 import StatCard from "@/components/dashboard/StatCard";
 import { Link } from "react-router-dom";
+import {
+  BUCKET_FILTER_BY_KEY,
+  SUBSCRIPTION_STATUS_FILTER,
+} from "@shared/subscriptionOverviewBuckets.js";
 
 const ICONS = {
   active: CheckCircle2,
@@ -33,6 +37,10 @@ function formatZar(amount) {
 
 /**
  * Admin Dashboard — Subscription Overview (backend counts only).
+ *
+ * Counts always come from the server and never from the filtered table. When `onSelectFilter` is
+ * given, the status cards become filter shortcuts for the table: they set the page's existing
+ * status filter, and `statusFilter` marks which card is currently applied.
  */
 export default function SubscriptionOverview({
   overview,
@@ -41,7 +49,24 @@ export default function SubscriptionOverview({
   errorMessage = null,
   className = "",
   showManageLink = true,
+  statusFilter = SUBSCRIPTION_STATUS_FILTER.ALL,
+  onSelectFilter = null,
 }) {
+  /** Clicking the applied card clears the filter back to All Status. */
+  const cardProps = (filterValue, label) =>
+    onSelectFilter
+      ? {
+          onClick: () =>
+            onSelectFilter(
+              statusFilter === filterValue ? SUBSCRIPTION_STATUS_FILTER.ALL : filterValue
+            ),
+          selected: statusFilter === filterValue,
+          ariaLabel:
+            statusFilter === filterValue
+              ? `${label} filter applied. Activate to show all statuses.`
+              : `Filter subscriptions by ${label}`,
+        }
+      : {};
   const buckets = overview?.buckets || [
     { key: "active", label: "Active", count: overview?.active ?? 0 },
     { key: "pending", label: "Pending", count: overview?.pending ?? 0 },
@@ -97,16 +122,19 @@ export default function SubscriptionOverview({
             title="Active Subscribers"
             value={isLoading ? "—" : reporting.activeSubscribers ?? 0}
             icon={Users}
+            {...cardProps(SUBSCRIPTION_STATUS_FILTER.ACTIVE, "active subscribers")}
           />
           <StatCard
             title="Trial Users"
             value={isLoading ? "—" : reporting.trialUsers ?? 0}
             icon={Clock}
+            {...cardProps(SUBSCRIPTION_STATUS_FILTER.LIVE_TRIAL, "trial users")}
           />
           <StatCard
             title="Expired Trials"
             value={isLoading ? "—" : reporting.expiredTrials ?? 0}
             icon={CalendarX2}
+            {...cardProps(SUBSCRIPTION_STATUS_FILTER.EXPIRED_TRIALS, "expired trials")}
           />
         </div>
       ) : null}
@@ -118,6 +146,9 @@ export default function SubscriptionOverview({
             title={b.label}
             value={isLoading && overview == null ? "—" : b.count}
             icon={ICONS[b.key] || CheckCircle2}
+            {...(BUCKET_FILTER_BY_KEY[b.key]
+              ? cardProps(BUCKET_FILTER_BY_KEY[b.key], b.label.toLowerCase())
+              : {})}
           />
         ))}
       </div>

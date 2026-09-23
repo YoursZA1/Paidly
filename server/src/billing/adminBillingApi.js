@@ -14,6 +14,7 @@ import {
   SUBSCRIPTION_EVENT_TYPE,
   buildSubscriptionEventTimeline,
 } from "../../../shared/subscriptionEventTypes.js";
+import { SUBSCRIPTION_OVERVIEW_BUCKETS } from "../../../shared/subscriptionOverviewBuckets.js";
 import {
   PAYMENT_REPORTING_START_ISO,
   SUBSCRIPTION_SOURCE,
@@ -38,27 +39,8 @@ function json(res, status, body) {
  * Admin dashboard “Subscription Overview” buckets (UI labels → DB status values).
  * Trial → trialing; Pending includes processing (checkout in flight).
  */
-const OVERVIEW_BUCKETS = Object.freeze([
-  { key: "active", label: "Active", statuses: [SUBSCRIPTION_STATUS.ACTIVE] },
-  {
-    key: "pending",
-    label: "Pending",
-    statuses: [SUBSCRIPTION_STATUS.PENDING, SUBSCRIPTION_STATUS.PROCESSING],
-  },
-  { key: "expired", label: "Expired", statuses: [SUBSCRIPTION_STATUS.EXPIRED] },
-  {
-    key: "cancelled",
-    label: "Cancelled",
-    statuses: [SUBSCRIPTION_STATUS.CANCELLED, "canceled"],
-  },
-  {
-    key: "trial",
-    label: "Trial",
-    statuses: [SUBSCRIPTION_STATUS.TRIALING, "trial"],
-  },
-  { key: "pastDue", label: "Past Due", statuses: [SUBSCRIPTION_STATUS.PAST_DUE] },
-  { key: "failed", label: "Failed", statuses: [SUBSCRIPTION_STATUS.FAILED] },
-]);
+/** Card definitions shared with the Subscriptions table filters (shared/subscriptionOverviewBuckets.js). */
+const OVERVIEW_BUCKETS = SUBSCRIPTION_OVERVIEW_BUCKETS;
 
 async function countSubscriptionsInStatuses(supabase, statuses) {
   const { count, error } = await supabase
@@ -983,20 +965,18 @@ export async function handleAdminSetCompanyAccess(res, supabase, actor, body) {
     return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(existing), unchanged: true });
   }
 
+  // Resuming a paused trial restores the trial (with its remaining time), not indefinite access.
+  const resumesToTrial =
+    resume &&
+    existing.trial_ends_at != null &&
+    new Date(existing.trial_ends_at).getTime() > now.getTime();
+  const action = pause ? "suspend" : resumesToTrial ? "set_trial_end" : "activate";
   const built = buildAdminOverridePatch(
     existing,
-    { action: pause ? "suspend" : "activate", reason },
+    { action, reason, trial_end_at: resumesToTrial ? existing.trial_ends_at : undefined },
     { actorId: actor?.id || null, now }
   );
-  return applyAdminPlanPatch(
-    res,
-    supabase,
-    actor,
-    existing,
-    built.patch,
-    pause ? "suspend" : "activate",
-    built.description
-  );
+  return applyAdminPlanPatch(res, supabase, actor, existing, built.patch, action, built.description);
 }
 
 async function applyAdminPlanPatch(res, supabase, actor, existing, patch, action, description) {

@@ -66,9 +66,8 @@ import { canSeeWorkforceNav, resolveWorkforceExperience } from "@/lib/workforceE
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff, membershipIsPosEnabled } from "@shared/posStaffInvite.js";
-import { shouldShowExpiredSubscriptionLock } from "@/lib/subscriptionPlan";
 import { describeEntitlementBadge, isEntitlementLapsed } from "@/lib/clientEntitlement";
-import UpgradeScreen from "@/components/subscription/UpgradeScreen";
+import BillingLockBanner from "@/components/subscription/BillingLockBanner";
 import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
 import {
@@ -1257,18 +1256,16 @@ export default function Layout({ children, currentPageName }) {
     return <Navigate to={createPageUrl("POS")} replace />;
   }
 
-  if (
-    shouldShowExpiredSubscriptionLock({
-      expired,
-      billingBypassRole,
-      isAdminRoute: isAdminV2Route,
-      isPosTerminal,
-      onSettingsRoute,
-      onBillingRoute: onBillingInvoicesRoute,
-    })
-  ) {
-    return <UpgradeScreen onLogout={handleLogout} />;
-  }
+  // A lapsed subscription no longer blocks the whole app: the account stays readable and billing
+  // stays reachable, while creating and editing are refused by the entitlement layer (server gates
+  // and the client write gate). The banner explains why.
+  const showBillingLockBanner =
+    expired &&
+    !billingBypassRole &&
+    !isAdminV2Route &&
+    !isPosTerminal &&
+    !onSettingsRoute &&
+    !onBillingInvoicesRoute;
 
   if (STANDALONE_PAGE_NAMES.includes(currentPageName) || isAdminV2Route) {
     return (
@@ -1659,6 +1656,9 @@ export default function Layout({ children, currentPageName }) {
           className={`dashboard-scroll-area mobile-page mobile-scale-typography flex-1 min-h-0 overflow-x-hidden scroll-smooth app-gutter-x min-w-0 flex flex-col pt-14 sm:pt-6 md:pt-8 lg:pt-8 ${lockListChrome ? "overflow-hidden pb-3 sm:pb-4" : "overflow-auto pb-8 sm:pb-6 md:pb-8"} ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
           <div className={`max-w-7xl mx-auto w-full min-w-0 mobile-page flex-1 ${lockListChrome ? "flex min-h-0 flex-col" : ""}`}>
+          {showBillingLockBanner ? (
+            <BillingLockBanner planLabel={planBadge.planLabel} statusLabel={planBadge.statusLabel} />
+          ) : null}
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname + location.search}

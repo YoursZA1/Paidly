@@ -28,6 +28,26 @@ import { pickPreferredSubscriptionRow, normalizePaidPackageKey } from '@/lib/sub
 import { isLegacyPlanSlug } from '@/lib/plans.js';
 import { MARKETING_PLAN_ORDER, MARKETING_PLANS, formatMarketingZar } from '@shared/planMarketing.js';
 import TablePagination from '@/components/ui/TablePagination';
+import {
+  SUBSCRIPTION_STATUS_FILTER,
+  subscriptionMatchesStatusFilter,
+} from '@shared/subscriptionOverviewBuckets.js';
+
+const STATUS_FILTER_LABELS = {
+  [SUBSCRIPTION_STATUS_FILTER.ALL]: 'All',
+  [SUBSCRIPTION_STATUS_FILTER.ACTIVE]: 'Active',
+  [SUBSCRIPTION_STATUS_FILTER.PENDING]: 'Pending',
+  [SUBSCRIPTION_STATUS_FILTER.EXPIRED]: 'Expired',
+  [SUBSCRIPTION_STATUS_FILTER.CANCELLED]: 'Cancelled',
+  [SUBSCRIPTION_STATUS_FILTER.TRIAL]: 'Trial',
+  [SUBSCRIPTION_STATUS_FILTER.PAST_DUE]: 'Past due',
+  [SUBSCRIPTION_STATUS_FILTER.FAILED]: 'Failed',
+  [SUBSCRIPTION_STATUS_FILTER.SUSPENDED]: 'Suspended',
+  [SUBSCRIPTION_STATUS_FILTER.ADMIN_GRANTED]: 'Admin granted',
+  [SUBSCRIPTION_STATUS_FILTER.NONE]: 'No subscription row',
+  [SUBSCRIPTION_STATUS_FILTER.LIVE_TRIAL]: 'Trial in progress',
+  [SUBSCRIPTION_STATUS_FILTER.EXPIRED_TRIALS]: 'Expired trial',
+};
 
 const LIST_LIMIT = 500;
 const SUBS_PAGE_SIZE = 15;
@@ -107,7 +127,7 @@ function buildSubscriptionRows(users, subscriptions) {
 export default function SubscriptionsPage() {
   const [search, setSearch] = useState('');
   const [planFilter, setPlanFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(SUBSCRIPTION_STATUS_FILTER.ALL);
   const [showAdd, setShowAdd] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
   const [detailSubId, setDetailSubId] = useState(null);
@@ -179,13 +199,19 @@ export default function SubscriptionsPage() {
       (planFilter === 'needs_migration'
         ? Boolean(s.needs_plan_migration || isLegacyPlanSlug(s.plan || s.plan_slug))
         : normalizePaidPackageKey(s.plan) === planFilter);
-    const matchStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'admin_granted'
-        ? s.subscription_source === 'admin' && s.status === 'active'
-        : s.status === statusFilter);
+    // Same status definitions the summary cards are counted with, so a card's number and the rows
+    // it filters to always agree.
+    const matchStatus = subscriptionMatchesStatusFilter(s, statusFilter);
     return matchSearch && matchPlan && matchStatus;
   });
+
+  const statusFilterLabel = STATUS_FILTER_LABELS[statusFilter] || statusFilter;
+  const isFilteredView =
+    statusFilter !== SUBSCRIPTION_STATUS_FILTER.ALL || planFilter !== 'all' || Boolean(search.trim());
+  const emptyMessage =
+    statusFilter === SUBSCRIPTION_STATUS_FILTER.ALL
+      ? 'No subscriptions found'
+      : `No ${statusFilterLabel.toLowerCase()} subscriptions found`;
 
   const totalSubsPages = Math.max(1, Math.ceil(filtered.length / SUBS_PAGE_SIZE));
   const pagedFiltered = filtered.slice(subsPage * SUBS_PAGE_SIZE, (subsPage + 1) * SUBS_PAGE_SIZE);
@@ -229,6 +255,8 @@ export default function SubscriptionsPage() {
         reporting={billingReporting}
         isLoading={overviewLoading}
         showManageLink={false}
+        statusFilter={statusFilter}
+        onSelectFilter={setStatusFilter}
         errorMessage={
           overviewError ? overviewErr?.message || 'Could not load subscription overview' : null
         }
@@ -282,6 +310,8 @@ export default function SubscriptionsPage() {
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="trialing">Trial</SelectItem>
+            <SelectItem value="live_trial">Trial — in progress</SelectItem>
+            <SelectItem value="expired_trials">Expired trials</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="expired">Expired</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
@@ -293,6 +323,31 @@ export default function SubscriptionsPage() {
             <SelectItem value="none">No subscription row</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span aria-live="polite">
+          {isLoading
+            ? 'Loading subscriptions…'
+            : `Showing ${filtered.length} of ${rows.length} ${
+                statusFilter === SUBSCRIPTION_STATUS_FILTER.ALL ? '' : `${statusFilterLabel.toLowerCase()} `
+              }record${filtered.length === 1 ? '' : 's'}`}
+        </span>
+        {isFilteredView ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => {
+              setStatusFilter(SUBSCRIPTION_STATUS_FILTER.ALL);
+              setPlanFilter('all');
+              setSearch('');
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -318,6 +373,11 @@ export default function SubscriptionsPage() {
               </div>
             </article>
           ))}
+          {filtered.length === 0 ? (
+            <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+              {isLoading ? 'Loading...' : emptyMessage}
+            </p>
+          ) : null}
         </div>
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full">
@@ -467,7 +527,7 @@ export default function SubscriptionsPage() {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                    {isLoading ? 'Loading...' : 'No subscriptions found'}
+                    {isLoading ? 'Loading...' : emptyMessage}
                   </td>
                 </tr>
               ) : null}

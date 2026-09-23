@@ -62,8 +62,13 @@ export function isTimestampInFuture(iso, now = new Date()) {
 }
 
 /**
- * Trialing with a future trial_ends_at. Unset trial_ends_at is treated as still valid
- * only for legacy rows (do not invent an end date on the client).
+ * A trial grants access while `now < trial_ends_at`.
+ *
+ * A finite trial expires whether or not an administrator created it: admin_override protects the
+ * administrator's decision from automation, it is not a bypass of the end date they chose.
+ * The only indefinite trial is an admin-managed row with no trial_ends_at at all
+ * (an administrator who wants open-ended access uses "Activate indefinitely" → status active).
+ *
  * @param {object | null | undefined} sub
  * @param {Date} [now]
  */
@@ -71,20 +76,21 @@ export function isTrialCurrentlyValid(sub, now = new Date()) {
   if (!sub) return false;
   const st = coerceSubscriptionStatus(sub.status);
   if (st !== SUBSCRIPTION_STATUS.TRIALING) return false;
-  if (isAdminManaged(sub)) return true;
   const raw = sub.trial_ends_at;
-  if (raw == null || raw === "") return true;
+  if (raw == null || raw === "") return isAdminManaged(sub);
   return isTimestampInFuture(raw, now);
 }
 
 /**
- * True when automation may flip trialing → expired. Never expires admin-managed rows.
+ * True when automation may flip trialing → expired.
+ *
+ * Finite trials expire, including admin-granted ones — that is the end date the administrator set.
+ * Indefinite admin trials (no trial_ends_at) are never touched by automation.
  * @param {object | null | undefined} sub
  * @param {Date} [now]
  */
 export function shouldExpireTrialRow(sub, now = new Date()) {
   if (!sub) return false;
-  if (isAdminManaged(sub)) return false;
   const st = coerceSubscriptionStatus(sub.status);
   if (st !== SUBSCRIPTION_STATUS.TRIALING) return false;
   const raw = sub.trial_ends_at;
@@ -127,7 +133,11 @@ export function hasSubscriptionAccess(sub, now = new Date()) {
 }
 
 /**
- * Prefer a live agreement over a newer pending checkout row.
+ * Pick the row that decides the company's package.
+ *
+ * Rows that currently grant access win over rows that do not (so a newer pending checkout never
+ * displaces a live agreement); among those, the most recently updated row is the current agreement,
+ * so an administrator's new Growth trial is not shadowed by an older active Starter row.
  * @param {object[]} rows
  * @param {Date} [now]
  */
@@ -136,10 +146,12 @@ export function pickAccessSubscriptionRow(rows, now = new Date()) {
   const score = (s) => {
     const st = coerceSubscriptionStatus(s?.status);
     const access = hasSubscriptionAccess(s, now);
+    // Every access-granting row scores the same; updated_at below breaks the tie, so the newest
+    // agreement wins rather than a stale one of a "higher" status.
     if (access && st === SUBSCRIPTION_STATUS.ACTIVE) return 100;
-    if (access && st === SUBSCRIPTION_STATUS.TRIALING) return 90;
-    if (access && st === SUBSCRIPTION_STATUS.PAST_DUE) return 80;
-    if (access && st === SUBSCRIPTION_STATUS.CANCELLED) return 70;
+    if (access && st === SUBSCRIPTION_STATUS.TRIALING) return 100;
+    if (access && st === SUBSCRIPTION_STATUS.PAST_DUE) return 100;
+    if (access && st === SUBSCRIPTION_STATUS.CANCELLED) return 100;
     if (st === SUBSCRIPTION_STATUS.PENDING || st === SUBSCRIPTION_STATUS.PROCESSING) return 20;
     if (st === SUBSCRIPTION_STATUS.EXPIRED) return 10;
     return 0;

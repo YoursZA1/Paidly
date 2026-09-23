@@ -58,7 +58,9 @@ describe("hasSubscriptionAccess", () => {
     expect(hasSubscriptionAccess({ status: "active" }, now)).toBe(true);
   });
 
-  it("allows admin-managed trialing past the original end", () => {
+  it("expires an admin-granted finite trial past its end date", () => {
+    // admin_override protects the administrator's decision from automation overwriting it.
+    // It is not a bypass of the end date the administrator chose.
     const sub = {
       status: "trialing",
       trial_ends_at: "2026-08-21T00:00:00.000Z",
@@ -66,8 +68,27 @@ describe("hasSubscriptionAccess", () => {
       subscription_source: "admin",
     };
     expect(isAdminManaged(sub)).toBe(true);
+    expect(hasSubscriptionAccess(sub, now)).toBe(false);
+    expect(shouldExpireTrialRow(sub, now)).toBe(true);
+  });
+
+  it("allows an admin trial that is still running", () => {
+    const sub = {
+      status: "trialing",
+      trial_ends_at: "2026-09-21T00:00:00.000Z",
+      admin_override: true,
+      subscription_source: "admin",
+    };
     expect(hasSubscriptionAccess(sub, now)).toBe(true);
     expect(shouldExpireTrialRow(sub, now)).toBe(false);
+  });
+
+  it("only an admin-managed row may trial indefinitely (no trial_ends_at)", () => {
+    const adminRow = { status: "trialing", trial_ends_at: null, admin_override: true, subscription_source: "admin" };
+    const selfServeRow = { status: "trialing", trial_ends_at: null, subscription_source: "system_trial" };
+    expect(hasSubscriptionAccess(adminRow, now)).toBe(true);
+    expect(shouldExpireTrialRow(adminRow, now)).toBe(false);
+    expect(hasSubscriptionAccess(selfServeRow, now)).toBe(false);
   });
 
   it("allows admin grant mapped as active + admin source", () => {

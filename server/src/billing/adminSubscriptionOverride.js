@@ -8,6 +8,8 @@ import { SUBSCRIPTION_STATUS, coerceSubscriptionStatus } from "../../../shared/s
 import { addCalendarDaysIso, SUBSCRIPTION_SOURCE, TRIAL_DURATION_DAYS } from "../../../shared/subscriptionAccess.js";
 
 export const ADMIN_SUBSCRIPTION_ACTIONS = Object.freeze([
+  "start_trial",
+  "activate_indefinite",
   "extend_trial",
   "restart_trial",
   "end_trial",
@@ -43,8 +45,37 @@ function markAdmin(patch, actorId, reason, nowIso) {
   return patch;
 }
 
+/** Apply an optional package change to a patch, using the current catalog only. */
+function applyPlanToPatch(patch, src, existing, extra) {
+  const planRaw = String(src.plan || src.plan_slug || "").trim().toLowerCase();
+  if (!planRaw) return patch;
+  const assignment = resolveCurrentCatalogAssignment({
+    plan: planRaw,
+    billing_cycle: src.billing_cycle || existing?.billing_cycle,
+  });
+  if (!assignment) {
+    throw httpError(400, "plan must be a current Paidly catalog plan (Starter, Business, Growth, or Enterprise)");
+  }
+  patch.plan = assignment.family;
+  patch.current_plan = assignment.family;
+  patch.plan_slug = assignment.slug;
+  patch.plan_family = assignment.family;
+  patch.billing_cycle = assignment.billing_cycle;
+  patch.amount = assignment.amount;
+  extra.plan = assignment.family;
+  return patch;
+}
+
 function humanAction(action, extra = {}) {
   switch (action) {
+    case "start_trial":
+      return extra.plan
+        ? `Admin started a ${extra.plan} trial${extra.days ? ` for ${extra.days} days` : ""}`
+        : `Admin started a trial${extra.days ? ` for ${extra.days} days` : ""}`;
+    case "activate_indefinite":
+      return extra.plan
+        ? `Admin activated ${extra.plan} indefinitely`
+        : "Admin activated access indefinitely";
     case "extend_trial":
       return extra.days
         ? `Admin extended trial by ${extra.days} days`
@@ -101,7 +132,30 @@ export function buildAdminOverridePatch(existing, body, opts = {}) {
   const patch = {};
   const extra = {};
 
-  if (action === "extend_trial") {
+  /**
+   * Finite admin trial: the chosen package for a chosen number of days (or an explicit end date).
+   * The row expires normally — admin_override only stops automation rewriting the administrator's
+   * choice, it does not defeat trial_ends_at.
+   */
+  if (action === "start_trial") {
+    const end = parseIso(src.trial_end_at || src.trial_ends_at, "trial_end_at");
+    let days = Number(src.days);
+    if (!end) {
+      if (!Number.isFinite(days) || days <= 0) days = TRIAL_DURATION_DAYS;
+      if (days < 1 || days > 365) throw httpError(400, "days must be between 1 and 365");
+    }
+    applyPlanToPatch(patch, src, existing, extra);
+    patch.status = SUBSCRIPTION_STATUS.TRIALING;
+    patch.trial_started_at = nowIso;
+    patch.trial_ends_at = end || addCalendarDaysIso(now, days);
+    if (!end) extra.days = days;
+  } else if (action === "activate_indefinite") {
+    /** Open-ended administrative access: active with no trial end to expire. */
+    applyPlanToPatch(patch, src, existing, extra);
+    patch.status = SUBSCRIPTION_STATUS.ACTIVE;
+    patch.trial_ends_at = null;
+    if (!existing?.activated_at) patch.activated_at = nowIso;
+  } else if (action === "extend_trial") {
     const customEnd = parseIso(src.trial_end_at || src.trial_ends_at, "trial_end_at");
     let days = Number(src.days);
     if (!Number.isFinite(days) || days <= 0) days = TRIAL_DURATION_DAYS;
@@ -129,6 +183,8 @@ export function buildAdminOverridePatch(existing, body, opts = {}) {
     patch.status = SUBSCRIPTION_STATUS.EXPIRED;
   } else if (action === "grant" || action === "activate") {
     patch.status = SUBSCRIPTION_STATUS.ACTIVE;
+    // Active access has no trial to end; leaving a stale date would show a trial that never applies.
+    patch.trial_ends_at = null;
     if (!existing?.activated_at) patch.activated_at = nowIso;
   } else if (action === "suspend") {
     patch.status = SUBSCRIPTION_STATUS.SUSPENDED;
