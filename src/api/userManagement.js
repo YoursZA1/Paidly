@@ -65,3 +65,33 @@ export async function setCompanyPlan(userId, plan, reason) {
   );
   return response.data;
 }
+
+/**
+ * Admin pause / resume of a user's company access. Access lives on the company subscription
+ * (suspended | active), not on profiles: no data, package, trial or billing history is touched.
+ * @param {string} userId
+ * @param {"paused"|"active"} access
+ * @param {string} [reason]
+ */
+export async function setCompanyAccess(userId, access, reason) {
+  const headers = await adminAuthHeaders();
+  const response = await backendApi.post(
+    "/api/admin/subscriptions",
+    { action: "set_company_access", user_id: userId, access, reason },
+    { headers }
+  );
+  return response.data;
+}
+
+/**
+ * Admin-facing message for a failed admin action: the server's reason when it sent one, else a
+ * plain fallback. Schema/driver details stay in the dev console, never in the toast.
+ * @param {unknown} err
+ * @param {string} fallback
+ */
+export function adminActionErrorMessage(err, fallback) {
+  const serverMessage = err?.response?.data?.error;
+  if (import.meta.env?.DEV) console.error("[admin action]", err?.response?.data || err);
+  if (typeof serverMessage === "string" && serverMessage.trim()) return serverMessage.trim();
+  return fallback;
+}

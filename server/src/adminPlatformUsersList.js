@@ -68,6 +68,21 @@ function subscriptionIsLive(row) {
 }
 
 /**
+ * Account access for the admin directory. profiles has no status column: access is the company
+ * subscription state (the field the entitlement resolver reads), so this is derived, never stored.
+ * @param {{ status?: string, trial_ends_at?: string|null, grace_ends_at?: string|null } | null} row
+ * @returns {"active"|"paused"|"pending"|"expired"|"none"}
+ */
+export function accountAccessStatus(row) {
+  if (!row) return "none";
+  const status = String(row.status || "").trim().toLowerCase();
+  if (status === "suspended" || status === "paused") return "paused";
+  if (status === "pending" || status === "processing") return "pending";
+  if (subscriptionIsLive(row)) return "active";
+  return "expired";
+}
+
+/**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
  * @param {number} limit
  */
@@ -94,7 +109,7 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
   if (userIds.length) {
     const { data: subs } = await supabaseAdmin
       .from("subscriptions")
-      .select("user_id, status, plan_slug, plan_family, plan, amount, trial_ends_at, grace_ends_at, updated_at")
+      .select("id, user_id, company_id, status, plan_slug, plan_family, plan, amount, trial_ends_at, trial_started_at, grace_ends_at, subscription_source, admin_override, next_billing_date, updated_at")
       .in("user_id", userIds)
       .order("updated_at", { ascending: false });
     for (const row of subs || []) {
@@ -128,7 +143,7 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
       subscription?.plan ||
       profile?.subscription_plan ||
       "free";
-    const status = profile?.status ?? "active";
+    const status = accountAccessStatus(subscription);
     const role = String(
       authUser.app_metadata?.role ||
         profile?.role ||
@@ -167,6 +182,11 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
       profile_plan: profile?.subscription_plan || profile?.plan || null,
       subscription_status: subscription?.status || null,
       subscription_is_live: Boolean(subscription?.live),
+      subscription_id: subscription?.id || null,
+      subscription_trial_ends_at: subscription?.trial_ends_at || null,
+      subscription_next_billing_date: subscription?.next_billing_date || null,
+      subscription_managed_by_admin:
+        subscription?.admin_override === true || subscription?.subscription_source === "admin",
       subscription_amount: subscription?.amount ?? null,
       plan_matches_profile:
         subscription == null

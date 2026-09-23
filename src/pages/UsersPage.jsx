@@ -40,7 +40,7 @@ import { useCurrentUser } from '@/lib/useCurrentUser';
 import { isKnownStaffRole } from '@/lib/staffDashboard';
 import { adminRowPrimaryId, stableDirectoryRowKey } from '@/utils/stableListKey';
 import { normalizePlanSlug, PLANS, isLegacyPlanSlug, familyForSlug } from '@/lib/plans.js';
-import { bulkUpdateUsers, setCompanyPlan } from '@/api/userManagement';
+import { adminActionErrorMessage, bulkUpdateUsers, setCompanyAccess, setCompanyPlan } from '@/api/userManagement';
 import TablePagination from '@/components/ui/TablePagination';
 
 const EMPTY_PLAN = '__empty__';
@@ -97,7 +97,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
   /** Remount bulk-action Selects after apply so placeholders return. */
   const [bulkSelectEpoch, setBulkSelectEpoch] = useState(0);
   const [showAddUser, setShowAddUser] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
+  const [editingUserId, setEditingUserId] = useState(null);
   const [bulkSuspendOpen, setBulkSuspendOpen] = useState(false);
   const [bulkSuspendIds, setBulkSuspendIds] = useState([]);
   const [usersPage, setUsersPage] = useState(0);
@@ -130,6 +130,12 @@ export default function UsersPage({ staffOnly = false } = {}) {
   });
 
   const usersFetching = useIsFetching({ queryKey: ['platform-users'] }) > 0;
+
+  // Always the freshest row for the open dialog (not a snapshot taken when it was opened).
+  const editingUser = useMemo(
+    () => (editingUserId ? users.find((u) => adminRowPrimaryId(u) === editingUserId) || null : null),
+    [editingUserId, users]
+  );
 
   const visibleUsers = useMemo(() => {
     const list = staffOnly
@@ -297,15 +303,27 @@ export default function UsersPage({ staffOnly = false } = {}) {
     onError: (err) => toast.error(err?.message || 'Bulk update failed'),
   });
 
+  // Account access lives on the company subscription (paused = suspended), never on profiles.
+  const accessMutation = useMutation({
+    mutationFn: ({ id, access }) => setCompanyAccess(id, access, `Admin ${access === 'paused' ? 'paused' : 'resumed'} account`),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+      queryClient.invalidateQueries({ queryKey: ['subscription-current'] });
+      toast.success(variables.access === 'paused' ? 'Account paused' : 'Account resumed');
+    },
+    onError: (err) => toast.error(adminActionErrorMessage(err, 'Unable to change this account\'s access. Please try again.')),
+  });
+
   const handleStatusChange = (user, newStatus) => {
     const rowId = adminRowPrimaryId(user);
     if (!rowId) {
-      toast.error('This row has no user id — cannot update status.');
+      toast.error('This row has no user id — cannot change access.');
       return;
     }
+    const access = newStatus === 'active' ? 'active' : 'paused';
     const prevStatus = user.status;
-    updateMutation.mutate(
-      { id: rowId, data: { status: newStatus } },
+    accessMutation.mutate(
+      { id: rowId, access },
       {
         onSuccess: () => {
           logAction({
@@ -313,16 +331,48 @@ export default function UsersPage({ staffOnly = false } = {}) {
             action: AUDIT_ACTIONS.USER_STATUS_CHANGED,
             category: 'users',
             entity: 'platform_user',
-            description: `Changed status of ${user.full_name || user.email} from "${prevStatus}" to "${newStatus}"`,
+            description: `Changed account access of ${user.full_name || user.email} from "${prevStatus}" to "${access}"`,
             targetId: rowId,
             targetLabel: user.email,
             before: { status: prevStatus },
-            after: { status: newStatus },
+            after: { status: access },
           });
         },
       }
     );
   };
+
+  const bulkAccessMutation = useMutation({
+    mutationFn: async ({ ids, access }) => {
+      const failedItems = [];
+      for (const id of ids) {
+        try {
+          await setCompanyAccess(id, access, `Bulk ${access === 'paused' ? 'pause' : 'resume'}`);
+        } catch (err) {
+          failedItems.push({ id, error: adminActionErrorMessage(err, 'failed') });
+        }
+      }
+      return { count: ids.length - failedItems.length, failedItems, access, ids };
+    },
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+      if (result.failedItems.length > 0) {
+        toast.warning(`${result.count} account(s) updated, ${result.failedItems.length} failed (${result.failedItems[0].error}).`);
+      } else {
+        toast.success(`${result.count} account(s) ${result.access === 'paused' ? 'paused' : 'resumed'}`);
+      }
+      logAction({
+        actor: currentUser,
+        action: AUDIT_ACTIONS.USER_STATUS_CHANGED,
+        category: 'users',
+        entity: 'platform_user',
+        description: `Bulk account access → ${result.access} for ${result.count} user(s)`,
+        after: { userIds: result.ids, status: result.access },
+      });
+      clearSelection();
+    },
+    onError: (err) => toast.error(adminActionErrorMessage(err, 'Bulk access change failed')),
+  });
 
   const runBulkAccountStatus = (newStatus) => {
     const ids = bulkEligibleUsers.map((u) => adminRowPrimaryId(u)).filter(Boolean);
@@ -334,45 +384,20 @@ export default function UsersPage({ staffOnly = false } = {}) {
       );
       return;
     }
-    if (newStatus === 'suspended') {
+    if (newStatus === 'paused') {
       setBulkSuspendIds(ids);
       setBulkSuspendOpen(true);
       return;
     }
-    bulkMutation.mutate({
-      ids,
-      data: { status: newStatus },
-      label: `account status → ${newStatus}`,
-      audit: {
-        action: AUDIT_ACTIONS.USER_STATUS_CHANGED,
-        category: 'users',
-        entity: 'platform_user',
-        description: `Bulk account status → ${newStatus} for ${ids.length} user(s)`,
-        after: { userIds: ids, status: newStatus },
-      },
-    });
+    bulkAccessMutation.mutate({ ids, access: 'active' });
   };
 
   const confirmBulkSuspend = () => {
     const ids = bulkSuspendIds;
-    if (!ids.length) {
-      setBulkSuspendOpen(false);
-      return;
-    }
-    bulkMutation.mutate({
-      ids,
-      data: { status: 'suspended' },
-      label: 'account status → suspended',
-      audit: {
-        action: AUDIT_ACTIONS.USER_STATUS_CHANGED,
-        category: 'users',
-        entity: 'platform_user',
-        description: `Bulk account status → suspended for ${ids.length} user(s)`,
-        after: { userIds: ids, status: 'suspended' },
-      },
-    });
     setBulkSuspendOpen(false);
     setBulkSuspendIds([]);
+    if (!ids.length) return;
+    bulkAccessMutation.mutate({ ids, access: 'paused' });
   };
 
   const bulkPlanMutation = useMutation({
@@ -477,11 +502,12 @@ export default function UsersPage({ staffOnly = false } = {}) {
               <SelectValue placeholder="Account status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All account status</SelectItem>
+              <SelectItem value="all">All account access</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="paused">Paused</SelectItem>
-              <SelectItem value="suspended">Suspended</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="expired">Expired</SelectItem>
+              <SelectItem value="pending">Awaiting payment</SelectItem>
+              <SelectItem value="none">No subscription</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -584,11 +610,12 @@ export default function UsersPage({ staffOnly = false } = {}) {
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All account status</SelectItem>
+                <SelectItem value="all">All account access</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="paused">Paused</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="expired">Expired</SelectItem>
+                <SelectItem value="pending">Awaiting payment</SelectItem>
+                <SelectItem value="none">No subscription</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -634,13 +661,11 @@ export default function UsersPage({ staffOnly = false } = {}) {
           <div className="flex flex-wrap items-center gap-2">
             <Select key={`bulk-acct-${bulkSelectEpoch}`} onValueChange={(v) => runBulkAccountStatus(v)}>
               <SelectTrigger className="h-9 w-[200px] bg-card">
-                <SelectValue placeholder="Set account status…" />
+                <SelectValue placeholder="Set account access…" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">→ Active</SelectItem>
-                <SelectItem value="paused">→ Paused</SelectItem>
-                <SelectItem value="suspended">→ Suspended</SelectItem>
-                <SelectItem value="pending">→ Pending</SelectItem>
+                <SelectItem value="active">→ Resume access</SelectItem>
+                <SelectItem value="paused">→ Pause access</SelectItem>
               </SelectContent>
             </Select>
 
@@ -689,7 +714,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
                         disabled={!rowId}
                         onClick={() => {
                           setShowAddUser(false);
-                          setEditingUser(u);
+                          setEditingUserId(adminRowPrimaryId(u));
                         }}
                       >
                         View / Edit
@@ -844,7 +869,7 @@ export default function UsersPage({ staffOnly = false } = {}) {
                             disabled={!rowId}
                             onClick={() => {
                               setShowAddUser(false);
-                              setEditingUser(u);
+                              setEditingUserId(adminRowPrimaryId(u));
                             }}
                           >
                             Edit User
@@ -924,10 +949,10 @@ export default function UsersPage({ staffOnly = false } = {}) {
       </AlertDialog>
 
       <UserFormDialog
-        open={showAddUser || !!editingUser}
+        open={showAddUser || !!editingUserId}
         onClose={() => {
           setShowAddUser(false);
-          setEditingUser(null);
+          setEditingUserId(null);
         }}
         user={editingUser}
       />

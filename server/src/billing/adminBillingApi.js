@@ -797,8 +797,12 @@ export async function handleAdminSubscriptionCreate(req, res) {
 
   const body = parseJsonBody(req);
   if (body == null) return json(res, 400, { error: "Invalid JSON body" });
-  if (String(body.action || "").trim().toLowerCase() === "set_company_plan") {
+  const namedAction = String(body.action || "").trim().toLowerCase();
+  if (namedAction === "set_company_plan") {
     return handleAdminSetCompanyPlan(res, supabase, user, body);
+  }
+  if (namedAction === "set_company_access") {
+    return handleAdminSetCompanyAccess(res, supabase, user, body);
   }
 
   let row;
@@ -889,8 +893,11 @@ export async function handleAdminSetCompanyPlan(res, supabase, actor, body) {
       return json(res, e.status || 400, { error: e.message || "Invalid plan" });
     }
     const patch = { ...built.patch };
-    // A lapsed row (expired trial, cancelled, suspended) must actually grant the new package.
-    if (!hasSubscriptionAccess(existing, now)) {
+    // A lapsed row (expired trial, cancelled, failed) must actually grant the new package. A
+    // suspended row stays suspended: an admin paused it on purpose, so changing the package must
+    // not silently restore access — Resume does that.
+    const suspended = coerceSubscriptionStatus(existing.status) === SUBSCRIPTION_STATUS.SUSPENDED;
+    if (!suspended && !hasSubscriptionAccess(existing, now)) {
       patch.status = SUBSCRIPTION_STATUS.ACTIVE;
       if (!existing.activated_at) patch.activated_at = now.toISOString();
     }
@@ -939,6 +946,59 @@ export async function handleAdminSetCompanyPlan(res, supabase, actor, body) {
   return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
 }
 
+/**
+ * POST /api/admin/subscriptions { action: "set_company_access", user_id, access: "paused"|"active", reason? }
+ *
+ * Admin pause / resume for the company a user belongs to. Access lives on the company subscription
+ * (status suspended|active + admin_override) — the field the entitlement resolver already reads —
+ * so nothing is deleted and the package, trial dates, billing history and company data are untouched.
+ */
+export async function handleAdminSetCompanyAccess(res, supabase, actor, body) {
+  const userId = String(body.user_id || "").trim();
+  if (!isValidUuid(userId)) return json(res, 400, { error: "user_id required" });
+  const requested = String(body.access || "").trim().toLowerCase();
+  const pause = ["paused", "pause", "suspended", "suspend"].includes(requested);
+  const resume = ["active", "activate", "resume"].includes(requested);
+  if (!pause && !resume) return json(res, 400, { error: 'access must be "paused" or "active"' });
+  const reason = String(body.reason || "").trim().slice(0, 500) || null;
+
+  const companyId = await resolveUserCompanyId(supabase, userId);
+  let q = supabase.from("subscriptions").select("*").order("updated_at", { ascending: false }).limit(20);
+  q = companyId ? q.eq("company_id", companyId) : q.eq("user_id", userId);
+  const { data: rows, error: loadErr } = await q;
+  if (loadErr) return json(res, 500, { error: "Failed to load subscription" });
+
+  const now = new Date();
+  const existing = pickAccessSubscriptionRow(rows || [], now);
+  if (!existing) {
+    return json(res, 409, {
+      error: "This account has no subscription yet, so there is no access to pause or resume. Set a package first.",
+      code: "NO_SUBSCRIPTION",
+    });
+  }
+
+  // Already in the requested state: report it instead of writing an override for nothing.
+  const isSuspended = coerceSubscriptionStatus(existing.status) === SUBSCRIPTION_STATUS.SUSPENDED;
+  if ((pause && isSuspended) || (resume && !isSuspended && hasSubscriptionAccess(existing, now))) {
+    return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(existing), unchanged: true });
+  }
+
+  const built = buildAdminOverridePatch(
+    existing,
+    { action: pause ? "suspend" : "activate", reason },
+    { actorId: actor?.id || null, now }
+  );
+  return applyAdminPlanPatch(
+    res,
+    supabase,
+    actor,
+    existing,
+    built.patch,
+    pause ? "suspend" : "activate",
+    built.description
+  );
+}
+
 async function applyAdminPlanPatch(res, supabase, actor, existing, patch, action, description) {
   await attachPlanId(supabase, patch);
   const { data, error } = await supabase
@@ -948,15 +1008,25 @@ async function applyAdminPlanPatch(res, supabase, actor, existing, patch, action
     .select("*")
     .maybeSingle();
   if (error || !data) return json(res, 500, { error: error?.message || "Failed to update subscription" });
+  // subscription_events has a fixed vocabulary (shared/subscriptionEventTypes.js) with no
+  // "suspended" type, so a pause is recorded in audit_logs only.
   const eventType =
-    action === "cancel" ? SUBSCRIPTION_EVENT_TYPE.CANCELLED : SUBSCRIPTION_EVENT_TYPE.ACTIVATED;
-  await logAdminSubscriptionEvent(supabase, data.id, data.company_id, eventType, {
-    source: "admin",
-    actor_id: actor?.id || null,
-    action,
-    from: existing.plan_family || existing.plan,
-    to: data.plan_family || data.plan,
-  });
+    action === "cancel"
+      ? SUBSCRIPTION_EVENT_TYPE.CANCELLED
+      : action === "change_plan"
+        ? SUBSCRIPTION_EVENT_TYPE.PLAN_CHANGED
+        : action === "activate"
+          ? SUBSCRIPTION_EVENT_TYPE.ACTIVATED
+          : null;
+  if (eventType) {
+    await logAdminSubscriptionEvent(supabase, data.id, data.company_id, eventType, {
+      source: "admin",
+      actor_id: actor?.id || null,
+      action,
+      from: existing.plan_family || existing.plan,
+      to: data.plan_family || data.plan,
+    });
+  }
   await writeAdminSubscriptionAudit(supabase, {
     actor,
     target: data,
