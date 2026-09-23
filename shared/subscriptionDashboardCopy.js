@@ -201,10 +201,13 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
     const urgency = stillOpen
       ? trialUrgency({ remainingMs, daysRemaining })
       : { heading: "You're on a free trial", supportingPrefix: null };
+    const trialBits = [];
+    if (name) trialBits.push(`You have full ${name} access.`);
+    trialBits.push(dateLabel ? `Your trial ends on ${dateLabel}.` : urgency.supportingPrefix);
     return banner({
       kind: DASHBOARD_BANNER_KIND.TRIALING,
       heading: urgency.heading,
-      supporting: dateLabel ? `Your trial ends on ${dateLabel}.` : urgency.supportingPrefix,
+      supporting: trialBits.filter(Boolean).join(" ") || null,
       countdown: stillOpen
         ? countdownLabel({
             expired: false,
@@ -213,7 +216,12 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
             hoursRemaining,
           })
         : null,
-      ctaLabel: daysRemaining === 1 || (remainingMs != null && remainingMs < MS_DAY && remainingMs > 0) ? "Subscribe now" : "Choose a plan",
+      ctaLabel:
+        daysRemaining === 1 || (remainingMs != null && remainingMs < MS_DAY && remainingMs > 0)
+          ? "Subscribe now"
+          : name
+            ? `Keep ${name}`
+            : "Choose a plan",
       tone: "neutral",
       planName: name,
     });
@@ -257,12 +265,16 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
     String(src.subscription_status || "").toLowerCase() === "trial";
 
   if (status === SUBSCRIPTION_STATUS.EXPIRED || (trialStatus && expiredByTime)) {
+    // The package survives the trial: point back at it, never at a lower tier.
     return banner({
       kind: DASHBOARD_BANNER_KIND.EXPIRED,
-      heading: "Your free trial has ended",
-      supporting: "Choose a Paidly plan to continue using your account.",
-      ctaLabel: "Choose a plan",
+      heading: name ? `Your ${name} free trial has ended` : "Your free trial has ended",
+      supporting: name
+        ? `Subscribe to ${name} to continue using your account.`
+        : "Choose a Paidly plan to continue using your account.",
+      ctaLabel: name ? `Subscribe to ${name}` : "Choose a plan",
       tone: "warning",
+      planName: name,
     });
   }
 
@@ -270,6 +282,8 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
     const dateLabel = formatTrialEndDate(trialEnd);
     const urgency = trialUrgency({ remainingMs, daysRemaining });
     const supportingParts = [];
+    // Trial = the chosen package on a clock. Say which package it is.
+    if (name) supportingParts.push(`You have full ${name} access.`);
     if (dateLabel) supportingParts.push(`Your trial ends on ${dateLabel}.`);
     if (urgency.supportingPrefix) supportingParts.push(urgency.supportingPrefix);
     const underADay = remainingMs != null && remainingMs < MS_DAY;
@@ -283,7 +297,7 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
         daysRemaining,
         hoursRemaining,
       }),
-      ctaLabel: daysRemaining === 1 || underADay ? "Subscribe now" : "Choose a plan",
+      ctaLabel: daysRemaining === 1 || underADay ? "Subscribe now" : name ? `Keep ${name}` : "Choose a plan",
       tone: underADay || daysRemaining === 1 || daysRemaining === 2 ? "warning" : "neutral",
       planName: name,
     });

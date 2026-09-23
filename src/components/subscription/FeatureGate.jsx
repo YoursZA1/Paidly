@@ -5,6 +5,7 @@ import { Lock, Crown } from 'lucide-react';
 import Button from '@/components/ui/button';
 import { hasFeature } from '@/lib/plans';
 import { requiredTierForFeature } from '@shared/planFeatures.js';
+import { resolveUpgradeTarget } from '@shared/planUpgrade.js';
 import { useEntitlementAccess } from '@/hooks/useEntitlementAccess';
 import { describeEntitlementBadge } from '@/lib/clientEntitlement';
 
@@ -59,12 +60,28 @@ const FAMILY_LABEL = {
 
 const FAMILY_BY_RANK = ['', 'starter', 'business', 'growth', 'enterprise'];
 
-/** Lowest package that includes the feature, from the shared catalog (shared/planFeatures.js). */
+/**
+ * Lowest package that includes the feature, from the shared catalog (shared/planFeatures.js).
+ * Catalog fact only — for what to tell a company, use getUpgradeTarget (it starts from their package).
+ */
 export const getRequiredPlan = (feature) => {
   const key = FEATURE_ALIASES[feature] || feature;
   const family = FAMILY_BY_RANK[requiredTierForFeature(key)];
   return family ? FAMILY_LABEL[family] : 'Enterprise';
 };
+
+/**
+ * What a company must do to reach `feature`, starting from its own package:
+ * nothing / renew its package / upgrade to the next package above that includes it.
+ * @param {string} feature UI or canonical feature key
+ * @param {{ subscribedPlan?: string | null, accessGranted?: boolean | null } | null | undefined} entitlement
+ */
+export const getUpgradeTarget = (feature, entitlement) =>
+  resolveUpgradeTarget({
+    currentPlan: entitlement?.subscribedPlan ?? null,
+    accessGranted: entitlement?.accessGranted === true,
+    featureKey: FEATURE_ALIASES[feature] || feature,
+  });
 
 export const hasFeatureAccess = (userPlan, feature) => {
   const key = FEATURE_ALIASES[feature] || feature;
@@ -88,7 +105,7 @@ export default function FeatureGate({ children, feature, fallback }) {
     return fallback;
   }
 
-  const required = getRequiredPlan(feature);
+  const target = getUpgradeTarget(feature, ent.entitlement);
   const badge = describeEntitlementBadge(ent.entitlement);
   const currentLabel = badge.plan
     ? `${badge.planLabel}${ent.accessGranted ? '' : ` (${badge.statusLabel.toLowerCase()})`}`
@@ -98,17 +115,29 @@ export default function FeatureGate({ children, feature, fallback }) {
     <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
       <Lock className="h-8 w-8 text-zinc-400" aria-hidden />
       <div>
-        <p className="font-semibold text-zinc-900 dark:text-zinc-100">Upgrade required</p>
+        <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+          {target.action === 'renew'
+            ? `Renew ${target.planLabel} to continue`
+            : target.action === 'none'
+              ? 'Not included in your plan'
+              : 'Upgrade required'}
+        </p>
         <p className="mt-1 text-sm text-zinc-500">
-          {required} plan needed for this feature. You are on {currentLabel}.
+          {target.action === 'renew'
+            ? `This feature is included in ${target.planLabel}. You are on ${currentLabel}.`
+            : target.action === 'none'
+              ? `This feature is available on a custom Enterprise agreement. You are on ${currentLabel}.`
+              : `${target.planLabel} plan needed for this feature. You are on ${currentLabel}.`}
         </p>
       </div>
-      <Button asChild>
-        <Link to={`${createPageUrl('Settings')}?tab=subscription`}>
-          <Crown className="mr-2 h-4 w-4" />
-          View plans
-        </Link>
-      </Button>
+      {target.label ? (
+        <Button asChild>
+          <Link to={`${createPageUrl('Settings')}?tab=subscription`}>
+            <Crown className="mr-2 h-4 w-4" />
+            {target.label}
+          </Link>
+        </Button>
+      ) : null}
     </div>
   );
 }

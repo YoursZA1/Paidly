@@ -18,10 +18,9 @@ import QuoteList from "../components/quote/QuoteList";
 import QuoteGrid from "../components/quote/QuoteGrid";
 import { useAppStore } from "@/stores/useAppStore";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { hasFeature } from "@/data/paidlySubscriptionPlans";
 import UpgradePrompt from "@/components/subscription/UpgradePrompt";
-import { useUserProfileQuery } from "@/hooks/useUserProfileQuery";
-import { normalizePaidPackageKey, slugFromProfile } from "@/lib/subscriptionPlan";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
+import { getUpgradeTarget } from "@/components/subscription/FeatureGate";
 import { useDocumentListController, buildLookupMap } from "@/hooks/useDocumentListController";
 import { quoteListAdapter } from "@/services/documentListAdapters";
 import DocumentListPagination from "@/components/shared/DocumentListPagination";
@@ -31,11 +30,10 @@ export default function QuotesPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const { user: authUser } = useAuth();
-    const { profile: profileFromQuery, isPending: profileQueryPending } = useUserProfileQuery();
+    const ent = useEntitlementAccess({ enabled: Boolean(authUser) });
     const quotesFromStore = useAppStore((s) => s.quotes);
     const clients = useAppStore((s) => s.clients);
     const userProfile = useAppStore((s) => s.userProfile);
-    const appStoreLoading = useAppStore((s) => s.isLoading);
     const {
         quotes: quotesFromQuery,
         loading: quotesLoading,
@@ -174,24 +172,16 @@ export default function QuotesPage() {
         }
     };
 
-    const billingProfile = useMemo(() => {
-        const a = authUser && typeof authUser === "object" ? authUser : {};
-        const s = userProfile && typeof userProfile === "object" ? userProfile : {};
-        const q = profileFromQuery && typeof profileFromQuery === "object" ? profileFromQuery : {};
-        return { ...a, ...s, ...q };
-    }, [authUser, userProfile, profileFromQuery]);
-
-    const billingSlug = slugFromProfile(billingProfile);
-    const packageKeyForFeatures = normalizePaidPackageKey(billingProfile);
-    const canGate =
-        Boolean(billingSlug) || (!appStoreLoading && !profileQueryPending);
-    if (canGate && !hasFeature(packageKeyForFeatures, "quotes")) {
+    // Company package decides access (never profiles.plan / trial status). A lapsed package that
+    // includes quotes stays readable via DocListLockShell; only a package without quotes is gated here.
+    const quotesUpgrade = getUpgradeTarget("quotes", ent.entitlement);
+    if (ent.isEntitlementReady && ent.accessGranted && !ent.hasFeature("quotes")) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center p-6">
                 <UpgradePrompt
                     featureKey="quotes"
                     title="Quotes aren’t on your current plan"
-                    description="Quotes are included on Starter, Business, and Growth. Pick a tier and pay with PayFast to unlock."
+                    description={`${quotesUpgrade.label || "Choose a plan"} to unlock quotes. Pay securely with PayFast.`}
                 />
             </div>
         );

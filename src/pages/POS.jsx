@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Crown, Lock, Store } from "lucide-react";
-import FeatureGate from "@/components/subscription/FeatureGate";
+import FeatureGate, { getUpgradeTarget } from "@/components/subscription/FeatureGate";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 import PosTerminal from "@/components/pos/PosTerminal";
 import { PosLoading } from "@/components/pos/PosShellStates";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,20 +11,27 @@ import { isPosOnlyStaff } from "@shared/posStaffInvite.js";
 import useCompanyContext from "@/hooks/useCompanyContext";
 
 function PosPlanLock() {
+  // From the company's package: a lapsed Business/Growth account renews, Starter upgrades.
+  const { entitlement } = useEntitlementAccess();
+  const target = getUpgradeTarget("pos", entitlement);
+  const renew = target.action === "renew";
   return (
     <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-6 text-center">
       <Lock className="size-10 text-muted-foreground" aria-hidden />
       <div>
-        <p className="font-display text-xl font-semibold">POS needs Business</p>
+        <p className="font-display text-xl font-semibold">
+          {renew ? `Renew ${target.planLabel} to open POS` : `POS needs ${target.planLabel || "Business"}`}
+        </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          The till sells from your catalog and updates stock. Upgrade to open it.
+          The till sells from your catalog and updates stock.{" "}
+          {renew ? `It is included in ${target.planLabel}.` : "Upgrade to open it."}
         </p>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Button asChild className="h-12 min-w-[10rem]">
           <Link to={`${createPageUrl("Settings")}?tab=subscription`}>
             <Crown className="size-4" />
-            View plans
+            {target.label || "View plans"}
           </Link>
         </Button>
         <Button asChild variant="outline" className="h-12">

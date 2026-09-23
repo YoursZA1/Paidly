@@ -1,6 +1,8 @@
 /**
  * Auth admin list + profile merge for GET /api/admin/platform-users (Express + Vercel).
  */
+import { pickAccessSubscriptionRow } from "../../shared/subscriptionAccess.js";
+import { familyForSlug } from "../../shared/plans.js";
 
 /** @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin */
 export async function listAllAuthUsersAdmin(supabaseAdmin) {
@@ -112,14 +114,16 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
       .select("id, user_id, company_id, status, plan_slug, plan_family, plan, amount, trial_ends_at, trial_started_at, grace_ends_at, subscription_source, admin_override, next_billing_date, updated_at")
       .in("user_id", userIds)
       .order("updated_at", { ascending: false });
+    const rowsByUser = new Map();
     for (const row of subs || []) {
       const key = String(row.user_id);
-      const current = subscriptionMap.get(key);
-      const live = subscriptionIsLive(row);
-      // Prefer a live agreement, else the most recently updated row.
-      if (!current || (live && !current.live)) {
-        subscriptionMap.set(key, { ...row, live });
-      }
+      if (!rowsByUser.has(key)) rowsByUser.set(key, []);
+      rowsByUser.get(key).push(row);
+    }
+    // Same row the entitlement resolver picks, so Admin shows the package the account really gets.
+    for (const [key, rows] of rowsByUser) {
+      const row = pickAccessSubscriptionRow(rows);
+      if (row) subscriptionMap.set(key, { ...row, live: subscriptionIsLive(row) });
     }
   }
   const nowMs = Date.now();
@@ -138,8 +142,8 @@ export async function fetchMergedPlatformUsersForAdmin(supabaseAdmin, limit) {
     const subscription = subscriptionMap.get(String(authUser.id)) || null;
     /** Plan shown in Admin comes from the subscription; the profile mirror is only a fallback label. */
     const plan =
+      familyForSlug(subscription?.plan_slug) ||
       subscription?.plan_family ||
-      subscription?.plan_slug ||
       subscription?.plan ||
       profile?.subscription_plan ||
       "free";

@@ -631,6 +631,9 @@ async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
       .maybeSingle();
     planName = plan?.name || planSlug;
   }
+  // The package the entitlement resolver decided (plan_family first). plan_id / plan_slug can lag
+  // behind it, and the name shown must match what the account can actually use.
+  if (opts.packageName) planName = opts.packageName;
 
   const currentStatus = sub.status || null;
   /** Access end: expires_at → current_period_end → pending_expires_at */
@@ -705,7 +708,7 @@ async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
     expiresAt: expiry,
     renewAt: renewDate,
     nextBillingDate: renewDate,
-    planFamily: sub.plan_family || familyForSlug(planSlug) || null,
+    planFamily: familyForSlug(sub.plan_slug) || sub.plan_family || familyForSlug(planSlug) || null,
     graceEndsAt: sub.grace_ends_at || null,
     accessGranted: hasPaidAccessIncludingGrace(sub, now),
     trialStartAt: sub.trial_started_at || null,
@@ -809,10 +812,14 @@ export async function handleSubscriptionCurrent(req, res) {
     });
   }
 
-  const statusPayload = await buildSubscriptionStatusPayload(supabase, sub, { viewerId: auth.user.id });
+  const statusPayload = await buildSubscriptionStatusPayload(supabase, sub, {
+    viewerId: auth.user.id,
+    packageName: entitlement.planName,
+  });
   return json(res, 200, {
     subscription: sub,
     ...statusPayload,
+    planFamily: entitlement.plan,
     accessGranted: entitlement.accessGranted,
     entitlement,
   });

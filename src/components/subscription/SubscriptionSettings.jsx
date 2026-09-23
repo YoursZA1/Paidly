@@ -62,12 +62,27 @@ export default function SubscriptionSettings() {
     const showActivePlanHeader = Boolean(ent.accessGranted && badge.plan);
     // CURRENT only when the company's subscription grants access on that package.
     const currentPlanId = ent.accessGranted ? ent.subscribedPlan : null;
-    const currentRank = currentPlanId ? FAMILY_TIER_RANK[currentPlanId] || 0 : 0;
+    // Directions always start from the company's package — including a lapsed one — so an expired
+    // Business trial is offered "Renew Business" / Growth, never Starter as an upgrade.
+    const basePlanId = ent.subscribedPlan || null;
+    const baseRank = basePlanId ? FAMILY_TIER_RANK[basePlanId] || 0 : 0;
+    const trialing = Boolean(ent.accessGranted && ent.trialing);
     const tierDirection = (tier) => {
-        if (!currentRank) return "subscribe";
+        if (!baseRank) return "subscribe";
         const rank = FAMILY_TIER_RANK[tier.family] || 0;
-        if (rank === currentRank) return "current";
-        return rank > currentRank ? "upgrade" : "downgrade";
+        if (rank === baseRank) {
+            if (!ent.accessGranted) return "renew";
+            // Trial: same package, just time-limited — let them pay to keep it.
+            return trialing ? "keep" : "current";
+        }
+        return rank > baseRank ? "upgrade" : "downgrade";
+    };
+    const ctaForDirection = (direction, tier) => {
+        if (direction === "upgrade") return "Upgrade";
+        if (direction === "downgrade") return "Downgrade";
+        if (direction === "renew") return `Renew ${tier.name}`;
+        if (direction === "keep") return `Keep ${tier.name} after trial`;
+        return "Subscribe";
     };
     // Live PayFast recurring agreement → change plans on that token instead of a new checkout.
     const payfastManaged = Boolean(billingStatus?.payfastManaged);
@@ -213,9 +228,9 @@ export default function SubscriptionSettings() {
                                         Most popular
                                     </span>
                                 )}
-                                {isCurrent && !tier.recommended && (
+                                {(isCurrent || direction === "keep" || direction === "renew") && !tier.recommended && (
                                     <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-widest">
-                                        Current
+                                        {direction === "renew" ? "Your plan" : direction === "keep" ? "Trial" : "Current"}
                                     </span>
                                 )}
 
@@ -242,7 +257,7 @@ export default function SubscriptionSettings() {
                                     ))}
                                 </ul>
 
-                                {!isCurrent && payfastManaged ? (
+                                {!isCurrent && payfastManaged && (direction === "upgrade" || direction === "downgrade") ? (
                                     <PlanSwitchButton
                                         planSlug={tier.id}
                                         planName={tier.name}
@@ -259,9 +274,7 @@ export default function SubscriptionSettings() {
                                         planSlug={tier.id}
                                         planName={tier.name}
                                         itemDescription={tier.description}
-                                        ctaLabel={
-                                            direction === "upgrade" ? "Upgrade" : direction === "downgrade" ? "Downgrade" : "Subscribe"
-                                        }
+                                        ctaLabel={ctaForDirection(direction, tier)}
                                         className="mt-0"
                                     />
                                 ) : (

@@ -8,9 +8,10 @@ import PropTypes from "prop-types";
 import { createPageUrl } from "@/utils";
 
 // Plan-gated nav: upgrade icon instead of “(Upgrade to …)” text.
-const LockedNavItem = ({ title, requiredPlan, icon: Icon, collapsed = false }) => {
+const LockedNavItem = ({ title, upgradeLabel: upgradeLabelProp, icon: Icon, collapsed = false }) => {
   const upgradeUrl = `${createPageUrl("Settings")}?tab=subscription`;
-  const upgradeLabel = requiredPlan ? `Upgrade to ${requiredPlan}` : "Upgrade plan";
+  // No computed target (e.g. Growth, the top package) → no upgrade wording.
+  const upgradeLabel = upgradeLabelProp || "Not included in your plan";
   return (
     <Link
       to={upgradeUrl}
@@ -32,7 +33,7 @@ const LockedNavItem = ({ title, requiredPlan, icon: Icon, collapsed = false }) =
 };
 LockedNavItem.propTypes = {
   title: PropTypes.string.isRequired,
-  requiredPlan: PropTypes.string,
+  upgradeLabel: PropTypes.string,
   icon: PropTypes.elementType,
   collapsed: PropTypes.bool,
 };
@@ -91,7 +92,7 @@ export const NavLink = ({ item, onClick, collapsed = false }) => {
   const isActive = item.url && location.pathname === item.url.split("?")[0];
 
   if (item.hasAccess === false) {
-    return <LockedNavItem title={item.title} requiredPlan={item.requiredPlan} icon={item.icon} collapsed={collapsed} />;
+    return <LockedNavItem title={item.title} upgradeLabel={item.upgradeLabel} icon={item.icon} collapsed={collapsed} />;
   }
 
   if (item.hasRoleAccess === false) {

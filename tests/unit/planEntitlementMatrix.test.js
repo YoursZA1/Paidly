@@ -15,6 +15,7 @@ const { memory, tables } = vi.hoisted(() => {
     if (f.op === "neq") return String(v ?? "") !== String(f.value ?? "");
     if (f.op === "in") return f.value.map(String).includes(String(v ?? ""));
     if (f.op === "notnull") return v != null;
+    if (f.op === "is") return f.value === null ? v == null : v === f.value;
     return true;
   };
 
@@ -59,6 +60,7 @@ const { memory, tables } = vi.hoisted(() => {
         neq(col, value) { st.filters.push({ op: "neq", col, value }); return api; },
         in(col, value) { st.filters.push({ op: "in", col, value }); return api; },
         not(col) { st.filters.push({ op: "notnull", col }); return api; },
+        is(col, value) { st.filters.push({ op: "is", col, value }); return api; },
         order(col, opts) { st.order = { col, asc: opts?.ascending !== false }; return api; },
         limit(n) { st.limit = n; return api; },
         async maybeSingle() { const r = run(); return { data: (r.data || [])[0] || null, error: null }; },
@@ -84,7 +86,9 @@ import {
   describeEntitlementBadge,
   isEntitlementLapsed,
 } from "../../src/lib/clientEntitlement.js";
-import { getRequiredPlan } from "../../src/components/subscription/FeatureGate.jsx";
+import { getRequiredPlan, getUpgradeTarget } from "../../src/components/subscription/FeatureGate.jsx";
+import { buildAdminOverridePatch } from "../../server/src/billing/adminSubscriptionOverride.js";
+import { upsertSubscriptionFromItn } from "../../server/src/payfastSubscriptionItn.js";
 
 const COMPANY = "11111111-1111-4111-8111-111111111111";
 const OWNER = "22222222-2222-4222-8222-222222222222";
@@ -352,5 +356,167 @@ describe("required-plan labels come from the shared catalog", () => {
     ["customBranding", "Enterprise"],
   ])("%s → %s", (feature, plan) => {
     expect(getRequiredPlan(feature)).toBe(plan);
+  });
+});
+
+/**
+ * Verification matrix (spec §11). For each case: effective package, entitlement state, feature
+ * visibility (client), backend authorization (server gate), upgrade CTA, displayed package.
+ * Growth is the top of the self-serve path, so it never gets a CTA.
+ */
+describe("verification matrix", () => {
+  const serverAllows = async (feature) =>
+    assertUserHasFeature(memory, OWNER, feature).then(() => true, () => false);
+
+  /** Everything the spec asks to verify, from one resolver pass. */
+  async function check(feature) {
+    const e = await entitlementFor();
+    const ui = deriveEntitlementFromSubscriptionCurrent({ entitlement: e });
+    return {
+      plan: e.plan,
+      access: e.accessGranted,
+      visible: clientHasFeature(feature, { snapshot: ui }),
+      server: await serverAllows(feature),
+      cta: getUpgradeTarget(feature, ui).label,
+      badge: describeEntitlementBadge(ui).planLabel,
+      seats: e.limits.seats,
+    };
+  }
+
+  const adminActivate = (row, body) => {
+    const { patch } = buildAdminOverridePatch(row, body, { actorId: randomUUID() });
+    Object.assign(row, patch);
+  };
+
+  // 1–3 trial + package, 4–6 active package: full package, package limits, no CTA on own features.
+  it.each([
+    ["trialing", "starter", "invoices", 1],
+    ["trialing", "business", "payslips", 5],
+    ["trialing", "growth", "leave_management", null],
+    ["active", "starter", "invoices", 1],
+    ["active", "business", "payslips", 5],
+    ["active", "growth", "leave_management", null],
+  ])("%s %s: full package, own limits, no CTA", async (status, plan, feature, seats) => {
+    seed({ plan, status, trialEndsInMs: status === "trialing" ? 5 * DAY : null });
+    expect(await check(feature)).toEqual({
+      plan, access: true, visible: true, server: true, cta: "", badge: plan[0].toUpperCase() + plan.slice(1), seats,
+    });
+  });
+
+  it("7. expired Business trial: package kept, access off, CTA renews Business (never Starter)", async () => {
+    seed({ plan: "business", status: "trialing", trialEndsInMs: -DAY });
+    expect(await check("reports_basic")).toMatchObject({
+      plan: "business", access: false, visible: false, server: false, cta: "Renew Business", badge: "Business",
+    });
+  });
+
+  it("8. admin activated Starter for 15 days", async () => {
+    const row = seed({ plan: "starter", status: "expired" });
+    adminActivate(row, { action: "start_trial", plan: "starter", days: 15 });
+    const e = await entitlementFor();
+    expect(e).toMatchObject({ plan: "starter", accessGranted: true, trialing: true, trialDaysRemaining: 15 });
+    expect(await check("payslips")).toMatchObject({ visible: false, server: false, cta: "Upgrade to Business" });
+  });
+
+  it("9. admin activated Business for 30 days: Business, not Starter", async () => {
+    const row = seed({ plan: "starter", status: "trialing", trialEndsInMs: -DAY });
+    adminActivate(row, { action: "start_trial", plan: "business", days: 30 });
+    const e = await entitlementFor();
+    expect(e).toMatchObject({ plan: "business", accessGranted: true, trialDaysRemaining: 30 });
+    expect(await check("payslips")).toMatchObject({ plan: "business", visible: true, server: true, cta: "" });
+  });
+
+  it("10. admin activated Growth indefinitely", async () => {
+    const row = seed({ plan: "starter", status: "expired" });
+    adminActivate(row, { action: "activate_indefinite", plan: "growth" });
+    expect(await entitlementFor()).toMatchObject({ plan: "growth", accessGranted: true, trialing: false, trialEndsAt: null });
+    expect(await check("api_access")).toMatchObject({ visible: true, server: true, cta: "" });
+  });
+
+  // 11–14: package changes take effect on the next resolve; no stale features either way.
+  it.each([
+    ["starter", "business", "payslips", true],
+    ["business", "growth", "leave_management", true],
+    ["growth", "business", "leave_management", false],
+    ["business", "starter", "payslips", false],
+  ])("%s → %s: %s allowed=%s", async (from, to, feature, allowed) => {
+    seed({ plan: from, status: "active" });
+    const { res } = resMock();
+    await handleAdminSetCompanyPlan(res, memory, { id: randomUUID() }, { user_id: OWNER, plan: to });
+    const r = await check(feature);
+    expect(r).toMatchObject({ plan: to, visible: allowed, server: allowed });
+    expect(r.cta).not.toMatch(/Starter/);
+    if (!allowed) expect(r.cta).toBe(to === "business" ? "Upgrade to Growth" : "Upgrade to Business");
+  });
+
+  it("15. Growth on a Starter-level area: allowed, no CTA (tiers are additive)", async () => {
+    seed({ plan: "growth" });
+    expect(await check("reports_basic")).toMatchObject({ visible: true, server: true, cta: "" });
+  });
+
+  it("16/17. Business on Business features, Growth on Growth features", async () => {
+    seed({ plan: "business" });
+    expect(await check("inventory")).toMatchObject({ visible: true, server: true, cta: "" });
+    tables.subscriptions[0].plan_slug = "growth_monthly";
+    tables.subscriptions[0].plan_family = "growth";
+    expect(await check("api_access")).toMatchObject({ visible: true, server: true, cta: "" });
+  });
+
+  it("18. unavailable to Starter → Upgrade to Business (next package with it)", async () => {
+    seed({ plan: "starter" });
+    expect(await check("pos")).toMatchObject({ visible: false, server: false, cta: "Upgrade to Business" });
+    expect(await check("leave_management")).toMatchObject({ cta: "Upgrade to Growth" });
+  });
+
+  it("19. unavailable to Business → Upgrade to Growth", async () => {
+    seed({ plan: "business" });
+    expect(await check("multi_company")).toMatchObject({ visible: false, server: false, cta: "Upgrade to Growth" });
+  });
+
+  it("20. unavailable to Growth (Enterprise-only): denied server-side, but no upgrade CTA", async () => {
+    seed({ plan: "growth" });
+    expect(await check("sso")).toMatchObject({ visible: false, server: false, cta: "" });
+  });
+});
+
+describe("root-cause regressions", () => {
+  it("PayFast ITN on a Starter trial row for a Business payment → Business (plan_family written)", async () => {
+    const row = seed({ plan: "starter", status: "trialing", trialEndsInMs: 3 * DAY });
+    await upsertSubscriptionFromItn(
+      memory,
+      { payment_status: "COMPLETE", token: "tok-1", custom_str2: "business_monthly", amount_gross: "150" },
+      { userIdHint: OWNER }
+    );
+    expect(tables.subscriptions).toHaveLength(1);
+    expect(row).toMatchObject({ plan_slug: "business_monthly", plan_family: "business", status: "active" });
+    expect(await entitlementFor()).toMatchObject({ plan: "business", accessGranted: true });
+  });
+
+  it("already-drifted row (slug business, family starter) resolves to the slug's package", async () => {
+    seed({ plan: "starter", extra: { plan_slug: "business_monthly", plan: "business_monthly" } });
+    expect((await entitlementFor()).plan).toBe("business");
+  });
+
+  it("owner row without company_id still decides the company's package (owner and members)", async () => {
+    seed({ plan: "growth", extra: { company_id: null } });
+    const MEMBER = randomUUID();
+    tables.memberships.push({ org_id: COMPANY, user_id: MEMBER, created_at: iso(0) });
+    expect(await entitlementFor()).toMatchObject({ plan: "growth", accessGranted: true });
+    expect((await entitlementFor(MEMBER)).plan).toBe("growth");
+  });
+
+  it("admin package change adopts an orphan row into the company", async () => {
+    seed({ plan: "starter", extra: { company_id: null } });
+    const { res } = resMock();
+    await handleAdminSetCompanyPlan(res, memory, { id: randomUUID() }, { user_id: OWNER, plan: "business" });
+    expect(tables.subscriptions).toHaveLength(1);
+    expect(tables.subscriptions[0]).toMatchObject({ company_id: COMPANY, plan_family: "business" });
+  });
+
+  it.each(["trial", "free", "none"])("plan '%s' with no package is no package — never Starter", async (plan) => {
+    seed({ plan: "starter", status: "active", extra: { plan, plan_slug: null, plan_family: null, current_plan: plan } });
+    const e = await entitlementFor();
+    expect(e.plan).toBeNull();
+    expect(e.features).toEqual([]);
   });
 });

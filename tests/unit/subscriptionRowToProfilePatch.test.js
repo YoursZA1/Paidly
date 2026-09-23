@@ -12,9 +12,9 @@ describe("subscriptionRowToProfilePatch", () => {
     expect(subscriptionRowToProfilePatch({ user_id: "", plan: "sme" }, TS)).toBeNull();
   });
 
-  it("normalizes free to starter family for profile sync", () => {
+  it("free is not a package: never mirrored as Starter", () => {
     const out = subscriptionRowToProfilePatch({ user_id: "u1", plan: "free", status: "active" }, TS);
-    expect(out.patch.plan).toBe("starter");
+    expect(out.patch.plan).toBe("none");
     expect(out.patch.subscription_status).toBe("active");
   });
 

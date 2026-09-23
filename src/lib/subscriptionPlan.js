@@ -149,9 +149,10 @@ export function normalizePaidPackageKey(planOrProfile) {
     typeof planOrProfile === "object" && planOrProfile
       ? slugFromProfile(planOrProfile)
       : String(planOrProfile ?? "").trim().toLowerCase();
-  if (!raw || raw === "none") return "none";
+  // trial / free are statuses, not packages — never Starter by default.
+  if (!raw || ["none", "free", "trial"].includes(raw)) return "none";
   if (
-    ["individual", "starter", "free", "basic", "trial"].includes(raw) ||
+    ["individual", "starter", "basic"].includes(raw) ||
     raw.startsWith("starter_")
   ) {
     return "starter";

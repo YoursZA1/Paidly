@@ -68,7 +68,7 @@ import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff, membershipIsPosEnabled } from "@shared/posStaffInvite.js";
 import { describeEntitlementBadge, isEntitlementLapsed } from "@/lib/clientEntitlement";
 import BillingLockBanner from "@/components/subscription/BillingLockBanner";
-import { hasFeatureAccess, getRequiredPlan } from "@/components/subscription/FeatureGate";
+import { hasFeatureAccess, getRequiredPlan, getUpgradeTarget } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
 import {
   ChevronsRight,
@@ -106,6 +106,7 @@ const navItemShape = PropTypes.shape({
   roles: PropTypes.array,
   hasAccess: PropTypes.bool,
   requiredPlan: PropTypes.string,
+  upgradeLabel: PropTypes.string,
   hasRoleAccess: PropTypes.bool,
   type: PropTypes.string,
   requiredPermission: PropTypes.string,
@@ -298,7 +299,8 @@ const allNavigationItems = [
   },
 ];
 
-const getNavigationItems = (userPlan, userRole, featureCheck) => {
+// `entitlement` (company subscription) makes the upgrade label relative to the current package.
+const getNavigationItems = (userPlan, userRole, featureCheck, entitlement = null) => {
   const check =
     typeof featureCheck === "function"
       ? featureCheck
@@ -319,6 +321,7 @@ const getNavigationItems = (userPlan, userRole, featureCheck) => {
       ...item,
       hasAccess: !item.feature || check(item.feature),
       requiredPlan: item.feature ? getRequiredPlan(item.feature) : null,
+      upgradeLabel: item.feature ? getUpgradeTarget(item.feature, entitlement).label || null : null,
       hasRoleAccess: !item.roles || item.roles.includes(normalizedRole)
     }));
   } else {
@@ -327,6 +330,7 @@ const getNavigationItems = (userPlan, userRole, featureCheck) => {
       ...item,
       hasAccess: !item.feature || check(item.feature),
       requiredPlan: item.feature ? getRequiredPlan(item.feature) : null,
+      upgradeLabel: item.feature ? getUpgradeTarget(item.feature, entitlement).label || null : null,
       hasRoleAccess: !item.roles || item.roles.includes(normalizedRole)
     }));
   }
@@ -491,9 +495,11 @@ NavSection.propTypes = {
 };
 
 // Plan-gated nav: keep the label clean and show an upgrade icon + tooltip instead of “(Upgrade to …)”.
-const LockedNavItem = ({ title, requiredPlan, icon: Icon, collapsed = false, mobile = false }) => {
+const LockedNavItem = ({ title, upgradeLabel: upgradeLabelProp, icon: Icon, collapsed = false, mobile = false }) => {
   const upgradeUrl = `${createPageUrl("Settings")}?tab=subscription`;
-  const upgradeLabel = requiredPlan ? `Upgrade to ${requiredPlan}` : "Upgrade plan";
+  // Computed from the company's package (getUpgradeTarget) — never the catalog's lowest tier.
+  // No computed target (e.g. Growth, the top package) → no upgrade wording.
+  const upgradeLabel = upgradeLabelProp || "Not included in your plan";
   const isCollapsedRail = collapsed && !mobile;
 
   const row = (
@@ -564,7 +570,7 @@ const LockedNavItem = ({ title, requiredPlan, icon: Icon, collapsed = false, mob
 };
 LockedNavItem.propTypes = {
   title: PropTypes.string.isRequired,
-  requiredPlan: PropTypes.string,
+  upgradeLabel: PropTypes.string,
   icon: PropTypes.elementType,
   collapsed: PropTypes.bool,
   mobile: PropTypes.bool,
@@ -656,7 +662,7 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
   if (item.hasAccess === false) {
     // POS is plan-gated: hide rather than showing “Upgrade to Business” in the sidebar.
     if (item.id === "nav-pos") return null;
-    return <LockedNavItem title={item.title} requiredPlan={item.requiredPlan} icon={item.icon} collapsed={collapsed} mobile={mobile} />;
+    return <LockedNavItem title={item.title} upgradeLabel={item.upgradeLabel} icon={item.icon} collapsed={collapsed} mobile={mobile} />;
   }
 
   if (item.hasRoleAccess === false) {
@@ -991,7 +997,7 @@ export default function Layout({ children, currentPageName }) {
   ]);
 
   const navigationItems = useMemo(() => {
-    let items = getNavigationItems(planForNavFeatures, user?.role, navHasFeature);
+    let items = getNavigationItems(planForNavFeatures, user?.role, navHasFeature, companyEntitlement);
     const experience = resolveWorkforceExperience(companyCtx);
     const canSeeWorkforce = !companyCtx || canSeeWorkforceNav(companyCtx);
     const has = (permission) =>
@@ -1028,7 +1034,7 @@ export default function Layout({ children, currentPageName }) {
       items = items.filter((item) => item.id !== "nav-pos");
     }
     return items;
-  }, [planForNavFeatures, user?.role, companyCtx, showPosNav, navHasFeature]);
+  }, [planForNavFeatures, user?.role, companyCtx, showPosNav, navHasFeature, companyEntitlement]);
 
   const navSections = useMemo(
     () => groupNavItemsBySection(navigationItems, { excludeTitles: ["Dashboard"] }),

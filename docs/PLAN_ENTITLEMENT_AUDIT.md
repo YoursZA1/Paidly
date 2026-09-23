@@ -253,3 +253,49 @@ price. No package defines a rate limit, so only the item price lock applies now.
 3. Run `plan_reconciliation_apply.sql`, review, `COMMIT`.
 4. Deploy the app.
 5. Then the follow-ups above.
+
+---
+
+# Follow-up audit — 2026-09-23: "Business account shown *Upgrade to Starter*"
+
+Rule: **the package decides access; trial status only decides how long the package lasts.**
+Source of truth unchanged: company subscription row → `resolveEntitlement` → `FAMILY_FEATURES` /
+`FAMILY_LIMITS` → server gates + `GET /api/subscriptions/current → entitlement` → client.
+
+## Root causes
+
+1. **`plan_family` drift.** PayFast ITN (`server/src/payfastSubscriptionItn.js`) updated `plan`/`plan_slug`
+   but not `plan_family`. An ITN with no checkout hint updates the latest token-less row — usually the
+   system trial — so a Starter trial paid on Business became `plan_slug=business_monthly,
+   plan_family=starter`. The resolver read `plan_family` first → Starter. The BEFORE trigger that
+   re-derived it was replaced (AFTER trigger) in 20260921140000.
+2. **Company-less rows invisible.** With a company resolved, only `company_id = X` rows were read. Owner
+   rows with `company_id NULL` (ITN rows without a company hint, pre-company rows) were skipped → no
+   package → every gated item locked with "Upgrade to Starter", while Admin still showed the package.
+3. **`trial` / `free` / `none` aliased to Starter** (`familyForSlug`, `normalize_plan_family`,
+   `normalizePaidPackageKey`, `normalizePaidlyPlan`, mirror default).
+4. **Upgrade CTA from the lowest tier** (`getRequiredPlan` in the sidebar), plan picker offering tiers at
+   or below the current one, Growth offered Enterprise as an "upgrade".
+5. SQL `company_access_subscription` ranked active > trialing > past_due; the JS resolver ranks all
+   access rows equally (newest wins). The profile mirror could show a different row than the gates.
+
+## Fix
+
+- Resolver reads `plan_slug` first, `plan_family` as fallback (existing drifted rows correct on deploy).
+- `loadCompanySubscriptionRows` (entitlements.js): company rows + owner/caller rows with no company;
+  used by the resolver and by admin `set_company_plan` / `set_company_access` (which adopts the orphan).
+- ITN writes `plan_family`. Migration 20260923150000: BEFORE trigger keeps `plan_family` in step with the
+  package columns; `normalize_plan_family` no longer maps trial/free/none; company access row includes
+  owner orphan rows and uses the JS ranking; mirror never invents Starter.
+- `shared/planUpgrade.js`: CTA = renew current package if it includes the feature, else the next package
+  above on Starter → Business → Growth. Growth never gets a CTA. Used by sidebar, FeatureGate, Quotes,
+  POS lock, UpgradeModal, Settings plan grid, dashboard banner.
+- `/api/subscriptions/current` returns the resolved package name/family (not a possibly stale `plan_id`).
+- Admin platform user list picks the same row as the resolver.
+
+Verification matrix: `tests/unit/planEntitlementMatrix.test.js` ("verification matrix", "root-cause
+regressions"), `tests/unit/planUpgrade.test.js`.
+
+Rollout: deploy code (safe alone), apply migration 20260923150000, then review
+`supabase/scripts/plan_reconciliation_report.sql` ("plan_family drift", "Rows with no package") and run
+`plan_reconciliation_apply.sql`.

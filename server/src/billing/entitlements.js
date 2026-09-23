@@ -74,20 +74,48 @@ export async function resolveEntitlementForCompany(supabase, companyId) {
   return resolveEntitlement(supabase, null, companyId);
 }
 
+/**
+ * Every subscription row that belongs to a company: rows stamped with the company, plus rows the
+ * company's owner (or the caller) holds with no company_id — PayFast ITN rows written without a
+ * company hint, and pre-company rows. Without the second set such a company resolves to "no
+ * package" and every gated screen reads as locked, while the admin list still shows its package.
+ * With no company, the user's own rows.
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {{ companyId?: string | null, userId?: string | null, columns?: string, limit?: number }} opts
+ * @returns {Promise<{ data: object[] | null, error: any }>}
+ */
+export async function loadCompanySubscriptionRows(supabase, { companyId = null, userId = null, columns = "*", limit = 20 } = {}) {
+  const base = () =>
+    supabase.from("subscriptions").select(columns).order("updated_at", { ascending: false }).limit(limit);
+
+  if (!companyId) {
+    if (!userId) return { data: [], error: null };
+    return await base().eq("user_id", userId);
+  }
+
+  const { data: companyRows, error } = await base().eq("company_id", companyId);
+  if (error) return { data: null, error };
+
+  const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", companyId).maybeSingle();
+  const holders = [...new Set([org?.owner_id, userId].filter(Boolean).map(String))];
+  let orphanRows = [];
+  if (holders.length) {
+    // At most two holders (owner, caller); filter company_id in JS.
+    for (const holder of holders) {
+      const { data: held, error: heldErr } = await base().eq("user_id", holder);
+      if (!heldErr) orphanRows.push(...(held || []).filter((r) => r.company_id == null));
+    }
+  }
+
+  const byId = new Map([...(companyRows || []), ...orphanRows].map((r) => [r.id, r]));
+  return { data: [...byId.values()], error: null };
+}
+
 export async function resolveEntitlement(supabase, userId, knownCompanyId = null) {
   const companyId = knownCompanyId || (userId ? await resolveUserCompanyId(supabase, userId) : null);
   const now = new Date();
 
-  const run = (cols) => {
-    let query = supabase
-      .from("subscriptions")
-      .select(cols)
-      .order("updated_at", { ascending: false })
-      .limit(10);
-    if (companyId) return query.eq("company_id", companyId);
-    if (userId) return query.eq("user_id", userId);
-    return query.eq("company_id", "00000000-0000-0000-0000-000000000000");
-  };
+  const run = (cols) => loadCompanySubscriptionRows(supabase, { companyId, userId, columns: cols, limit: 10 });
 
   let { data: rows, error } = await run(ENTITLEMENT_SELECT_RICH);
   if (error) {
@@ -118,11 +146,13 @@ export async function resolveEntitlement(supabase, userId, knownCompanyId = null
     }
   }
 
-  // plan_family → plan_slug → plan/current_plan. No "starter" default: an unknown package must not
-  // silently hand out Starter, and a valid row must never be downgraded because one column is unset.
+  // The package is the catalog slug; plan_family is its cached family (used for slugs the shared
+  // catalog doesn't know). Slug first, so a row whose plan_family lagged behind a PayFast payment
+  // (trial row updated to business_monthly, family still "starter") resolves to what was paid for.
+  // No "starter" default and no trial/free/none alias: a missing package is no package.
   const family =
-    normalizePlanFamily(sub?.plan_family) ||
     familyForSlug(sub?.plan_slug) ||
+    normalizePlanFamily(sub?.plan_family) ||
     familyForSlug(sub?.plan) ||
     familyForSlug(sub?.current_plan) ||
     null;

@@ -1,5 +1,6 @@
 import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
 import { requireBearerUser, resolveUserCompanyId } from "./httpAuth.js";
+import { loadCompanySubscriptionRows } from "./entitlements.js";
 import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
 import { isValidEmail, isValidUuid } from "../inputValidation.js";
 import { resolveCurrentCatalogAssignment, isLegacyPlanSlug } from "../subscriptionPlans.js";
@@ -848,9 +849,8 @@ export async function handleAdminSetCompanyPlan(res, supabase, actor, body) {
   const reason = String(body.reason || "").trim().slice(0, 500) || null;
 
   const companyId = await resolveUserCompanyId(supabase, userId);
-  let q = supabase.from("subscriptions").select("*").order("updated_at", { ascending: false }).limit(20);
-  q = companyId ? q.eq("company_id", companyId) : q.eq("user_id", userId);
-  const { data: rows, error: loadErr } = await q;
+  // Same rows the entitlement resolver reads, so the admin changes the row that decides access.
+  const { data: rows, error: loadErr } = await loadCompanySubscriptionRows(supabase, { companyId, userId });
   if (loadErr) return json(res, 500, { error: "Failed to load subscription" });
 
   const now = new Date();
@@ -875,6 +875,8 @@ export async function handleAdminSetCompanyPlan(res, supabase, actor, body) {
       return json(res, e.status || 400, { error: e.message || "Invalid plan" });
     }
     const patch = { ...built.patch };
+    // Adopt an owner row written without a company so it is keyed like every other company row.
+    if (companyId && !existing.company_id) patch.company_id = companyId;
     // A lapsed row (expired trial, cancelled, failed) must actually grant the new package. A
     // suspended row stays suspended: an admin paused it on purpose, so changing the package must
     // not silently restore access — Resume does that.
@@ -945,9 +947,8 @@ export async function handleAdminSetCompanyAccess(res, supabase, actor, body) {
   const reason = String(body.reason || "").trim().slice(0, 500) || null;
 
   const companyId = await resolveUserCompanyId(supabase, userId);
-  let q = supabase.from("subscriptions").select("*").order("updated_at", { ascending: false }).limit(20);
-  q = companyId ? q.eq("company_id", companyId) : q.eq("user_id", userId);
-  const { data: rows, error: loadErr } = await q;
+  // Same rows the entitlement resolver reads, so the admin changes the row that decides access.
+  const { data: rows, error: loadErr } = await loadCompanySubscriptionRows(supabase, { companyId, userId });
   if (loadErr) return json(res, 500, { error: "Failed to load subscription" });
 
   const now = new Date();

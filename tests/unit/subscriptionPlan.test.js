@@ -11,8 +11,8 @@ import {
 describe("normalizePaidPackageKey", () => {
   it("maps product and legacy slugs to starter | business | growth | enterprise", () => {
     expect(normalizePaidPackageKey("individual")).toBe("starter");
-    expect(normalizePaidPackageKey("free")).toBe("starter");
-    expect(normalizePaidPackageKey("trial")).toBe("starter");
+    expect(normalizePaidPackageKey("free")).toBe("none"); // a status, not a package
+    expect(normalizePaidPackageKey("trial")).toBe("none"); // a trial carries its own package
     expect(normalizePaidPackageKey("sme")).toBe("business");
     expect(normalizePaidPackageKey("professional")).toBe("business");
     expect(normalizePaidPackageKey("corporate")).toBe("growth");

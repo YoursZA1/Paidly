@@ -12,7 +12,7 @@ import {
   sanitizeOneLine,
 } from "./inputValidation.js";
 import { SUBSCRIPTION_STATUS } from "../../shared/subscriptionStatuses.js";
-import { normalizePlanSlug } from "./subscriptionPlans.js";
+import { familyForSlug, normalizePlanSlug } from "./subscriptionPlans.js";
 
 function parsePayfastWhitelist(raw) {
   return String(raw || "")
@@ -214,6 +214,9 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
     plan: planSlug,
     current_plan: planSlug,
     plan_slug: planSlug,
+    // The resolver reads plan_family first. Writing the slug without it left a trial row that
+    // received a Business payment still resolving as its old (Starter) family.
+    plan_family: familyForSlug(planSlug) || undefined,
     billing_cycle: cycle,
     provider: "payfast",
     updated_at: nowIso,

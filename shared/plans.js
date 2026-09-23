@@ -25,14 +25,14 @@ export const base = ["invoices", "clients", "email"];
 
 /**
  * Legacy slug → family (goodwill: sme→business, corporate→growth).
+ * `trial`, `free` and `none` are deliberately absent: they describe a status (or no package), not a
+ * package. A trial carries the package it was started on; mapping these to Starter is how Business
+ * and Growth accounts were shown Starter limits. They resolve to null (no package).
  * @type {Readonly<Record<string, import('./planFeatures.js').PlanFamily>>}
  */
 export const LEGACY_SLUG_ALIASES = Object.freeze({
   individual: "starter",
-  free: "starter",
   basic: "starter",
-  trial: "starter",
-  none: "starter",
   starter: "starter",
   sme: "business",
   professional: "business",

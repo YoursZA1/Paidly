@@ -115,3 +115,24 @@ SELECT s.id, s.user_id, s.email, s.status, s.plan_family, s.subscription_source,
 FROM public.subscriptions s
 WHERE s.company_id IS NULL
 ORDER BY s.updated_at DESC;
+
+-- plan_family drift (fixed going forward by 20260923150000 subscriptions_derive_plan_family).
+-- The resolver reads plan_family first; these rows grant stored_family while their slug says
+-- slug_family. Typical cause: a PayFast ITN that updated a trial row's plan_slug but not plan_family.
+SELECT s.id, s.company_id, s.user_id, s.status, s.subscription_source,
+       s.plan_family AS stored_family, s.plan_slug, s.plan,
+       coalesce(public.normalize_plan_family(s.plan_slug), public.normalize_plan_family(s.plan)) AS slug_family,
+       s.updated_at
+FROM public.subscriptions s
+WHERE coalesce(public.normalize_plan_family(s.plan_slug), public.normalize_plan_family(s.plan)) IS NOT NULL
+  AND s.plan_family IS DISTINCT FROM coalesce(public.normalize_plan_family(s.plan_slug), public.normalize_plan_family(s.plan))
+ORDER BY s.updated_at DESC;
+
+-- Rows with no package at all (plan is trial/free/none/empty and no plan_family). Since
+-- 20260923150000 these resolve to "no package" instead of silently becoming Starter. Assign the
+-- real package per company with POST /api/admin/subscriptions { action: "set_company_plan" }.
+SELECT s.id, s.company_id, s.user_id, s.email, s.status, s.plan, s.plan_slug, s.current_plan, s.updated_at
+FROM public.subscriptions s
+WHERE coalesce(public.normalize_plan_family(s.plan_family), public.normalize_plan_family(s.plan_slug),
+               public.normalize_plan_family(s.plan), public.normalize_plan_family(s.current_plan)) IS NULL
+ORDER BY s.updated_at DESC;

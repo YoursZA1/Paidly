@@ -4,8 +4,9 @@
  */
 export function normalizePaidlyPlan(rawPlan) {
   const value = String(rawPlan || "").trim().toLowerCase();
-  if (!value) return null;
-  if (["individual", "starter", "free", "basic", "trial", "none"].includes(value) || value.startsWith("starter_")) {
+  // trial / free / none are statuses (or no package), never an implicit Starter.
+  if (!value || ["free", "trial", "none"].includes(value)) return null;
+  if (["individual", "starter", "basic"].includes(value) || value.startsWith("starter_")) {
     return "starter";
   }
   if (["sme", "professional", "business", "pro"].includes(value) || value.startsWith("business_")) {
