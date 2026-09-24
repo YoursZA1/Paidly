@@ -57,6 +57,13 @@ const FEATURE_ALIASES = {
   api_access: 'api_access',
 };
 
+/**
+ * Canonical plan feature key for a UI key (e.g. nav "cashflow" → "reports_basic"). Every client
+ * feature check must resolve through this, or an alias reads as "not in any plan" and locks for all.
+ * @param {string} feature
+ */
+export const canonicalFeatureKey = (feature) => FEATURE_ALIASES[feature] || feature;
+
 const FAMILY_LABEL = {
   starter: 'Starter',
   business: 'Business',

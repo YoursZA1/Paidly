@@ -10,6 +10,12 @@ import { coerceSubscriptionStatus, SUBSCRIPTION_STATUS } from "./subscriptionSta
 
 export const TRIAL_DURATION_DAYS = 7;
 
+/**
+ * Access kept after a failed renewal (status past_due, grace_ends_at = failure + this). Used by the
+ * PayFast ITN (FAILED) and the dunning cron, so both paths grant the same grace.
+ */
+export const PAST_DUE_GRACE_DAYS = 7;
+
 /** New Paidly payment/revenue reporting epoch (UTC). Do not use the client timezone. */
 export const PAYMENT_REPORTING_START_ISO = "2026-08-20T00:00:00.000Z";
 

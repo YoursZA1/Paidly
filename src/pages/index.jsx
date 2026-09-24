@@ -327,7 +327,7 @@ const PAYSLIP_REPORT_ROUTES = [
     { path: "/Workforce/organisation", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}>{planGate("departments", <WorkforceOrganisation />)}</RequireCompanyPermissionRedirect></RequireAuth> },
     // Birthdays / work anniversaries from employee profiles: every plan.
     { path: "/Workforce/people-calendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><WorkforcePeopleCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/workforce/reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><WorkforceReports /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/workforce/reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}>{planGate("payroll", <WorkforceReports />)}</RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/employees/:id", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><RequireEmployeeProfileAccess><EmployeeProfile /></RequireEmployeeProfileAccess></RequireCompanyPermissionRedirect></RequireAuth> },

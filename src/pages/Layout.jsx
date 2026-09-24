@@ -68,7 +68,7 @@ import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff, membershipIsPosEnabled } from "@shared/posStaffInvite.js";
 import { describeEntitlementBadge, isEntitlementLapsed } from "@/lib/clientEntitlement";
 import BillingLockBanner from "@/components/subscription/BillingLockBanner";
-import { hasFeatureAccess, getRequiredPlan, getUpgradeTarget } from "@/components/subscription/FeatureGate";
+import { canonicalFeatureKey, hasFeatureAccess, getRequiredPlan, getUpgradeTarget } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
 import {
   ChevronsRight,
@@ -954,7 +954,8 @@ export default function Layout({ children, currentPageName }) {
 
   // Company subscription only (via /api/subscriptions/current). Never profiles.plan.
   const navHasFeature = useCallback(
-    (feature) => !feature || entitlementHasFeature(feature),
+    // Nav items use UI keys ("cashflow", "reports"); resolve them like <FeatureGate> does.
+    (feature) => !feature || entitlementHasFeature(canonicalFeatureKey(feature)),
     [entitlementHasFeature]
   );
 

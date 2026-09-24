@@ -3,6 +3,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { processQueuedBroadcastJobs } from "../server/src/adminBroadcastQueue.js";
+import { addCalendarDaysIso, PAST_DUE_GRACE_DAYS } from "../shared/subscriptionAccess.js";
 
 function isAuthorized(req) {
   const secret = process.env.CRON_SECRET;
@@ -122,7 +123,7 @@ async function runSubscriptionDunningBatch() {
     const nextStatus = nextFailures >= maxRetry ? "cancelled" : "past_due";
     const graceEndsAt =
       nextStatus === "past_due"
-        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        ? addCalendarDaysIso(new Date(), PAST_DUE_GRACE_DAYS)
         : null;
     const patch = {
       status: nextStatus,
@@ -158,7 +159,7 @@ async function runSubscriptionDunningBatch() {
     const nextStatus = nextFailures >= maxRetry ? "cancelled" : "past_due";
     const graceEndsAt =
       nextStatus === "past_due"
-        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        ? addCalendarDaysIso(new Date(), PAST_DUE_GRACE_DAYS)
         : null;
     const patch = {
       status: nextStatus,

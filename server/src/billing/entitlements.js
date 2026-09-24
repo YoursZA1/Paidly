@@ -60,9 +60,12 @@ export async function resolveEntitlementForCompany(supabase, companyId) {
 
 /**
  * Every subscription row that belongs to a company: rows stamped with the company, plus rows the
- * company's owner (or the caller) holds with no company_id — PayFast ITN rows written without a
- * company hint, and pre-company rows. Without the second set such a company resolves to "no
- * package" and every gated screen reads as locked, while the admin list still shows its package.
+ * company's owner holds with no company_id — PayFast ITN rows written without a company hint, and
+ * pre-company rows. Without the second set such a company resolves to "no package" and every gated
+ * screen reads as locked, while the admin list still shows its package.
+ * Only the owner's company-less rows count: a member's own (personal) subscription must not unlock
+ * paid features for an employer that has not paid. Checkout always stamps company_id, so new rows
+ * never depend on this. Same rule as public.company_access_subscription.
  * With no company, the user's own rows.
  * @param {import("@supabase/supabase-js").SupabaseClient} supabase
  * @param {{ companyId?: string | null, userId?: string | null, columns?: string, limit?: number }} opts
@@ -81,14 +84,11 @@ export async function loadCompanySubscriptionRows(supabase, { companyId = null, 
   if (error) return { data: null, error };
 
   const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", companyId).maybeSingle();
-  const holders = [...new Set([org?.owner_id, userId].filter(Boolean).map(String))];
   let orphanRows = [];
-  if (holders.length) {
-    // At most two holders (owner, caller); filter company_id in JS.
-    for (const holder of holders) {
-      const { data: held, error: heldErr } = await base().eq("user_id", holder);
-      if (!heldErr) orphanRows.push(...(held || []).filter((r) => r.company_id == null));
-    }
+  if (org?.owner_id) {
+    // Filter company_id in JS.
+    const { data: held, error: heldErr } = await base().eq("user_id", String(org.owner_id));
+    if (!heldErr) orphanRows = (held || []).filter((r) => r.company_id == null);
   }
 
   const byId = new Map([...(companyRows || []), ...orphanRows].map((r) => [r.id, r]));

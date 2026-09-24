@@ -20,7 +20,8 @@ ALTER ROLE authenticated RESET app.paidly_entitlements_enforce;        -- enforc
 
 ## Staging / Preview
 
-1. Set `PAIDLY_ENTITLEMENTS_ENFORCE=true` on the Preview environment (also in `.env.development.example`).
+1. `PAIDLY_ENTITLEMENTS_ENFORCE=true` is set explicitly on the Vercel **Preview** environment (2026-09-24;
+   also in `.env.development.example`). Production is still unset, which enforces by the code default.
 2. Confirm free / expired company cannot call payroll or leave APIs (403 `UPGRADE_REQUIRED`).
 3. Confirm active Business+ can.
 4. Confirm UI locks match (Layout + FeatureGate use `/api/subscriptions/current`).
@@ -33,3 +34,10 @@ ALTER ROLE authenticated RESET app.paidly_entitlements_enforce;        -- enforc
 4. Keep `=false` only as an emergency rollback.
 
 UI and EntityManager read the same subscription current payload for chrome and client writes; they do not grant access if the server would deny.
+
+## Failed renewals (grace)
+
+A failed renewal sets `past_due` with `grace_ends_at = now + PAST_DUE_GRACE_DAYS` (7 days,
+`shared/subscriptionAccess.js`), whether PayFast reports it (ITN `FAILED`) or the dunning cron notices the
+missed billing date. Access continues until `grace_ends_at`; a successful payment clears it; after
+`max_retry_attempts` failures (default 3) the agreement is `cancelled` with no grace.

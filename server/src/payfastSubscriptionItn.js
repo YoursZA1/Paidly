@@ -12,6 +12,7 @@ import {
   sanitizeOneLine,
 } from "./inputValidation.js";
 import { SUBSCRIPTION_STATUS } from "../../shared/subscriptionStatuses.js";
+import { addCalendarDaysIso, PAST_DUE_GRACE_DAYS } from "../../shared/subscriptionAccess.js";
 import { familyForSlug, normalizePlanSlug } from "./subscriptionPlans.js";
 
 function parsePayfastWhitelist(raw) {
@@ -238,6 +239,7 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
           next_retry_at: null,
           dunning_stage: 0,
           past_due_at: null,
+          grace_ends_at: null,
           canceled_at: null,
           cancelled_at: null,
           last_payment_failure_at: null,
@@ -249,6 +251,9 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
           next_retry_at: addHoursIso(nowIso, retryHours) || nowIso,
           dunning_stage: nextFailures,
           past_due_at: nowIso,
+          // Same grace as the dunning cron: a failed renewal keeps access while PayFast retries.
+          // None once the agreement is cancelled for non-payment.
+          grace_ends_at: status === SUBSCRIPTION_STATUS.PAST_DUE ? addCalendarDaysIso(nowIso, PAST_DUE_GRACE_DAYS) : null,
           last_payment_failure_at: nowIso,
         }),
     failure_count: nextFailures,

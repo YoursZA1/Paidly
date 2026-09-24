@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { __clearLogoUrlDiskCacheForTests } from "@/lib/logoUrlDiskCache";
 import { __clearStorageAssetFailuresForTests } from "@/lib/paidlyStorageAssetGuard";
 
+const session = vi.hoisted(() => ({ current: { access_token: "jwt" } }));
+
+// signLogoUrl only signs with a session JWT (never as anon).
+vi.mock("@/core/auth/SessionCoordinator", () => ({ getStableSession: async () => session.current }));
+
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     storage: {
@@ -23,6 +28,7 @@ vi.mock("@/lib/supabaseClient", () => ({
 
 describe("AssetService.getLogo + storage guard", () => {
   afterEach(() => {
+    session.current = { access_token: "jwt" };
     __clearStorageAssetFailuresForTests();
     __clearLogoUrlDiskCacheForTests();
   });
@@ -47,6 +53,12 @@ describe("AssetService.getLogo + storage guard", () => {
     const { default: AssetService } = await import("@/services/AssetService");
     const signed = await AssetService.signLogoUrl("logo-abc.png");
     expect(signed).toContain("/object/sign/paidly/logo-abc.png");
+  });
+
+  it("signLogoUrl returns the fallback without a session (no anon signing)", async () => {
+    session.current = null;
+    const { default: AssetService } = await import("@/services/AssetService");
+    expect(await AssetService.signLogoUrl("logo-abc.png")).toBe(AssetService.FALLBACK_LOGO);
   });
 
   it("resolves legacy profile-logos paths for read-only display", async () => {

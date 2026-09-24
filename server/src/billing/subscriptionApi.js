@@ -14,7 +14,7 @@ import {
 } from "../payfast.js";
 import { isSafeHttpUrl, sanitizeOneLine } from "../inputValidation.js";
 import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
-import { requireBearerUser, resolveUserCompanyId } from "./httpAuth.js";
+import { requireBearerUser, resolveBillingCompany, resolveUserCompanyId } from "./httpAuth.js";
 import { loadActivePlan, listPublicPlans } from "./plansCatalog.js";
 import { familyForSlug } from "../subscriptionPlans.js";
 import { SUBSCRIPTION_STATUS } from "../../../shared/subscriptionStatuses.js";
@@ -125,6 +125,9 @@ export function buildSubscriptionCheckoutUnsignedPayload({
     subscription_notify_buyer: toPayfastBooleanFlag(true, true),
   };
 }
+
+const BILLING_OWNER_REQUIRED = "BILLING_OWNER_REQUIRED";
+const BILLING_OWNER_MESSAGE = "Only the company owner can manage the Paidly subscription.";
 
 function json(res, status, body) {
   return res.status(status).json(body);
@@ -274,9 +277,12 @@ export async function handleSubscriptionCreate(req, res) {
     }
   }
 
-  const companyId = await resolveUserCompanyId(supabase, user.id);
+  const { companyId, isOwner } = await resolveBillingCompany(supabase, user.id);
   if (!companyId) {
     return json(res, 400, { error: "No company context for user" });
+  }
+  if (!isOwner) {
+    return json(res, 403, { code: BILLING_OWNER_REQUIRED, error: BILLING_OWNER_MESSAGE });
   }
 
   // One PayFast agreement per company. A second checkout would start a second recurring
@@ -846,7 +852,7 @@ export async function handleSubscriptionCancel(req, res) {
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
   let subscriptionId = String(body.subscriptionId || body.id || "").trim();
-  const companyId = await resolveUserCompanyId(supabase, auth.user.id);
+  const { companyId, isOwner } = await resolveBillingCompany(supabase, auth.user.id);
 
   if (!subscriptionId) {
     let q = supabase
@@ -862,7 +868,8 @@ export async function handleSubscriptionCancel(req, res) {
       ])
       .order("updated_at", { ascending: false })
       .limit(1);
-    q = companyId ? q.eq("company_id", companyId) : q.eq("user_id", auth.user.id);
+    // A member who is not the owner can only reach an agreement they hold themselves.
+    q = companyId && isOwner ? q.eq("company_id", companyId) : q.eq("user_id", auth.user.id);
     const { data: rows } = await q;
     subscriptionId = rows?.[0]?.id || "";
   }
@@ -885,8 +892,8 @@ export async function handleSubscriptionCancel(req, res) {
   const owns =
     sub.user_id === auth.user.id ||
     sub.created_by === auth.user.id ||
-    (companyId && sub.company_id === companyId);
-  if (!owns) return json(res, 403, { error: "Forbidden" });
+    (isOwner && companyId && sub.company_id === companyId);
+  if (!owns) return json(res, 403, { code: BILLING_OWNER_REQUIRED, error: BILLING_OWNER_MESSAGE });
 
   if (sub.status === SUBSCRIPTION_STATUS.CANCELLED) {
     return json(res, 200, {
@@ -1100,7 +1107,7 @@ export async function handleSubscriptionChange(req, res) {
   if (auth.error) return json(res, auth.status, { error: auth.error });
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
-  const companyId = await resolveUserCompanyId(supabase, auth.user.id);
+  const { companyId, isOwner } = await resolveBillingCompany(supabase, auth.user.id);
   const planSlug = String(body.planSlug || body.plan || body.slug || "").trim();
   const plan = await loadActivePlan(supabase, planSlug);
   if (!plan || !Number.isFinite(plan.amount) || plan.amount <= 0) {
@@ -1110,16 +1117,24 @@ export async function handleSubscriptionChange(req, res) {
     return json(res, 400, { error: "Enterprise plans require contacting sales", code: "CONTACT_SALES" });
   }
 
-  const sub = await loadPayfastAgreementRow(supabase, { userId: auth.user.id, companyId });
+  // A member who is not the owner only reaches an agreement they hold themselves; with none,
+  // they are refused below (BILLING_OWNER_REQUIRED).
+  const sub = await loadPayfastAgreementRow(supabase, {
+    userId: auth.user.id,
+    companyId: isOwner ? companyId : null,
+  });
   if (!sub) {
+    if (companyId && !isOwner) {
+      return json(res, 403, { code: BILLING_OWNER_REQUIRED, error: BILLING_OWNER_MESSAGE });
+    }
     // Nothing billing on PayFast yet — this is a first subscription.
     return handleSubscriptionCreate(req, res);
   }
   const owns =
     sub.user_id === auth.user.id ||
     sub.created_by === auth.user.id ||
-    (companyId && sub.company_id === companyId);
-  if (!owns) return json(res, 403, { error: "Forbidden" });
+    (isOwner && companyId && sub.company_id === companyId);
+  if (!owns) return json(res, 403, { code: BILLING_OWNER_REQUIRED, error: BILLING_OWNER_MESSAGE });
 
   const token = String(sub.payfast_token || sub.payfast_subscription_id || "").trim();
   const remote = await fetchPayfastSubscription(token);

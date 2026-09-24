@@ -59,3 +59,24 @@ SELECT
   has_table_privilege(r.role_name, 'public.subscriptions', 'UPDATE') AS can_update,
   has_table_privilege(r.role_name, 'public.subscriptions', 'DELETE') AS can_delete
 FROM (VALUES ('anon'), ('authenticated'), ('service_role')) AS r (role_name);
+
+-- 4. Company-less rows held by someone who owns no company (20260924150000).
+--    company_access_subscription and the server resolver count a company-less row only for the
+--    company its holder OWNS. Rows listed here no longer grant any company access; before deploying,
+--    review each one that currently grants access (has_access = true) — e.g. a member who paid for
+--    the employer before checkout stamped company_id — and give that company its own subscription
+--    through the admin console if it should keep the package.
+SELECT
+  s.id,
+  s.status,
+  coalesce(s.plan_slug, s.plan_family, s.plan) AS package,
+  public.subscription_row_has_access(s)       AS has_access,
+  s.user_id,
+  (SELECT array_agg(m.org_id) FROM public.memberships m WHERE m.user_id = s.user_id) AS member_of_companies,
+  s.subscription_source,
+  s.updated_at
+FROM public.subscriptions s
+WHERE s.company_id IS NULL
+  AND s.user_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM public.organizations o WHERE o.owner_id = s.user_id)
+ORDER BY public.subscription_row_has_access(s) DESC, s.updated_at DESC;

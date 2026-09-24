@@ -58,3 +58,23 @@ export async function resolveUserCompanyId(supabaseAdmin, userId) {
     .maybeSingle();
   return membership?.org_id || null;
 }
+
+/**
+ * Company for billing mutations (checkout, plan change, cancel) and whether the caller owns it.
+ * Same company as resolveUserCompanyId. Billing & Invoices is org-owner only in the SPA
+ * (RequireBusinessOwner); a member (employee, manager, HR, payroll) resolves to the employer's
+ * company here and must not be able to start, change or cancel that company's agreement.
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
+ * @param {string} userId
+ * @returns {Promise<{ companyId: string | null, isOwner: boolean }>}
+ */
+export async function resolveBillingCompany(supabaseAdmin, userId) {
+  const companyId = await resolveUserCompanyId(supabaseAdmin, userId);
+  if (!companyId) return { companyId: null, isOwner: false };
+  const { data: org } = await supabaseAdmin
+    .from("organizations")
+    .select("owner_id")
+    .eq("id", companyId)
+    .maybeSingle();
+  return { companyId, isOwner: Boolean(org?.owner_id) && String(org.owner_id) === String(userId) };
+}

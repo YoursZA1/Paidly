@@ -19,10 +19,29 @@ import {
   getPeopleCalendar,
 } from "./employeeService.js";
 import { requireWorkforcePermission } from "./workforceAuth.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
+import { assertUserHasFeature, UpgradeRequiredError } from "../featureGate.js";
 import { canSeeOrgWorkforce } from "../leave/leaveAuthz.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
+}
+
+/**
+ * Plan gate for a Workforce route (company subscription → shared/planFeatures.js), same response as
+ * payrollGate. The page carries the same <FeatureGate>, so the UI and the API agree.
+ * @returns {Promise<object | null>} the error response, or null when the plan includes the feature
+ */
+async function denyWithoutFeature(res, gate, feature) {
+  try {
+    await assertUserHasFeature(supabaseAdmin, gate.user.id, feature, { companyId: gate.membership.companyId });
+    return null;
+  } catch (err) {
+    if (err instanceof UpgradeRequiredError) {
+      return jsonError(res, 403, "Upgrade required", { code: "UPGRADE_REQUIRED", feature: err.feature });
+    }
+    throw err;
+  }
 }
 
 function managerScope(membership) {
@@ -58,6 +77,9 @@ export async function handleWorkforceEmployees(req, res) {
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
     try {
+      // Organogram (reporting lines + departments) is Growth, like the /Workforce/organisation page.
+      const denied = await denyWithoutFeature(res, gate, "departments");
+      if (denied) return denied;
       const data = await getWorkforceOrganogram(gate.membership.companyId, {
         managerScopeId: managerScope(gate.membership),
       });
