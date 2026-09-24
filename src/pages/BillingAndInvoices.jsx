@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const EMPTY_ROWS = [];
+
 function formatZar(amount) {
   const n = Number(amount);
   if (!Number.isFinite(n)) return "—";
@@ -67,7 +69,10 @@ function planDisplayName(rawPlan) {
 export default function BillingAndInvoices() {
   // Company subscription only (useEntitlementAccess); profiles.plan is not a billing source.
   const ent = useEntitlementAccess();
-  const { data: subsRows = [], isLoading: subsLoading, isError: subsError } = useMySubscriptionsQuery();
+  const subsQuery = useMySubscriptionsQuery();
+  const subsRows = subsQuery.data ?? EMPTY_ROWS;
+  const subsError = subsQuery.isError ? subsQuery.error : null;
+  const subsLoading = !subsError && (subsQuery.isAwaitingAuth || (!subsQuery.isSignedOut && !subsQuery.isSuccess));
   const badge = describeEntitlementBadge(ent.entitlement);
   const planSlug = badge.plan ? normalizePlanSlug(badge.plan) : null;
   const planDef = ent.accessGranted && planSlug && PLANS[planSlug] ? PLANS[planSlug] : null;
@@ -255,10 +260,29 @@ export default function BillingAndInvoices() {
                   <Skeleton className="h-10 w-full" />
                 </div>
               ) : subsError ? (
-                <p className="text-sm text-destructive" role="alert">
-                  Could not load subscription history. If this persists, ensure your project has the latest database
-                  policies applied.
-                </p>
+                <div className="space-y-3" role="alert">
+                  <p className="text-sm text-destructive">
+                    Could not load subscription history.
+                    {subsError.code ? (
+                      <span className="ml-1 font-mono text-xs">({subsError.code})</span>
+                    ) : null}
+                  </p>
+                  <p className="break-words font-mono text-xs text-muted-foreground">
+                    {subsError.message}
+                    {subsError.hint ? ` — ${subsError.hint}` : ""}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => subsQuery.refetch()}
+                    disabled={subsQuery.isFetching}
+                  >
+                    {subsQuery.isFetching ? "Retrying…" : "Try again"}
+                  </Button>
+                </div>
+              ) : subsQuery.isSignedOut ? (
+                <p className="text-sm text-muted-foreground">Sign in to see your subscription history.</p>
               ) : subsRows.length === 0 ? (
                 <EmptyState
                   icon={<CreditCard className="w-7 h-7 text-muted-foreground" />}
