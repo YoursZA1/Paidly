@@ -156,9 +156,14 @@ export function csvRowToInvoicePayload(headers, values) {
     row[h.trim()] = v !== undefined && v !== null ? String(v).trim() : "";
   });
   const rawStatus = (row.status || "draft").trim() || "draft";
-  const status = isCanonicalInvoiceStatus(normalizeInvoiceStatus(rawStatus))
+  let status = isCanonicalInvoiceStatus(normalizeInvoiceStatus(rawStatus))
     ? normalizeInvoiceStatus(rawStatus)
     : INVOICE_STATUS.draft;
+  // An imported invoice never starts paid: it is created open and any payments in the file are
+  // recorded through the Payment Engine, which derives paid / partially paid from them.
+  if (status === INVOICE_STATUS.paid || status === INVOICE_STATUS.partially_paid) {
+    status = INVOICE_STATUS.sent;
+  }
   let items = [];
   try {
     if (row.items) items = JSON.parse(row.items);

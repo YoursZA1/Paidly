@@ -8,6 +8,7 @@ import {
 import {
   handleDocumentHistory,
   handleDocumentPay,
+  handleDocumentRecord,
   handleDocumentRemind,
   handleOzowReturn,
 } from "./documentPaymentRoutes.js";
@@ -22,6 +23,7 @@ export function registerPaymentIntentRoutes(app) {
   app.get("/api/payment-intents", handlePaymentProvidersList);
   app.post("/api/payment-intents", handlePaymentIntentCreate);
   app.post("/api/payment-intents/document-pay", handleDocumentPay);
+  app.post("/api/payment-intents/document-record", handleDocumentRecord);
   app.post("/api/payment-intents/document-remind", handleDocumentRemind);
   app.get("/api/payment-intents/document-history", handleDocumentHistory);
   app.get("/api/payment-intents/document-timeline", handleDocumentTimeline);

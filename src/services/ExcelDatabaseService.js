@@ -73,7 +73,10 @@ const importInvoices = async (rows) => {
         tax_rate: row["Tax Rate (%)"] || row.tax_rate || 0,
         tax_amount: row["Tax Amount"] || row.tax_amount || 0,
         total_amount: row["Total Amount"] || row.total_amount || row["Subtotal"] || 0,
-        status: (row["Status"] || row.status || "draft").toString().toLowerCase(),
+        // Never imported as paid: paid status only follows payments recorded by the Payment Engine.
+        status: ((s) => (["paid", "partially_paid", "partial_paid"].includes(s) ? "sent" : s))(
+          (row["Status"] || row.status || "draft").toString().toLowerCase()
+        ),
         notes: row["Notes"] || row.notes || "",
         items: [
           {

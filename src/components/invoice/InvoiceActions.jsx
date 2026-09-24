@@ -38,8 +38,9 @@ import { documentSendSuccessDescription } from '@/components/shared/DocumentSend
 const statusOptions = [
     { value: INVOICE_STATUS.sent, label: 'Mark as Sent', icon: Mail },
     { value: INVOICE_STATUS.viewed, label: 'Mark as Viewed', icon: Eye },
-    { value: INVOICE_STATUS.partially_paid, label: 'Mark as Partially Paid', icon: DollarSign },
-    { value: INVOICE_STATUS.paid, label: 'Mark as Paid', icon: CheckCircle },
+    // Both open Record Payment: the status follows the payment recorded.
+    { value: INVOICE_STATUS.partially_paid, label: 'Record Partial Payment', icon: DollarSign },
+    { value: INVOICE_STATUS.paid, label: 'Record Full Payment', icon: CheckCircle },
     { value: INVOICE_STATUS.overdue, label: 'Mark as Overdue', icon: AlertTriangle },
     { value: INVOICE_STATUS.void, label: 'Mark as Void', icon: XCircle },
 ];
@@ -299,6 +300,12 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     };
 
     const handleStatusChange = async (newStatus) => {
+        // Paid / partially paid follow recorded payments, never a bare status flip (the database
+        // refuses it too). Record the money received instead; the status is derived from it.
+        if (newStatus === INVOICE_STATUS.paid || newStatus === INVOICE_STATUS.partially_paid) {
+            setShowPaymentModal(true);
+            return;
+        }
         try {
             if (!isManualStatusChangeAllowed(invoice.status, newStatus)) {
                 toast({

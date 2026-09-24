@@ -14,6 +14,16 @@ import {
   isActivePaymentIntentStatus,
 } from "../../../shared/payments/paymentIntentStates.js";
 import { assertPaymentEngineSource } from "../../../shared/payments/paymentEngine.js";
+import { CARD_RAIL_UNAVAILABLE, cardTerminalRailEnabled } from "../../../shared/payments/paidlyPayContract.js";
+
+/** Throws when the card / terminal rail is off (production: no acquirer can prove a card charge). */
+export function assertCardRailAvailable(provider) {
+  if (!isCardTerminalSettlement(provider) || cardTerminalRailEnabled()) return;
+  const error = new Error("Card payments are not available yet. Take cash, or use Ozow (instant EFT).");
+  error.code = CARD_RAIL_UNAVAILABLE;
+  error.status = 422;
+  throw error;
+}
 
 export function mapPaymentIntentSchemaError(message) {
   const msg = String(message || "");
@@ -88,6 +98,7 @@ export async function createPaymentIntentRow({
 }) {
   const source = assertPaymentEngineSource(sourceKind);
   const rail = assertCustomerPaymentProvider(provider, source);
+  assertCardRailAvailable(rail);
   const existing = await findPaymentIntentByIdempotency(orgId, idempotencyKey);
   if (existing) return existing;
 
@@ -296,6 +307,19 @@ export async function settleTillCashIntent(intent, amountTendered) {
     };
   }
 
+  // Same state machine as online rails: a cancelled / expired / failed cash intent is never paid.
+  const transition = applyPaymentIntentTransition(intent.status, PAYMENT_INTENT_STATUS.paid);
+  if (!transition.ok || paymentIntentIsExpired(intent)) {
+    return {
+      intent,
+      charge: {
+        status: intent.status,
+        code: transition.ok ? "INTENT_EXPIRED" : transition.code,
+        error: transition.ok ? "This payment intent has expired." : transition.error,
+      },
+    };
+  }
+
   const settled = settleTillCash(intent.amount, amountTendered);
   if (!settled.ok) {
     return { intent, charge: { status: "failed", error: settled.error, code: settled.code } };
@@ -310,10 +334,17 @@ export async function settleTillCashIntent(intent, amountTendered) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", intent.id)
+    .eq("org_id", intent.org_id)
+    .eq("status", intent.status)
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
+  if (!data) {
+    // Another request moved it first; report what it is now rather than overwriting it.
+    const latest = await getOrgPaymentIntent(intent.org_id, intent.id);
+    return { intent: latest || intent, charge: { status: latest?.status || intent.status, duplicate: true } };
+  }
   return {
     intent: data,
     charge: {
@@ -324,18 +355,27 @@ export async function settleTillCashIntent(intent, amountTendered) {
   };
 }
 
+/**
+ * Link the POS sale to its intent. Only a paid intent can carry a sale; this never marks an
+ * intent paid (that is the verified provider event / till cash settlement).
+ */
 export async function attachPosSaleToIntent(intentId, saleId) {
   const { data, error } = await supabaseAdmin
     .from("payment_intents")
     .update({
       pos_sale_event_id: saleId,
-      status: "paid",
       updated_at: new Date().toISOString(),
     })
     .eq("id", intentId)
+    .eq("status", PAYMENT_INTENT_STATUS.paid)
     .select("*")
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (!data) {
+    const notPaid = new Error("Only a paid payment intent can be linked to a POS sale");
+    notPaid.code = "INTENT_NOT_PAID";
+    throw notPaid;
+  }
   return data;
 }
 

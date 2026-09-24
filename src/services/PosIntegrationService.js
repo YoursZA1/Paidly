@@ -57,7 +57,6 @@ function apiBase() {
 }
 
 export const POS_PROVIDERS = [
-  { id: "generic", label: "Generic webhook", description: "Any POS that can POST JSON to a URL.", connectType: "manual" },
   { id: "yoco", label: "Yoco", description: "Connect with your Yoco secret API key — webhook is registered automatically.", connectType: "yoco_key" },
   { id: "square", label: "Square", description: "Sign in with Square to authorize Paidly.", connectType: "square_oauth" },
 ];

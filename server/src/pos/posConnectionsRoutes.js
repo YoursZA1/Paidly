@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { getUserFromRequest } from "../supabaseAuth.js";
 import {
@@ -43,8 +42,6 @@ function isMissingPosSchemaError(message) {
   return /pos_connections|pos_sales_events|delete_pos_connection/i.test(msg)
     && /schema cache|does not exist|could not find the table|could not find the function/i.test(msg);
 }
-
-const VALID_PROVIDERS = new Set(["generic", "yoco", "square"]);
 
 function sanitizeConnection(row) {
   if (!row) return null;
@@ -153,40 +150,16 @@ export async function handlePosConnectionsList(req, res) {
   });
 }
 
+/**
+ * POST /api/pos/connections — manual webhook connections are retired. They handed the signing
+ * secret to the merchant, so their "sales" were not evidence of money received. Yoco and Square
+ * connect through their own flows (provider-signed webhooks).
+ */
 export async function handlePosConnectionCreate(req, res) {
   const gate = await requireSettingsManager(req, res);
   if (!gate.ok) return gate.response;
-
-  const provider = String(req.body?.provider || "generic").trim().toLowerCase();
-  if (!VALID_PROVIDERS.has(provider)) {
-    return jsonError(res, 400, "Invalid provider. Use generic, yoco, or square.");
-  }
-
-  const label = String(req.body?.label || "").trim() || `${provider.charAt(0).toUpperCase()}${provider.slice(1)} POS`;
-  const webhookSecret = crypto.randomBytes(32).toString("hex");
-  const webhookToken = crypto.randomBytes(24).toString("hex");
-
-  const { data, error } = await supabaseAdmin
-    .from("pos_connections")
-    .insert({
-      org_id: gate.membership.orgId,
-      provider,
-      label,
-      webhook_token: webhookToken,
-      webhook_secret: webhookSecret,
-      status: "active",
-      created_by: gate.user.id,
-    })
-    .select("*")
-    .single();
-
-  if (error) return jsonError(res, 500, error.message || "Could not create POS connection");
-
-  return res.status(201).json({
-    connection: {
-      ...sanitizeConnection(data),
-      webhook_secret: webhookSecret,
-    },
+  return jsonError(res, 410, "Manual webhook connections are no longer available. Connect Yoco or Square instead.", {
+    code: "MANUAL_POS_WEBHOOK_DISABLED",
   });
 }
 
@@ -207,7 +180,11 @@ export async function handlePosConnectionPatch(req, res) {
     updates.status = status;
   }
   if (req.body?.rotate_secret === true) {
-    updates.webhook_secret = crypto.randomBytes(32).toString("hex");
+    // Webhook secrets are issued by the provider; rotating would replace one with a secret the
+    // merchant sees (and could sign sales with).
+    return jsonError(res, 410, "Webhook secrets are issued by the provider and cannot be rotated here.", {
+      code: "MANUAL_POS_WEBHOOK_DISABLED",
+    });
   }
 
   if (Object.keys(updates).length === 0) {

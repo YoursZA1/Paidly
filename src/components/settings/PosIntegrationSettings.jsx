@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plug, Copy, Plus, Trash2, RefreshCw, Loader2, Check, Link2 } from "lucide-react";
+import { Plug, Copy, Trash2, RefreshCw, Loader2, Check, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,10 +27,8 @@ import { useToast } from "@/components/ui/use-toast";
 import {
   POS_PROVIDERS,
   listPosConnections,
-  createPosConnection,
   updatePosConnection,
   deletePosConnection,
-  buildGenericWebhookExample,
   getPosOAuthStatus,
   startSquareOAuthConnect,
   connectYocoPos,
@@ -72,14 +70,12 @@ export default function PosIntegrationSettings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
   const [connectingSquare, setConnectingSquare] = useState(false);
   const [connectingYoco, setConnectingYoco] = useState(false);
   const [oauthStatus, setOauthStatus] = useState(null);
   const [newProvider, setNewProvider] = useState("square");
   const [newLabel, setNewLabel] = useState("");
   const [yocoApiKey, setYocoApiKey] = useState("");
-  const [revealedSecrets, setRevealedSecrets] = useState({});
 
   const selectedProvider = useMemo(
     () => POS_PROVIDERS.find((p) => p.id === newProvider) || POS_PROVIDERS[0],
@@ -135,36 +131,6 @@ export default function PosIntegrationSettings() {
       setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams, toast, loadConnections]);
-
-  const examplePayload = useMemo(() => JSON.stringify(buildGenericWebhookExample(), null, 2), []);
-
-  const handleCreateManual = async () => {
-    setCreating(true);
-    try {
-      const result = await createPosConnection({
-        provider: newProvider,
-        label: newLabel.trim() || undefined,
-      });
-      const created = result?.connection;
-      if (created?.id && created?.webhook_secret) {
-        setRevealedSecrets((prev) => ({ ...prev, [created.id]: created.webhook_secret }));
-      }
-      setNewLabel("");
-      await loadConnections();
-      toast({
-        title: "POS connection created",
-        description: "Copy the webhook URL and secret into your POS provider.",
-      });
-    } catch (err) {
-      toast({
-        title: "Could not create connection",
-        description: err?.message || "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const handleConnectSquare = async () => {
     setConnectingSquare(true);
@@ -227,26 +193,6 @@ export default function PosIntegrationSettings() {
     }
   };
 
-  const handleRotateSecret = async (connectionId) => {
-    try {
-      const result = await updatePosConnection(connectionId, { rotate_secret: true });
-      const secret = result?.connection?.webhook_secret;
-      if (secret) {
-        setRevealedSecrets((prev) => ({ ...prev, [connectionId]: secret }));
-      }
-      toast({
-        title: "Webhook secret rotated",
-        description: "Update the secret in your POS provider.",
-      });
-    } catch (err) {
-      toast({
-        title: "Rotate failed",
-        description: err?.message || "Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleDelete = async (connectionId) => {
     try {
       await deletePosConnection(connectionId);
@@ -279,8 +225,8 @@ export default function PosIntegrationSettings() {
           <p className="text-sm font-medium text-foreground">Connect your point of sale</p>
           <p className="text-sm text-muted-foreground">
             Paidly POS is a till inside the app. Open it at the link above, or from sidebar → POS.
-            These connections are for external hardware — Square, Yoco, or a generic webhook. All of
-            them write the same sales events and decrement catalog stock when SKU or barcode matches.
+            These connections are for external hardware — Square or Yoco, signed by the provider. Both
+            write the same sales events and decrement catalog stock when SKU or barcode matches.
           </p>
         </div>
       </div>
@@ -359,12 +305,6 @@ export default function PosIntegrationSettings() {
           </div>
         ) : null}
 
-        {selectedProvider?.connectType === "manual" ? (
-          <Button onClick={handleCreateManual} disabled={creating}>
-            {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-            Create webhook connection
-          </Button>
-        ) : null}
       </div>
 
       <div className="space-y-3">
@@ -431,32 +371,11 @@ export default function PosIntegrationSettings() {
                   </div>
 
                   {isManual ? (
-                    <>
-                      <CopyField
-                        label="Webhook URL"
-                        value={connection.webhook_url}
-                        description="Paste this into your POS provider webhook settings."
-                      />
-                      {revealedSecrets[connection.id] ? (
-                        <CopyField
-                          label="Webhook secret"
-                          value={revealedSecrets[connection.id]}
-                          description="Send as Authorization: Bearer &lt;secret&gt; or X-Paidly-Webhook-Secret header."
-                        />
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-muted-foreground">Webhook secret is hidden after creation.</p>
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="h-auto p-0"
-                            onClick={() => void handleRotateSecret(connection.id)}
-                          >
-                            Rotate to reveal new secret
-                          </Button>
-                        </div>
-                      )}
-                    </>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      Manual webhook connections no longer import sales: their signing secret was shared
+                      with the business, so a sale sent through them is not proof of payment. Remove this
+                      connection and connect Yoco or Square instead.
+                    </p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       Connected via secure authorization. Webhook is managed automatically
@@ -481,14 +400,6 @@ export default function PosIntegrationSettings() {
         )}
       </div>
 
-      <div className="rounded-xl border border-dashed border-border p-4 space-y-2">
-        <h3 className="text-sm font-semibold">Generic webhook payload example</h3>
-        <p className="text-xs text-muted-foreground">
-          For non-OAuth providers, POST JSON to your webhook URL. Match products by{" "}
-          <code className="text-xs">sku</code> or <code className="text-xs">barcode</code>.
-        </p>
-        <pre className="text-xs overflow-x-auto rounded-lg bg-muted/50 p-3 font-mono">{examplePayload}</pre>
-      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
 } from "../../server/src/payments/paymentIntentRoutes.js";
 import {
   handleDocumentPay,
+  handleDocumentRecord,
   handleDocumentRemind,
   handleDocumentHistory,
   handleOzowReturn,
@@ -74,6 +75,7 @@ export default async function handler(req, res) {
   }
 
   if (head === "document-pay") return handleDocumentPay(req, res);
+  if (head === "document-record") return handleDocumentRecord(req, res);
   if (head === "document-remind") return handleDocumentRemind(req, res);
   if (head === "document-history") return handleDocumentHistory(req, res);
   if (head === "document-timeline") return handleDocumentTimeline(req, res);

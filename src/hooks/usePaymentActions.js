@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { Invoice, Payment } from '@/api/entities';
+import { recordDocumentPayment } from '@/api/documentPaymentApi';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
-import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import { formatCurrency } from '@/utils/currencyCalculations';
 
 /**
- * Hook for recording payments against an invoice.
- * Handles validation, API calls, status updates, and toast feedback.
+ * Hook for recording money received offline (cash, EFT, card machine, cheque) against an invoice.
+ *
+ * The Payment Engine records it (POST /api/payment-intents/document-record): a cash payment_intent is
+ * approved and settled server-side, which writes the payment and derives the invoice status. The
+ * browser never writes payments or a paid status — the database refuses both.
  *
  * @param {Object} invoice - The invoice to record payment against
  * @param {Object} options
@@ -44,53 +47,40 @@ export function usePaymentActions(invoice, options = {}) {
     setIsProcessing(true);
 
     try {
-      const newPayment = await Payment.create({
-        invoice_id: invoice.id,
-        client_id: invoice.client_id,
+      const result = await recordDocumentPayment({
+        invoiceId: invoice.id,
         amount: paymentData.amount,
-        payment_date: paymentData.payment_date,
-        payment_method: paymentData.payment_method,
-        reference_number: paymentData.reference_number || '',
-        notes: paymentData.notes || '',
-        created_date: new Date().toISOString(),
+        paymentMethod: paymentData.payment_method,
+        paidAt: paymentData.payment_date || null,
+        reference: paymentData.reference_number || null,
+        notes: paymentData.notes || null,
+        idempotencyKey: paymentData.idempotency_key || globalThis.crypto?.randomUUID?.() || null,
       });
 
       const allPayments = await Payment.list('-payment_date');
       const invoicePayments = (allPayments || []).filter((p) => p.invoice_id === invoice.id);
-      const mergedPaymentsMap = new Map();
-      [...invoicePayments, newPayment].forEach((p) => {
-        if (p?.id) mergedPaymentsMap.set(p.id, p);
-      });
-      const mergedPayments = Array.from(mergedPaymentsMap.values());
+      const nextStatus = result?.invoice_status || invoice.status;
 
-      const autoUpdate = getAutoStatusUpdate({
-        ...invoice,
-        payments: mergedPayments,
-      });
-      const nextStatus = autoUpdate?.status || invoice.status;
-
-      const changes = [{ field: 'payment_recorded', from: null, to: newPayment }];
+      const changes = [{ field: 'payment_recorded', from: null, to: result?.payment || null }];
       if (nextStatus !== invoice.status) {
         changes.push({ field: 'status', from: invoice.status, to: nextStatus });
       }
-
       const historyEntry = createHistoryEntry({
         action: 'payment_recorded',
         summary: `Payment recorded (${formatCurrency(paymentData.amount, invoice.currency || 'USD')})`,
         changes,
         meta: { amount: paymentData.amount, payment_method: paymentData.payment_method },
       });
-
-      const updatePayload = {
-        ...(autoUpdate || {}),
-        version_history: appendHistory(invoice.version_history, historyEntry),
-      };
-
-      await Invoice.update(invoice.id, updatePayload);
+      const version_history = appendHistory(invoice.version_history, historyEntry);
+      try {
+        // History only — the status was set by the settlement.
+        await Invoice.update(invoice.id, { version_history });
+      } catch (historyErr) {
+        console.warn('Payment recorded; history entry not saved:', historyErr);
+      }
 
       const currency = invoice.currency || 'USD';
-      const totalPaidAfter = mergedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-      const isFullyPaid = totalPaidAfter >= totalAmount;
+      const isFullyPaid = Number(result?.amount_due ?? 1) <= 0;
 
       toast({
         title: isFullyPaid ? 'Invoice fully paid' : 'Payment recorded',
@@ -100,8 +90,8 @@ export function usePaymentActions(invoice, options = {}) {
         duration: 4000,
       });
 
-      const updatedInvoice = { ...invoice, ...updatePayload };
-      onSuccess?.({ invoice: updatedInvoice, payments: mergedPayments, isFullyPaid });
+      const updatedInvoice = { ...invoice, status: nextStatus, version_history };
+      onSuccess?.({ invoice: updatedInvoice, payments: invoicePayments, isFullyPaid });
     } catch (error) {
       console.error('Failed to record payment:', error);
       toast({

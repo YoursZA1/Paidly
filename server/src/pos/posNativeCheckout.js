@@ -597,6 +597,7 @@ export async function handleNativePosCheckout(req, res, gate) {
       });
     }
   } catch (err) {
+    if (err?.status === 422) return jsonError(res, 422, err.message, { code: err.code });
     return jsonError(res, 500, mapMissingSchema(err?.message), { code: err?.code });
   }
 

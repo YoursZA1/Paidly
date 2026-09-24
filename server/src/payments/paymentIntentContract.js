@@ -36,7 +36,22 @@ const POS_PROVIDERS = new Set([
   CUSTOMER_PAYMENT_PROVIDERS.OZOW,
   CUSTOMER_PAYMENT_PROVIDERS.CARD_TERMINAL,
 ]);
-const DOCUMENT_PROVIDERS = new Set([CUSTOMER_PAYMENT_PROVIDERS.OZOW]);
+/**
+ * Invoice rails: Ozow (verified Notify) and cash = approved settlement of money received offline
+ * (cash, EFT into the bank, card machine, cheque) by an owner/manager — never written by the browser.
+ */
+const DOCUMENT_PROVIDERS = new Set([CUSTOMER_PAYMENT_PROVIDERS.OZOW, CUSTOMER_PAYMENT_PROVIDERS.CASH]);
+
+/** How offline invoice money was received (payments.method for document cash settlements). */
+export const OFFLINE_PAYMENT_METHODS = Object.freeze([
+  "cash",
+  "bank_transfer",
+  "credit_card",
+  "debit_card",
+  "mobile_payment",
+  "check",
+  "other",
+]);
 
 export function normalizeCustomerPaymentProvider(raw) {
   const key = String(raw || "").trim().toLowerCase();
@@ -59,7 +74,7 @@ export function assertCustomerPaymentProvider(provider, sourceKind) {
     throw error;
   }
   if (source === "document" && !DOCUMENT_PROVIDERS.has(id)) {
-    const error = new Error("Document payment provider must be ozow");
+    const error = new Error("Document payment provider must be ozow or cash");
     error.code = "UNSUPPORTED_DOCUMENT_PROVIDER";
     throw error;
   }

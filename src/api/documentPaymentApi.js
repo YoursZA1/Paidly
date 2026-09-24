@@ -65,6 +65,37 @@ export async function remindDocumentPayment(invoiceId) {
   return parseJson(res, "Could not send reminder");
 }
 
+/**
+ * Record money received offline (cash, EFT, card machine, cheque) against an invoice.
+ * The Payment Engine creates and settles a cash payment_intent, writes the payment and derives the
+ * invoice status; the browser never writes payments or a paid status itself.
+ */
+export async function recordDocumentPayment({
+  invoiceId,
+  amount,
+  paymentMethod,
+  paidAt = null,
+  reference = null,
+  notes = null,
+  idempotencyKey = null,
+}) {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/payment-intents/document-record`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      invoice_id: invoiceId,
+      amount,
+      payment_method: paymentMethod || "cash",
+      paid_at: paidAt || undefined,
+      reference: reference || undefined,
+      notes: notes || undefined,
+      idempotency_key: idempotencyKey || undefined,
+    }),
+  });
+  return parseJson(res, "Could not record payment");
+}
+
 export async function fetchDocumentPaymentHistory({ invoiceId, shareToken = null }) {
   const headers = shareToken ? publicHeaders(shareToken) : await authHeaders();
   const qs = new URLSearchParams({ invoice_id: invoiceId });

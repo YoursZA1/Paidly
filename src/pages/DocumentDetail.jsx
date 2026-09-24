@@ -743,6 +743,13 @@ export default function DocumentDetailPage() {
 
   const handleMarkPaid = async () => {
     if (!documentId || !doc) return;
+    if (doc.type === DOCUMENT_TYPES.invoice) {
+      // An invoice is paid by the payments recorded against it, never by a status flip (the
+      // database refuses one). Record the payment on the invoice; its status follows.
+      toast({ title: "Record the payment", description: "Invoice status follows the payments recorded against it." });
+      navigate(createPageUrl(`ViewInvoice?id=${encodeURIComponent(documentId)}`));
+      return;
+    }
     setSaving(true);
     try {
       const paidStatus = doc.type === DOCUMENT_TYPES.payslip ? PAYSLIP_STATUSES.paid : INVOICE_STATUSES.paid;

@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { sendHtmlEmail } from "../sendInvoice.js";
 import { resolvePublicAppOrigin } from "../companyInviteAppUrl.js";
-import { CUSTOMER_PAYMENT_PROVIDERS } from "./paymentIntentContract.js";
+import { CUSTOMER_PAYMENT_PROVIDERS, OFFLINE_PAYMENT_METHODS } from "./paymentIntentContract.js";
 import {
+  assertCardRailAvailable,
   applyVerifiedIntentStatus,
   confirmPaymentIntent,
   createPaymentIntentRow,
@@ -76,6 +77,7 @@ export async function findActiveDocumentIntent(orgId, invoiceId) {
     .select("*")
     .eq("org_id", orgId)
     .eq("source_kind", "document")
+    .eq("provider", CUSTOMER_PAYMENT_PROVIDERS.OZOW)
     .eq("document_id", invoiceId)
     .in("status", ACTIVE_PAYMENT_INTENT_STATUSES)
     .order("created_at", { ascending: false })
@@ -238,6 +240,8 @@ async function insertSettledInvoicePayment(intent, invoice, amount) {
   if (findErr) throw findErr;
   if (existingRows?.[0]?.id) return { payment: existingRows[0], duplicate: true };
 
+  const meta = intent.metadata && typeof intent.metadata === "object" ? intent.metadata : {};
+  const offline = intent.provider === CUSTOMER_PAYMENT_PROVIDERS.CASH;
   const row = {
     org_id: intent.org_id,
     invoice_id: invoice.id,
@@ -245,10 +249,13 @@ async function insertSettledInvoicePayment(intent, invoice, amount) {
     client_id: invoice.client_id || intent.client_id || null,
     amount,
     status: "paid",
-    paid_at: new Date().toISOString(),
-    method: "ozow",
+    paid_at: (offline && meta.paid_at) || new Date().toISOString(),
+    method: offline ? meta.offline_method || "cash" : "ozow",
+    // Always the intent id: the link back to the Payment Engine (and the idempotency key).
     reference,
-    notes: `Ozow ${intent.external_id || intent.id}`,
+    notes: offline
+      ? [meta.payer_reference ? `Ref ${meta.payer_reference}` : null, meta.notes || null].filter(Boolean).join(" · ") || null
+      : `Ozow ${intent.external_id || intent.id}`,
   };
 
   const { data, error } = await supabaseAdmin.from("payments").insert(row).select("*").single();
@@ -337,7 +344,98 @@ export async function settleDocumentIntent(intent) {
   };
 }
 
-export async function applyVerifiedProviderEvent({ intentId, nextStatus, externalId, amount, metadata }) {
+function httpError(status, code, message) {
+  const error = new Error(message);
+  error.status = status;
+  error.code = code;
+  return error;
+}
+
+/**
+ * Approved settlement of money received offline (cash, EFT into the bank, card machine, cheque).
+ * The only way a hand-recorded invoice payment exists: payment_intent (provider cash) → approved by
+ * an owner / manager / the invoice's owner (checked by the route) → paid → settleDocumentIntent,
+ * which writes the payments row and derives the invoice status. The browser never writes payments.
+ */
+export async function recordOfflineDocumentPayment({
+  orgId,
+  invoiceId,
+  amount,
+  method,
+  paidAt = null,
+  payerReference = null,
+  notes = null,
+  approvedBy,
+  idempotencyKey = null,
+}) {
+  const invoice = await loadOrgInvoice(orgId, invoiceId);
+  if (!invoice) throw httpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+
+  const value = money(amount);
+  if (!(value > 0)) throw httpError(422, "AMOUNT_INVALID", "Amount must be greater than 0");
+  const offlineMethod = String(method || "cash").trim().toLowerCase();
+  if (!OFFLINE_PAYMENT_METHODS.includes(offlineMethod)) {
+    throw httpError(422, "METHOD_INVALID", `Payment method must be one of: ${OFFLINE_PAYMENT_METHODS.join(", ")}`);
+  }
+  let paidAtIso = null;
+  if (paidAt) {
+    const d = new Date(paidAt);
+    if (!Number.isFinite(d.getTime()) || d.getTime() > Date.now() + 86_400_000) {
+      throw httpError(422, "PAID_AT_INVALID", "Payment date is invalid");
+    }
+    paidAtIso = d.toISOString();
+  }
+
+  const key = idempotencyKey ? `document:${invoice.id}:offline:${String(idempotencyKey).slice(0, 80)}` : null;
+  if (key) {
+    const { findPaymentIntentByIdempotency } = await import("./paymentIntentService.js");
+    const replay = await findPaymentIntentByIdempotency(orgId, key);
+    if (replay && isConfirmedPaymentIntent(replay.status)) {
+      const settlement = await settleDocumentIntent(replay);
+      return { intent: replay, ...settlement, duplicate: true };
+    }
+  }
+
+  const payments = await listConfirmedInvoicePayments(orgId, invoice.id);
+  const amountDue = invoiceAmountDue(invoice, payments);
+  if (!invoiceIsPayable(invoice, amountDue)) {
+    throw httpError(422, "INVOICE_NOT_PAYABLE", "This invoice is not open for payment (draft, void or already paid)");
+  }
+  if (value > amountDue + 0.005) {
+    throw httpError(422, "AMOUNT_EXCEEDS_BALANCE", `Amount exceeds the outstanding balance of ${amountDue.toFixed(2)}`);
+  }
+
+  const currency = String(invoice.currency || invoice.owner_currency || "ZAR").trim().toUpperCase() || "ZAR";
+  const intent = await createPaymentIntentRow({
+    orgId,
+    sourceKind: "document",
+    provider: CUSTOMER_PAYMENT_PROVIDERS.CASH,
+    amount: value,
+    currency,
+    idempotencyKey: key || `document:${invoice.id}:offline:${randomUUID()}`,
+    clientId: invoice.client_id || null,
+    companyId: invoice.company_id || null,
+    createdBy: approvedBy,
+    documentId: invoice.id,
+    documentType: "invoice",
+    metadata: {
+      origin: "offline_receipt",
+      offline_method: offlineMethod,
+      paid_at: paidAtIso,
+      payer_reference: payerReference ? String(payerReference).slice(0, 120) : null,
+      notes: notes ? String(notes).slice(0, 500) : null,
+    },
+  });
+
+  const applied = await applyVerifiedIntentStatus(intent, "paid", {
+    source: "offline_receipt",
+    metadata: { settlement: "approved", approved_by: approvedBy, approved_at: new Date().toISOString() },
+  });
+  const settlement = await settleDocumentIntent(applied.intent);
+  return { intent: applied.intent, ...settlement };
+}
+
+export async function applyVerifiedProviderEvent({ intentId, nextStatus, externalId, amount, metadata, provider = null }) {
   if (!intentId) {
     const error = new Error("Payment intent reference is required");
     error.code = "INTENT_REQUIRED";
@@ -356,6 +454,13 @@ export async function applyVerifiedProviderEvent({ intentId, nextStatus, externa
     throw missing;
   }
 
+  // A provider only settles its own rail's intents (an Ozow notify never pays a cash / card intent).
+  if (provider && String(intent.provider || "").toLowerCase() !== String(provider).toLowerCase()) {
+    const mismatch = new Error("This payment intent belongs to a different payment rail");
+    mismatch.code = "PROVIDER_MISMATCH";
+    throw mismatch;
+  }
+
   if (amount != null && amount !== "" && ozowAmountString(intent.amount) !== ozowAmountString(amount)) {
     console.error("[document-payment] amount mismatch", {
       intentId: intent.id,
@@ -366,6 +471,9 @@ export async function applyVerifiedProviderEvent({ intentId, nextStatus, externa
     mismatch.code = "AMOUNT_MISMATCH";
     throw mismatch;
   }
+
+  // No acquirer backs the card rail in production: a "paid" card event there proves nothing.
+  if (isConfirmedPaymentIntent(nextStatus)) assertCardRailAvailable(intent.provider);
 
   const applied = await applyVerifiedIntentStatus(intent, nextStatus, {
     externalId,

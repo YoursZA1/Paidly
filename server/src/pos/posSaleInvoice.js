@@ -4,6 +4,7 @@ import { isValidUuid } from "../inputValidation.js";
 import { salePublicView } from "./posNativeCheckout.js";
 import { buildInvoiceFromPosSale } from "./posSaleInvoiceMath.js";
 import { loadPosTillCustomer } from "./posTillCustomer.js";
+import { isProviderSignedConnection } from "./posWebhookHandler.js";
 
 export { buildInvoiceFromPosSale };
 
@@ -63,6 +64,29 @@ async function linkSaleInvoice(saleId, invoiceId) {
  * POST /api/pos/invoice
  * Optional tax-invoice copy of a completed till sale. Never auto-runs from checkout.
  */
+/**
+ * Was this sale's money received through a verified path?
+ *  - native Paidly till: written only after its payment_intent is paid (Ozow notify / till cash)
+ *  - Square: app-level webhook signed with Paidly's Square key
+ *  - Yoco: Yoco-connect connection (secret issued by Yoco, never shown to the merchant)
+ * Sales from retired manual / generic webhook connections are not.
+ * @param {{ provider?: string, connection_id?: string | null }} sale
+ */
+export async function saleIsVerifiedMoney(sale) {
+  const provider = String(sale?.provider || "").toLowerCase();
+  if (provider === "paidly") return true;
+  if (provider !== "yoco" && provider !== "square") return false;
+  if (!sale.connection_id) return false;
+  const { data: connection } = await supabaseAdmin
+    .from("pos_connections")
+    .select("provider, config")
+    .eq("id", sale.connection_id)
+    .maybeSingle();
+  if (!connection) return false;
+  if (provider === "square") return connection.provider === "square" && Boolean(connection.config?.square_merchant_id);
+  return isProviderSignedConnection(connection);
+}
+
 export async function handlePosConvertToInvoice(req, res, gate) {
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const saleId = String(body.sale_id || "").trim();
@@ -86,6 +110,14 @@ export async function handlePosConvertToInvoice(req, res, gate) {
 
   if (saleError) return jsonError(res, 500, saleError.message || "Could not load sale");
   if (!sale) return jsonError(res, 404, "Sale not found");
+
+  // The tax invoice is created already paid, so the sale must be proof of money received:
+  // a native till sale (Payment Engine) or a provider-signed Yoco / Square import.
+  if (!(await saleIsVerifiedMoney(sale))) {
+    return jsonError(res, 422, "This sale was not verified by a payment provider, so it cannot become a paid invoice.", {
+      code: "SALE_NOT_VERIFIED",
+    });
+  }
 
   try {
     const existing = await loadExistingInvoice(orgId, sale.id, sale.invoice_id);

@@ -203,6 +203,18 @@ export function isMockPaymentsEnabled(env = process.env) {
   return true;
 }
 
+/**
+ * Card / terminal rail (Paidly Pay tap-to-pay, QR, Yoco / Square readers on the till).
+ * There is no card acquirer integration, so nothing can prove a card was charged: in production the
+ * rail is off — card intents are not created and can never become paid. Development / preview-mock
+ * keep it for testing (mock stays gated by isMockPaymentsEnabled).
+ */
+export function cardTerminalRailEnabled(env = process.env) {
+  return isMockPaymentsEnabled(env) || paidlyPayEnvironment(env) !== "production";
+}
+
+export const CARD_RAIL_UNAVAILABLE = "CARD_RAIL_UNAVAILABLE";
+
 export function paidlyPayEnvironment(env = process.env) {
   if (String(env.NODE_ENV || "").trim() === "production") return "production";
   if (env.VERCEL_ENV === "production") return "production";

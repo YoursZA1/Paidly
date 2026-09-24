@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Invoice, Payment, InvoiceView } from "@/api/entities";
+import { Invoice, InvoiceView } from "@/api/entities";
+import { recordDocumentPayment } from "@/api/documentPaymentApi";
 import { Button } from "@/components/ui/button";
 import DocumentTableDensityToggle from "@/components/document-table/DocumentTableDensityToggle";
 import { useDocumentTableDensity } from "@/hooks/useDocumentTableDensity";
@@ -198,13 +199,14 @@ export default function InvoicesPage() {
                         for (const p of rowPayments) {
                             if (!p.amount) continue;
                             try {
-                                await Payment.create({
-                                    invoice_id: createdInvoice.id,
+                                // Payment Engine: approved cash settlement; the server derives the status.
+                                await recordDocumentPayment({
+                                    invoiceId: createdInvoice.id,
                                     amount: p.amount,
-                                    paid_at: p.paid_at || undefined,
-                                    method: p.method || undefined,
-                                    reference: p.notes || undefined,
-                                    status: "completed",
+                                    paymentMethod: p.method || "other",
+                                    paidAt: p.paid_at || null,
+                                    notes: p.notes || null,
+                                    idempotencyKey: `import:${createdInvoice.id}:${rowPayments.indexOf(p)}`,
                                 });
                             } catch (err) {
                                 console.warn("Import payment failed for invoice", createdInvoice.id, err);

@@ -816,6 +816,7 @@ async function handlePaymentWebhook(req, res, requestId) {
       nextStatus,
       externalId: providerEventId || null,
       amount: body.amount == null || body.amount === "" ? undefined : body.amount,
+      provider: "card_terminal",
       metadata: {
         webhook_verified: true,
         terminal_confirmed: nextStatus === "paid",
@@ -851,7 +852,11 @@ async function handlePaymentWebhook(req, res, requestId) {
     if (err?.code === "AMOUNT_MISMATCH") {
       return sendPaidlyError(res, 409, err.code, err.message, requestId);
     }
-    if (err?.code === "INVALID_INTENT_TRANSITION") {
+    if (
+      err?.code === "INVALID_INTENT_TRANSITION" ||
+      err?.code === "CARD_RAIL_UNAVAILABLE" ||
+      err?.code === "PROVIDER_MISMATCH"
+    ) {
       return sendPaidlyError(res, 409, err.code, err.message, requestId);
     }
     throw err;

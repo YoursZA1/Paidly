@@ -13,8 +13,12 @@ import { loadCompanyMembership } from "../companyRouteAccess.js";
 import {
   createOrReuseDocumentPaymentIntent,
   documentPaymentSnapshot,
+  loadOrgInvoice,
+  recordOfflineDocumentPayment,
   remindDocumentPayment,
 } from "./documentPaymentService.js";
+import { COMPANY_ROLES } from "../companyRouteAccess.js";
+import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
 import { getOrgPaymentIntent, mapPaymentIntentSchemaError, publicPaymentIntentView } from "./paymentEngine.js";
 import { DOCUMENT_EVENT_ACTOR, DOCUMENT_EVENT_SOURCE, DOCUMENT_EVENT_TYPE } from "../../../shared/documents/documentEvents.js";
 import { appendDocumentEventBestEffort } from "../documents/documentEventService.js";
@@ -145,6 +149,79 @@ export async function handleDocumentPay(req, res) {
       currency: result.currency,
       invoice_id: result.invoice.id,
       invoice_number: result.invoice.invoice_number,
+    });
+  } catch (err) {
+    if (err?.status) return jsonError(res, err.status, err.message, { code: err.code });
+    return schemaError(res, err);
+  }
+}
+
+/**
+ * POST /api/payment-intents/document-record — approve money received offline against an invoice
+ * (cash, EFT, card machine, cheque). Payment Engine cash settlement: creates a payment_intent and
+ * settles it through the same adapter as Ozow. Approver: company owner/admin/manager, or the user who
+ * owns/created the invoice (same rule as the invoice write policy). Till / POS-only staff cannot.
+ * Amount is capped at the outstanding balance; status is derived, never sent by the client.
+ */
+export async function handleDocumentRecord(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return jsonError(res, 405, "Method not allowed");
+  }
+  const gate = await requireOrgMember(req, res);
+  if (!gate.ok) return gate.response;
+  if (gate.posAccess || !gate.user?.id || isPosOnlyStaff(gate.membership)) {
+    return jsonError(res, 403, "Till staff cannot record invoice payments", { code: "PAYMENT_FORBIDDEN" });
+  }
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const claimedRail = [body.method, body.payment_method].map((v) => String(v || "").trim().toLowerCase());
+  if (
+    body.status != null ||
+    body.provider != null ||
+    claimedRail.some((v) => v === "ozow" || v === "card_terminal" || v === "paidly_pay" || v === "payfast")
+  ) {
+    return jsonError(res, 422, "Status and provider are set by the Payment Engine, not the client", {
+      code: "CLIENT_OVERRIDE_FORBIDDEN",
+    });
+  }
+  const invoiceId = String(body.invoice_id || body.document_id || "").trim();
+  if (!invoiceId) return jsonError(res, 422, "invoice_id is required");
+
+  try {
+    const orgId = gate.membership.orgId;
+    const invoice = await loadOrgInvoice(orgId, invoiceId);
+    if (!invoice) return jsonError(res, 404, "Invoice not found");
+    const role = gate.membership.companyRole;
+    const approver =
+      role === COMPANY_ROLES.ADMIN ||
+      role === COMPANY_ROLES.MANAGER ||
+      invoice.user_id === gate.user.id ||
+      invoice.created_by === gate.user.id;
+    if (!approver) {
+      return jsonError(res, 403, "You do not have permission to record payments on this invoice", {
+        code: "PAYMENT_FORBIDDEN",
+      });
+    }
+
+    const result = await recordOfflineDocumentPayment({
+      orgId,
+      invoiceId: invoice.id,
+      amount: body.amount,
+      method: body.payment_method || body.method,
+      paidAt: body.paid_at || body.payment_date || null,
+      payerReference: body.reference || body.reference_number || null,
+      notes: body.notes || null,
+      approvedBy: gate.user.id,
+      idempotencyKey: body.idempotency_key || null,
+    });
+    return res.status(result.duplicate ? 200 : 201).json({
+      ok: true,
+      duplicate: Boolean(result.duplicate),
+      payment_intent: publicPaymentIntentView(result.intent),
+      payment: result.payment || null,
+      invoice_id: result.invoice?.id || invoice.id,
+      invoice_status: result.invoice?.status || invoice.status,
+      amount_due: result.amountDue,
     });
   } catch (err) {
     if (err?.status) return jsonError(res, err.status, err.message, { code: err.code });

@@ -1,5 +1,6 @@
 import { CUSTOMER_PAYMENT_PROVIDERS } from "../paymentIntentContract.js";
 import {
+  cardTerminalRailEnabled,
   isMockPaymentsEnabled,
   paidlyPayOpenUrl,
   resolvePaidlyPayOrigin,
@@ -15,7 +16,7 @@ export const cardTerminalProvider = {
   sourceKinds: ["pos"],
   kind: "terminal",
   isConfigured() {
-    return true;
+    return cardTerminalRailEnabled();
   },
   async createCharge(intent, chargeCtx = {}) {
     const rail = chargeCtx.cardRail || intent.metadata?.card_rail || {};

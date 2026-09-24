@@ -1,6 +1,5 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { normalizeRequestBody } from "../validateBody.js";
-import { verifyPosHmacSignature } from "./posWebhookAuth.js";
 import { processPosWebhookSale } from "./posSaleProcessor.js";
 import { verifyYocoStandardWebhook } from "./yocoConnect.js";
 import {
@@ -60,18 +59,32 @@ export async function handlePosWebhook(req, res) {
   const rawBody = getRawBodyString(req, body);
   const headers = req.headers || {};
 
-  let verified = false;
-  if (connection.provider === "yoco" && (headers["webhook-signature"] || headers["webhook_signature"])) {
-    verified = verifyYocoStandardWebhook(rawBody, headers, connection.webhook_secret);
-  } else {
-    verified = verifyPosHmacSignature(req, rawBody, connection.webhook_secret);
+  // A sale counts as money received only on evidence the merchant cannot produce: Yoco's own
+  // signature, with the secret Yoco issued when Paidly registered the webhook (Yoco connect).
+  // Manual / generic connections were signed with a secret handed to the merchant, so anyone with
+  // settings access could "sell" any amount. Square arrives on the app-level route below.
+  if (!isProviderSignedConnection(connection) || !(headers["webhook-signature"] || headers["webhook_signature"])) {
+    return res.status(403).json({
+      error: "Only provider-signed POS sales are accepted. Connect Yoco or Square through their connect flow.",
+      code: "EXTERNAL_SALE_UNVERIFIED",
+    });
   }
 
-  if (!verified) {
-    return res.status(401).json({ error: "Invalid webhook secret" });
+  // verifyYocoStandardWebhook treats an empty secret as "no check"; never accept that here.
+  const secret = String(connection.webhook_secret || "").trim();
+  if (!secret || !verifyYocoStandardWebhook(rawBody, headers, secret)) {
+    return res.status(401).json({ error: "Invalid webhook signature" });
   }
 
   return ingestPosSale(res, connection, body);
+}
+
+/**
+ * Connections whose webhook secret came from the provider and was never shown to the merchant.
+ * @param {{ provider?: string, config?: object | null }} connection
+ */
+export function isProviderSignedConnection(connection) {
+  return connection?.provider === "yoco" && connection?.config?.connection_method === "oauth_connect";
 }
 
 async function handleSquareProviderWebhook(req, res) {

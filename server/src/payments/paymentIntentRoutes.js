@@ -1,4 +1,5 @@
 import { requireOrgMember, requirePosPermission } from "../pos/posConnectionsRoutes.js";
+import { supabaseAdmin } from "../supabaseAdmin.js";
 import { requirePosCapability } from "../pos/posBusinessType.js";
 import { requirePosPlan } from "../pos/posEntitlement.js";
 import { PERMISSIONS } from "../companyRouteAccess.js";
@@ -51,10 +52,31 @@ export async function handlePaymentIntentCreate(req, res) {
     }
     throw err;
   }
+  if (sourceKind === "document") {
+    // Invoice intents are created by POST /api/payment-intents/document-pay, which derives the
+    // amount from the invoice's outstanding balance. Never from a client-supplied amount here.
+    return jsonError(res, 422, "Invoice payments start from the invoice (document-pay), not a raw intent.", {
+      code: "USE_DOCUMENT_PAY",
+    });
+  }
   if (sourceKind === "pos") {
     const featureOk = await requirePosPlan(req, res);
     if (!featureOk) return;
     if (!(await requirePosCapability(res, gate.membership.orgId))) return;
+  }
+
+  // Company (brand) and client must belong to the caller's organization.
+  const orgId = gate.membership.orgId;
+  const ownedId = async (table, raw) => {
+    const id = String(raw || "").trim();
+    if (!id) return { ok: true, id: null };
+    const { data } = await supabaseAdmin.from(table).select("id").eq("id", id).eq("org_id", orgId).maybeSingle();
+    return data?.id ? { ok: true, id: data.id } : { ok: false };
+  };
+  const company = await ownedId("companies", body.company_id);
+  const client = await ownedId("clients", body.client_id);
+  if (!company.ok || !client.ok) {
+    return jsonError(res, 403, "company_id / client_id must belong to your organization", { code: "ORG_MISMATCH" });
   }
 
   const provider =
@@ -71,17 +93,17 @@ export async function handlePaymentIntentCreate(req, res) {
 
   try {
     const intent = await createCustomerPaymentIntent({
-      orgId: gate.membership.orgId,
+      orgId,
       sourceKind,
       provider,
       amount,
       currency: String(body.currency || "ZAR").trim().toUpperCase().slice(0, 3) || "ZAR",
       idempotencyKey: body.idempotency_key ? String(body.idempotency_key).trim() : null,
-      clientId: body.client_id || null,
-      companyId: body.company_id || null,
+      clientId: client.id,
+      companyId: company.id,
       createdBy: gate.user.id,
-      documentId: body.document_id || null,
-      documentType: body.document_type || null,
+      documentId: null,
+      documentType: null,
       metadata: { origin: "api", payment_method: body.payment_method || null },
     });
     return res.status(201).json({
@@ -90,7 +112,7 @@ export async function handlePaymentIntentCreate(req, res) {
       providers: listCustomerPaymentProviders(),
     });
   } catch (err) {
-    if (err?.code === "PAYFAST_NOT_CUSTOMER_RAIL") {
+    if (err?.code === "PAYFAST_NOT_CUSTOMER_RAIL" || err?.code === "CARD_RAIL_UNAVAILABLE") {
       return jsonError(res, 422, err.message, { code: err.code });
     }
     return schemaError(res, err);
@@ -198,7 +220,7 @@ export async function handlePaymentIntentAction(req, res) {
         : null,
     });
   } catch (err) {
-    if (err?.code === "INVALID_INTENT_TRANSITION") {
+    if (err?.code === "INVALID_INTENT_TRANSITION" || err?.code === "CARD_RAIL_UNAVAILABLE") {
       return jsonError(res, 409, err.message, { code: err.code });
     }
     return schemaError(res, err);
@@ -238,6 +260,7 @@ export async function handleCustomerPaymentWebhook(req, res) {
         nextStatus: result.nextStatus,
         externalId: result.externalId,
         amount: result.amount,
+        provider: result.provider || providerId,
         metadata: {
           ozow_status: result.ozowStatus || null,
           webhook_verified: true,
@@ -262,7 +285,12 @@ export async function handleCustomerPaymentWebhook(req, res) {
         console.error("[payment-webhook] intent missing", result.intentId);
         return jsonError(res, 404, applyErr.message, { code: applyErr.code });
       }
-      if (applyErr?.code === "AMOUNT_MISMATCH" || applyErr?.code === "INVALID_INTENT_TRANSITION") {
+      if (
+        applyErr?.code === "AMOUNT_MISMATCH" ||
+        applyErr?.code === "INVALID_INTENT_TRANSITION" ||
+        applyErr?.code === "CARD_RAIL_UNAVAILABLE" ||
+        applyErr?.code === "PROVIDER_MISMATCH"
+      ) {
         console.error("[payment-webhook] rejected", applyErr.code, result.intentId);
         return jsonError(res, 409, applyErr.message, { code: applyErr.code });
       }
