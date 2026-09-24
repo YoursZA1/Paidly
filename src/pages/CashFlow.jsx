@@ -33,6 +33,8 @@ import ExpenseForm from "@/components/cashflow/ExpenseForm";
 import ExpenseList from "@/components/cashflow/ExpenseList";
 import ReceiptScanner from "@/components/cashflow/ReceiptScanner";
 import BankImportModal from "@/components/cashflow/BankImportModal";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
+import { useUpgradeModalStore } from "@/stores/useUpgradeModalStore";
 import CashFlowKpiCard from "@/components/cashflow/CashFlowKpiCard";
 import CashPositionCard from "@/components/cashflow/CashPositionCard";
 import CashFlowOverTimeChart from "@/components/cashflow/CashFlowOverTimeChart";
@@ -119,6 +121,16 @@ export default function CashFlowPage() {
     const updateExpenseInStore = useAppStore((s) => s.updateExpense);
     const deleteExpenseFromStore = useAppStore((s) => s.deleteExpense);
     const [showExpenseForm, setShowExpenseForm] = useState(false);
+    // Cash flow is on every plan; recording expenses is Business+ (plan feature "expenses").
+    const { hasFeature: planHasFeature } = useEntitlementAccess();
+    const openUpgradeModal = useUpgradeModalStore((st) => st.openUpgradeModal);
+    const withExpenses = (action) => {
+        if (!planHasFeature("expenses")) {
+            openUpgradeModal({ featureKey: "expenses" });
+            return;
+        }
+        action();
+    };
     const [showReceiptScanner, setShowReceiptScanner] = useState(false);
     const [expenseFormFromScan, setExpenseFormFromScan] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
@@ -375,11 +387,11 @@ export default function CashFlowPage() {
         }
     };
 
-    const handleEditExpense = (expense) => {
+    const handleEditExpense = (expense) => withExpenses(() => {
         setEditingExpense(expense);
         setExpenseFormFromScan(false);
         setShowExpenseForm(true);
-    };
+    });
 
     const handleDeleteExpense = async (expenseId) => {
         try {
@@ -422,7 +434,7 @@ export default function CashFlowPage() {
                         <p className="text-muted-foreground mt-1">Understand your financial health in real time. Till sales are included in income.</p>
                     </div>
                     <div className="responsive-page-header-actions gap-2">
-                        <Button variant="outline" className="gap-2" onClick={() => setShowImportModal(true)}>
+                        <Button variant="outline" className="gap-2" onClick={() => withExpenses(() => setShowImportModal(true))}>
                           <Upload className="w-4 h-4" /> Import
                         </Button>
                         <DropdownMenu>
@@ -448,15 +460,15 @@ export default function CashFlowPage() {
                             </a>
                           </Button>
                         )}
-                        <Button variant="outline" className="gap-2" onClick={() => setShowReceiptScanner(true)}>
+                        <Button variant="outline" className="gap-2" onClick={() => withExpenses(() => setShowReceiptScanner(true))}>
                           <ScanLine className="w-4 h-4" /> Scan Receipt
                         </Button>
                         <Button
-                          onClick={() => {
+                          onClick={() => withExpenses(() => {
                             setEditingExpense(null);
                             setExpenseFormFromScan(false);
                             setShowExpenseForm(true);
-                          }}
+                          })}
                           className="gap-2"
                         >
                           <Plus className="w-4 h-4" /> Add Expense
@@ -597,11 +609,11 @@ export default function CashFlowPage() {
                                 </Button>
                                 <Button
                                   variant="outline"
-                                  onClick={() => {
+                                  onClick={() => withExpenses(() => {
                                     setEditingExpense(null);
                                     setExpenseFormFromScan(false);
                                     setShowExpenseForm(true);
-                                  }}
+                                  })}
                                 >
                                   + Add Expense
                                 </Button>

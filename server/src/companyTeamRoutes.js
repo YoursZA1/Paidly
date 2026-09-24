@@ -1153,6 +1153,11 @@ export function registerCompanyTeamRoutes(app) {
   app.post("/api/company/invite-resend", handleCompanyInviteResend);
   app.patch("/api/company/role", handleCompanyTeamRolePatch);
   app.get("/api/company/context", handleCompanyContextGet);
+  app.all("/api/company/email-templates", (req, res) => {
+    import("./company/emailTemplatesRoute.js").then(({ handleCompanyEmailTemplates }) =>
+      handleCompanyEmailTemplates(req, res)
+    );
+  });
   app.all("/api/company/employees", (req, res) => {
     import("./workforce/workforceRoutes.js").then(({ handleWorkforceEmployees }) =>
       handleWorkforceEmployees(req, res)

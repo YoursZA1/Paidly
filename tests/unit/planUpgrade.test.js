@@ -31,7 +31,7 @@ describe("resolveUpgradeTarget — package decides, trial only sets duration", (
   });
 
   it("Starter needing a Growth feature → Upgrade to Growth (skips Business)", () => {
-    const t = resolveUpgradeTarget({ currentPlan: "starter", accessGranted: true, featureKey: "leave_management" });
+    const t = resolveUpgradeTarget({ currentPlan: "starter", accessGranted: true, featureKey: "api_access" });
     expect(t).toMatchObject({ action: "upgrade", plan: "growth" });
   });
 
@@ -92,7 +92,7 @@ describe("offerablePlans", () => {
   });
 
   it("feature filter keeps only packages that include it", () => {
-    expect(offerablePlans({ currentPlan: "starter", accessGranted: true, featureKey: "leave_management" }, SELF_SERVE)).toEqual([
+    expect(offerablePlans({ currentPlan: "starter", accessGranted: true, featureKey: "api_access" }, SELF_SERVE)).toEqual([
       "growth",
     ]);
   });

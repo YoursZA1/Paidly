@@ -531,6 +531,7 @@ export default function ViewDocument() {
         onOpenChange={setEmailOpen}
         docType={docType}
         record={record}
+        client={client}
         onRecordUpdate={(next) => setRecord((prev) => (prev ? { ...prev, ...next } : prev))}
       />
     </div>

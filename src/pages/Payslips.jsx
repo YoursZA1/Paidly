@@ -20,6 +20,9 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
 import AuthBootstrapShell from "@/components/auth/AuthBootstrapShell";
 import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
+import { lowestFamilyAllowing, payslipEmployeeKey } from "@shared/planFeatures.js";
+import { PLAN_FAMILY_LABEL } from "@shared/planUpgrade.js";
 
 export default function PayslipsPage() {
     const { loading: companyLoading, hasPermission } = useCompanyContext();
@@ -146,6 +149,14 @@ function PayslipsMain() {
     };
 
     const payslips = payslipsFromStore ?? [];
+    // Plan limit: distinct employees with payslips (same rule the database guard enforces).
+    const { entitlement: planEntitlement } = useEntitlementAccess();
+    const payslipLimit = planEntitlement?.limits?.payslipEmployees;
+    const payslipEmployeesUsed = new Set(payslips.map(payslipEmployeeKey).filter(Boolean)).size;
+    const payslipUpgrade =
+        typeof payslipLimit === "number"
+            ? lowestFamilyAllowing(planEntitlement?.subscribedPlan, "payslipEmployees", payslipLimit + 1)
+            : null;
     useEffect(() => {
         setIsLoading(payslips.length === 0 && isRefreshing);
     }, [payslips.length, isRefreshing]);
@@ -185,6 +196,22 @@ function PayslipsMain() {
                         </p>
                     </div>
                     <WorkforceSubnav />
+                    {typeof payslipLimit === "number" ? (
+                        <p className="text-sm text-muted-foreground">
+                            {payslipEmployeesUsed > payslipLimit
+                                ? `Payslips issued for ${payslipEmployeesUsed} employees. Your ${PLAN_FAMILY_LABEL[planEntitlement?.subscribedPlan] || "current"} plan includes ${payslipLimit}; employees who already have payslips keep receiving them.`
+                                : `Payslips issued for ${payslipEmployeesUsed} of ${payslipLimit} employee${payslipLimit === 1 ? "" : "s"} on your ${PLAN_FAMILY_LABEL[planEntitlement?.subscribedPlan] || "current"} plan.`}
+                            {payslipUpgrade && payslipEmployeesUsed >= payslipLimit ? (
+                                <>
+                                    {" "}
+                                    <Link to={`${createPageUrl("Settings")}?tab=subscription`} className="font-medium text-primary underline-offset-4 hover:underline">
+                                        Upgrade to {PLAN_FAMILY_LABEL[payslipUpgrade]}
+                                    </Link>{" "}
+                                    to add more employees.
+                                </>
+                            ) : null}
+                        </p>
+                    ) : null}
                     <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
                         <input
                             type="file"

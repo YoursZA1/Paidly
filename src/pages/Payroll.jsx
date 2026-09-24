@@ -16,6 +16,7 @@ import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
 import WorkforceSubnav from "@/components/workforce/WorkforceSubnav.jsx";
 import { uncoveredPayRunIds } from "@shared/payroll/adjustmentRun.js";
+import { PLAN_FAMILY_LABEL } from "@shared/planUpgrade.js";
 
 const STATUS_LABEL = {
   draft: "Draft",
@@ -98,6 +99,12 @@ export default function PayrollPage() {
   };
 
   const run = data?.current_run;
+  // Plan limit (payslip employees) as the server enforces it: already-paid employees are kept,
+  // only new employees beyond the limit block the next pay run.
+  const capacity = data?.payslip_capacity || null;
+  const payrollLimit = capacity?.limit ?? null;
+  const overPayrollLimit = Boolean(capacity && capacity.ok === false);
+  const payrollUpgrade = capacity?.upgrade_to || null;
   const money = (n) => formatCurrency(Number(n || 0), currency);
   const needsAdjustment = Boolean(data?.needs_adjustment_run);
   const flaggedRunIds = new Set(uncoveredPayRunIds(data?.adjustment_signals || []));
@@ -139,8 +146,33 @@ export default function PayrollPage() {
               onCreateAdjustment={createAdjustment}
             />
           ) : null}
+          {overPayrollLimit ? (
+            <Card className="mb-6 rounded-xl border-amber-500/40 bg-amber-500/5">
+              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm">
+                  Your {PLAN_FAMILY_LABEL[entitlement?.subscribedPlan] || "current"} plan includes payslips for{" "}
+                  {payrollLimit} employee{payrollLimit === 1 ? "" : "s"}, and {capacity.used} already{" "}
+                  {capacity.used === 1 ? "has" : "have"} payslips. New employees can&apos;t join a pay run
+                  {capacity.blocked_employees?.length ? ` (${capacity.blocked_employees.slice(0, 5).join(", ")})` : ""} until you
+                  {payrollUpgrade ? ` upgrade to ${PLAN_FAMILY_LABEL[payrollUpgrade]} or` : ""} take them off payroll on their
+                  Payroll tab. Employees already paid are unaffected.
+                </p>
+                {payrollUpgrade ? (
+                  <Button asChild size="sm" className="rounded-xl shrink-0">
+                    <Link to={`${createPageUrl("Settings")}?tab=subscription`}>
+                      Upgrade to {PLAN_FAMILY_LABEL[payrollUpgrade]}
+                    </Link>
+                  </Button>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-6">
-            <SummaryCard label="Employees" value={data?.employees ?? "—"} icon={Users} />
+            <SummaryCard
+              label="Employees on payroll"
+              value={data?.employees ?? "—"}
+              icon={Users}
+            />
             <SummaryCard label="Gross payroll" value={money(data?.gross_payroll)} />
             <SummaryCard label="Deductions" value={money(data?.total_deductions)} />
             <SummaryCard label="Net payroll" value={money(data?.total_net)} />

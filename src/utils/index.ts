@@ -26,8 +26,14 @@ export function createViewDocumentUrl(docType: 'invoice' | 'quote', id: string) 
 }
 
 /** Marketing signup URL; `#sign-up` scrolls to the create-account card on the Signup page. */
-export function createSignupUrl(): string {
-    return `${createPageUrl("Signup")}#sign-up`;
+/**
+ * Signup link. Pass the package chosen on a pricing card so signup preselects it (and the trial
+ * starts on that package) instead of defaulting to Starter.
+ */
+export function createSignupUrl(plan?: string): string {
+    const family = String(plan || "").trim().toLowerCase();
+    const query = ["starter", "business", "growth"].includes(family) ? `?plan=${family}` : "";
+    return `${createPageUrl("Signup")}${query}#sign-up`;
 }
 
 /** Waitlist section on the marketing home page. */

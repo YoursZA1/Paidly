@@ -231,6 +231,7 @@ export default function MyPayrollPage({ embedded = false, variant = "default" })
               </Card>
             </TabsContent>
             <TabsContent value="leave">
+              <FeatureGate feature="leave_management">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {(leave?.balances || []).map((b) => (
                   <Card key={b.leave_type.id} className="rounded-xl">
@@ -249,8 +250,10 @@ export default function MyPayrollPage({ embedded = false, variant = "default" })
                   </Card>
                 ))}
               </div>
+              </FeatureGate>
             </TabsContent>
             <TabsContent value="requests">
+              <FeatureGate feature="leave_management">
               <Card className="rounded-xl overflow-hidden">
                 <CardContent className="p-0 overflow-x-auto">
                   <table className="w-full text-sm">
@@ -298,12 +301,14 @@ export default function MyPayrollPage({ embedded = false, variant = "default" })
                   </table>
                 </CardContent>
               </Card>
+              </FeatureGate>
             </TabsContent>
           </Tabs>
   );
 
+  // Employee self-service: payslips are on every plan; the leave tabs need Leave (Business+).
   return (
-    <FeatureGate feature="payroll">
+    <FeatureGate feature="payslips">
       {embedded ? (
         <div className="space-y-4">
           {header}

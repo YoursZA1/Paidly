@@ -14,6 +14,7 @@ import { handleLeaveRoute, resolveLeaveRoute } from "../../server/src/leave/leav
 import { handleWorkforceEmployees, resolveWorkforceRoute } from "../../server/src/workforce/workforceRoutes.js";
 import { handleClientTimelineRoute, resolveClientTimelineRoute } from "../../server/src/clients/clientTimelineRoutes.js";
 import { resolveCompanyRoute } from "../../server/src/company/companyVercelRoute.js";
+import { handleCompanyEmailTemplates } from "../../server/src/company/emailTemplatesRoute.js";
 
 /**
  * Vercel: /api/company/invite | /api/company/role | /api/company/context
@@ -86,6 +87,9 @@ export default async function handler(req, res) {
   }
   if (route === "context") {
     return handleCompanyContextGet(req, res);
+  }
+  if (route === "email-templates") {
+    return handleCompanyEmailTemplates(req, res);
   }
 
   return res.status(404).json({ error: "Not found" });

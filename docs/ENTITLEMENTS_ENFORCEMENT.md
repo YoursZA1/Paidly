@@ -7,10 +7,16 @@ Feature authz SoR: `subscriptions` via `resolveEntitlement` / `assertUserHasFeat
 
 | Value | Effect |
 |-------|--------|
-| `PAIDLY_ENTITLEMENTS_ENFORCE=true` | Block unauthorized API access |
-| `=false` / `report` | Log only (escape hatch) |
-| unset + Vercel **preview** | Enforce |
-| unset + Vercel **production** | Report-only + one-time warn log |
+| unset / `true` | **Enforce** (default on every environment since 2026-09-24) |
+| `=false` / `report` | Log only — emergency rollback |
+
+The database guard for browser-written tables (`paidly_enforce_plan_feature`, see
+[PLAN_ENTITLEMENTS.md](PLAN_ENTITLEMENTS.md)) enforces by default too. Roll back **both together**:
+
+```sql
+ALTER ROLE authenticated SET app.paidly_entitlements_enforce = 'off';  -- log-only
+ALTER ROLE authenticated RESET app.paidly_entitlements_enforce;        -- enforce again
+```
 
 ## Staging / Preview
 

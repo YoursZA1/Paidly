@@ -68,15 +68,20 @@ export function isPosOnlyStaffAllowedPath(pathname) {
   return POS_ONLY_STAFF_ALLOWED_PATH_RE.test(path) || isWorkforceSectionPath(path);
 }
 
-function item(id, title, url, icon) {
-  return { id, title, url, icon };
+/**
+ * @param {string} [feature] plan feature (shared/planFeatures.js) the destination needs. Layout locks
+ *   the item (upgrade label from the current package) when the company plan lacks it; RBAC decides
+ *   whether the item is listed at all.
+ */
+function item(id, title, url, icon, feature) {
+  return feature ? { id, title, url, icon, feature } : { id, title, url, icon };
 }
 
 function employeeChildren({ membershipId, posEnabled = false }) {
   const children = [
     item("nav-workforce-overview", "Home", createPageUrl("Workforce"), ClipboardList),
-    item("nav-workforce-leave", "My leave", `${createPageUrl("MyPayroll")}?tab=leave`, CalendarOff),
-    item("nav-workforce-payslips", "My payslips", `${createPageUrl("MyPayroll")}?tab=payslips`, Receipt),
+    item("nav-workforce-leave", "My leave", `${createPageUrl("MyPayroll")}?tab=leave`, CalendarOff, "leave_management"),
+    item("nav-workforce-payslips", "My payslips", `${createPageUrl("MyPayroll")}?tab=payslips`, Receipt, "payslips"),
   ];
   if (membershipId) {
     children.push(item("nav-workforce-profile", "My profile", employeeProfilePath(membershipId), User));
@@ -92,8 +97,8 @@ function managerChildren() {
   return [
     item("nav-workforce-overview", "Overview", `${base}?tab=overview`, ClipboardList),
     item("nav-workforce-team", "My team", `${base}?tab=team`, Users),
-    item("nav-workforce-leave", "Leave requests", `${base}?tab=leave`, CalendarOff),
-    item("nav-workforce-calendar", "Team calendar", `${base}?tab=calendar`, CalendarDays),
+    item("nav-workforce-leave", "Leave requests", `${base}?tab=leave`, CalendarOff, "leave_management"),
+    item("nav-workforce-calendar", "Team calendar", `${base}?tab=calendar`, CalendarDays, "leave_management"),
     item("nav-workforce-me", "Me", `${base}?tab=me`, User),
   ];
 }
@@ -101,11 +106,11 @@ function managerChildren() {
 function financeChildren(can) {
   const children = [item("nav-workforce-overview", "Overview", createPageUrl("Workforce"), ClipboardList)];
   if (can(PERMISSIONS.MANAGE_PAYROLL)) {
-    children.push(item("nav-workforce-payroll", "Payroll", createPageUrl("Workforce/payroll"), Wallet));
-    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("Payslips"), Receipt));
+    children.push(item("nav-workforce-payroll", "Payroll", createPageUrl("Workforce/payroll"), Wallet, "payroll"));
+    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("Payslips"), Receipt, "payslips"));
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS) || can(PERMISSIONS.MANAGE_PAYROLL)) {
-    children.push(item("nav-workforce-reports", "Reports", createPageUrl("Workforce/reports"), BarChart2));
+    children.push(item("nav-workforce-reports", "Reports", createPageUrl("Workforce/reports"), BarChart2, "payroll"));
   }
   return children;
 }
@@ -117,26 +122,26 @@ function hrChildren(can) {
     children.push(item("nav-workforce-employees", "Employees", createPageUrl("Workforce/employees"), Users));
   }
   if (can(PERMISSIONS.MANAGE_PAYROLL)) {
-    children.push(item("nav-workforce-payroll", "Payroll", createPageUrl("Workforce/payroll"), Wallet));
-    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("Payslips"), Receipt));
+    children.push(item("nav-workforce-payroll", "Payroll", createPageUrl("Workforce/payroll"), Wallet, "payroll"));
+    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("Payslips"), Receipt, "payslips"));
   } else if (can(PERMISSIONS.VIEW_OWN_PAYSLIPS)) {
-    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("MyPayroll"), Receipt));
+    children.push(item("nav-workforce-payslips", "Payslips", createPageUrl("MyPayroll"), Receipt, "payslips"));
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS) || can(PERMISSIONS.MANAGE_PAYROLL)) {
-    children.push(item("nav-workforce-reports", "Reports", createPageUrl("Workforce/reports"), BarChart2));
+    children.push(item("nav-workforce-reports", "Reports", createPageUrl("Workforce/reports"), BarChart2, "payroll"));
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     children.push(
-      item("nav-workforce-organisation", "Organisation", createPageUrl("Workforce/organisation"), Network)
+      item("nav-workforce-organisation", "Organisation", createPageUrl("Workforce/organisation"), Network, "departments")
     );
     children.push(
       item("nav-workforce-people-calendar", "People calendar", createPageUrl("Workforce/people-calendar"), CalendarDays)
     );
   }
   if (can(PERMISSIONS.VIEW_TEAM_LEAVE)) {
-    children.push(item("nav-workforce-leave", "Leave", createPageUrl("Leave"), CalendarOff));
+    children.push(item("nav-workforce-leave", "Leave", createPageUrl("Leave"), CalendarOff, "leave_management"));
   } else if (can(PERMISSIONS.VIEW_OWN_LEAVE)) {
-    children.push(item("nav-workforce-leave", "Leave", `${createPageUrl("MyPayroll")}?tab=leave`, CalendarOff));
+    children.push(item("nav-workforce-leave", "Leave", `${createPageUrl("MyPayroll")}?tab=leave`, CalendarOff, "leave_management"));
   }
   if (can(PERMISSIONS.VIEW_TEAM_MEMBERS)) {
     children.push(item("nav-workforce-attendance", "Attendance", createPageUrl("Workforce/attendance"), ClipboardList));

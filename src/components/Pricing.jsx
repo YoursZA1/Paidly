@@ -234,7 +234,7 @@ export default function Pricing() {
               </ul>
 
               <Link
-                to={plan.contactSales ? "/contact" : createSignupUrl()}
+                to={plan.contactSales ? "/contact" : createSignupUrl(plan.family)}
                 className={`mt-9 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-all duration-200 ${
                   plan.highlighted
                     ? "bg-[#FF4F00] text-white shadow-lg shadow-[#FF4F00]/25 hover:bg-[#E64700] hover:shadow-[#FF4F00]/40"

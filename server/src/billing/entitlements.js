@@ -2,10 +2,8 @@
  * Server-side subscription entitlements (SoR = subscriptions table, never profiles).
  *
  * PAIDLY_ENTITLEMENTS_ENFORCE:
- *   true / 1 / on / enforce → block on requireFeature / requireActiveBilling
- *   false / 0 / off / report → report-only (log, never block) for those helpers
- *   unset → enforce on preview/development/test; report-only on production
- *             (set explicitly true on staging; soak before production true)
+ *   unset / true / 1 / on / enforce → block (default everywhere, same as the database guard)
+ *   false / 0 / off / report → report-only (log, never block) — emergency rollback only
  */
 
 import { getBillingSupabaseAdmin } from "./supabaseAdmin.js";
@@ -25,29 +23,15 @@ import {
   shouldExpireTrialRow,
 } from "../../../shared/subscriptionAccess.js";
 
-let entitlementsProductionUnsetWarned = false;
-
+/**
+ * One switch for every entitlement gate (server helpers here, the payroll/seat limits, and — via
+ * app.paidly_entitlements_enforce — the database guard). Default: enforce everywhere, matching the
+ * database guard. PAIDLY_ENTITLEMENTS_ENFORCE=false (or 0/off/report) is the emergency log-only
+ * rollback; set app.paidly_entitlements_enforce = 'off' on the database at the same time.
+ */
 function entitlementsEnforceEnabled() {
   const raw = String(process.env.PAIDLY_ENTITLEMENTS_ENFORCE ?? "").trim().toLowerCase();
   if (raw === "0" || raw === "false" || raw === "off" || raw === "report") return false;
-  if (raw === "1" || raw === "true" || raw === "on" || raw === "enforce") return true;
-
-  // Unset: enforce on preview/development/test; production requires explicit true after soak
-  // (escape hatch: PAIDLY_ENTITLEMENTS_ENFORCE=false). Prefer setting the var on Vercel Production.
-  const vercelEnv = String(process.env.VERCEL_ENV || "").trim().toLowerCase();
-  if (vercelEnv === "production") {
-    if (!entitlementsProductionUnsetWarned) {
-      entitlementsProductionUnsetWarned = true;
-      console.warn(
-        "[entitlements] PAIDLY_ENTITLEMENTS_ENFORCE unset on production — report-only. Set true on Vercel Production after soak (docs/ENTITLEMENTS_ENFORCEMENT.md)."
-      );
-    }
-    return false;
-  }
-  if (vercelEnv === "preview" || vercelEnv === "development") return true;
-
-  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
-  if (nodeEnv === "production") return false;
   return true;
 }
 
@@ -157,7 +141,7 @@ export async function resolveEntitlement(supabase, userId, knownCompanyId = null
     familyForSlug(sub?.current_plan) ||
     null;
   const tierRank = family ? FAMILY_TIER_RANK[family] : 0;
-  const limits = family ? FAMILY_LIMITS[family] : { seats: 1, companies: 1 };
+  const limits = family ? FAMILY_LIMITS[family] : { seats: 1, companies: 1, payslipEmployees: 0 };
   const features = family ? [...FAMILY_FEATURES[family]] : [];
   const access = hasPaidAccessIncludingGrace(sub);
   const inGrace =
@@ -175,6 +159,7 @@ export async function resolveEntitlement(supabase, userId, knownCompanyId = null
     inGrace,
     graceEndsAt: sub?.grace_ends_at || null,
     seats: limits.seats,
+    payslipEmployees: limits.payslipEmployees,
     features,
     subscription: sub,
   };
@@ -199,7 +184,7 @@ export function buildEntitlementSnapshot(ent, now = new Date()) {
   const sub = ent?.subscription || null;
   const plan = ent?.family || null;
   const access = Boolean(ent?.access);
-  const limits = plan ? FAMILY_LIMITS[plan] : { seats: null, companies: null };
+  const limits = plan ? FAMILY_LIMITS[plan] : { seats: null, companies: null, payslipEmployees: null };
   const status = coerceSubscriptionStatus(sub?.status) || null;
   const trialEndsAt = sub?.trial_ends_at || null;
   const trialing = status === "trialing" && access;
@@ -224,6 +209,8 @@ export function buildEntitlementSnapshot(ent, now = new Date()) {
     limits: {
       seats: access ? limits.seats : 0,
       companies: access ? limits.companies : 0,
+      // null = unlimited (Growth). Employees active on payroll that pay runs may include.
+      payslipEmployees: access ? limits.payslipEmployees : 0,
     },
   };
 }

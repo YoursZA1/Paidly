@@ -168,11 +168,11 @@ describe("subscription truth — profiles.plan cannot override", () => {
     });
     seedProfile("growth_monthly");
     await expect(
-      assertUserHasFeature(memory, USER, "leave_management", { companyId: COMPANY })
+      assertUserHasFeature(memory, USER, "api_access", { companyId: COMPANY })
     ).rejects.toBeInstanceOf(UpgradeRequiredError);
   });
 
-  it("CASE Trialing valid + Free profile → allow starter invoices; deny growth leave", async () => {
+  it("CASE Trialing valid + Free profile → allow business payslips; deny growth API", async () => {
     const ends = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
     seedSubscription({
       status: "trialing",
@@ -184,7 +184,7 @@ describe("subscription truth — profiles.plan cannot override", () => {
     await expect(assertUserHasFeature(memory, USER, "invoices", { companyId: COMPANY })).resolves.toBeUndefined();
     await expect(assertUserHasFeature(memory, USER, "payslips", { companyId: COMPANY })).resolves.toBeUndefined();
     await expect(
-      assertUserHasFeature(memory, USER, "leave_management", { companyId: COMPANY })
+      assertUserHasFeature(memory, USER, "api_access", { companyId: COMPANY })
     ).rejects.toBeInstanceOf(UpgradeRequiredError);
   });
 
@@ -277,9 +277,9 @@ describe("PAIDLY_ENTITLEMENTS_ENFORCE defaults", () => {
     expect(entitlementsEnforceEnabled()).toBe(true);
   });
 
-  it("unset + VERCEL_ENV=production → report-only", () => {
+  it("unset + VERCEL_ENV=production → enforce (same default as the database guard)", () => {
     vi.stubEnv("PAIDLY_ENTITLEMENTS_ENFORCE", "");
     vi.stubEnv("VERCEL_ENV", "production");
-    expect(entitlementsEnforceEnabled()).toBe(false);
+    expect(entitlementsEnforceEnabled()).toBe(true);
   });
 });

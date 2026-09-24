@@ -155,7 +155,11 @@ export default function Signup() {
   const [companyName, setCompanyName] = useState("");
   const [companyAddress, setCompanyAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [plan, setPlan] = useState("starter");
+  // Package chosen on a pricing card (?plan=business) is preselected; it becomes the trial's package.
+  const [plan, setPlan] = useState(() => {
+    const requested = String(searchParams.get("plan") || "").trim().toLowerCase();
+    return ["starter", "business", "growth"].includes(requested) ? requested : "starter";
+  });
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [createdUserId, setCreatedUserId] = useState("");

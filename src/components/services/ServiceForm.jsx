@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,6 +152,11 @@ export default function ServiceForm({
     hideActions = false,
     onValidityChange,
 }) {
+    // Stock-tracked products are Inventory (Business+); every plan keeps services, labour, materials.
+    const { hasFeature: planHasFeature } = useEntitlementAccess();
+    const itemTypeOptions = ITEM_TYPES.filter(
+        (type) => type.value !== "product" || planHasFeature("inventory") || service?.item_type === "product"
+    );
     const isDialog = variant === "dialog";
     const isPageShell = Boolean(formId) && hideActions;
     const isEditorSurface = surface === "editor";
@@ -373,7 +379,7 @@ export default function ServiceForm({
                                         <SelectValue placeholder="Select catalog item type..." />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {ITEM_TYPES.map(type => (
+                                        {itemTypeOptions.map(type => (
                                             <SelectItem key={type.value} value={type.value}>
                                                 <span className="flex items-center gap-2">
                                                     {renderIcon(type.icon, { className: "w-4 h-4" })}

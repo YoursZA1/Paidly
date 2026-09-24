@@ -215,7 +215,7 @@ const allNavigationItems = [
     title: "Products",
     url: createPageUrl("Services"),
     icon: Briefcase,
-    feature: null,
+    feature: null, // services are on every plan; stock actions gate inside the page
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-services",
   },
@@ -240,7 +240,7 @@ const allNavigationItems = [
     title: "Purchase Orders",
     url: createPageUrl("PurchaseOrders"),
     icon: ShoppingCart,
-    feature: null,
+    feature: "purchase_orders",
     roles: MAIN_APP_NAV_ROLES,
     id: "nav-purchase-orders",
   },
@@ -1009,7 +1009,9 @@ export default function Layout({ children, currentPageName }) {
           posEnabled: membershipIsPosEnabled(companyCtx),
         }).map((child) => ({
           ...child,
-          hasAccess: true,
+          // RBAC already chose the children; the plan decides whether each is open or locked.
+          hasAccess: !child.feature || navHasFeature(child.feature),
+          upgradeLabel: child.feature ? getUpgradeTarget(child.feature, companyEntitlement).label || null : null,
           hasRoleAccess: true,
           roles: MAIN_APP_NAV_ROLES,
         }))

@@ -8,6 +8,7 @@ import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { readStoredAuthUser } from "@/utils/authStorage";
 import { assertRuntimeAllowsMutations } from "@/lib/runtimeMutationGuard";
 import { clientHasFeature, getClientEntitlementSnapshot } from "@/lib/clientEntitlement";
+import { catalogItemFeature } from "@shared/planFeatures.js";
 import { ensureUserHasOrganization as ensureUserHasOrganizationShared } from "@/api/auth/ensureUserOrganization.js";
 import {
   getSessionWithRetry,
@@ -148,6 +149,22 @@ function buildPurchaseOrderItemRows(purchaseOrderId, orgId, items) {
     }));
 }
 
+/**
+ * The database plan guard (supabase/migrations/20260924120000_plan_feature_db_guard.sql) raises with
+ * HINT "<CODE>:<feature>" and a customer-facing message. Surface it as-is (with the code) instead of
+ * a generic write failure.
+ * @param {{ message?: string, hint?: string } | null | undefined} error
+ */
+export function planGuardErrorFromSupabase(error) {
+  const hint = String(error?.hint || "");
+  const m = /^(PLAN_UPGRADE_REQUIRED|PAYSLIP_EMPLOYEE_LIMIT|SUBSCRIPTION_REQUIRED):([a-z_]+)$/.exec(hint);
+  if (!m) return null;
+  const err = new Error(String(error.message || "This feature is not included in your plan."));
+  err.code = m[1];
+  err.feature = m[2];
+  return err;
+}
+
 export class EntityManager {
   /** @type {{ auth: { user?: object } } | null} */
   static breakApiClient = null;
@@ -160,7 +177,7 @@ export class EntityManager {
    * Blocks Supabase writes for tiered features using the subscription entitlement
    * snapshot published by useEntitlementAccess (never profiles.plan alone once ready).
    */
-  static assertSupabaseTableFeatureGate(supabaseTable) {
+  static assertSupabaseTableFeatureGate(supabaseTable, rowData = null) {
     if (!isSupabaseConfigured || !supabaseTable) return;
     // Paid tables written straight to PostgREST from the browser. Server gates cover payroll,
     // email, POS and integrations; these are the ones only the client can stop today, so an
@@ -176,7 +193,8 @@ export class EntityManager {
       expenses: "expenses",
       products: "inventory",
       stock_transactions: "inventory",
-      services: "inventory",
+      // Catalog: services are invoicing (every plan); stock-tracked products are Inventory.
+      services: catalogItemFeature(rowData?.item_type),
       suppliers: "purchase_orders",
       payslips: "payslips",
       packages: "invoices",
@@ -191,15 +209,7 @@ export class EntityManager {
     }
   }
 
-  /** @deprecated Prefer client entitlement snapshot; kept for diagnostics. */
-  static getAuthBillingPlanSlug() {
-    const snap = getClientEntitlementSnapshot();
-    if (snap.ready) {
-      return snap.accessGranted ? String(snap.planSlug || snap.planFamily || "").trim() : "";
-    }
-    const u = EntityManager.breakApiClient?.auth?.user;
-    return String(u?.subscription_plan || u?.plan || "").trim();
-  }
+
 
   constructor(entityName = '', userId = null) {
     this.entityName = entityName;
@@ -1267,7 +1277,7 @@ export class EntityManager {
         });
       }
 
-      EntityManager.assertSupabaseTableFeatureGate(supabaseTable);
+      EntityManager.assertSupabaseTableFeatureGate(supabaseTable, supabaseData);
 
       // Log for debugging (dev only — payload contains client PII, amounts, and addresses).
       if (import.meta.env.DEV) {
@@ -1306,6 +1316,10 @@ export class EntityManager {
             ({ data: inserted, error } = await insertOnce());
           }
         }
+
+        // Database plan guard (paidly_enforce_plan_feature): already a customer-facing sentence.
+        const planError = planGuardErrorFromSupabase(error);
+        if (planError) throw planError;
 
         if (error) {
           const conflictType = supabaseTable === "quotes" ? "quote" : supabaseTable === "invoices" ? "invoice" : this.entityName;
@@ -1468,7 +1482,7 @@ export class EntityManager {
                            table === 'purchaseorders' ? 'purchase_orders' :
                            table === 'purchaseorderitems' ? 'purchase_order_items' : null;
 
-      EntityManager.assertSupabaseTableFeatureGate(supabaseTable);
+      EntityManager.assertSupabaseTableFeatureGate(supabaseTable, data);
 
       // Prepare update data
       const updateData = {

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { assertPayrollEmployeeCapacity, payrollEmployeeCapacity } from "./payrollEmployeeLimit.js";
 import { supabaseAdmin, writePayrollAudit, notifyUser } from "./payrollGate.js";
 import { calculatePayroll, selectStatutoryRules } from "../../../shared/payroll/calculatePayroll.js";
 import { unpaidLeaveDaysInPeriod } from "../../../shared/payroll/unpaidLeaveImpact.js";
@@ -216,7 +217,16 @@ export async function payrollOverview(orgId) {
     .eq("status", "paid");
   const adjustment = await loadOutstandingAdjustmentSignals(orgId);
 
+  // Same rule the pay run enforces, so the banner never disagrees with the server.
+  const capacity = await payrollEmployeeCapacity(orgId, profiles.filter(eligibleProfile));
   return {
+    payslip_capacity: {
+      limit: capacity.limit,
+      used: capacity.used,
+      ok: capacity.ok,
+      upgrade_to: capacity.upgradeTo,
+      blocked_employees: capacity.blockedEmployees,
+    },
     employees: profiles.filter((p) => p.payroll_status === "active" && p.employment_status !== "terminated").length,
     current_period: { label: monthLabel(now.year, now.month), ...bounds },
     current_run: current,
@@ -230,6 +240,20 @@ export async function payrollOverview(orgId) {
     needs_adjustment_run: adjustment.needs_adjustment_run,
     adjustment_signals: adjustment.signals,
   };
+}
+
+/**
+ * Putting an employee on payroll must fit the package limit. Already-active employees (a salary
+ * edit) never trip it; only an employee joining the active set is counted.
+ */
+async function assertCapacityForActivation(orgId, profileId, membershipId) {
+  const { data: rows, error } = await supabaseAdmin.from("payroll_profiles").select("*").eq("org_id", orgId);
+  if (error) throw error;
+  const all = rows || [];
+  const self = all.find((r) => (profileId && r.id === profileId) || (membershipId && r.membership_id === membershipId));
+  if (self && isPayrollParticipationActive(self)) return;
+  const active = all.filter((r) => r !== self && isPayrollParticipationActive(r));
+  await assertPayrollEmployeeCapacity(orgId, self ? [...active, self] : active.concat([{ membership_id: membershipId }]));
 }
 
 function hasOwn(payload, key) {
@@ -282,6 +306,9 @@ export async function upsertPayrollProfile(orgId, actorId, payload) {
     if (!patch.pay_frequency) patch.pay_frequency = "monthly";
     if (!patch.pay_type) patch.pay_type = "monthly_salary";
     if (!patch.payroll_status) patch.payroll_status = "active";
+  }
+  if (String(patch.payroll_status || "").toLowerCase() === "active") {
+    await assertCapacityForActivation(orgId, id, patch.membership_id || null);
   }
   let row;
   if (id) {
@@ -420,6 +447,7 @@ export async function syncPayRunEmployees(orgId, runId) {
   const existing = new Set((run.items || []).map((item) => item.payroll_profile_id));
   const missing = profiles.filter((profile) => profile.id && !existing.has(profile.id));
   if (missing.length) {
+    await assertPayrollEmployeeCapacity(orgId, [...(run.items || []), ...missing]);
     const { error } = await supabaseAdmin
       .from("pay_run_items")
       .insert(missing.map((profile) => payRunItemInsert(orgId, run.id, profile)));
@@ -498,6 +526,9 @@ export async function createPayRun(orgId, actorId, body) {
   const period = periodFromBody(input);
   const frequency = String(input.frequency || "monthly");
   const runType = String(input.run_type || "regular");
+  // Package limit before anything is written: a run the plan can't pay must not exist half-made.
+  const profiles = (await syncPayrollProfiles(orgId)).filter(eligibleProfile);
+  await assertPayrollEmployeeCapacity(orgId, profiles);
   const insert = {
     org_id: orgId,
     period_label: period.label,
@@ -520,7 +551,6 @@ export async function createPayRun(orgId, actorId, body) {
     throw error;
   }
 
-  const profiles = (await syncPayrollProfiles(orgId)).filter(eligibleProfile);
   if (profiles.length) {
     const items = profiles.map((p) => payRunItemInsert(orgId, data.id, p));
     const { error: itemErr } = await supabaseAdmin.from("pay_run_items").insert(items);
@@ -986,6 +1016,9 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
     err.details = invalid.map((i) => i.employee_name || i.id);
     throw err;
   }
+
+  // Payslips are what the package limit counts; re-check in case the package changed since the run.
+  await assertPayrollEmployeeCapacity(orgId, run.items || []);
 
   const { orgRow, ownerProfile } = await loadEmployerBranding(orgId);
   const employerSnapshot = buildEmployerSnapshot(orgRow || {}, ownerProfile);

@@ -9,7 +9,10 @@ import { resolveUpgradeTarget } from '@shared/planUpgrade.js';
 import { useEntitlementAccess } from '@/hooks/useEntitlementAccess';
 import { describeEntitlementBadge } from '@/lib/clientEntitlement';
 
-/** Map UI feature keys → canonical plan feature keys (default-deny). */
+/**
+ * Map UI feature keys → canonical plan feature keys (shared/planFeatures.js). Default-deny: a key
+ * missing from the catalog is allowed nowhere, so new features must be classified there first.
+ */
 const FEATURE_ALIASES = {
   invoices: 'invoices',
   quotes: 'quotes',
@@ -24,11 +27,12 @@ const FEATURE_ALIASES = {
   tasks: 'invoices',
   accounting: 'expenses',
   budgets: 'expenses',
-  payroll: 'payslips',
+  payroll: 'payroll',
   multicurrency: 'invoices',
   customBranding: 'white_label',
   analytics: 'reports_advanced',
   advancedAccounting: 'vat_reports',
+  templates: 'templates',
   apiAccess: 'api_access',
   webhooks: 'integrations',
   advancedReports: 'reports_advanced',
@@ -41,6 +45,8 @@ const FEATURE_ALIASES = {
   expenses: 'expenses',
   purchase_orders: 'purchase_orders',
   payslips: 'payslips',
+  purchaseOrders: 'purchase_orders',
+  recurringInvoices: 'recurring_invoices',
   leave_management: 'leave_management',
   vat_reports: 'vat_reports',
   email_templates: 'email_templates',

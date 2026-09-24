@@ -33,7 +33,8 @@ describe("clientEntitlement", () => {
     });
     publishClientEntitlement(ent);
     expect(clientHasFeature("payslips")).toBe(true);
-    expect(clientHasFeature("leave_management")).toBe(false);
+    expect(clientHasFeature("leave_management")).toBe(true); // Leave is Business+
+    expect(clientHasFeature("api_access")).toBe(false);
   });
 
   it("never falls back to profiles.plan before the subscription loads", () => {

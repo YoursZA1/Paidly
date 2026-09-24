@@ -14,7 +14,7 @@ import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Users, Building2, Trash2, Download, Upload, ChevronDown, Landmark, Star, Edit, ChevronRight, Loader2, Plug } from "lucide-react";
+import { Save, Settings as SettingsIcon, Image as ImageIcon, UploadCloud, CreditCard, Plus, Bell, Award, Check, FileText, DollarSign, User as UserIcon, Users, Building2, Trash2, Download, Upload, ChevronDown, Landmark, Star, Edit, ChevronRight, Loader2, Plug, Mail } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
@@ -46,6 +46,7 @@ import PaymentReminderSettings from "@/components/reminders/PaymentReminderSetti
 import QuoteReminderSettings from "@/components/reminders/QuoteReminderSettings";
 import ReminderDashboard from "@/components/reminders/ReminderDashboard";
 import SubscriptionSettings from "@/components/subscription/SubscriptionSettings";
+import EmailTemplatesSettings from "@/components/settings/EmailTemplatesSettings";
 import PosIntegrationSettings from "@/components/settings/PosIntegrationSettings";
 import PosRegistersSettings from "@/components/settings/PosRegistersSettings";
 import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
@@ -2103,6 +2104,7 @@ const SETTINGS_TABS = [
     { value: "payments", label: "Payment Methods", icon: CreditCard, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "integrations", label: "Integrations", icon: Plug, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "reminders", label: "Reminders", icon: Bell, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
+    { value: "email-templates", label: "Email Templates", icon: Mail, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
     { value: "subscription", label: "Subscription", icon: Award, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
 ];
 
@@ -2149,6 +2151,12 @@ function SettingsTabPanels({ activeTab }) {
                         <QuoteReminderSettings />
                         <ReminderDashboard />
                     </div>
+                </SettingsCard>
+            );
+        case "email-templates":
+            return (
+                <SettingsCard title="Email templates" description="Default subject and message for invoice and quote emails.">
+                    <EmailTemplatesSettings />
                 </SettingsCard>
             );
         case "subscription":

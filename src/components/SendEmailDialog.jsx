@@ -7,7 +7,7 @@ import { createPageUrl } from "@/utils";
 /**
  * Ensures a public share token, builds the client-facing URL, then reuses ManualShareModal for copy + email.
  */
-export default function SendEmailDialog({ open, onOpenChange, docType, record, onRecordUpdate }) {
+export default function SendEmailDialog({ open, onOpenChange, docType, record, client = null, onRecordUpdate }) {
   const [shareUrl, setShareUrl] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
@@ -100,6 +100,8 @@ export default function SendEmailDialog({ open, onOpenChange, docType, record, o
       shareUrl={shareUrl}
       itemType={itemType}
       invoice={docType === "invoice" ? record : undefined}
+      document={record}
+      client={client}
     />
   );
 }

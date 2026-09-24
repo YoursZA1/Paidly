@@ -3,6 +3,7 @@ import Layout from "./Layout.jsx";
 import AuthenticatedShell from "@/components/layout/AuthenticatedShell";
 import AuthLayout from "@/components/layout/AuthLayout";
 
+import FeatureGate from "@/components/subscription/FeatureGate";
 const Dashboard = lazy(() => import("./Dashboard"));
 const Signup = lazy(() => import("./Signup"));
 const Home = lazy(() => import("./Home"));
@@ -175,6 +176,15 @@ const AUTH_ROUTES = [
     { path: "/cancel", element: <PayfastCancel /> },
 ];
 
+/**
+ * Plan gate for a route (shared/planFeatures.js via FeatureGate): a direct URL to a feature the
+ * company's plan lacks shows the locked / upgrade state instead of the page. RBAC wrappers stay.
+ * Applied per component, so every path alias (e.g. /Services and /services) is covered.
+ */
+function planGate(feature, element) {
+    return <FeatureGate feature={feature}>{element}</FeatureGate>;
+}
+
 function ownerRoute(element) {
     return (
         <RequireAuth>
@@ -229,8 +239,8 @@ const MAIN_ROUTES = [
     { path: "/EditCatalogItem", element: ownerRoute(<EditCatalogItem />) },
     { path: "/editcatalogitem", element: ownerRoute(<EditCatalogItem />) },
     { path: "/Vendors", element: <RequireAuth roles={["admin"]}><Vendors /></RequireAuth> },
-    { path: "/PurchaseOrders", element: ownerRoute(<PurchaseOrders />) },
-    { path: "/purchaseorders", element: ownerRoute(<PurchaseOrders />) },
+    { path: "/PurchaseOrders", element: ownerRoute(planGate("purchase_orders", <PurchaseOrders />)) },
+    { path: "/purchaseorders", element: ownerRoute(planGate("purchase_orders", <PurchaseOrders />)) },
     // React Router matches case-insensitively. Do not add /POS → /pos <Navigate> —
     // that redirect matches /pos as well and never commits UI (blank till).
     { path: "/pos/till/:tillId", element: <PosAccessRoute /> },
@@ -266,16 +276,16 @@ const INVOICE_ROUTES = [
     { path: "/documents", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><Documents /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/CreateLeaveRequest", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_LEAVE}><CreateLeaveRequest /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/createleaverequest", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_LEAVE}><CreateLeaveRequest /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/CreateExpenseClaim", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><CreateExpenseClaim /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/createexpenseclaim", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}><CreateExpenseClaim /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/CreateExpenseClaim", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}>{planGate("expenses", <CreateExpenseClaim />)}</RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/createexpenseclaim", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_DOCUMENTS}>{planGate("expenses", <CreateExpenseClaim />)}</RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/CreateTypedDocument/:type", element: <RequireAuth><CreateTypedDocument /></RequireAuth> },
     { path: "/createtypeddocument/:type", element: <RequireAuth><CreateTypedDocument /></RequireAuth> },
     { path: "/ViewInvoice", element: ownerRoute(<ViewInvoice />) },
     { path: "/EditInvoice", element: ownerRoute(<EditInvoice />) },
-    { path: "/RecurringInvoices", element: ownerRoute(<RecurringInvoices />) },
-    { path: "/CreateRecurringInvoice", element: ownerRoute(<CreateRecurringInvoice />) },
-    { path: "/EditRecurringInvoice", element: ownerRoute(<EditRecurringInvoice />) },
-    { path: "/editrecurringinvoice", element: ownerRoute(<EditRecurringInvoice />) },
+    { path: "/RecurringInvoices", element: ownerRoute(planGate("recurring_invoices", <RecurringInvoices />)) },
+    { path: "/CreateRecurringInvoice", element: ownerRoute(planGate("recurring_invoices", <CreateRecurringInvoice />)) },
+    { path: "/EditRecurringInvoice", element: ownerRoute(planGate("recurring_invoices", <EditRecurringInvoice />)) },
+    { path: "/editrecurringinvoice", element: ownerRoute(planGate("recurring_invoices", <EditRecurringInvoice />)) },
     { path: "/Edit-recurring-invoice", element: ownerRoute(<RedirectPreserveSearch to="/EditRecurringInvoice" />) },
 ];
 
@@ -287,7 +297,7 @@ const QUOTE_ROUTES = [
     { path: "/ViewQuote", element: ownerRoute(<ViewQuote />) },
     { path: "/EditQuote", element: ownerRoute(<EditQuote />) },
     { path: "/QuotePDF", element: ownerRoute(<QuotePDF />) },
-    { path: "/QuoteTemplates", element: ownerRoute(<QuoteTemplates />) },
+    { path: "/QuoteTemplates", element: ownerRoute(planGate("templates", <QuoteTemplates />)) },
 ];
 
 // --- Payslip & Report Pages ---
@@ -312,7 +322,11 @@ const PAYSLIP_REPORT_ROUTES = [
     { path: "/workforce/employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Workforce/attendance", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><WorkforceAttendance /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/workforce/attendance", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_OWN_PROFILE}><WorkforceAttendance /></RequireCompanyPermissionRedirect></RequireAuth> },
-    { path: "/Workforce/reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><WorkforceReports /></RequireCompanyPermissionRedirect></RequireAuth> },
+    { path: "/Workforce/reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}>{planGate("payroll", <WorkforceReports />)}</RequireCompanyPermissionRedirect></RequireAuth> },
+    // Organogram (reporting lines + departments): plan feature "departments" (Growth).
+    { path: "/Workforce/organisation", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}>{planGate("departments", <WorkforceOrganisation />)}</RequireCompanyPermissionRedirect></RequireAuth> },
+    // Birthdays / work anniversaries from employee profiles: every plan.
+    { path: "/Workforce/people-calendar", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><WorkforcePeopleCalendar /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/workforce/reports", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><WorkforceReports /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/Employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },
     { path: "/employees", element: <RequireAuth><RequireCompanyPermissionRedirect permission={PERMISSIONS.VIEW_TEAM_MEMBERS}><Employees /></RequireCompanyPermissionRedirect></RequireAuth> },

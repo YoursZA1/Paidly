@@ -32,6 +32,8 @@ import InventoryToolsSheet from "../components/inventory/InventoryToolsSheet";
 import BarcodeScannerDialog from "../components/inventory/BarcodeScannerDialog";
 import IndustryTemplatesDialog from "../components/inventory/IndustryTemplatesDialog";
 import { activeProductHasBarcode } from "@/lib/pos/posBarcode";
+import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
+import { useUpgradeModalStore } from "@/stores/useUpgradeModalStore";
 
 const DELIVERY_ADDRESS_MARKER = "DELIVERY_ADDRESS:\n";
 const COUNT_STYLE_TO_DB_UNIT = {
@@ -183,6 +185,24 @@ export default function Inventory() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
+  // Services (the invoicing catalog) are on every plan; products with stock are Inventory (Business+).
+  const { hasFeature: planHasFeature } = useEntitlementAccess();
+  const openUpgradeModal = useUpgradeModalStore((st) => st.openUpgradeModal);
+  const canUseInventory = planHasFeature("inventory");
+  const withInventory = useCallback(
+    (action) => (...args) => {
+      if (!canUseInventory) {
+        openUpgradeModal({
+          featureKey: "inventory",
+          title: "Unlock inventory",
+          description: "Stock-tracked products, deliveries and stock movements are on Business and Growth. Services stay available on your plan.",
+        });
+        return undefined;
+      }
+      return action(...args);
+    },
+    [canUseInventory, openUpgradeModal]
+  );
   const userProfile = useAppStore((s) => s.userProfile);
   const userCurrency = userProfile?.currency || "ZAR";
 
@@ -1239,7 +1259,7 @@ export default function Inventory() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6 space-y-3">
           <LowStockAlert
             lowStockProducts={lowStockProducts}
-            onReorder={handleReorder}
+            onReorder={withInventory(handleReorder)}
             reorderingIds={reorderingIds}
           />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1256,10 +1276,10 @@ export default function Inventory() {
         profileAvatarUrl={profileAvatarUrl}
         profileInitials={profileInitials}
         onCreateCategory={() => setCategoryDialogOpen(true)}
-        onAddProduct={() => {
+        onAddProduct={withInventory(() => {
           setEditingProduct(null);
           setProductDialogOpen(true);
-        }}
+        })}
         onAddService={() => openCatalogDialog(null, "service")}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
@@ -1272,10 +1292,10 @@ export default function Inventory() {
         onQuantityFilterChange={setQuantityFilter}
         priceFilter={priceFilter}
         onPriceFilterChange={setPriceFilter}
-        onOpenTools={() => {
+        onOpenTools={withInventory(() => {
           setToolsView("actions");
           setToolsSheetOpen(true);
-        }}
+        })}
         isLoading={isLoading}
         loadError={loadError}
         onRetry={refetchAll}
@@ -1285,7 +1305,7 @@ export default function Inventory() {
         sortDirection={sortDirection}
         onSort={handleSort}
         onOpenProduct={handleOpenProduct}
-        onEditProduct={handleEditRow}
+        onEditProduct={(row) => (row?.item_type === "product" ? withInventory(handleEditRow)(row) : handleEditRow(row))}
         onDeleteProduct={handleDeleteProduct}
         page={safePage}
         pageSize={pageSize}
@@ -1315,10 +1335,10 @@ export default function Inventory() {
         open={categoryDialogOpen}
         onOpenChange={setCategoryDialogOpen}
         existingCategories={categories}
-        onUseCategory={(name) => {
+        onUseCategory={withInventory((name) => {
           setEditingProduct({ category: name, item_type: "product" });
           setProductDialogOpen(true);
-        }}
+        })}
       />
 
       <InventoryToolsSheet
@@ -1385,12 +1405,12 @@ export default function Inventory() {
         transactions={transactions}
         products={products}
         deliveries={deliveries}
-        onEdit={(product) => {
+        onEdit={withInventory((product) => {
           setProductDetailOpen(false);
           setDetailProduct(null);
           setEditingProduct(product);
           setProductDialogOpen(true);
-        }}
+        })}
       />
 
       <CatalogItemDialog

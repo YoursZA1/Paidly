@@ -89,6 +89,19 @@ import {
 import { getRequiredPlan, getUpgradeTarget } from "../../src/components/subscription/FeatureGate.jsx";
 import { buildAdminOverridePatch } from "../../server/src/billing/adminSubscriptionOverride.js";
 import { upsertSubscriptionFromItn } from "../../server/src/payfastSubscriptionItn.js";
+import { assertPayrollEmployeeCapacity } from "../../server/src/payroll/payrollEmployeeLimit.js";
+import {
+  FAMILY_FEATURES,
+  FAMILY_LIMITS,
+  familyHasFeature,
+  getFeatureLimit,
+  getPlanEntitlements,
+  lowestFamilyAllowing,
+  payslipEmployeeKey,
+  requiredTierForFeature,
+} from "../../shared/planFeatures.js";
+import { planGuardErrorFromSupabase } from "../../src/api/entity/EntityManager.js";
+import { readFileSync } from "node:fs";
 
 const COMPANY = "11111111-1111-4111-8111-111111111111";
 const OWNER = "22222222-2222-4222-8222-222222222222";
@@ -132,7 +145,7 @@ beforeEach(() => {
 });
 
 const PLANS = ["starter", "business", "growth"];
-const TOP_FEATURE = { starter: "invoices", business: "payslips", growth: "api_access" };
+const TOP_FEATURE = { starter: "payslips", business: "leave_management", growth: "api_access" };
 const SEATS = { starter: 1, business: 5, growth: null };
 
 describe("package × lifecycle matrix (server resolver = UI snapshot)", () => {
@@ -155,7 +168,7 @@ describe("package × lifecycle matrix (server resolver = UI snapshot)", () => {
       expect(e.limits.seats).toBe(SEATS[plan]);
       const ui = await uiFor();
       expect(describeEntitlementBadge(ui).statusLabel).toBe("Active");
-      const higher = { starter: "payslips", business: "api_access", growth: "sso" }[plan];
+      const higher = { starter: "inventory", business: "api_access", growth: "sso" }[plan];
       expect(e.features).not.toContain(higher);
       expect(clientHasFeature(higher, { snapshot: ui })).toBe(false);
     });
@@ -349,8 +362,9 @@ describe("required-plan labels come from the shared catalog", () => {
     ["invoices", "Starter"],
     ["pos", "Business"],
     ["payroll", "Business"],
+    ["payslips", "Starter"],
     ["recurring", "Business"],
-    ["leave_management", "Growth"],
+    ["leave_management", "Business"],
     ["apiAccess", "Growth"],
     ["multi_company", "Growth"],
     ["customBranding", "Enterprise"],
@@ -391,11 +405,11 @@ describe("verification matrix", () => {
   // 1–3 trial + package, 4–6 active package: full package, package limits, no CTA on own features.
   it.each([
     ["trialing", "starter", "invoices", 1],
-    ["trialing", "business", "payslips", 5],
-    ["trialing", "growth", "leave_management", null],
+    ["trialing", "business", "leave_management", 5],
+    ["trialing", "growth", "api_access", null],
     ["active", "starter", "invoices", 1],
-    ["active", "business", "payslips", 5],
-    ["active", "growth", "leave_management", null],
+    ["active", "business", "leave_management", 5],
+    ["active", "growth", "api_access", null],
   ])("%s %s: full package, own limits, no CTA", async (status, plan, feature, seats) => {
     seed({ plan, status, trialEndsInMs: status === "trialing" ? 5 * DAY : null });
     expect(await check(feature)).toEqual({
@@ -415,7 +429,7 @@ describe("verification matrix", () => {
     adminActivate(row, { action: "start_trial", plan: "starter", days: 15 });
     const e = await entitlementFor();
     expect(e).toMatchObject({ plan: "starter", accessGranted: true, trialing: true, trialDaysRemaining: 15 });
-    expect(await check("payslips")).toMatchObject({ visible: false, server: false, cta: "Upgrade to Business" });
+    expect(await check("inventory")).toMatchObject({ visible: false, server: false, cta: "Upgrade to Business" });
   });
 
   it("9. admin activated Business for 30 days: Business, not Starter", async () => {
@@ -423,7 +437,7 @@ describe("verification matrix", () => {
     adminActivate(row, { action: "start_trial", plan: "business", days: 30 });
     const e = await entitlementFor();
     expect(e).toMatchObject({ plan: "business", accessGranted: true, trialDaysRemaining: 30 });
-    expect(await check("payslips")).toMatchObject({ plan: "business", visible: true, server: true, cta: "" });
+    expect(await check("leave_management")).toMatchObject({ plan: "business", visible: true, server: true, cta: "" });
   });
 
   it("10. admin activated Growth indefinitely", async () => {
@@ -435,10 +449,10 @@ describe("verification matrix", () => {
 
   // 11–14: package changes take effect on the next resolve; no stale features either way.
   it.each([
-    ["starter", "business", "payslips", true],
-    ["business", "growth", "leave_management", true],
-    ["growth", "business", "leave_management", false],
-    ["business", "starter", "payslips", false],
+    ["starter", "business", "leave_management", true],
+    ["business", "growth", "api_access", true],
+    ["growth", "business", "api_access", false],
+    ["business", "starter", "leave_management", false],
   ])("%s → %s: %s allowed=%s", async (from, to, feature, allowed) => {
     seed({ plan: from, status: "active" });
     const { res } = resMock();
@@ -465,7 +479,7 @@ describe("verification matrix", () => {
   it("18. unavailable to Starter → Upgrade to Business (next package with it)", async () => {
     seed({ plan: "starter" });
     expect(await check("pos")).toMatchObject({ visible: false, server: false, cta: "Upgrade to Business" });
-    expect(await check("leave_management")).toMatchObject({ cta: "Upgrade to Growth" });
+    expect(await check("api_access")).toMatchObject({ cta: "Upgrade to Growth" });
   });
 
   it("19. unavailable to Business → Upgrade to Growth", async () => {
@@ -518,5 +532,226 @@ describe("root-cause regressions", () => {
     const e = await entitlementFor();
     expect(e.plan).toBeNull();
     expect(e.features).toEqual([]);
+  });
+});
+
+/** The Paidly package access matrix, row for row (✓ = included, — = not included). */
+describe("package access matrix", () => {
+  const MATRIX = [
+    // [row, feature key, starter, business, growth]
+    ["Invoices", "invoices", 1, 1, 1],
+    ["Quotes", "quotes", 1, 1, 1],
+    ["Clients", "clients", 1, 1, 1],
+    ["Templates", "templates", 0, 1, 1],
+    ["Inventory", "inventory", 0, 1, 1],
+    ["Recurring Invoices", "recurring_invoices", 0, 1, 1],
+    ["POS", "pos", 0, 1, 1],
+    ["Expenses", "expenses", 0, 1, 1],
+    ["Purchase Orders", "purchase_orders", 0, 1, 1],
+    ["Reports Basic", "reports_basic", 1, 1, 1],
+    ["Basic Reports", "basic_reports", 1, 1, 1],
+    ["VAT Reports", "vat_reports", 0, 1, 1],
+    ["Documents / PDF", "documents_pdf", 1, 1, 1],
+    ["Email Send", "email_send", 1, 1, 1],
+    ["Email", "email", 1, 1, 1],
+    ["Email Templates", "email_templates", 0, 1, 1],
+    ["Payslips (count-limited: 1 / 4 / unlimited employees)", "payslips", 1, 1, 1],
+    ["Payroll (pay runs)", "payroll", 0, 1, 1],
+    ["Leave", "leave_management", 0, 1, 1],
+    ["Support Basic", "support_basic", 1, 1, 1],
+    ["Support Priority", "support_priority", 0, 1, 1],
+  ];
+
+  it.each(MATRIX)("%s", (_row, key, starter, business, growth) => {
+    expect(familyHasFeature("starter", key)).toBe(Boolean(starter));
+    expect(familyHasFeature("business", key)).toBe(Boolean(business));
+    expect(familyHasFeature("growth", key)).toBe(Boolean(growth));
+  });
+
+  it("payslip employees: Starter 1, Business 4, Growth unlimited", () => {
+    expect(FAMILY_LIMITS.starter.payslipEmployees).toBe(1);
+    expect(FAMILY_LIMITS.business.payslipEmployees).toBe(4);
+    expect(FAMILY_LIMITS.growth.payslipEmployees).toBeNull();
+  });
+
+  it("Growth has every non-Enterprise feature", () => {
+    const keys = [...new Set(MATRIX.map((r) => r[1]).concat(["departments", "api_access", "integrations", "multi_company"]))];
+    for (const key of keys) expect(familyHasFeature("growth", key)).toBe(true);
+  });
+
+  it("limit upgrade target starts from the current package", () => {
+    expect(lowestFamilyAllowing("starter", "payslipEmployees", 2)).toBe("business");
+    expect(lowestFamilyAllowing("starter", "payslipEmployees", 5)).toBe("growth");
+    expect(lowestFamilyAllowing("business", "payslipEmployees", 5)).toBe("growth");
+    expect(lowestFamilyAllowing("growth", "payslipEmployees", 500)).toBe("growth");
+  });
+});
+
+describe("payroll employee limit (server-enforced, from the company package)", () => {
+  // n new employees (no payslips yet) joining a pay run.
+  const employees = (n) => Array.from({ length: n }, (_, i) => ({ membership_id: `m${i + 1}`, full_name: `Employee ${i + 1}` }));
+  const allowed = (n) => assertPayrollEmployeeCapacity(COMPANY, employees(n), { supabase: memory }).then(() => true, (e) => e);
+
+  it.each([
+    ["starter", 1, true],
+    ["starter", 2, "Upgrade to Business"],
+    ["business", 4, true],
+    ["business", 5, "Upgrade to Growth"],
+    ["growth", 250, true],
+  ])("%s with %i on payroll", async (plan, count, expected) => {
+    seed({ plan });
+    const r = await allowed(count);
+    if (expected === true) {
+      expect(r).toBe(true);
+    } else {
+      expect(r).toMatchObject({ status: 403, code: "PAYROLL_EMPLOYEE_LIMIT" });
+      expect(r.message).toContain(expected);
+    }
+  });
+
+  it("a Business trial gets the Business limit (4), not Starter's", async () => {
+    seed({ plan: "business", status: "trialing", trialEndsInMs: 3 * DAY });
+    expect(await allowed(4)).toBe(true);
+    expect((await entitlementFor()).limits.payslipEmployees).toBe(4);
+  });
+
+  it("admin Starter → Growth lifts the limit immediately", async () => {
+    seed({ plan: "starter" });
+    expect(await allowed(3)).not.toBe(true);
+    const { res } = resMock();
+    await handleAdminSetCompanyPlan(res, memory, { id: randomUUID() }, { user_id: OWNER, plan: "growth" });
+    expect(await allowed(3)).toBe(true);
+  });
+});
+
+/** Spec §29–30: same plan across trial / paid / admin activation / expired. */
+describe("cross-status: status decides access, plan decides features", () => {
+  const STATUSES = {
+    trial: { status: "trialing", trialEndsInMs: 5 * DAY },
+    paid: { status: "active" },
+    admin: { status: "active", extra: { subscription_source: "admin", admin_override: true } },
+    expired: { status: "trialing", trialEndsInMs: -DAY },
+  };
+  const EXPECT = {
+    starter: { allowed: ["invoices", "quotes", "clients", "documents_pdf", "email", "basic_reports", "payslips"], blocked: ["inventory", "recurring_invoices", "pos", "expenses", "purchase_orders", "payroll", "leave_management", "vat_reports", "email_templates", "templates"], payslips: 1 },
+    business: { allowed: ["invoices", "quotes", "clients", "templates", "inventory", "recurring_invoices", "pos", "expenses", "purchase_orders", "payroll", "leave_management", "vat_reports", "email_templates"], blocked: ["api_access", "multi_company"], payslips: 4 },
+    growth: { allowed: [...FAMILY_FEATURES.growth], blocked: [], payslips: null },
+  };
+
+  for (const plan of ["starter", "business", "growth"]) {
+    for (const [label, st] of Object.entries(STATUSES)) {
+      it(`${plan} ${label}`, async () => {
+        seed({ plan, status: st.status, trialEndsInMs: st.trialEndsInMs ?? null, extra: st.extra || {} });
+        const e = await entitlementFor();
+        expect(e.plan).toBe(plan); // expiry never changes the plan
+        const ui = deriveEntitlementFromSubscriptionCurrent({ entitlement: e });
+        const server = (f) => assertUserHasFeature(memory, OWNER, f).then(() => true, () => false);
+        if (label === "expired") {
+          expect(e.accessGranted).toBe(false);
+          for (const f of EXPECT[plan].allowed) {
+            expect(clientHasFeature(f, { snapshot: ui })).toBe(false);
+            expect(await server(f)).toBe(false);
+          }
+          return;
+        }
+        expect(e.accessGranted).toBe(true);
+        for (const f of EXPECT[plan].allowed) {
+          expect(clientHasFeature(f, { snapshot: ui }), f).toBe(true);
+          expect(await server(f), f).toBe(true);
+        }
+        for (const f of EXPECT[plan].blocked) {
+          expect(clientHasFeature(f, { snapshot: ui }), f).toBe(false);
+          expect(await server(f), f).toBe(false);
+        }
+        expect(e.limits.payslipEmployees).toBe(EXPECT[plan].payslips);
+      });
+    }
+  }
+});
+
+/** Spec §31: direct API calls. POS / payroll / leave are server routes; see DB guard parity below. */
+describe("security: Starter calling Business APIs directly is refused server-side", () => {
+  it.each(["pos", "payroll", "leave_management", "vat_reports", "purchase_orders", "inventory", "expenses", "recurring_invoices"])(
+    "starter → %s",
+    async (feature) => {
+      seed({ plan: "starter" });
+      await expect(assertUserHasFeature(memory, OWNER, feature)).rejects.toBeInstanceOf(UpgradeRequiredError);
+    }
+  );
+
+  it("company A's plan never applies to company B (resolved per company)", async () => {
+    seed({ plan: "growth" });
+    const B = "33333333-3333-4333-8333-333333333333";
+    const B_OWNER = "44444444-4444-4444-8444-444444444444";
+    tables.organizations.push({ id: B, owner_id: B_OWNER, created_at: iso(-DAY) });
+    tables.subscriptions.push({ id: randomUUID(), company_id: B, user_id: B_OWNER, status: "active", plan_slug: "starter_monthly", plan_family: "starter", updated_at: iso(0) });
+    expect((await entitlementFor(OWNER)).plan).toBe("growth");
+    expect((await entitlementFor(B_OWNER)).plan).toBe("starter");
+    await expect(assertUserHasFeature(memory, B_OWNER, "pos")).rejects.toBeInstanceOf(UpgradeRequiredError);
+  });
+});
+
+/** The DB guard for browser-written tables must mirror the one catalog exactly. */
+describe("database plan guard mirrors shared/planFeatures.js", () => {
+  const sql = readFileSync(new URL("../../supabase/migrations/20260924120000_plan_feature_db_guard.sql", import.meta.url), "utf8");
+  const tierFn = sql.slice(sql.indexOf("FUNCTION public.paidly_feature_min_tier"), sql.indexOf("FUNCTION public.paidly_payslip_employee_limit"));
+  const sqlTiers = Object.fromEntries([...tierFn.matchAll(/WHEN '([a-z_]+)' THEN (\d+)/g)].map((m) => [m[1], Number(m[2])]));
+
+  it("every catalog feature has the same tier in SQL", () => {
+    const all = new Set(Object.values(FAMILY_FEATURES).flat());
+    for (const f of all) expect(sqlTiers[f], f).toBe(requiredTierForFeature(f));
+    expect(Object.keys(sqlTiers).sort()).toEqual([...all].sort());
+  });
+
+  it("payslip employee limits match", () => {
+    const limitFn = sql.slice(sql.indexOf("FUNCTION public.paidly_payslip_employee_limit"), sql.indexOf("FUNCTION public.paidly_family_label"));
+    for (const fam of ["starter", "business", "growth", "enterprise"]) {
+      const m = new RegExp(`WHEN '${fam}' THEN (\\d+|NULL)`).exec(limitFn);
+      const v = m[1] === "NULL" ? null : Number(m[1]);
+      expect(v, fam).toBe(FAMILY_LIMITS[fam].payslipEmployees);
+    }
+  });
+
+  it("guarded tables use the same features as the browser write gate", () => {
+    const pairs = Object.fromEntries([...sql.matchAll(/ARRAY\['([a-z_]+)', '([a-z_]+)'\]/g)].map((m) => [m[1], m[2]]));
+    expect(Object.keys(pairs)).toHaveLength(9);
+    const em = readFileSync(new URL("../../src/api/entity/EntityManager.js", import.meta.url), "utf8");
+    for (const [table, feature] of Object.entries(pairs)) {
+      if (feature === "catalog") {
+        // services: feature by item_type (catalogItemFeature), same in the browser gate.
+        expect(em).toMatch(/services: catalogItemFeature\(rowData\?\.item_type\)/);
+        continue;
+      }
+      expect(em, table).toMatch(new RegExp(`${table}: "${feature}"`));
+      expect(requiredTierForFeature(feature)).toBeLessThan(99);
+    }
+  });
+
+  it("plan guard errors surface as customer messages with their code", () => {
+    const err = planGuardErrorFromSupabase({
+      message: "Your Starter plan includes payslips for 1 employee. Upgrade to Business to issue payslips for more employees.",
+      hint: "PAYSLIP_EMPLOYEE_LIMIT:payslips",
+    });
+    expect(err).toMatchObject({ code: "PAYSLIP_EMPLOYEE_LIMIT", feature: "payslips" });
+    expect(err.message).toMatch(/^Your Starter plan/);
+    expect(planGuardErrorFromSupabase({ message: "duplicate key", hint: "" })).toBeNull();
+  });
+});
+
+describe("entitlement helpers", () => {
+  it("getPlanEntitlements / getFeatureLimit", () => {
+    expect(getPlanEntitlements("business")).toContain("payroll");
+    expect(getPlanEntitlements("starter")).not.toContain("payroll");
+    expect(getPlanEntitlements(null)).toEqual([]);
+    expect(getFeatureLimit("starter", "payslipEmployees")).toBe(1);
+    expect(getFeatureLimit("growth", "payslipEmployees")).toBeNull();
+    expect(getFeatureLimit(null, "payslipEmployees")).toBe(0);
+  });
+
+  it("payslip employee identity: membership, else employee number, else name", () => {
+    expect(payslipEmployeeKey({ membership_id: "m1", employee_id: "E1" })).toBe("m1");
+    expect(payslipEmployeeKey({ employee_id: " E1 ", employee_name: "Ann" })).toBe("e1");
+    expect(payslipEmployeeKey({ employee_name: " Ann Lee " })).toBe("ann lee");
+    expect(payslipEmployeeKey({})).toBeNull();
   });
 });

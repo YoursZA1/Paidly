@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import Button from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,14 +7,61 @@ import { Textarea } from '@/components/ui/textarea';
 import { Copy, Mail, CheckCircle, Send } from 'lucide-react';
 import { breakApi } from '@/api/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { fetchEmailTemplates } from '@/services/EmailTemplatesService';
+import { effectiveEmailTemplate, renderEmailTemplate } from '@shared/emailTemplates.js';
 
-export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType = "invoice", onMarkAsSent, invoice }) {
+function escapeHtml(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType = "invoice", onMarkAsSent, invoice, document: docRecord = null, client = null }) {
     const { profile } = useAuth();
     const [copied, setCopied] = useState(false);
     const [emailTo, setEmailTo] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
     const [emailMessage, setEmailMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
+
+    // Prefill from the company's email template (Business+) or Paidly's default wording.
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        let cancelled = false;
+        const record = docRecord || invoice || {};
+        const docType = itemType === 'quote' ? 'quote' : 'invoice';
+        const currency = record.currency || profile?.currency || 'ZAR';
+        let amount = '';
+        if (record.total_amount != null) {
+            try {
+                amount = new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(Number(record.total_amount) || 0);
+            } catch {
+                amount = `${currency} ${Number(record.total_amount || 0).toFixed(2)}`;
+            }
+        }
+        const values = {
+            client_name: client?.name || record.client_name || 'there',
+            document_number: record.invoice_number || record.quote_number || '',
+            company_name: profile?.company_name || profile?.full_name || 'Paidly',
+            amount,
+            due_date: record.due_date || record.valid_until || '',
+        };
+        const apply = (templates, allowed) => {
+            if (cancelled) return;
+            const t = effectiveEmailTemplate(templates, docType, allowed);
+            setEmailSubject((prev) => prev || renderEmailTemplate(t.subject, values));
+            setEmailMessage((prev) => prev || renderEmailTemplate(t.message, values));
+            setEmailTo((prev) => prev || client?.email || '');
+        };
+        fetchEmailTemplates()
+            .then(({ templates, allowed }) => apply(templates, allowed))
+            .catch(() => apply({}, false));
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, itemType, docRecord, invoice, client, profile?.company_name, profile?.full_name, profile?.currency]);
 
     const handleCopyLink = () => {
         navigator.clipboard.writeText(shareUrl);
@@ -36,7 +83,7 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
                         <h1 style="font-size: 24px; color: #333;">You've received a new ${itemType}</h1>
                     </div>
                     <div style="background: white; padding: 30px; border: 1px solid #e1e5e9; border-radius: 8px;">
-                        <p style="font-size: 16px; color: #555;">${emailMessage || `Please find your ${itemType} below.`}</p>
+                        <p style="font-size: 16px; color: #555;">${escapeHtml(emailMessage || `Please find your ${itemType} below.`).replace(/\n/g, '<br/>')}</p>
                         <div style="text-align: center; margin: 30px 0;">
                             <a href="${shareUrl}" 
                                style="background-color: #4f46e5; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; display: inline-block;">

@@ -43,6 +43,7 @@ export async function payrollRequest(path, { method = "GET", body } = {}) {
     const err = new Error(json.error || json.message || res.statusText || "Request failed");
     err.status = res.status;
     err.details = json.details;
+    err.code = json.code;
     throw err;
   }
   return json.data;

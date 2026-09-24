@@ -44,17 +44,24 @@ async function handle(res, fn) {
     const status = Number(err?.status) || 500;
     return jsonError(res, status, err?.message || "Payroll request failed", {
       details: err?.details,
+      ...(err?.code && typeof err.code === "string" && /^[A-Z_]+$/.test(err.code) ? { code: err.code } : {}),
     });
   }
 }
 
+/**
+ * Plan features (shared/planFeatures.js): the pay-run engine (overview, runs, statutory, reports,
+ * dashboard, reconciliation, employer settings) is `payroll` — Business+. Issuing and viewing
+ * payslips (preview, employee payroll profiles, publish/send, employee self-service) is `payslips`
+ * — every plan, limited by FAMILY_LIMITS.payslipEmployees. RBAC (permission) is checked as well.
+ */
 export async function handlePayrollRoute(req, res, resolved) {
   const route = resolved?.route;
   const id = resolved?.id || null;
   const body = normalizeRequestBody(req);
 
   if (route === "overview") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
     return handle(res, () => payrollOverview(gate.membership.companyId));
@@ -80,7 +87,7 @@ export async function handlePayrollRoute(req, res, resolved) {
   }
 
   if (route === "runs") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method === "GET") {
       return handle(res, async () => {
@@ -101,14 +108,14 @@ export async function handlePayrollRoute(req, res, resolved) {
   }
 
   if (route === "run-by-id") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
     return handle(res, () => getPayRun(gate.membership.companyId, id));
   }
 
   if (route === "run-refresh") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
     return handle(res, () => syncPayRunEmployees(gate.membership.companyId, id));
@@ -123,7 +130,7 @@ export async function handlePayrollRoute(req, res, resolved) {
     "run-cancel": cancelPayRun,
   };
   if (runActions[route]) {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
     if (route === "run-calculate") {
@@ -139,14 +146,14 @@ export async function handlePayrollRoute(req, res, resolved) {
   }
 
   if (route === "run-validate") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET" && req.method !== "POST") return jsonError(res, 405, "Method not allowed");
     return handle(res, () => validatePayRun(gate.membership.companyId, id));
   }
 
   if (route === "run-send") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method !== "POST") return jsonError(res, 405, "Method not allowed");
     return handle(res, () =>
@@ -155,7 +162,7 @@ export async function handlePayrollRoute(req, res, resolved) {
   }
 
   if (route === "statutory") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method === "GET") {
       return handle(res, () => listStatutoryRules(gate.membership.companyId));
@@ -167,7 +174,7 @@ export async function handlePayrollRoute(req, res, resolved) {
   }
 
   if (route === "reports") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
     const q = req.query || {};
@@ -190,14 +197,14 @@ export async function handlePayrollRoute(req, res, resolved) {
   }
 
   if (route === "dashboard") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
     return handle(res, () => getPayrollDashboard(gate.membership.companyId));
   }
 
   if (route === "run-reconciliation") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method === "GET") {
       return handle(res, () => getPayRunReconciliation(gate.membership.companyId, id));
@@ -209,7 +216,7 @@ export async function handlePayrollRoute(req, res, resolved) {
   }
 
   if (route === "employer-settings") {
-    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payslips" });
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.MANAGE_PAYROLL, { feature: "payroll" });
     if (!gate.ok) return gate.response;
     if (req.method === "GET") {
       return handle(res, () => getEmployerPayrollSettings(gate.membership.companyId));

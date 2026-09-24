@@ -58,6 +58,7 @@ export function resolveCompanyRoute(req) {
 
   if (head === "role") return { route: "team-role", parts };
   if (head === "context") return { route: "context", parts };
+  if (head === "email-templates") return { route: "email-templates", parts };
 
   const urlPath = String(req?.url || "").split("?")[0] || "";
   if (urlPath.endsWith("/invite-validate") || urlPath.endsWith("/invite/validate")) {

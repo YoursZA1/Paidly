@@ -357,37 +357,6 @@ export const restoreArchivedItem = (item, userId = null) => {
 // ========== PLAN-BASED PERMISSIONS ==========
 
 /**
- * Check if user has permission for an action based on plan
- * @param {object} user - User object with plan info
- * @param {string} action - Action to check (e.g., 'lock_pricing', 'delete_items')
- * @returns {object} { allowed: boolean, message: string }
- */
-export const checkPlanPermission = (user, action) => {
-    // Default permissions by plan
-    const planPermissions = {
-        free: ['view_items', 'create_items', 'edit_items'],
-        basic: ['view_items', 'create_items', 'edit_items', 'archive_items'],
-        pro: ['view_items', 'create_items', 'edit_items', 'archive_items', 'lock_pricing', 'delete_items'],
-        enterprise: ['view_items', 'create_items', 'edit_items', 'archive_items', 'lock_pricing', 'delete_items', 'bulk_operations', 'advanced_permissions']
-    };
-    
-    const userPlan = user?.plan || 'free';
-    const allowedActions = planPermissions[userPlan] || planPermissions.free;
-    
-    if (allowedActions.includes(action)) {
-        return {
-            allowed: true,
-            message: `${action} is allowed on ${userPlan} plan`
-        };
-    }
-    
-    return {
-        allowed: false,
-        message: `${action} requires upgrade to Pro plan or higher`
-    };
-};
-
-/**
  * Get allowed rate adjustment percentage by plan
  * @param {object} user - User object with plan info
  * @returns {number} Maximum allowed percent change (null = unlimited)
@@ -419,6 +388,5 @@ export default {
     restoreArchivedItem,
     
     // Plan-based permissions
-    checkPlanPermission,
     getRateAdjustmentLimit
 };

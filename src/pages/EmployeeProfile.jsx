@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -58,6 +59,8 @@ export default function EmployeeProfile() {
   const [baseSalary, setBaseSalary] = useState("");
   const [hourlyRate, setHourlyRate] = useState("");
   const [dailyRate, setDailyRate] = useState("");
+  // "On payroll" counts toward the package's payroll employee limit (Starter 1, Business 4).
+  const [onPayroll, setOnPayroll] = useState(true);
   const [restricted, setRestricted] = useState(false);
   const [sectionLoading, setSectionLoading] = useState("");
   const requestedTab = new URLSearchParams(location.search).get("tab") || "overview";
@@ -101,6 +104,7 @@ export default function EmployeeProfile() {
     setBaseSalary(next.base_salary ?? "");
     setHourlyRate(next.hourly_rate ?? "");
     setDailyRate(next.daily_rate ?? "");
+    setOnPayroll(String(next.payroll_status || "active").toLowerCase() === "active");
   };
 
   useEffect(() => {
@@ -237,6 +241,9 @@ export default function EmployeeProfile() {
       if (payType === "hourly") payload.hourly_rate = Number(hourlyRate) || 0;
       else if (payType === "daily") payload.daily_rate = Number(dailyRate) || 0;
       else payload.base_salary = Number(baseSalary) || 0;
+      // Only when changed, so a lifecycle "paused" status isn't overwritten by a salary edit.
+      const wasOnPayroll = String(employee?.payroll_status || "active").toLowerCase() === "active";
+      if (onPayroll !== wasOnPayroll) payload.payroll_status = onPayroll ? "active" : "inactive";
       await payrollApi.saveProfile(payload);
       const refreshed = await workforceApi.get(id);
       syncEmployee(refreshed);
@@ -450,6 +457,15 @@ export default function EmployeeProfile() {
                 <CardContent className="text-sm space-y-3">
                   {canSeePay ? (
                     <>
+                      <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-3">
+                        <div>
+                          <Label htmlFor="on-payroll">Include in payroll</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Included employees are paid in pay runs and count toward your plan&apos;s payroll limit.
+                          </p>
+                        </div>
+                        <Switch id="on-payroll" checked={onPayroll} onCheckedChange={setOnPayroll} />
+                      </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
                           <Label>Pay type</Label>
