@@ -1131,7 +1131,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         stored = null;
       }
       try {
-        const status = await fetchOrgPaymentIntent(intentId);
+        const status = await fetchPosPaymentIntent(intentId);
         if (cancelled) return;
         if (status.payment_intent?.status !== "paid") {
           toast({

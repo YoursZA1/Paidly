@@ -21,21 +21,34 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-export function buildPayslipDeliveryEmail({ employeeName, periodLabel, payslipNumber, url }) {
+export function buildPayslipDeliveryEmail({ employeeName, periodLabel, payslipNumber, url, hasAttachment = false }) {
+  // Never includes the ID number / PDF password — only how to open the file.
   return {
     subject: `Your Paidly payslip for ${periodLabel}`,
     html: `
       <p>Hi ${escapeHtml(employeeName || "there")},</p>
-      <p>Your Paidly payslip for <strong>${escapeHtml(periodLabel)}</strong> is ready.</p>
+      <p>Your Paidly payslip for <strong>${escapeHtml(periodLabel)}</strong> is ${hasAttachment ? "attached" : "ready"}.</p>
       <p>Payslip number: <strong>${escapeHtml(payslipNumber || "")}</strong></p>
+      ${
+        hasAttachment
+          ? "<p>The PDF is password protected for your security. Use your South African ID number to open it.</p>"
+          : ""
+      }
       <p><a href="${escapeHtml(url)}">View your payslip</a> (sign-in or email verification may be required).</p>
       <p>This link is for you only. Do not forward it.</p>
     `,
   };
 }
 
+/** True only for a PDF carrying an encryption dictionary (the payslip PDF is always encrypted). */
+export function isEncryptedPdf(content) {
+  const buf = Buffer.isBuffer(content) ? content : Buffer.from(content || []);
+  return buf.subarray(0, 5).toString("latin1") === "%PDF-" && buf.includes("/Encrypt");
+}
+
 /**
- * Send a payslip via the shared email provider. Never attaches payroll PDF.
+ * Send a payslip via the shared email provider. The only PDF it will attach is an encrypted one
+ * (server/src/payroll/payslipPdf.js); an unencrypted attachment is refused, never sent.
  * Marks nothing as sent — caller persists status after this returns success.
  */
 export async function sendPayslipEmail({
@@ -48,8 +61,15 @@ export async function sendPayslipEmail({
   orgId,
   payslipId,
   sendAttempt,
+  attachment = null,
   transport = sendHtmlEmail,
 } = {}) {
+  if (attachment && !isEncryptedPdf(attachment.content)) {
+    throw new DocumentEngineError(
+      DOCUMENT_ENGINE_ERROR.UNAUTHORIZED_DOCUMENT_ACCESS,
+      "Refusing to email an unencrypted payslip PDF."
+    );
+  }
   const email = String(to || "").trim();
   if (!email) {
     throw new DocumentEngineError(
@@ -73,8 +93,13 @@ export async function sendPayslipEmail({
     periodLabel,
     payslipNumber,
     url,
+    hasAttachment: Boolean(attachment),
   });
-  const result = await transport(email, mail.subject, mail.html, "Paidly");
+  const result = attachment
+    ? await transport(email, mail.subject, mail.html, "Paidly", {
+        attachments: [{ filename: attachment.filename, content: attachment.content, content_type: "application/pdf" }],
+      })
+    : await transport(email, mail.subject, mail.html, "Paidly");
   if (!result || result.success === false) {
     throw new DocumentEngineError(
       DOCUMENT_ENGINE_ERROR.EMAIL_PROVIDER_FAILED,

@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import FeatureGate from "@/components/subscription/FeatureGate";
 import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
 import PayrollReconciliationPanel from "@/components/payroll/PayrollReconciliationPanel";
+import PayRunItemDetail from "@/components/payroll/PayRunItemDetail";
 
 const STATUS_LABEL = {
   draft: "Draft",
@@ -67,6 +68,17 @@ export default function PayRunPage() {
     } finally {
       setBusy("");
     }
+  };
+
+  // Secure payslip PDFs need each employee's SA ID number; tell the admin who was not emailed.
+  const warnBlockedPayslips = (delivery) => {
+    const blocked = delivery?.blocked_missing_id || [];
+    if (!blocked.length) return;
+    toast({
+      variant: "destructive",
+      title: `${blocked.length} payslip${blocked.length === 1 ? "" : "s"} not emailed`,
+      description: `${delivery.blocked_message} ${blocked.map((b) => b.employee_name).filter(Boolean).join(", ")}`.trim(),
+    });
   };
 
   const items = run?.items || [];
@@ -167,12 +179,23 @@ export default function PayRunPage() {
               </Button>
             ) : null}
             {canFinalize ? (
-              <Button className="rounded-xl h-9 bg-primary text-primary-foreground" disabled={Boolean(busy)} onClick={() => act("final", () => payrollApi.finalizeRun(id))}>
+              <Button className="rounded-xl h-9 bg-primary text-primary-foreground" disabled={Boolean(busy)} onClick={() =>
+                  act("final", async () => {
+                    const next = await payrollApi.finalizeRun(id);
+                    warnBlockedPayslips(next?.payslip_delivery);
+                    return next;
+                  })
+                }>
                 <Lock className="h-4 w-4 mr-1" /> Finalize payslips
               </Button>
             ) : null}
             {canSend ? (
-              <Button variant="outline" className="rounded-xl h-9" disabled={Boolean(busy)} onClick={() => act("send", () => payrollApi.sendPayslips(id).then(() => payrollApi.getRun(id)))}>
+              <Button variant="outline" className="rounded-xl h-9" disabled={Boolean(busy)} onClick={() =>
+                  act("send", async () => {
+                    warnBlockedPayslips(await payrollApi.sendPayslips(id));
+                    return payrollApi.getRun(id);
+                  })
+                }>
                 <Mail className="h-4 w-4 mr-1" /> Send payslips
               </Button>
             ) : null}
@@ -305,28 +328,23 @@ export default function PayRunPage() {
       </PageTemplate>
 
       <Dialog open={Boolean(breakdown)} onOpenChange={() => setBreakdown(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{breakdown?.employee_name}</DialogTitle>
+            <DialogTitle>{breakdown?.employee_name} · how this was calculated</DialogTitle>
           </DialogHeader>
           {breakdown ? (
-            <div className="space-y-2 text-sm">
-              {(breakdown.earnings || []).map((line) => (
-                <Row key={line.code} label={`+ ${line.name}`} value={money(line.amount)} />
-              ))}
-              <Row label="Gross pay" value={money(breakdown.gross_pay)} strong />
-              {(breakdown.statutory_deductions || []).filter((l) => l.amount > 0).map((line) => (
-                <Row key={line.code} label={`− ${line.name}`} value={money(line.amount)} />
-              ))}
-              {(breakdown.other_deductions || []).map((line) => (
-                <Row key={line.code} label={`− ${line.name}`} value={money(line.amount)} />
-              ))}
-              <Row label="Total deductions" value={money(breakdown.total_deductions)} />
-              <Row label="Net pay" value={money(breakdown.net_pay)} strong />
-              {(breakdown.warnings || []).map((w) => (
-                <p key={w} className="text-xs text-amber-700">{w}</p>
-              ))}
-            </div>
+            <PayRunItemDetail
+              item={breakdown}
+              editable={Boolean(canCalculate)}
+              busy={busy === "calc"}
+              onRecalculate={(override) =>
+                act("calc", async () => {
+                  const next = await payrollApi.calculateRun(id, { items: [override] });
+                  setBreakdown((next.items || []).find((i) => i.id === override.id) || null);
+                  return next;
+                })
+              }
+            />
           ) : null}
         </DialogContent>
       </Dialog>
@@ -341,13 +359,4 @@ function sumEarnings(item, types) {
     if (set.has(type)) return sum + Number(line.amount || 0);
     return sum;
   }, 0);
-}
-
-function Row({ label, value, strong }) {
-  return (
-    <div className={`flex justify-between gap-4 ${strong ? "font-semibold border-t border-border pt-2 mt-2" : ""}`}>
-      <span>{label}</span>
-      <span className="tabular-nums">{value}</span>
-    </div>
-  );
 }

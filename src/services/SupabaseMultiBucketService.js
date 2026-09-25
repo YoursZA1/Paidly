@@ -42,7 +42,7 @@ export async function uploadToBucket(file, bucket, path) {
 // await uploadToBucket(file, 'customers', `${userId}/kyc/passport.jpg`);
 // await uploadToBucket(file, 'products-services', `${userId}/productA/image.png`);
 // await uploadToBucket(file, 'quotes', `${userId}/quote456.pdf`);
-// await uploadToBucket(file, 'payroll', `${userId}/2026-02/payslip.pdf`);
+// Payslips: never uploaded here (no public URLs) — see server/src/payroll/payslipPdf.js.
 // await uploadToBucket(file, 'bank-details', `${userId}/bank-statement.pdf`);
 // await uploadToBucket(file, 'activities', `${userId}/export-2026-02-10.csv`);
 // Logos: use uploadLogo() from @/lib/logoUpload (paidly bucket, logo-{uuid}.ext).

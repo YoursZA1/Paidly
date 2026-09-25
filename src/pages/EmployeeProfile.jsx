@@ -59,6 +59,7 @@ export default function EmployeeProfile() {
   const [baseSalary, setBaseSalary] = useState("");
   const [hourlyRate, setHourlyRate] = useState("");
   const [dailyRate, setDailyRate] = useState("");
+  const [medicalMembers, setMedicalMembers] = useState("");
   // "On payroll" counts toward the package's payroll employee limit (Starter 1, Business 4).
   const [onPayroll, setOnPayroll] = useState(true);
   const [restricted, setRestricted] = useState(false);
@@ -104,6 +105,7 @@ export default function EmployeeProfile() {
     setBaseSalary(next.base_salary ?? "");
     setHourlyRate(next.hourly_rate ?? "");
     setDailyRate(next.daily_rate ?? "");
+    setMedicalMembers(next.medical_scheme_members ?? "");
     setOnPayroll(String(next.payroll_status || "active").toLowerCase() === "active");
   };
 
@@ -241,6 +243,7 @@ export default function EmployeeProfile() {
       if (payType === "hourly") payload.hourly_rate = Number(hourlyRate) || 0;
       else if (payType === "daily") payload.daily_rate = Number(dailyRate) || 0;
       else payload.base_salary = Number(baseSalary) || 0;
+      payload.medical_scheme_members = medicalMembers === "" ? null : Number(medicalMembers);
       // Only when changed, so a lifecycle "paused" status isn't overwritten by a salary edit.
       const wasOnPayroll = String(employee?.payroll_status || "active").toLowerCase() === "active";
       if (onPayroll !== wasOnPayroll) payload.payroll_status = onPayroll ? "active" : "inactive";
@@ -499,6 +502,21 @@ export default function EmployeeProfile() {
                             <Input type="number" min="0" step="0.01" value={baseSalary} onChange={(e) => setBaseSalary(e.target.value)} />
                           </div>
                         )}
+                        <div className="space-y-2">
+                          <Label>Medical scheme members</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="20"
+                            step="1"
+                            placeholder="Not on a scheme"
+                            value={medicalMembers}
+                            onChange={(e) => setMedicalMembers(e.target.value)}
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            People on the scheme incl. the employee — sets the SARS medical tax credit. Age rebates use the date of birth above.
+                          </p>
+                        </div>
                       </div>
                       {employee.tax_identifiers || employee.banking ? (
                         <div className="space-y-3 border-t border-border pt-3">

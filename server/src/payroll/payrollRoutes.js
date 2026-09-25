@@ -1,5 +1,6 @@
 import { normalizeRequestBody } from "../validateBody.js";
 import { jsonError, requirePayrollPermission, PERMISSIONS, supabaseAdmin } from "./payrollGate.js";
+import { membershipHasPermission } from "../companyRouteAccess.js";
 import { displayPayslipStatus } from "../../../shared/payroll/payslipStatus.js";
 import {
   payrollOverview,
@@ -21,6 +22,7 @@ import {
   upsertStatutoryRule,
   publishPayslip,
   sendEmployeePayslip,
+  generateSecurePayslipPdf,
   getPayrollReports,
   getEmployerPayrollSettings,
   updateEmployerPayrollSettings,
@@ -241,6 +243,42 @@ export async function handlePayrollRoute(req, res, resolved) {
     return handle(res, () => sendEmployeePayslip(gate.membership.companyId, gate.user.id, id, originFromReq(req)));
   }
 
+  if (route === "payslip-pdf") {
+    // Encrypted payslip PDF (password: the employee's SA ID number). Payroll admins: any payslip of
+    // their company. Everyone else: only their own. The response never carries the password.
+    const gate = await requirePayrollPermission(req, res, PERMISSIONS.VIEW_OWN_PAYSLIPS, { feature: "payslips" });
+    if (!gate.ok) return gate.response;
+    if (req.method !== "GET") return jsonError(res, 405, "Method not allowed");
+    const orgId = gate.membership.companyId;
+    try {
+      const isAdmin = membershipHasPermission(gate.membership, PERMISSIONS.MANAGE_PAYROLL);
+      if (!isAdmin) {
+        const { data: own } = await supabaseAdmin
+          .from("payslips")
+          .select("id, employee_user_id, membership_id")
+          .eq("org_id", orgId)
+          .eq("id", id)
+          .maybeSingle();
+        const mine =
+          own &&
+          ((own.employee_user_id && own.employee_user_id === gate.user.id) ||
+            (own.membership_id && gate.membership.id && own.membership_id === gate.membership.id));
+        if (!mine) return jsonError(res, 404, "Payslip not found");
+      }
+      const pdf = await generateSecurePayslipPdf(orgId, id, { deliveryMethod: "download", actorId: gate.user.id });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${pdf.filename}"`);
+      res.setHeader("Cache-Control", "no-store, private");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      return res.status(200).send(pdf.content);
+    } catch (err) {
+      const status = Number(err?.status) || 500;
+      return jsonError(res, status, status >= 500 ? "Could not generate the payslip PDF" : err.message, {
+        ...(err?.code && typeof err.code === "string" && /^[A-Z_]+$/.test(err.code) ? { code: err.code } : {}),
+      });
+    }
+  }
+
   if (route === "me") {
     const gate = await requirePayrollPermission(req, res, PERMISSIONS.VIEW_OWN_PAYSLIPS, { feature: "payslips" });
     if (!gate.ok) return gate.response;
@@ -342,6 +380,7 @@ export function resolvePayrollRoute(req) {
 
   if (segs[0] === "payslips" && segs[1] && segs[2] === "publish") return { route: "payslip-publish", id: segs[1] };
   if (segs[0] === "payslips" && segs[1] && segs[2] === "send") return { route: "payslip-send", id: segs[1] };
+  if (segs[0] === "payslips" && segs[1] && segs[2] === "pdf") return { route: "payslip-pdf", id: segs[1] };
   if (req.query?.__payroll) {
     return resolvePayrollRoute({
       ...req,

@@ -49,6 +49,31 @@ export async function payrollRequest(path, { method = "GET", body } = {}) {
   return json.data;
 }
 
+function filenameFromDisposition(header, fallback) {
+  const m = /filename="?([^";]+)"?/i.exec(String(header || ""));
+  return (m && m[1]) || fallback;
+}
+
+/**
+ * Encrypted payslip PDF from the server (opens with the employee's SA ID number). The browser never
+ * builds a payslip PDF and never receives the password.
+ * @returns {Promise<{ blob: Blob, filename: string }>}
+ */
+export async function downloadPayslipPdf(payslipId) {
+  const id = requireRecordUuid(payslipId, "payslip id");
+  const { Authorization } = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/payroll/payslips/${id}/pdf`, { method: "GET", headers: { Authorization } });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    const err = new Error(json.error || "Could not download the payslip");
+    err.status = res.status;
+    err.code = json.code;
+    throw err;
+  }
+  const blob = await res.blob();
+  return { blob, filename: filenameFromDisposition(res.headers.get("Content-Disposition"), "payslip.pdf") };
+}
+
 export const payrollApi = {
   overview: () => payrollRequest("/api/payroll/overview"),
   profiles: () => payrollRequest("/api/payroll/profiles"),

@@ -34,8 +34,8 @@ for file in $STAGED; do
 
   [ -f "$file" ] || continue
 
-  # Resend email API key (re_<32+ chars>)
-  check_pattern "$file" "resend-api-key"         're_[A-Za-z0-9_-]{20,}'
+  # Resend email API key (re_<32+ chars>). Must start a token — not "restore_…", "ignore_…".
+  check_pattern "$file" "resend-api-key"         '(^|[^A-Za-z0-9_])re_[A-Za-z0-9_-]{20,}'
   # Supabase JWT — anon or service role (eyJhbGci prefix)
   check_pattern "$file" "supabase-jwt"            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.'
   # Stripe live secret key

@@ -3,6 +3,7 @@
  * Viewer token: HMAC-signed JWT-like blob (same secret as client-portal / public invoice).
  */
 import crypto from "node:crypto";
+import { buildSecurePayslipPdf, PAYSLIP_ID_REQUIRED } from "../server/src/payroll/payslipPdf.js";
 import { getPortalSigningSecret } from "./client-portal/_shared.js";
 import {
   bearerTokenFromReq,
@@ -320,5 +321,84 @@ export async function handlePublicPayslipVerify(req, res) {
   } catch (e) {
     console.error("[public-payslip/verify]", e);
     return res.status(500).json({ error: e?.message || "Failed" });
+  }
+}
+
+/**
+ * GET /api/public-payslip-pdf?token=… — encrypted PDF for a verified viewer of a shared payslip.
+ * Same gate as the full payload (email-verified viewer token). The PDF opens only with the
+ * employee's SA ID number, so a forwarded file or link alone does not expose the payslip.
+ */
+export async function handlePublicPayslipPdf(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+
+  const raw = req.query?.token;
+  const shareToken = typeof raw === "string" ? raw.trim() : "";
+  if (!shareToken || !isValidShareTokenUuid(shareToken)) return res.status(400).json({ error: "Invalid token" });
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return res.status(503).json({ error: "Server misconfigured" });
+
+  const { data: row, error } = await supabase.from("payslips").select("*").eq("public_share_token", shareToken).maybeSingle();
+  if (error) return res.status(500).json({ error: "Failed to load payslip" });
+  if (!row) return res.status(404).json({ error: "Payslip not found" });
+
+  const gateEmail = publicPayslipGateEmail(row);
+  const viewer = verifyPublicPayslipViewerToken(bearerTokenFromReq(req));
+  const okViewer =
+    Boolean(gateEmail) && viewer && viewer.shareToken.toLowerCase() === shareToken.toLowerCase() && viewer.email === gateEmail;
+  if (!okViewer) return res.status(401).json({ error: "Verify your email to download this payslip", requiresEmailVerification: true });
+
+  let profile = null;
+  if (row.payroll_profile_id) {
+    ({ data: profile } = await supabase
+      .from("payroll_profiles")
+      .select("id, tax_identifiers")
+      .eq("org_id", row.org_id)
+      .eq("id", row.payroll_profile_id)
+      .maybeSingle());
+  }
+  if (!profile && row.membership_id) {
+    ({ data: profile } = await supabase
+      .from("payroll_profiles")
+      .select("id, tax_identifiers")
+      .eq("org_id", row.org_id)
+      .eq("membership_id", row.membership_id)
+      .maybeSingle());
+  }
+  const audit = async (action, status, reason = null) => {
+    try {
+      await supabase.from("payroll_audit_logs").insert({
+        org_id: row.org_id,
+        actor_id: null,
+        action,
+        record_type: "payslips",
+        record_id: row.id,
+        metadata: { payslip_id: row.id, employee_id: row.membership_id || null, delivery_method: "public_link", status, ...(reason ? { reason } : {}) },
+      });
+    } catch {
+      /* audit is best-effort */
+    }
+  };
+  try {
+    const pdf = await buildSecurePayslipPdf(row, profile || {});
+    await audit("PAYSLIP_PDF_GENERATED", "success");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${pdf.filename}"`);
+    res.setHeader("Cache-Control", "no-store, private");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.status(200).send(pdf.content);
+  } catch (err) {
+    const missingId = err?.code === PAYSLIP_ID_REQUIRED;
+    await audit("PAYSLIP_PDF_BLOCKED", "failure", missingId ? PAYSLIP_ID_REQUIRED : "PDF_RENDER_FAILED");
+    return res.status(missingId ? 422 : 500).json({
+      error: missingId
+        ? "This payslip cannot be downloaded yet. Ask your employer to add your ID number to your payroll profile."
+        : "Could not generate the payslip PDF",
+      ...(missingId ? { code: PAYSLIP_ID_REQUIRED } : {}),
+    });
   }
 }

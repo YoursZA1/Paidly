@@ -117,6 +117,10 @@
       "destination": "/api/public-share?doc=payslip&op=verify"
     },
     {
+      "source": "/api/public-payslip-pdf",
+      "destination": "/api/public-share?doc=payslip&op=pdf"
+    },
+    {
       "source": "/api/security/events",
       "destination": "/api/admin/security-events"
     },

@@ -35,6 +35,10 @@ export function normalizeEmployerPayrollSettings(settings) {
       raw.people_reminder_lead_days == null || raw.people_reminder_lead_days === ""
         ? DEFAULT_PEOPLE_REMINDER_LEAD_DAYS
         : normalizePeopleReminderLeadDays(raw.people_reminder_lead_days),
+    // SDL exemption (annual leviable payroll R500 000 or less) — the SDL rule skips exempt employers.
+    sdl_exempt: raw.sdl_exempt === true || raw.sdl_exempt === "true",
+    // PAYE method for regular pay: "annualised" (default) or SARS "run_to_date" (cumulative).
+    paye_method: raw.paye_method === "run_to_date" ? "run_to_date" : "annualised",
   };
 }
 
@@ -60,6 +64,12 @@ export function mergeEmployerPayrollSettings(existing, patch) {
   }
   if (patch && Object.prototype.hasOwnProperty.call(patch, "people_reminder_lead_days")) {
     base.people_reminder_lead_days = next.people_reminder_lead_days;
+  }
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "sdl_exempt")) {
+    base.sdl_exempt = next.sdl_exempt;
+  }
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "paye_method")) {
+    base.paye_method = next.paye_method;
   }
   return base;
 }

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Payroll, User } from '@/api/entities';
-import { fetchPublicPayslipPayload } from '@/api/publicPayslipApiClient';
+import { fetchPublicPayslipPayload, fetchPublicPayslipPdf } from '@/api/publicPayslipApiClient';
+import { downloadPayslipPdf } from '@/services/PayrollApiService';
 import { getPublicPayslipViewerToken } from '@/lib/publicPayslipViewerStorage';
 import { format, isValid, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import generatePdfFromElement from '@/utils/generatePdfFromElement';
 import { isAbortError } from '@/utils/retryOnAbort';
 import PayslipDocument from '@/components/payslips/PayslipDocument';
 import useCompanyContext from '@/hooks/useCompanyContext';
@@ -23,7 +23,7 @@ export default function PayslipPDF() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-    const printRef = useRef(null);
+    const [downloadError, setDownloadError] = useState('');
     const { ctx, hasPermission, loading: companyLoading } = useCompanyContext();
     const canManagePayroll = hasPermission(PERMISSIONS.MANAGE_PAYROLL);
     const isPublicTokenView = Boolean(shareToken);
@@ -140,17 +140,27 @@ export default function PayslipPDF() {
     const userCurrency = user?.currency || 'ZAR';
 
     const payPeriodLabel = `${safeFormatDate(payslip.pay_period_start)} - ${safeFormatDate(payslip.pay_period_end)}`;
-    const filename = `${payslip?.payslip_number || 'payslip'}.pdf`;
-
+    // The PDF is generated and encrypted on the server (password: the employee's SA ID number).
+    // No browser-built fallback: an unprotected payslip is never produced.
     const handleDownloadPDF = async () => {
-        if (!printRef.current || isGeneratingPdf) return;
+        if (isGeneratingPdf) return;
         setIsGeneratingPdf(true);
+        setDownloadError('');
         try {
-            await generatePdfFromElement(printRef.current, filename);
+            const { blob, filename } = shareToken
+                ? await fetchPublicPayslipPdf(shareToken, getPublicPayslipViewerToken(shareToken))
+                : await downloadPayslipPdf(payslip.id);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 10_000);
         } catch (error) {
             if (isAbortError(error)) return;
-            console.error('Payslip PDF generation failed, falling back to print:', error);
-            window.print();
+            setDownloadError(error?.message || 'Could not download the payslip.');
         } finally {
             setIsGeneratingPdf(false);
         }
@@ -176,12 +186,22 @@ export default function PayslipPDF() {
                             Back
                         </Button>
                         <Button onClick={() => void handleDownloadPDF()} disabled={isGeneratingPdf}>
-                            {isGeneratingPdf ? 'Generating PDF…' : 'Download PDF'}
+                            {isGeneratingPdf ? 'Preparing secure PDF…' : 'Download PDF'}
                         </Button>
+                    </div>
+                    <div className="no-print mb-4 max-w-[210mm] mx-auto space-y-2">
+                        <p className="text-xs text-muted-foreground sm:text-right">
+                            The PDF is password protected. Open it with your South African ID number.
+                        </p>
+                        {downloadError ? (
+                            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                                {downloadError}
+                            </p>
+                        ) : null}
                     </div>
 
                     <div className="print-container max-w-[210mm] mx-auto">
-                        <div ref={printRef}>
+                        <div>
                             <PayslipDocument
                                 payslip={payslip}
                                 user={user}

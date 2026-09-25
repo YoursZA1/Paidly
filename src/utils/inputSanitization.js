@@ -11,7 +11,8 @@ export const UPLOAD_BUCKET_ALLOWLIST = new Set([
   "invoices",
   "quotes",
   "customers",
-  "payroll",
+  // No "payroll": payslips are never uploaded from the browser or given public URLs. Payslip PDFs are
+  // generated and encrypted on the server per request (server/src/payroll/payslipPdf.js).
   "private",
 ]);
 

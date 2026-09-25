@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { assertPayrollEmployeeCapacity, payrollEmployeeCapacity } from "./payrollEmployeeLimit.js";
 import { supabaseAdmin, writePayrollAudit, notifyUser } from "./payrollGate.js";
-import { calculatePayroll, selectStatutoryRules } from "../../../shared/payroll/calculatePayroll.js";
+import { calculatePayroll, inputEarningLines, selectStatutoryRules } from "../../../shared/payroll/calculatePayroll.js";
 import { unpaidLeaveDaysInPeriod } from "../../../shared/payroll/unpaidLeaveImpact.js";
 import { buildPayslipNumber } from "../../../shared/payroll/payslipNumber.js";
 import { johannesburgYmd, monthBounds, monthLabel } from "../../../shared/payroll/dates.js";
@@ -20,6 +20,9 @@ import {
   supersedeEffectiveTo,
 } from "../../../shared/payroll/statutoryVersion.js";
 import { requirePayslipMembershipId } from "../../../shared/payroll/payslipWriteGuard.js";
+import { dobFromSaIdNumber, taxYearForDate } from "../../../shared/payroll/taxYear.js";
+import { computePayrollYtd, payslipYtd } from "../../../shared/payroll/payrollYtd.js";
+import { buildSecurePayslipPdf, PAYSLIP_ID_REQUIRED } from "./payslipPdf.js";
 import { claimPayRunForCalculate, commitPayRunCalculate } from "./payRunLockRpc.js";
 import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/documentSendAdapter.js";
 import { loadOutstandingAdjustmentSignals } from "../workforce/adjustmentSignals.js";
@@ -97,6 +100,78 @@ export async function ensurePayrollDefaults(orgId) {
     sort_order: i,
   }));
   await supabaseAdmin.from("payroll_component_types").insert(rows);
+}
+
+/** PAYE follows the date the employee is paid; the tax year of a run is that of its pay date. */
+export function payrollTaxDate(run) {
+  return String(run?.pay_date || run?.period_end || "").slice(0, 10) || johannesburgYmd().iso;
+}
+
+/**
+ * Everything the engine needs besides the profile: date of birth (memberships — identity is not
+ * duplicated on payroll), employer payroll settings, and YTD from finalized runs of this company.
+ */
+async function loadPayrollCalculationContext(orgId, profiles, { taxYear, excludeRunId = null } = {}) {
+  const membershipIds = [...new Set((profiles || []).map((p) => p.membership_id).filter(Boolean))];
+  const profileIds = [...new Set((profiles || []).map((p) => p.id).filter(Boolean))];
+
+  const dobByMembership = new Map();
+  if (membershipIds.length) {
+    const { data, error } = await supabaseAdmin
+      .from("memberships")
+      .select("id, date_of_birth")
+      .eq("org_id", orgId)
+      .in("id", membershipIds);
+    if (!error) for (const m of data || []) if (m.date_of_birth) dobByMembership.set(m.id, String(m.date_of_birth).slice(0, 10));
+  }
+
+  const { data: org } = await supabaseAdmin.from("organizations").select("payroll_settings").eq("id", orgId).maybeSingle();
+  const employer = normalizeEmployerPayrollSettings(org?.payroll_settings);
+
+  const ytdByProfile = new Map();
+  if (profileIds.length && taxYear) {
+    const { data: rows, error } = await supabaseAdmin
+      .from("pay_run_items")
+      .select(
+        "id, org_id, pay_run_id, payroll_profile_id, gross_pay, taxable_income, statutory_deductions, total_deductions, net_pay, calculation, pay_runs!inner(id, org_id, status, finalized_at, pay_date, period_start, period_end, run_type)"
+      )
+      .eq("org_id", orgId)
+      .in("payroll_profile_id", profileIds);
+    if (error) throw error;
+    const runs = (rows || []).map((r) => r.pay_runs).filter(Boolean);
+    for (const profile of profiles || []) {
+      ytdByProfile.set(
+        profile.id,
+        computePayrollYtd({
+          items: rows || [],
+          runs,
+          orgId,
+          profileId: profile.id,
+          taxYear,
+          excludeRunId,
+          frequency: profile.pay_frequency,
+        })
+      );
+    }
+  }
+  return { dobByMembership, employer, ytdByProfile };
+}
+
+function engineContext(run, profile, ctx, taxYear) {
+  const taxDate = payrollTaxDate(run);
+  return {
+    payDate: taxDate,
+    periodStart: run.period_start || null,
+    periodEnd: run.period_end || null,
+    dateOfBirth:
+      ctx.dobByMembership.get(profile.membership_id) ||
+      dobFromSaIdNumber(profile.tax_identifiers?.id_number, taxYear?.code) ||
+      null,
+    medicalSchemeMembers: profile.medical_scheme_members ?? null,
+    payeMethod: ctx.employer.paye_method,
+    employer: { sdl_exempt: ctx.employer.sdl_exempt },
+    ytd: ctx.ytdByProfile.get(profile.id) || null,
+  };
 }
 
 async function loadStatutoryRules(orgId, onIso) {
@@ -293,6 +368,11 @@ export async function upsertPayrollProfile(orgId, actorId, payload) {
   if (hasOwn(payload, "base_salary")) patch.base_salary = money(payload.base_salary);
   if (hasOwn(payload, "hourly_rate")) patch.hourly_rate = money(payload.hourly_rate);
   if (hasOwn(payload, "daily_rate")) patch.daily_rate = money(payload.daily_rate);
+  if (hasOwn(payload, "medical_scheme_members")) {
+    const raw = payload.medical_scheme_members;
+    const n = raw === "" || raw == null ? null : Math.floor(Number(raw));
+    patch.medical_scheme_members = Number.isFinite(n) && n >= 0 && n <= 20 ? n : null;
+  }
   if (hasOwn(payload, "banking")) {
     patch.banking = payload.banking && typeof payload.banking === "object" ? payload.banking : {};
   }
@@ -390,17 +470,42 @@ export async function previewCalculation(orgId, payload) {
       return previewFromPayRunItem(found.item, found.run);
     }
   }
-  const rules = await loadStatutoryRules(orgId, payload.period_end || johannesburgYmd().iso);
+  // The stored payroll profile is the base (identity, tax ids, medical members). Pay fields the
+  // browser sends are an unsaved what-if: allowed for a preview (nothing is written), and flagged.
+  const PAY_FIELDS = ["pay_type", "pay_frequency", "base_salary", "hourly_rate", "daily_rate"];
+  const browserProfile = payload.profile && typeof payload.profile === "object" ? payload.profile : {};
+  let profile = browserProfile;
+  let whatIf = false;
+  if (membershipId) {
+    const { data: serverProfile } = await supabaseAdmin
+      .from("payroll_profiles")
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("membership_id", membershipId)
+      .maybeSingle();
+    if (serverProfile) {
+      const overlay = Object.fromEntries(PAY_FIELDS.filter((k) => k in browserProfile).map((k) => [k, browserProfile[k]]));
+      whatIf = PAY_FIELDS.some((k) => k in overlay && String(overlay[k]) !== String(serverProfile[k] ?? ""));
+      profile = { ...serverProfile, ...overlay };
+    }
+  }
+  const run = { pay_date: payload.pay_date || null, period_start: payload.period_start || null, period_end: payload.period_end || null };
+  const taxDate = payrollTaxDate(run);
+  const taxYear = taxYearForDate(taxDate);
+  const rules = await loadStatutoryRules(orgId, taxDate);
+  const ctx = await loadPayrollCalculationContext(orgId, profile?.id ? [profile] : [], { taxYear });
   return {
     source: "preview",
+    what_if: whatIf,
     ...calculatePayroll({
-      profile: payload.profile || {},
+      profile,
       earnings: payload.earnings || [],
       deductions: payload.deductions || [],
       statutoryRules: rules,
       overtimeHours: payload.overtime_hours,
       overtimeRate: payload.overtime_rate,
       extras: payload.extras || {},
+      context: engineContext(run, profile, ctx, taxYear),
     }),
   };
 }
@@ -716,12 +821,20 @@ export async function calculatePayRun(orgId, actorId, runId, body = {}) {
   }
 }
 
-async function calculatePayRunOnce(orgId, actorId, run, body = {}, leaveSnapshot = {}) {
+/** Exported for tests: the calculation of one open run (rules, context, engine, snapshots). */
+export async function calculatePayRunOnce(orgId, actorId, run, body = {}, leaveSnapshot = {}) {
   const runId = run.id;
-  const rules = await loadStatutoryRules(orgId, run.period_end);
+  const taxDate = payrollTaxDate(run);
+  const taxYear = taxYearForDate(taxDate);
+  const rules = await loadStatutoryRules(orgId, taxDate);
   const components = await loadRecurringComponents(orgId);
   const profileIds = (run.items || []).map((i) => i.payroll_profile_id);
-  const { data: profiles } = await supabaseAdmin.from("payroll_profiles").select("*").in("id", profileIds);
+  const { data: profiles } = await supabaseAdmin
+    .from("payroll_profiles")
+    .select("*")
+    .eq("org_id", orgId)
+    .in("id", profileIds);
+  const calcContext = await loadPayrollCalculationContext(orgId, profiles || [], { taxYear, excludeRunId: run.id });
   const profileById = new Map((profiles || []).map((p) => [p.id, p]));
   const overrides = Array.isArray(body.items) ? body.items : [];
   const overrideById = new Map(overrides.map((o) => [o.id, o]));
@@ -744,6 +857,7 @@ async function calculatePayRunOnce(orgId, actorId, run, body = {}, leaveSnapshot
   let dedTotal = 0;
   let netTotal = 0;
   const snapshots = [];
+  const unitUpdates = [];
 
   for (const item of run.items || []) {
     const profile = profileById.get(item.payroll_profile_id) || {};
@@ -767,10 +881,14 @@ async function calculatePayRunOnce(orgId, actorId, run, body = {}, leaveSnapshot
         amount: c.default_amount,
         recurring: true,
       }));
+    // Inputs: the admin's override for this run, else what was entered on the item before, else the
+    // org's recurring components. (An empty stored list means nothing was entered yet.)
+    const storedEarnings = inputEarningLines(item.earnings);
+    const storedDeductions = Array.isArray(item.deductions) ? item.deductions : [];
     const result = calculatePayroll({
       profile,
-      earnings: over.earnings || item.earnings || recurringEarnings,
-      deductions: over.deductions || item.deductions || recurringDeductions,
+      earnings: over.earnings || (storedEarnings.length ? storedEarnings : recurringEarnings),
+      deductions: over.deductions || (storedDeductions.length ? storedDeductions : recurringDeductions),
       statutoryRules: rules,
       overtimeHours: over.overtime_hours ?? item.overtime_hours,
       overtimeRate: over.overtime_rate ?? item.overtime_rate,
@@ -781,8 +899,18 @@ async function calculatePayRunOnce(orgId, actorId, run, body = {}, leaveSnapshot
           requests: leaveByProfile.get(item.payroll_profile_id) || [],
         }),
         working_days_in_period: workingDaysInPeriod,
+        hours: over.ordinary_hours ?? item.ordinary_hours ?? null,
+        days: over.days_worked ?? item.days_worked ?? null,
       },
+      context: engineContext(run, profile, calcContext, taxYear),
     });
+    if (over.ordinary_hours !== undefined || over.days_worked !== undefined) {
+      unitUpdates.push({
+        id: item.id,
+        ordinary_hours: over.ordinary_hours ?? item.ordinary_hours ?? null,
+        days_worked: over.days_worked ?? item.days_worked ?? null,
+      });
+    }
     grossTotal += result.gross_pay;
     dedTotal += result.total_deductions;
     netTotal += result.net_pay;
@@ -811,6 +939,19 @@ async function calculatePayRunOnce(orgId, actorId, run, body = {}, leaveSnapshot
         employee_count: (run.items || []).length,
       })
       .eq("id", runId);
+  }
+
+  // Payable units (hourly / daily) the admin entered — kept on the item for the next recalculation.
+  for (const { id, ...units } of unitUpdates) {
+    const { error: unitErr } = await supabaseAdmin
+      .from("pay_run_items")
+      .update(units)
+      .eq("id", id)
+      .eq("org_id", orgId);
+    if (unitErr) {
+      throwIfMissingWorkforceColumn(unitErr, ["ordinary_hours", "days_worked"]);
+      throw unitErr;
+    }
   }
 
   await writePayrollAudit({
@@ -994,6 +1135,24 @@ async function loadEmployerBranding(orgId) {
   return { orgRow: orgRow || null, ownerProfile };
 }
 
+function sumDeductionLines(lines, pattern) {
+  return money(
+    (lines || [])
+      .filter((d) => d?.employee_portion !== false && pattern.test(`${d?.type || ""} ${d?.code || ""}`))
+      .reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
+  );
+}
+
+/** Items calculated before employer contributions were summarised: rebuild from statutory lines. */
+function employerContributionsFromLines(lines) {
+  const list = Array.isArray(lines) ? lines : [];
+  const employer = (re) => money(list.filter((l) => re.test(String(l.code || ""))).reduce((s, l) => s + (Number(l.employer_amount) || 0), 0));
+  const uif = employer(/^UIF/i);
+  const sdl = employer(/^SDL$/i);
+  const total = money(list.reduce((s, l) => s + (Number(l.employer_amount) || 0), 0));
+  return { uif, sdl, other_statutory: money(total - uif - sdl), benefits: 0, total };
+}
+
 export async function finalizePayRun(orgId, actorId, runId, origin = "") {
   const run = await getPayRun(orgId, runId);
   if (run.status !== "approved") {
@@ -1022,6 +1181,15 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
 
   const { orgRow, ownerProfile } = await loadEmployerBranding(orgId);
   const employerSnapshot = buildEmployerSnapshot(orgRow || {}, ownerProfile);
+
+  // YTD is frozen on the payslip: finalized runs of this company in the same tax year, plus this run.
+  const taxYear = taxYearForDate(payrollTaxDate(run));
+  const { data: runProfiles } = await supabaseAdmin
+    .from("payroll_profiles")
+    .select("id, membership_id, pay_frequency")
+    .eq("org_id", orgId)
+    .in("id", (run.items || []).map((i) => i.payroll_profile_id));
+  const ytdContext = await loadPayrollCalculationContext(orgId, runProfiles || [], { taxYear, excludeRunId: run.id });
 
   for (const item of run.items || []) {
     if (item.payslip_id) continue;
@@ -1061,14 +1229,17 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
       gross_pay: item.gross_pay,
       tax_deduction: (item.statutory_deductions || []).find((d) => String(d.code).toUpperCase() === "PAYE")?.amount || 0,
       uif_deduction: (item.statutory_deductions || []).find((d) => String(d.code).toUpperCase() === "UIF")?.amount || 0,
-      pension_deduction: (item.other_deductions || []).find((d) => /pension|retirement/i.test(d.type || d.code || ""))?.amount || 0,
-      medical_aid_deduction: (item.other_deductions || []).find((d) => /medical/i.test(d.type || d.code || ""))?.amount || 0,
+      pension_deduction: sumDeductionLines(item.other_deductions, /pension|provident|retirement/i),
+      medical_aid_deduction: sumDeductionLines(item.other_deductions, /medical/i),
       other_deductions: item.other_deductions || [],
       total_deductions: item.total_deductions,
       net_pay: item.net_pay,
       status: "published",
       public_share_token: token,
       calculation_breakdown: item.calculation,
+      tax_year: item.calculation?.tax_year?.label || taxYear.label,
+      ytd: payslipYtd(ytdContext.ytdByProfile.get(item.payroll_profile_id), item, profile?.pay_frequency),
+      employer_contributions: item.calculation?.employer_contributions || employerContributionsFromLines(item.statutory_deductions),
       leave_summary: leaveSummary,
       employer_snapshot: employerSnapshot,
       employee_snapshot: buildEmployeePayslipSnapshot(profile || {}),
@@ -1079,7 +1250,7 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
     };
     const { data: payslip, error } = await supabaseAdmin.from("payslips").insert(payslipRow).select("id").maybeSingle();
     if (error) {
-      throwIfMissingWorkforceColumn(error, ["membership_id", "employer_snapshot", "employee_snapshot"]);
+      throwIfMissingWorkforceColumn(error, ["membership_id", "employer_snapshot", "employee_snapshot", "tax_year", "ytd", "employer_contributions"]);
       throw error;
     }
     await recordPayslipCreatedEvent({ orgId, payslipId: payslip.id });
@@ -1192,6 +1363,72 @@ export async function cancelPayRun(orgId, actorId, runId) {
   return getPayRun(orgId, runId);
 }
 
+/**
+ * Finalized payslip → encrypted PDF (password: the employee's SA ID number, read here from the
+ * payroll profile and never returned, logged or stored). Audited with safe metadata only.
+ * @param {{ deliveryMethod: "download" | "email" | "public_link", actorId?: string | null }} opts
+ * @returns {Promise<{ slip: Record<string, any>, filename: string, content: Buffer }>}
+ */
+export async function generateSecurePayslipPdf(orgId, payslipId, { deliveryMethod, actorId = null } = {}) {
+  const id = parseUuid(payslipId);
+  if (!id) {
+    const err = new Error("Payslip id is required");
+    err.status = 400;
+    throw err;
+  }
+  const { data: slip, error } = await supabaseAdmin.from("payslips").select("*").eq("org_id", orgId).eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!slip) {
+    const err = new Error("Payslip not found");
+    err.status = 404;
+    throw err;
+  }
+  return securePdfForSlip(orgId, slip, { deliveryMethod, actorId });
+}
+
+async function securePdfForSlip(orgId, slip, { deliveryMethod, actorId = null }) {
+  let profile = null;
+  if (slip.payroll_profile_id) {
+    ({ data: profile } = await supabaseAdmin
+      .from("payroll_profiles")
+      .select("id, tax_identifiers")
+      .eq("org_id", orgId)
+      .eq("id", slip.payroll_profile_id)
+      .maybeSingle());
+  }
+  if (!profile && slip.membership_id) {
+    ({ data: profile } = await supabaseAdmin
+      .from("payroll_profiles")
+      .select("id, tax_identifiers")
+      .eq("org_id", orgId)
+      .eq("membership_id", slip.membership_id)
+      .maybeSingle());
+  }
+  const audit = (action, status, reason = null) =>
+    writePayrollAudit({
+      orgId,
+      actorId,
+      action,
+      recordType: "payslips",
+      recordId: slip.id,
+      metadata: {
+        payslip_id: slip.id,
+        employee_id: slip.membership_id || null,
+        delivery_method: deliveryMethod || null,
+        status,
+        ...(reason ? { reason } : {}),
+      },
+    });
+  try {
+    const pdf = await buildSecurePayslipPdf(slip, profile || {});
+    await audit("PAYSLIP_PDF_GENERATED", "success");
+    return { slip, ...pdf };
+  } catch (err) {
+    await audit("PAYSLIP_PDF_BLOCKED", "failure", err?.code === PAYSLIP_ID_REQUIRED ? PAYSLIP_ID_REQUIRED : "PDF_RENDER_FAILED");
+    throw err;
+  }
+}
+
 export async function sendPayRunPayslips(orgId, actorId, runId, origin, options = {}) {
   const run = await getPayRun(orgId, runId);
   if (!run.finalized_at) {
@@ -1201,7 +1438,7 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
   }
   const { data: payslips } = await supabaseAdmin
     .from("payslips")
-    .select("id, employee_name, employee_email, employee_user_id, public_share_token, payslip_number, status, sent_to_email")
+    .select("*")
     .eq("org_id", orgId)
     .eq("pay_run_id", runId);
 
@@ -1210,6 +1447,7 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
   let sent = 0;
   let skipped = 0;
   let failed = 0;
+  const blocked = [];
   for (const slip of payslips || []) {
     const to = slip.employee_email;
     if (!to) continue;
@@ -1223,6 +1461,8 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
     }
     const sendAttempt = `${slip.id}:${runId}:${resend ? Date.now() : "send"}`;
     try {
+      // Each employee gets their own separately encrypted PDF; no ID number → no email (never unprotected).
+      const pdf = await securePdfForSlip(orgId, slip, { deliveryMethod: "email", actorId });
       await sendPayslipEmail({
         to,
         employeeName: slip.employee_name,
@@ -1233,9 +1473,11 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
         orgId,
         payslipId: slip.id,
         sendAttempt,
+        attachment: { filename: pdf.filename, content: pdf.content },
       });
     } catch (err) {
       failed += 1;
+      if (err?.code === PAYSLIP_ID_REQUIRED) blocked.push({ payslip_id: slip.id, employee_name: slip.employee_name });
       await writePayrollAudit({
         orgId,
         actorId,
@@ -1259,7 +1501,15 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
     }
     sent += 1;
   }
-  return { sent, skipped, failed, total: (payslips || []).length };
+  return {
+    sent,
+    skipped,
+    failed,
+    total: (payslips || []).length,
+    ...(blocked.length
+      ? { blocked_missing_id: blocked, blocked_message: "Employee ID number is required before a secure payslip can be generated." }
+      : {}),
+  };
 }
 
 export async function publishPayslip(orgId, actorId, payslipId) {
@@ -1318,7 +1568,7 @@ export async function sendEmployeePayslip(orgId, actorId, payslipId, origin = ""
   }
   const { data: slip, error } = await supabaseAdmin
     .from("payslips")
-    .select("id, employee_name, employee_email, employee_user_id, public_share_token, payslip_number, status, sent_to_email, pay_run_id, pay_period_start, pay_period_end")
+    .select("*")
     .eq("org_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -1340,7 +1590,10 @@ export async function sendEmployeePayslip(orgId, actorId, payslipId, origin = ""
   }
   const periodLabel = [slip.pay_period_start, slip.pay_period_end].filter(Boolean).join(" → ");
   const base = String(origin || "").replace(/\/$/, "") || "https://www.paidly.co.za";
+  // Throws PAYSLIP_ID_REQUIRED (422) before anything is sent when the employee has no valid ID number.
+  const pdf = await securePdfForSlip(orgId, slip, { deliveryMethod: "email", actorId });
   await sendPayslipEmail({
+    attachment: { filename: pdf.filename, content: pdf.content },
     to,
     employeeName: slip.employee_name,
     periodLabel,
@@ -1407,6 +1660,8 @@ export async function updateEmployerPayrollSettings(orgId, actorId, payload = {}
     "sdl_reference",
     "trading_name",
     "people_reminder_lead_days",
+    "sdl_exempt",
+    "paye_method",
   ].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   if (hasRefPatch) {
     patch.payroll_settings = mergeEmployerPayrollSettings(org?.payroll_settings, payload);

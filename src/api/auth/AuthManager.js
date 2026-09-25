@@ -12,7 +12,7 @@ import {
   getSessionDataForProfileWrite,
   isSupabaseAuthUuid,
 } from "@/api/auth/authSessionHelpers.js";
-import { getStableSession } from "@/core/auth/SessionCoordinator";
+import { getLiveClientSession, getStableSession } from "@/core/auth/SessionCoordinator";
 import { useAuthSessionStore } from "@/stores/authSessionStore";
 import { normalizePaidlyPlan } from "@/api/auth/planNormalize.js";
 import { clearOrgIdCache } from "@/api/auth/orgCache.js";
@@ -553,8 +553,8 @@ export class AuthManager {
     // so confirm the client will actually send this user's JWT before writing.
     let clientSessionUserId = null;
     try {
-      const { data: live } = await retryOnAbort(() => supabase.auth.getSession(), 3, 300);
-      clientSessionUserId = live?.session?.user?.id ?? null;
+      const live = await retryOnAbort(() => getLiveClientSession(), 3, 300);
+      clientSessionUserId = live?.user?.id ?? null;
     } catch (e) {
       if (!isAbortError(e)) throw e;
       clientSessionUserId = authUserId; // lock contention only; the request itself will wait for the token

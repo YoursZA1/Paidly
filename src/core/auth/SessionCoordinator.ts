@@ -138,6 +138,16 @@ export async function getStableSession(): Promise<RawSession> {
 }
 
 /**
+ * The session the Supabase client will actually send — read from the client, bypassing the auth
+ * store and the snapshot. Use before a write that must carry the user's JWT: the store can outlive
+ * the client's token (tab-only storage, sign-out races). Not cached.
+ */
+export async function getLiveClientSession(): Promise<RawSession> {
+  const { data } = await supabase.auth.getSession();
+  return (data?.session as RawSession) ?? null;
+}
+
+/**
  * Synchronous guard: returns true if the auth store has any session object.
  *
  * Use this for "is the user still signed in?" checks that do not need a

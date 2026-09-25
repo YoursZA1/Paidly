@@ -176,6 +176,8 @@ function CompanyProfileSettings() {
         sdl_reference: "",
         trading_name: "",
         people_reminder_lead_days: "30",
+        sdl_exempt: false,
+        paye_method: "annualised",
     }));
     const [logoFile, setLogoFile] = useState(null);
     const pendingLogoChangeRef = useRef(false);
@@ -288,6 +290,8 @@ function CompanyProfileSettings() {
                                 people_reminder_lead_days: String(
                                     org.payroll_settings?.people_reminder_lead_days ?? prev.people_reminder_lead_days ?? "30"
                                 ),
+                                sdl_exempt: org.payroll_settings?.sdl_exempt === true,
+                                paye_method: org.payroll_settings?.paye_method === "run_to_date" ? "run_to_date" : "annualised",
                             }));
                         }
                     } catch {
@@ -454,6 +458,8 @@ function CompanyProfileSettings() {
                         sdl_reference: (updatedData.sdl_reference || "").trim() || null,
                         trading_name: (updatedData.trading_name || "").trim() || null,
                         people_reminder_lead_days: updatedData.people_reminder_lead_days,
+                        sdl_exempt: updatedData.sdl_exempt === true,
+                        paye_method: updatedData.paye_method === "run_to_date" ? "run_to_date" : "annualised",
                     },
                     ...(type ? { business_type: type } : {}),
                 }).catch(() => {});
@@ -894,6 +900,35 @@ function CompanyProfileSettings() {
                             className="h-11 rounded-lg"
                         />
                     </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="paye_method" className="text-sm font-medium text-foreground">
+                            PAYE method
+                        </Label>
+                        <select
+                            id="paye_method"
+                            value={formData.paye_method}
+                            onChange={(e) => handleInputChange("paye_method", e.target.value)}
+                            className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm"
+                        >
+                            <option value="annualised">Annualised (SARS tables, each period on its own)</option>
+                            <option value="run_to_date">Run-to-date (cumulative — corrects earlier periods)</option>
+                        </select>
+                        <p className="text-xs text-muted-foreground">Bonuses are always taxed with the SARS annual-equivalent method.</p>
+                    </div>
+                    <label className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm">
+                        <input
+                            type="checkbox"
+                            className="mt-0.5 h-4 w-4"
+                            checked={formData.sdl_exempt === true}
+                            onChange={(e) => handleInputChange("sdl_exempt", e.target.checked)}
+                        />
+                        <span>
+                            <span className="font-medium text-foreground">SDL exempt</span>
+                            <span className="block text-xs text-muted-foreground">
+                                Annual leviable payroll is R500 000 or less. Skills Development Levy is then not calculated.
+                            </span>
+                        </span>
+                    </label>
                     <div className="space-y-1.5">
                         <Label htmlFor="trading_name" className="text-sm font-medium text-foreground">
                             Trading name

@@ -3,7 +3,7 @@
  * Rewrites: ?doc=invoice|quote|payslip|og|email-track (see vercel.json).
  */
 import { handlePublicInvoiceGet, handlePublicInvoiceVerify } from "./_publicInvoiceShared.js";
-import { handlePublicPayslipGet, handlePublicPayslipVerify } from "./_publicPayslipShared.js";
+import { handlePublicPayslipGet, handlePublicPayslipPdf, handlePublicPayslipVerify } from "./_publicPayslipShared.js";
 import { handlePublicQuoteGet, handlePublicQuoteDecide } from "./_publicQuoteShared.js";
 import { handlePublicLeaveGet, handlePublicLeaveDecide } from "./_publicLeaveShared.js";
 import { handleEmailTrack } from "./_emailTrackShared.js";
@@ -29,6 +29,7 @@ export default async function handler(req, res) {
   if (doc === "leave" && op === "decide") return handlePublicLeaveDecide(req, res);
   if (doc === "payslip" && op === "get") return handlePublicPayslipGet(req, res);
   if (doc === "payslip" && op === "verify") return handlePublicPayslipVerify(req, res);
+  if (doc === "payslip" && op === "pdf") return handlePublicPayslipPdf(req, res);
 
   return res.status(404).json({ error: "Not found" });
 }

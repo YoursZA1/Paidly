@@ -1,27 +1,53 @@
 import { formatCurrency } from "@/components/CurrencySelector";
 import LogoImage from "@/components/shared/LogoImage";
 import { resolvePayslipEmployerDisplay } from "@shared/payroll/employerSnapshot.js";
+import { buildPayslipView, PAY_TYPE_LABELS } from "@shared/payroll/payslipView.js";
+
+/**
+ * Payslip document (screen, print, PDF, public link). Presentation only: every amount is the
+ * finalized pay run value stored on the payslip — nothing here calculates payroll.
+ */
 
 function valueOrDash(value) {
   const text = String(value ?? "").trim();
   return text || "—";
 }
 
-function normalizeList(items) {
-  return Array.isArray(items) ? items : [];
-}
-
-function money(value, currency) {
-  return formatCurrency(Number(value || 0), currency);
-}
-
-function Row({ label, value, emphasize = false }) {
+function Field({ label, value }) {
+  if (value == null || String(value).trim() === "") return null;
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5">
-      <span className="text-[13px] text-slate-600">{label}</span>
-      <span className={`text-[13px] tabular-nums ${emphasize ? "font-semibold text-slate-900" : "text-slate-800"}`}>
-        {value}
-      </span>
+    <div className="min-w-0">
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="mt-0.5 break-words text-[13px] font-medium text-slate-900">{value}</dd>
+    </div>
+  );
+}
+
+function MoneyTable({ title, rows, total, totalLabel, money, muted = false }) {
+  return (
+    <div className="rounded-xl border border-border bg-white p-4 sm:p-5" style={{ pageBreakInside: "avoid" }}>
+      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-slate-700">{title}</h3>
+      <table className="mt-2 w-full text-[13px]">
+        <tbody className="divide-y divide-border/70">
+          {rows.map((row, i) => (
+            <tr key={`${row.code || row.label}-${i}`}>
+              <td className="py-2 pr-3 text-slate-700">
+                {row.label}
+                {row.detail ? <span className="block text-[11px] text-slate-500">{row.detail}</span> : null}
+              </td>
+              <td className={`py-2 text-right tabular-nums ${muted ? "text-slate-600" : "text-slate-900"}`}>{money(row.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+        {totalLabel ? (
+          <tfoot>
+            <tr className="border-t-2 border-slate-200">
+              <td className="pt-2.5 font-semibold text-slate-900">{totalLabel}</td>
+              <td className="pt-2.5 text-right font-semibold tabular-nums text-slate-900">{money(total)}</td>
+            </tr>
+          </tfoot>
+        ) : null}
+      </table>
     </div>
   );
 }
@@ -33,153 +59,124 @@ export default function PayslipDocument({
   payPeriodLabel,
   className = "",
 }) {
-  const currency = user?.currency || payslip?.owner_currency || "ZAR";
-  const allowances = normalizeList(payslip?.allowances);
-  const otherDeductions = normalizeList(payslip?.other_deductions);
-  const overtimePay = Number(payslip?.overtime_hours || 0) * Number(payslip?.overtime_rate || 0);
+  // Payroll is South African: one money format everywhere on the payslip (R 12 000,00).
+  const currency = payslip?.currency || "ZAR";
+  const money = (value) => formatCurrency(Number(value || 0), currency);
+  const view = buildPayslipView(payslip || {}, { formatMoney: money });
   const employer = resolvePayslipEmployerDisplay(payslip, user);
   const employeeSnap =
     payslip?.employee_snapshot && typeof payslip.employee_snapshot === "object" ? payslip.employee_snapshot : {};
-  const hasEmployerRefs = Boolean(employer.registration_number || employer.paye_reference || employer.uif_reference || employer.email || employer.phone);
+  const leave = Array.isArray(payslip?.leave_summary) ? payslip.leave_summary : [];
 
   return (
-    <article className={`w-full max-w-[800px] mx-auto rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm ${className}`}>
-      <header className="border-b border-border pb-6">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            {employer.logo_url ? (
-              <LogoImage
-                src={employer.logo_url}
-                alt="Company logo"
-                className="h-12 w-auto object-contain"
-              />
-            ) : (
-              <p className="text-xl font-bold text-slate-900">{valueOrDash(employer.company_name)}</p>
-            )}
-            <p className="mt-3 text-sm font-semibold text-slate-900">{valueOrDash(employer.company_name)}</p>
-            {employer.trading_name && employer.trading_name !== employer.company_name ? (
-              <p className="text-[12px] text-slate-600">Trading as {employer.trading_name}</p>
-            ) : null}
-            <p className="mt-1 whitespace-pre-line text-[13px] leading-5 text-slate-600">
-              {valueOrDash(employer.address)}
-            </p>
-            {hasEmployerRefs ? (
-              <div className="mt-2 space-y-0.5 text-[12px] leading-5 text-slate-600">
-                {employer.registration_number ? (
-                  <p><span className="font-medium text-slate-800">Reg:</span> {employer.registration_number}</p>
-                ) : null}
-                {employer.paye_reference ? (
-                  <p><span className="font-medium text-slate-800">PAYE:</span> {employer.paye_reference}</p>
-                ) : null}
-                {employer.uif_reference ? (
-                  <p><span className="font-medium text-slate-800">UIF:</span> {employer.uif_reference}</p>
-                ) : null}
-                {employer.email ? (
-                  <p><span className="font-medium text-slate-800">Email:</span> {employer.email}</p>
-                ) : null}
-                {employer.phone ? (
-                  <p><span className="font-medium text-slate-800">Tel:</span> {employer.phone}</p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="shrink-0 text-left sm:text-right">
-            <h1 className="text-3xl font-bold tracking-tight text-primary">PAYSLIP</h1>
-            <p className="mt-2 text-sm text-slate-700">
-              <span className="font-semibold">ID:</span> {valueOrDash(payslip?.payslip_number)}
-            </p>
-            <p className="mt-1 text-sm text-slate-700">
-              <span className="font-semibold">Date:</span> {valueOrDash(payDate)}
-            </p>
-          </div>
+    <article className={`w-full max-w-[800px] mx-auto rounded-2xl border border-border bg-card p-5 sm:p-8 shadow-sm ${className}`}>
+      <header className="flex flex-col gap-5 border-b border-border pb-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          {employer.logo_url ? (
+            <LogoImage src={employer.logo_url} alt="Company logo" className="mb-2 h-10 w-auto object-contain" />
+          ) : null}
+          <p className="text-base font-semibold text-slate-900">{valueOrDash(employer.company_name)}</p>
+          {employer.trading_name && employer.trading_name !== employer.company_name ? (
+            <p className="text-[12px] text-slate-600">Trading as {employer.trading_name}</p>
+          ) : null}
+          {employer.address ? (
+            <p className="mt-0.5 whitespace-pre-line text-[12px] leading-5 text-slate-600">{employer.address}</p>
+          ) : null}
+          <p className="mt-1 text-[11px] leading-5 text-slate-500">
+            {[
+              employer.paye_reference ? `PAYE ref ${employer.paye_reference}` : null,
+              employer.uif_reference ? `UIF ref ${employer.uif_reference}` : null,
+              employer.registration_number ? `Reg ${employer.registration_number}` : null,
+              employer.email || null,
+              employer.phone || null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        <div className="shrink-0 sm:text-right">
+          <h1 className="text-2xl font-bold tracking-tight text-primary">Payslip</h1>
+          <p className="mt-1 text-[13px] text-slate-700">{valueOrDash(payslip?.payslip_number)}</p>
+          {view.taxYear ? <p className="text-[12px] text-slate-500">Tax year {view.taxYear}</p> : null}
         </div>
       </header>
 
-      <section className="mt-6 rounded-xl border border-border bg-slate-50/70 p-4 sm:p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Employee Details</h2>
-        <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
-          <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Employee Name:</span> {valueOrDash(payslip?.employee_name)}</p>
-          <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Employee ID:</span> {valueOrDash(payslip?.employee_id)}</p>
-          <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Position:</span> {valueOrDash(payslip?.position)}</p>
-          <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Department:</span> {valueOrDash(payslip?.department)}</p>
-          {employeeSnap.employment_start_date ? (
-            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Start date:</span> {employeeSnap.employment_start_date}</p>
-          ) : null}
-          {employeeSnap.tax_number ? (
-            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Tax number:</span> {employeeSnap.tax_number}</p>
-          ) : null}
-          {employeeSnap.id_number_masked || employeeSnap.passport_number_masked ? (
-            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">ID / passport:</span> {employeeSnap.id_number_masked || employeeSnap.passport_number_masked}</p>
-          ) : null}
-          {employeeSnap.uif_number ? (
-            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">UIF number:</span> {employeeSnap.uif_number}</p>
-          ) : null}
-          {employeeSnap.bank_account_masked ? (
-            <p className="text-sm text-slate-700"><span className="font-semibold text-slate-900">Paid to:</span> {[employeeSnap.bank_name, employeeSnap.bank_account_masked].filter(Boolean).join(" ")}</p>
-          ) : null}
-          <p className="text-sm text-slate-700 sm:col-span-2"><span className="font-semibold text-slate-900">Pay Period:</span> {valueOrDash(payPeriodLabel)}</p>
-        </div>
+      <section className="mt-5 rounded-xl border border-border bg-slate-50/70 p-4 sm:p-5">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+          <Field label="Employee" value={valueOrDash(payslip?.employee_name)} />
+          <Field label="Employee no." value={payslip?.employee_id} />
+          <Field label="Occupation" value={payslip?.position} />
+          <Field label="Department" value={payslip?.department} />
+          <Field label="Pay type" value={PAY_TYPE_LABELS[view.payType] || null} />
+          <Field label="Tax number" value={employeeSnap.tax_number} />
+          <Field label="Pay period" value={valueOrDash(payPeriodLabel)} />
+          <Field label="Payment date" value={valueOrDash(payDate)} />
+          <Field label="Start date" value={employeeSnap.employment_start_date} />
+          <Field label="UIF number" value={employeeSnap.uif_number} />
+          <Field
+            label="Paid to"
+            value={employeeSnap.bank_account_masked ? [employeeSnap.bank_name, employeeSnap.bank_account_masked].filter(Boolean).join(" ") : null}
+          />
+        </dl>
       </section>
 
-      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2" style={{ pageBreakInside: "avoid" }}>
-        <div className="rounded-xl border border-border bg-white p-4 sm:p-5">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Earnings</h3>
-          <div className="mt-3 divide-y divide-border/80">
-            <Row label="Basic salary" value={money(payslip?.basic_salary, currency)} />
-            {overtimePay > 0 ? <Row label="Overtime" value={money(overtimePay, currency)} /> : null}
-            {allowances.map((item, index) => (
-              <Row key={`allowance-${index}`} label={valueOrDash(item?.name)} value={money(item?.amount, currency)} />
-            ))}
-            <Row label="Gross pay" value={money(payslip?.gross_pay, currency)} emphasize />
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border bg-white p-4 sm:p-5">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Deductions</h3>
-          <div className="mt-3 divide-y divide-border/80">
-            <Row label="PAYE tax" value={money(payslip?.tax_deduction, currency)} />
-            <Row label="UIF" value={money(payslip?.uif_deduction, currency)} />
-            {Number(payslip?.pension_deduction || 0) > 0 ? (
-              <Row label="Pension fund" value={money(payslip?.pension_deduction, currency)} />
-            ) : null}
-            {Number(payslip?.medical_aid_deduction || 0) > 0 ? (
-              <Row label="Medical aid" value={money(payslip?.medical_aid_deduction, currency)} />
-            ) : null}
-            {otherDeductions.map((item, index) => (
-              <Row key={`deduction-${index}`} label={valueOrDash(item?.name)} value={money(item?.amount, currency)} />
-            ))}
-            <Row label="Total deductions" value={money(payslip?.total_deductions, currency)} emphasize />
-          </div>
-        </div>
+      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <MoneyTable title="Earnings" rows={view.earnings} total={view.grossPay} totalLabel="Gross pay" money={money} />
+        <MoneyTable title="Deductions" rows={view.deductions} total={view.totalDeductions} totalLabel="Total deductions" money={money} />
       </section>
 
-      <section className="mt-6 flex justify-end" style={{ pageBreakInside: "avoid" }}>
-        <div className="w-full rounded-xl border border-primary/20 bg-primary/10 px-5 py-4 text-right sm:max-w-sm">
-          <p className="text-sm font-semibold uppercase tracking-wide text-primary">Net Pay</p>
-          <p className="mt-1 text-3xl font-bold tabular-nums text-primary">{money(payslip?.net_pay, currency)}</p>
+      {view.fringeBenefits.length ? (
+        <p className="mt-3 text-[12px] text-slate-600">
+          Taxable benefits (not paid in cash):{" "}
+          {view.fringeBenefits.map((l) => `${l.label} ${money(l.amount)}`).join(" · ")}
+        </p>
+      ) : null}
+
+      <section className="mt-5 rounded-2xl bg-primary px-5 py-5 text-primary-foreground sm:flex sm:items-end sm:justify-between" style={{ pageBreakInside: "avoid" }}>
+        <div>
+          <p className="text-[12px] font-semibold uppercase tracking-widest opacity-90">Net pay</p>
+          <p className="text-[12px] opacity-80">{payDate ? `Paid ${payDate}` : null}</p>
         </div>
+        <p className="mt-1 text-4xl font-bold tabular-nums sm:mt-0">{money(view.netPay)}</p>
       </section>
 
-      {Array.isArray(payslip?.leave_summary) && payslip.leave_summary.length > 0 ? (
-        <section className="mt-6 rounded-xl border border-border bg-white p-4 sm:p-5" style={{ pageBreakInside: "avoid" }}>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Leave summary</h3>
-          <table className="mt-3 w-full text-sm">
+      {view.ytd.length || view.employerContributions.length ? (
+        <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {view.ytd.length ? (
+            <MoneyTable title={`Year to date${view.taxYear ? ` · ${view.taxYear}` : ""}`} rows={view.ytd} money={money} muted />
+          ) : null}
+          {view.employerContributions.length ? (
+            <MoneyTable
+              title="Employer contributions"
+              rows={view.employerContributions}
+              total={view.employerContributionsTotal}
+              totalLabel="Total (not deducted from pay)"
+              money={money}
+              muted
+            />
+          ) : null}
+        </section>
+      ) : null}
+
+      {leave.length ? (
+        <section className="mt-5 rounded-xl border border-border bg-white p-4 sm:p-5" style={{ pageBreakInside: "avoid" }}>
+          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-slate-700">Leave (days)</h3>
+          <table className="mt-2 w-full text-[13px]">
             <thead>
-              <tr className="text-left text-slate-600">
+              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
                 <th className="py-1 font-medium">Type</th>
-                <th className="py-1 font-medium">Accrued</th>
-                <th className="py-1 font-medium">Used</th>
-                <th className="py-1 font-medium">Available</th>
+                <th className="py-1 text-right font-medium">Accrued</th>
+                <th className="py-1 text-right font-medium">Taken</th>
+                <th className="py-1 text-right font-medium">Balance</th>
               </tr>
             </thead>
-            <tbody>
-              {payslip.leave_summary.map((row) => (
-                <tr key={row.code || row.name} style={{ pageBreakInside: "avoid" }}>
-                  <td className="py-1">{valueOrDash(row.name)}</td>
-                  <td className="py-1 tabular-nums">{row.accrued}</td>
-                  <td className="py-1 tabular-nums">{row.used}</td>
-                  <td className="py-1 tabular-nums">{row.available}</td>
+            <tbody className="divide-y divide-border/70">
+              {leave.map((row) => (
+                <tr key={row.code || row.name}>
+                  <td className="py-1.5">{valueOrDash(row.name)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{row.accrued ?? "—"}</td>
+                  <td className="py-1.5 text-right tabular-nums">{row.used ?? "—"}</td>
+                  <td className="py-1.5 text-right tabular-nums font-medium">{row.available ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -187,8 +184,9 @@ export default function PayslipDocument({
         </section>
       ) : null}
 
-      <footer className="mt-8 flex items-center justify-between border-t border-border pt-3 text-[11px] text-slate-500">
-        <span>Paidly payslip · {valueOrDash(payslip?.payslip_number)}</span>
+      <footer className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[11px] text-slate-500">
+        <span>Generated by Paidly from finalized payroll · {valueOrDash(payslip?.payslip_number)}</span>
+        <span>Keep this payslip for your records.</span>
       </footer>
     </article>
   );

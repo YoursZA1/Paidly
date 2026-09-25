@@ -73,6 +73,10 @@ export const PAYROLL_AUDIT_ACTIONS = Object.freeze([
   "PAYSLIP_PUBLIC_ACCESS_ANOMALY",
   "PUBLIC_PAYSLIP_VERIFY_FAILED",
   "PAYSLIP_PUBLISHED",
+  // Secure PDF delivery. Metadata: payslip_id, employee_id, delivery_method, status, reason — never
+  // the ID number, the PDF password or PDF content.
+  "PAYSLIP_PDF_GENERATED",
+  "PAYSLIP_PDF_BLOCKED",
 ]);
 
 export const COMPONENT_KINDS = Object.freeze(["earning", "deduction"]);

@@ -50,3 +50,23 @@ export async function verifyPublicPayslipEmail(shareToken, email) {
   }
   return data.viewerToken;
 }
+
+/**
+ * Encrypted payslip PDF for a verified public viewer (opens with the employee's SA ID number).
+ * @returns {Promise<{ blob: Blob, filename: string }>}
+ */
+export async function fetchPublicPayslipPdf(shareToken, viewerToken) {
+  const apiBase = getPublicApiBase();
+  const res = await fetch(`${apiBase}/api/public-payslip-pdf?token=${encodeURIComponent(shareToken)}`, {
+    headers: viewerToken ? { Authorization: `Bearer ${viewerToken}` } : {},
+  });
+  if (!res.ok) {
+    const data = await parseJson(res);
+    const err = new Error(data?.error || `Request failed (${res.status})`);
+    err.code = data?.code;
+    throw err;
+  }
+  const blob = await res.blob();
+  const m = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") || "");
+  return { blob, filename: (m && m[1]) || "payslip.pdf" };
+}

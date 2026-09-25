@@ -111,6 +111,22 @@ export default [
     },
   },
   {
+    // Isomorphic modules imported by both the SPA and the server.
+    files: ['shared/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: { ...globals.node, ...globals.browser },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  {
     // Node-run config / tooling files at repo root.
     files: ['*.config.js', 'vite.config.js'],
     languageOptions: {
