@@ -265,11 +265,17 @@ export async function confirmPaymentIntent(intent, chargeCtx = {}) {
     })
     .eq("id", intent.id)
     .eq("org_id", intent.org_id)
+    .eq("status", intent.status)
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
-  if (data && data.status !== intent.status) {
+  if (!data) {
+    // A verified provider event moved it first (e.g. paid). Never overwrite that with a charge result.
+    const latest = await getOrgPaymentIntent(intent.org_id, intent.id);
+    return { intent: latest || intent, charge: { ...charge, status: latest?.status || intent.status, duplicate: true } };
+  }
+  if (data.status !== intent.status) {
     const { appendDocumentPaymentStatusEvent } = await import("./documentPaymentEventBridge.js");
     await appendDocumentPaymentStatusEvent(data, data.status, {
       source: "payment_confirm",
@@ -356,8 +362,9 @@ export async function settleTillCashIntent(intent, amountTendered) {
 }
 
 /**
- * Link the POS sale to its intent. Only a paid intent can carry a sale; this never marks an
- * intent paid (that is the verified provider event / till cash settlement).
+ * Link the POS sale to its intent. Only a paid intent can carry a sale, and only one sale: an intent
+ * already linked to a different sale is never re-pointed (one payment, one sale). Idempotent for the
+ * same sale. This never marks an intent paid (that is the verified provider event / till cash).
  */
 export async function attachPosSaleToIntent(intentId, saleId) {
   const { data, error } = await supabaseAdmin
@@ -368,15 +375,42 @@ export async function attachPosSaleToIntent(intentId, saleId) {
     })
     .eq("id", intentId)
     .eq("status", PAYMENT_INTENT_STATUS.paid)
+    .is("pos_sale_event_id", null)
     .select("*")
     .maybeSingle();
   if (error) throw error;
-  if (!data) {
-    const notPaid = new Error("Only a paid payment intent can be linked to a POS sale");
-    notPaid.code = "INTENT_NOT_PAID";
-    throw notPaid;
+  if (data) return data;
+
+  const { data: current, error: readError } = await supabaseAdmin
+    .from("payment_intents")
+    .select("*")
+    .eq("id", intentId)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (current?.status === PAYMENT_INTENT_STATUS.paid && String(current.pos_sale_event_id) === String(saleId)) {
+    return current;
   }
-  return data;
+  if (current?.status === PAYMENT_INTENT_STATUS.paid && current.pos_sale_event_id) {
+    const linked = new Error("This payment intent already settled another POS sale");
+    linked.code = "INTENT_ALREADY_LINKED";
+    throw linked;
+  }
+  const notPaid = new Error("Only a paid payment intent can be linked to a POS sale");
+  notPaid.code = "INTENT_NOT_PAID";
+  throw notPaid;
+}
+
+/** The sale a paid intent already settled, found by its payment_intent_id (any connection). */
+export async function findSaleForIntent(orgId, intentId) {
+  const { data, error } = await supabaseAdmin
+    .from("pos_sales_events")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("payment_intent_id", intentId)
+    .eq("sale_kind", "sale")
+    .limit(1);
+  if (error) throw error;
+  return data?.[0] || null;
 }
 
 export async function getOrgPaymentIntent(orgId, intentId) {

@@ -194,13 +194,14 @@ export function transactionReferenceForIntent(intent) {
   return `POS-${suffix}`;
 }
 
+/**
+ * Mock outcomes mark intents paid without a provider, so they are test-only: never in production
+ * (NODE_ENV or VERCEL_ENV production), with no override. Mock only ever moves card_terminal intents.
+ */
 export function isMockPaymentsEnabled(env = process.env) {
   const mode = String(env.PAYMENT_PROVIDER_MODE || "").trim().toLowerCase();
   if (mode !== "mock") return false;
-  if (String(env.NODE_ENV || "").trim() === "production" && env.ALLOW_MOCK_PAYMENTS !== "1") {
-    return false;
-  }
-  return true;
+  return paidlyPayEnvironment(env) !== "production";
 }
 
 /**
@@ -210,7 +211,7 @@ export function isMockPaymentsEnabled(env = process.env) {
  * keep it for testing (mock stays gated by isMockPaymentsEnabled).
  */
 export function cardTerminalRailEnabled(env = process.env) {
-  return isMockPaymentsEnabled(env) || paidlyPayEnvironment(env) !== "production";
+  return paidlyPayEnvironment(env) !== "production";
 }
 
 export const CARD_RAIL_UNAVAILABLE = "CARD_RAIL_UNAVAILABLE";

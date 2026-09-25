@@ -509,6 +509,8 @@ async function handleSimulatePaymentIntent(req, res, requestId, auth, id) {
     intentId: intent.id,
     nextStatus,
     externalId: eventKey,
+    // Mock stands in for a card terminal only; it never pays an Ozow or cash intent.
+    provider: "card_terminal",
     metadata: {
       mock: true,
       webhook_verified: true,
@@ -1014,6 +1016,11 @@ export async function handlePaidlyPayApi(req, res) {
     statusForLog = err?.status || 500;
     if (err?.code === PAIDLY_PAY_ERROR.CROSS_COMPANY_DENIED) {
       return sendPaidlyError(res, 403, err.code, err.message, requestId);
+    }
+    // Payment Engine refusals (wrong rail, illegal transition, card rail off) are conflicts, not crashes.
+    if (["PROVIDER_MISMATCH", "INVALID_INTENT_TRANSITION", "CARD_RAIL_UNAVAILABLE", "AMOUNT_MISMATCH"].includes(err?.code)) {
+      statusForLog = 409;
+      return sendPaidlyError(res, 409, err.code, err.message, requestId);
     }
     const message = process.env.NODE_ENV === "production" ? "Request failed" : err?.message || "Request failed";
     return sendPaidlyError(res, statusForLog >= 400 ? statusForLog : 500, errorCategory, message, requestId);

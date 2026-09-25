@@ -27,6 +27,8 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [phase, setPhase] = useState('form'); // 'form' | 'recording' | 'success'
+  // One key per opening: a retry after a lost response replays instead of recording the money twice.
+  const [idempotencyKey, setIdempotencyKey] = useState(null);
 
   // Load existing payments from Payment entity
   useEffect(() => {
@@ -66,6 +68,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
   useEffect(() => {
     if (!isOpen) return;
     setPhase('form');
+    setIdempotencyKey(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const presetAmount = defaultValues?.amount;
     setAmount(presetAmount ? Number(presetAmount).toFixed(2) : '');
     setDate(toDateInputValue(defaultValues?.payment_date));
@@ -113,7 +116,8 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
         payment_date: new Date(date).toISOString(),
         payment_method: method,
         reference_number: notes.split('\n')[0] || '',
-        notes
+        notes,
+        idempotency_key: idempotencyKey,
       });
       setPhase('success');
       setTimeout(() => {

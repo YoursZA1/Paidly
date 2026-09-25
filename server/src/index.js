@@ -995,7 +995,7 @@ app.post("/api/payfast/subscription", requireAuthMiddleware, (req, res) => {
   });
 });
 
-/** One-time PayFast payment for invoices (public invoice view). */
+/** Legacy one-time invoice PayFast checkout — disabled (410). Customer invoices pay via the Payment Engine (Ozow). */
 app.post("/api/payfast/once", payfastOnceHandler);
 
 /**
@@ -1005,7 +1005,7 @@ app.post("/api/payfast/once", payfastOnceHandler);
 app.post("/payfast/subscription/itn", handlePayfastSubscriptionItn);
 app.post("/api/payfast/subscription/itn", handlePayfastSubscriptionItn);
 
-/** Unified PayFast ITN: invoice payments (custom_str1 invoice:…) or subscriptions. */
+/** PayFast ITN — Paidly SaaS subscriptions only. Legacy invoice ITNs (custom_str1 invoice:…) are logged and ignored. */
 app.post("/api/payfast/itn", handlePayfastSubscriptionItn);
 app.post("/api/payfast/webhook", handlePayfastSubscriptionItn);
 

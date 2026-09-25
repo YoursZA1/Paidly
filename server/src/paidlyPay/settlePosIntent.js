@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { attachPosSaleToIntent } from "../payments/paymentEngine.js";
+import { attachPosSaleToIntent, findSaleForIntent } from "../payments/paymentEngine.js";
 import { commitNativePosInventory } from "../pos/posInventorySync.js";
 import { makeReceiptNumber, roundMoney } from "../pos/posCheckoutMath.js";
 import { withSaleLineIds } from "../pos/posReturnMath.js";
@@ -39,17 +39,19 @@ export async function settlePosIntent(intent, { actorType = POS_AUDIT_ACTOR.WEBH
   }
 
   const externalId = snapshot.idempotency_key || `intent:${intent.id}`;
-  if (snapshot.connection_id) {
-    const { data: existing } = await supabaseAdmin
+  // One payment, one sale — replays and concurrent notifies reuse the sale already recorded.
+  let existing = await findSaleForIntent(intent.org_id, intent.id);
+  if (!existing?.id && snapshot.connection_id) {
+    ({ data: existing } = await supabaseAdmin
       .from("pos_sales_events")
       .select("*")
       .eq("connection_id", snapshot.connection_id)
       .eq("external_id", externalId)
-      .maybeSingle();
-    if (existing?.id) {
-      await attachPosSaleToIntent(intent.id, existing.id).catch(() => null);
-      return { settled: true, duplicate: true, saleId: existing.id, sale: existing };
-    }
+      .maybeSingle());
+  }
+  if (existing?.id) {
+    await attachPosSaleToIntent(intent.id, existing.id).catch(() => null);
+    return { settled: true, duplicate: true, saleId: existing.id, sale: existing };
   }
 
   const occurredAt = new Date().toISOString();
@@ -114,13 +116,16 @@ export async function settlePosIntent(intent, { actorType = POS_AUDIT_ACTOR.WEBH
   }
 
   if (insertError) {
-    if (insertError.code === "23505" && snapshot.connection_id) {
-      const { data: raced } = await supabaseAdmin
-        .from("pos_sales_events")
-        .select("*")
-        .eq("connection_id", snapshot.connection_id)
-        .eq("external_id", externalId)
-        .maybeSingle();
+    if (insertError.code === "23505") {
+      let raced = await findSaleForIntent(intent.org_id, intent.id);
+      if (!raced?.id && snapshot.connection_id) {
+        ({ data: raced } = await supabaseAdmin
+          .from("pos_sales_events")
+          .select("*")
+          .eq("connection_id", snapshot.connection_id)
+          .eq("external_id", externalId)
+          .maybeSingle());
+      }
       if (raced?.id) {
         await attachPosSaleToIntent(intent.id, raced.id).catch(() => null);
         return { settled: true, duplicate: true, saleId: raced.id, sale: raced };

@@ -30,6 +30,7 @@ import {
   createCustomerPaymentIntent,
   findActivePosCheckoutIntent,
   findPaymentIntentByIdempotency,
+  findSaleForIntent,
   mapPaymentIntentSchemaError,
   settleTillCashIntent,
 } from "../payments/paymentEngine.js";
@@ -609,13 +610,19 @@ export async function handleNativePosCheckout(req, res, gate) {
     return jsonError(res, 422, intentMatch.error, { code: intentMatch.code });
   }
 
-  if (intent.status === "paid" && intent.pos_sale_event_id) {
-    const { data: paidSale } = await supabaseAdmin
-      .from("pos_sales_events")
-      .select("*")
-      .eq("id", intent.pos_sale_event_id)
-      .eq("org_id", gate.membership.orgId)
-      .maybeSingle();
+  if (intent.status === "paid") {
+    // One payment, one sale: a paid intent that already settled a sale (linked, or found by its
+    // payment_intent_id when the link was lost) returns that sale instead of recording another.
+    let paidSale = null;
+    if (intent.pos_sale_event_id) {
+      ({ data: paidSale } = await supabaseAdmin
+        .from("pos_sales_events")
+        .select("*")
+        .eq("id", intent.pos_sale_event_id)
+        .eq("org_id", gate.membership.orgId)
+        .maybeSingle());
+    }
+    if (!paidSale?.id) paidSale = await findSaleForIntent(gate.membership.orgId, intent.id);
     if (paidSale?.id) {
       return settleRecordedSaleInventory(res, {
         orgId: gate.membership.orgId,
@@ -822,12 +829,13 @@ export async function handleNativePosCheckout(req, res, gate) {
 
   if (insertError) {
     if (insertError.code === "23505") {
-      const { data: raced } = await supabaseAdmin
+      let { data: raced } = await supabaseAdmin
         .from("pos_sales_events")
         .select("*")
         .eq("connection_id", connection.id)
         .eq("external_id", idempotencyKey)
         .maybeSingle();
+      if (!raced?.id) raced = await findSaleForIntent(gate.membership.orgId, intent.id);
       if (raced?.id) {
         return settleRecordedSaleInventory(res, {
           orgId: gate.membership.orgId,

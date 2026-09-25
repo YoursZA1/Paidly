@@ -199,6 +199,8 @@ export async function handlePaymentIntentAction(req, res) {
       intentId: intent.id,
       nextStatus,
       externalId: `mock:${intent.id}:${nextStatus}`,
+      // Mock stands in for a card terminal only; it never pays an Ozow or cash intent.
+      provider: "card_terminal",
       metadata: {
         mock: true,
         webhook_verified: true,
@@ -220,7 +222,11 @@ export async function handlePaymentIntentAction(req, res) {
         : null,
     });
   } catch (err) {
-    if (err?.code === "INVALID_INTENT_TRANSITION" || err?.code === "CARD_RAIL_UNAVAILABLE") {
+    if (
+      err?.code === "INVALID_INTENT_TRANSITION" ||
+      err?.code === "CARD_RAIL_UNAVAILABLE" ||
+      err?.code === "PROVIDER_MISMATCH"
+    ) {
       return jsonError(res, 409, err.message, { code: err.code });
     }
     return schemaError(res, err);
@@ -297,7 +303,11 @@ export async function handleCustomerPaymentWebhook(req, res) {
       throw applyErr;
     }
   } catch (err) {
-    if (err?.code === "PAYFAST_NOT_CUSTOMER_RAIL" || err?.code === "UNKNOWN_PAYMENT_PROVIDER") {
+    if (
+      err?.code === "PAYFAST_NOT_CUSTOMER_RAIL" ||
+      err?.code === "UNKNOWN_PAYMENT_PROVIDER" ||
+      err?.code === "CASH_NOT_ONLINE_PROVIDER"
+    ) {
       return jsonError(res, err.code === "UNKNOWN_PAYMENT_PROVIDER" ? 404 : 400, err.message, { code: err.code });
     }
     return jsonError(res, 500, err?.message || "Webhook failed");

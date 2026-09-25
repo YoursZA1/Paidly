@@ -34,7 +34,6 @@ MVP bootstrap (server env only — never `VITE_` / `NEXT_PUBLIC_`):
 | `PAIDLY_PAY_ORIGINS` | Comma-separated allowed CORS origins (never `*`) |
 | `PAIDLY_PAY_APP_URL` | Optional public origin of the Pay app. If unset, POS opens same-origin `/pay?payment_intent_id=` |
 | `PAYMENT_PROVIDER_MODE` | `live` (default in production) or `mock` |
-| `ALLOW_MOCK_PAYMENTS` | Must be `1` to use mock in `NODE_ENV=production` |
 
 Company id on the query string is ignored unless it matches the authenticated key’s company.
 
@@ -199,7 +198,7 @@ Same HMAC. Body may include `transaction_id` / `company_id` / `amount`, but the 
 
 ## Mock provider
 
-Set `PAYMENT_PROVIDER_MODE=mock` in development. The terminal still cannot mark a sale paid. Simulate outcomes with signed webhooks (`payment.succeeded`, `payment.failed`, `payment.expired`, `payment.cancelled`, `payment.refunded`). Production stays `live` unless `ALLOW_MOCK_PAYMENTS=1` is set on the server.
+Set `PAYMENT_PROVIDER_MODE=mock` in development. The terminal still cannot mark a sale paid. Simulate outcomes with signed webhooks (`payment.succeeded`, `payment.failed`, `payment.expired`, `payment.cancelled`, `payment.refunded`). Production is always `live`: mock is ignored there (no override), and mock outcomes only move card-terminal intents.
 
 ## Error format
 

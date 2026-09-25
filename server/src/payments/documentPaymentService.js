@@ -427,6 +427,11 @@ export async function recordOfflineDocumentPayment({
     },
   });
 
+  // A reused idempotency key must describe the same receipt; never settle an earlier attempt's amount.
+  if (money(intent.amount) !== value || intent.document_id !== invoice.id || intent.provider !== CUSTOMER_PAYMENT_PROVIDERS.CASH) {
+    throw httpError(409, "IDEMPOTENCY_KEY_REUSED", "This payment was already started with different details. Reopen the form and try again.");
+  }
+
   const applied = await applyVerifiedIntentStatus(intent, "paid", {
     source: "offline_receipt",
     metadata: { settlement: "approved", approved_by: approvedBy, approved_at: new Date().toISOString() },

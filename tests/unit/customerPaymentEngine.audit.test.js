@@ -355,7 +355,7 @@ describe("POS payments", () => {
     expect(unpaid.pos_sale_event_id).toBeUndefined();
   });
 
-  it("TEST 16 — mock outcomes are refused unless PAYMENT_PROVIDER_MODE=mock (and never in production without ALLOW_MOCK_PAYMENTS)", async () => {
+  it("TEST 16 — mock outcomes are refused unless PAYMENT_PROVIDER_MODE=mock (and never in production, with no override)", async () => {
     const intent = posIntent({ provider: "card_terminal", status: "requires_action" });
     const res = mockRes();
     await handlePaymentIntentAction({ params: { id: intent.id }, body: { action: "mock", outcome: "succeeded" }, headers: {} }, res);

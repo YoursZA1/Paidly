@@ -28,12 +28,13 @@ describe("Paidly Pay HMAC and contract", () => {
     expect(publicStatusFromIntent({ status: "pending" })).toBe("created");
   });
 
-  it("does not enable mock payments in production without an explicit override", () => {
+  it("never enables mock payments in production — there is no override", () => {
     expect(isMockPaymentsEnabled({ PAYMENT_PROVIDER_MODE: "mock", NODE_ENV: "test" })).toBe(true);
     expect(isMockPaymentsEnabled({ PAYMENT_PROVIDER_MODE: "mock", NODE_ENV: "production" })).toBe(false);
     expect(
       isMockPaymentsEnabled({ PAYMENT_PROVIDER_MODE: "mock", NODE_ENV: "production", ALLOW_MOCK_PAYMENTS: "1" })
-    ).toBe(true);
+    ).toBe(false);
+    expect(isMockPaymentsEnabled({ PAYMENT_PROVIDER_MODE: "mock", VERCEL_ENV: "production" })).toBe(false);
     expect(isMockPaymentsEnabled({ PAYMENT_PROVIDER_MODE: "live", NODE_ENV: "test" })).toBe(false);
   });
 

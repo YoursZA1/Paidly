@@ -64,17 +64,6 @@ export const payfastSubscriptionBodySchema = z.object({
   subscriptionNotifyBuyer: z.union([z.boolean(), z.string(), z.null()]).optional(),
 });
 
-/** POST /api/payfast/once */
-export const payfastOnceBodySchema = z.object({
-  invoiceId: z.string().uuid(),
-  amount: z.union([z.number(), z.string()]),
-  currency: z.string().optional(),
-  clientName: z.union([z.string(), z.null()]).optional(),
-  clientEmail: apiEmailSchema,
-  returnUrl: z.union([z.string(), z.null()]).optional(),
-  cancelUrl: z.union([z.string(), z.null()]).optional(),
-});
-
 /** POST /api/admin/roles */
 export const adminRolesBodySchema = z.object({
   userId: z.string().uuid(),

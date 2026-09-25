@@ -36,6 +36,7 @@ export {
   markPaymentIntentExpired,
   settleTillCashIntent,
   attachPosSaleToIntent,
+  findSaleForIntent,
   mapPaymentIntentSchemaError,
   publicPaymentIntentView as toPublicPaymentIntent,
 } from "./paymentIntentService.js";

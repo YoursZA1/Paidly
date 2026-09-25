@@ -15,6 +15,10 @@ const MIGRATION = path.resolve(
   __dirname,
   "../../supabase/migrations/20260925090000_customer_payment_integrity_guards.sql"
 );
+const FOLLOWUP = path.resolve(
+  __dirname,
+  "../../supabase/migrations/20260925130000_customer_payment_engine_followups.sql"
+);
 
 // The pre-existing shape: payments writable by org members (the gap), plus the intents CHECK.
 const STUB = `
@@ -33,10 +37,13 @@ create table public.payment_intents (id uuid primary key default gen_random_uuid
   constraint payment_intents_pos_provider_check check (
     (source_kind = 'pos' and provider in ('cash', 'ozow', 'card_terminal'))
     or (source_kind = 'document' and provider in ('ozow'))));
+create table public.pos_sales_events (id uuid primary key default gen_random_uuid(), org_id uuid,
+  payment_intent_id uuid, sale_kind text not null default 'sale');
 alter table public.payments enable row level security;
 create policy "org members write payments" on public.payments for all using (true) with check (true);
 create policy "org members select payments" on public.payments for select using (true);
 grant all on public.invoices, public.payments, public.payment_intents to authenticated, service_role;
+grant all on public.pos_sales_events to service_role;
 alter table public.payments force row level security;
 `;
 
@@ -80,10 +87,13 @@ beforeAll(async () => {
   await db.exec(STUB);
   await db.exec(readFileSync(MIGRATION, "utf8"));
   await db.exec(readFileSync(MIGRATION, "utf8")); // idempotent
+  await db.exec(readFileSync(FOLLOWUP, "utf8"));
+  await db.exec(readFileSync(FOLLOWUP, "utf8")); // idempotent
 }, 60_000);
 
 beforeEach(async () => {
   await q(`delete from public.payments`);
+  await q(`delete from public.pos_sales_events`);
   await q(`delete from public.invoices`);
   await q(`insert into public.invoices values ($1, $2, 'sent', 1000)`, [INVOICE, ORG]);
 });
@@ -158,4 +168,78 @@ describe("payment_intents rails", () => {
     expect(await intent("document", "payfast")).toBe("23514");
     expect(await intent("pos", "payfast")).toBe("23514");
   });
+});
+
+describe("follow-ups (20260925130000): no paid invoice without money, one settlement per intent", () => {
+  const setTotal = (who, total) => as(who, `update public.invoices set total_amount = $1 where id = $2`, [total, INVOICE]);
+  const invoiceRow = async () => (await q(`select status, total_amount::float as total from public.invoices`))[0];
+
+  it("closes the two-step bypass: zero the total + mark paid, then restore the total", async () => {
+    // Step 1 alone is harmless (a R0 invoice owes nothing)…
+    expect(await as("user", `update public.invoices set status = 'paid', total_amount = 0 where id = $1`, [INVOICE])).toBe("ok");
+    // …but step 2 must not turn it into a R1000 invoice "paid" with nothing received.
+    expect(await setTotal("user", 1000)).toBe("INVOICE_STATUS_NEEDS_PAYMENT");
+    expect(await invoiceRow()).toEqual({ status: "paid", total: 0 });
+  });
+
+  it("a paid / partially paid invoice's total cannot move past the payments behind it", async () => {
+    await insertPayment("engine", 400);
+    expect(await setStatus("user", "partially_paid")).toBe("ok");
+    expect(await setTotal("user", 400)).toBe("INVOICE_STATUS_NEEDS_PAYMENT"); // would be fully paid: status must follow
+    expect(await setTotal("user", 1200)).toBe("ok"); // still partially paid (400 of 1200)
+    await insertPayment("engine", 800);
+    expect(await setStatus("user", "paid")).toBe("ok");
+    expect(await setTotal("user", 1500)).toBe("INVOICE_STATUS_NEEDS_PAYMENT");
+    expect(await setTotal("user", 1200)).toBe("ok"); // unchanged value
+    expect(await as("user", `update public.invoices set status = 'sent', total_amount = 5000 where id = $1`, [INVOICE])).toBe("ok");
+  });
+
+  it("does not gate unpaid invoices or the Engine", async () => {
+    expect(await setTotal("user", 50)).toBe("ok");
+    await as("engine", `update public.invoices set status = 'paid', total_amount = 0 where id = $1`, [INVOICE]);
+    expect(await setTotal("engine", 999)).toBe("ok");
+  });
+
+  it("payments: one row per intent reference on every rail (cash / EFT too, not only ozow)", async () => {
+    const intentId = "40000000-0000-4000-8000-000000000001";
+    const settle = (method, reference = intentId) =>
+      as("engine", `insert into public.payments (org_id, invoice_id, amount, status, paid_at, method, reference) values ($1, $2, 100, 'paid', now(), $3, $4)`, [
+        ORG,
+        INVOICE,
+        method,
+        reference,
+      ]);
+    expect(await settle("bank_transfer")).toBe("ok");
+    expect(await settle("bank_transfer")).toBe("23505"); // unique_violation
+    expect(await settle("cash", intentId.toUpperCase())).toBe("23505");
+    // Free-text references from before the lockdown stay non-unique.
+    expect(await settle("cash", "EFT")).toBe("ok");
+    expect(await settle("cash", "EFT")).toBe("ok");
+  });
+
+  it("pos_sales_events: one sale per payment intent; returns and intent-less rows are not constrained", async () => {
+    const intentId = "50000000-0000-4000-8000-000000000001";
+    const sale = (kind, pi = intentId) =>
+      as("engine", `insert into public.pos_sales_events (org_id, payment_intent_id, sale_kind) values ($1, $2, $3)`, [ORG, pi, kind]);
+    expect(await sale("sale")).toBe("ok");
+    expect(await sale("sale")).toBe("23505");
+    expect(await sale("return")).toBe("ok");
+    expect(await sale("sale", null)).toBe("ok");
+    expect(await sale("sale", null)).toBe("ok");
+  });
+
+  it("existing duplicates: the index is skipped with a warning, the rest of the migration still applies", async () => {
+    const fresh = new PGlite();
+    await fresh.exec(STUB);
+    await fresh.exec(readFileSync(MIGRATION, "utf8"));
+    const dup = "60000000-0000-4000-8000-000000000001";
+    await fresh.query(`insert into public.payments (org_id, amount, reference, method) values ($1, 1, $2, 'cash'), ($1, 1, $2, 'cash')`, [ORG, dup]);
+    await fresh.query(`insert into public.pos_sales_events (org_id, payment_intent_id) values ($1, $2), ($1, $2)`, [ORG, dup]);
+    await fresh.exec(readFileSync(FOLLOWUP, "utf8"));
+    const idx = await fresh.query(`select indexname from pg_indexes where indexname in ('payments_engine_intent_reference_uniq', 'pos_sales_events_one_sale_per_intent')`);
+    expect(idx.rows).toEqual([]);
+    const trg = await fresh.query(`select tgname from pg_trigger where tgname = 'paidly_invoice_paid_status_guard'`);
+    expect(trg.rows).toHaveLength(1);
+    await fresh.close();
+  }, 60_000);
 });
