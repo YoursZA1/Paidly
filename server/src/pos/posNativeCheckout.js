@@ -223,8 +223,6 @@ export function salePublicView(row) {
   };
 }
 
-export { salePublicView };
-
 async function persistSaleInventory(saleEventId, inventory, extra = {}) {
   const { data, error } = await supabaseAdmin
     .from("pos_sales_events")

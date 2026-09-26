@@ -13,10 +13,14 @@ export default async function renderOgImageHandler(req, res) {
     const client = searchParams.get("client") || "Client";
     const total = searchParams.get("total") || "R 0.00";
 
+    // Plain createElement, not JSX: Vercel loads this file as native ESM, and JSX there is a
+    // SyntaxError that takes down every route in api/public-share.js.
+    const h = React.createElement;
     const imageResponse = new ImageResponse(
-      (
-        <div
-          style={{
+      h(
+        "div",
+        {
+          style: {
             height: "100%",
             width: "100%",
             display: "flex",
@@ -27,50 +31,40 @@ export default async function renderOgImageHandler(req, res) {
             padding: 40,
             border: "20px solid #f97316",
             fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          }}
-        >
-          <div
-            style={{
+          },
+        },
+        h(
+          "div",
+          {
+            style: {
               fontSize: 36,
               fontWeight: 700,
               color: "#0f172a",
               letterSpacing: "0.05em",
               marginBottom: 16,
-            }}
-          >
-            PAIDLY INVOICE
-          </div>
-          <div
-            style={{
+            },
+          },
+          "PAIDLY INVOICE"
+        ),
+        h(
+          "div",
+          {
+            style: {
               fontSize: 72,
               fontWeight: 800,
               color: "#f97316",
               marginTop: 8,
               letterSpacing: "-0.02em",
-            }}
-          >
-            {total}
-          </div>
-          <div
-            style={{
-              fontSize: 28,
-              color: "#64748b",
-              marginTop: 16,
-            }}
-          >
-            {num}
-          </div>
-          <div
-            style={{
-              fontSize: 32,
-              color: "#0f172a",
-              marginTop: 40,
-              fontWeight: 600,
-            }}
-          >
-            Billed to: {client}
-          </div>
-        </div>
+            },
+          },
+          total
+        ),
+        h("div", { style: { fontSize: 28, color: "#64748b", marginTop: 16 } }, num),
+        h(
+          "div",
+          { style: { fontSize: 32, color: "#0f172a", marginTop: 40, fontWeight: 600 } },
+          `Billed to: ${client}`
+        )
       ),
       {
         width: 1200,
