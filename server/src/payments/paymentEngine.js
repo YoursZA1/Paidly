@@ -43,4 +43,11 @@ export {
 
 export { applyVerifiedProviderEvent, settleDocumentIntent } from "./documentPaymentService.js";
 
-export { getCustomerPaymentProvider, listCustomerPaymentProviders } from "./paymentProviders.js";
+export {
+  getCustomerPaymentProvider,
+  listCustomerPaymentProviders,
+  resolveOnlineProvider,
+  resolvePosTenderProvider,
+  describeOnlineProvider,
+  onlineProviderIdsForSource,
+} from "./paymentProviders.js";

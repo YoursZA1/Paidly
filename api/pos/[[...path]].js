@@ -45,6 +45,7 @@ import {
   handlePosAccessEnd,
 } from "../../server/src/pos/posInviteActivate.js";
 import { handlePosPinGet, handlePosPinSet, handlePosPinVerify } from "../../server/src/pos/posPinRoutes.js";
+import { dispatchRestaurantRoute, isRestaurantRoute } from "../../server/src/pos/restaurant/posRestaurantDispatch.js";
 
 /**
  * Vercel: one extra segment reaches this file (`/api/pos/registers`).
@@ -137,6 +138,10 @@ export default async function handler(req, res) {
     if (req.method === "POST") return handlePosPinSet(req, res);
     res.setHeader("Allow", "GET, POST, OPTIONS");
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (isRestaurantRoute(resolved.route)) {
+    return dispatchRestaurantRoute(resolved.route, req, res);
   }
 
   if (resolved.route === "sales") {

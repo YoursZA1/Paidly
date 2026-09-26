@@ -50,8 +50,8 @@ function PosBusinessTypeLock({ posOnlyStaff = false }) {
         <p className="font-display text-xl font-semibold">POS is optional</p>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
           {posOnlyStaff
-            ? "This company is not set up for a till. Ask a manager to switch the business type to Retail or Mixed."
-            : "Service businesses use invoices, quotes, and clients. Switch to Retail or Mixed to open a till."}
+            ? "This company is not set up for a till. Ask a manager to switch the business type to Retail, Mixed or Restaurant."
+            : "Service businesses use invoices, quotes, and clients. Switch to Retail, Mixed or Restaurant to open a till."}
         </p>
       </div>
       {posOnlyStaff ? null : (

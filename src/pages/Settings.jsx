@@ -49,6 +49,7 @@ import SubscriptionSettings from "@/components/subscription/SubscriptionSettings
 import EmailTemplatesSettings from "@/components/settings/EmailTemplatesSettings";
 import PosIntegrationSettings from "@/components/settings/PosIntegrationSettings";
 import PosRegistersSettings from "@/components/settings/PosRegistersSettings";
+import RestaurantSetupSettings from "@/components/settings/RestaurantSetupSettings";
 import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
 import InstallPaidlyCard from "@/components/pwa/InstallPaidlyCard";
 import CompanyTeamMembersPanel from "@/components/company/CompanyTeamMembersPanel";
@@ -2107,7 +2108,7 @@ function PosIntegrationsTab() {
                 description="The till is optional. Service businesses stay on invoices, quotes, and clients."
             >
                 <p className="text-sm text-muted-foreground mb-4">
-                    Choose Retail or Mixed under Company Profile if you sell in person. You can turn POS off later by switching back to Service.
+                    Choose Retail, Mixed or Restaurant under Company Profile if you sell in person. You can turn POS off later by switching back to Service.
                 </p>
                 <Button asChild>
                     <Link to={`${createPageUrl("Settings")}?tab=profile`}>Choose business type</Link>
@@ -2122,6 +2123,12 @@ function PosIntegrationsTab() {
                 description="Each register is a till on a brand. Opening balance is the cash float — not a sale and not an invoice."
             >
                 <PosRegistersSettings />
+            </SettingsCard>
+            <SettingsCard
+                title="Restaurant setup"
+                description="Floors and tables for dine-in. When tables exist, the till opens on the floor plan: table → order → kitchen → bill."
+            >
+                <RestaurantSetupSettings />
             </SettingsCard>
             <SettingsCard title="POS integrations" description="Use Paidly POS in the app, or connect Yoco/Square so external tills write the same sales and inventory.">
                 <PosIntegrationSettings />

@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { formatCurrency } from "@/components/CurrencySelector";
+import { paymentProviderLabel } from "@shared/payments/paymentProviderCatalog.js";
 
 const STATUS_LABEL = {
   pending: "Pending",
@@ -26,7 +27,7 @@ export default function InvoicePaymentHistory({ history = [], currency = "ZAR" }
             <li key={row.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
               <div className="min-w-0">
                 <p className="text-sm text-foreground">{when}</p>
-                <p className="text-xs capitalize text-muted-foreground">{row.provider || "ozow"}</p>
+                <p className="text-xs text-muted-foreground">{paymentProviderLabel(row.provider)}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium tabular-nums text-foreground">

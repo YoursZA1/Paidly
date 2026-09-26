@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { createPageUrl } from "@/utils";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { FilePlus2, LayoutDashboard, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import DoneState from "@/components/shared/DoneState";
+import { longDate } from "@/components/shared/doneStateLabels";
 import {
   getPendingSubscriptionId,
   pollUntilActive,
@@ -14,8 +16,8 @@ import {
  * PayFast return_url (/return, /success).
  *
  * Shows "Waiting for payment confirmation…", polls GET /api/subscriptions/status,
- * and navigates to Dashboard only when the backend reports currentStatus === "active"
- * (or accessGranted). Never sets subscription.status = "active" on the client.
+ * and shows the persistent "Subscription active" Done State only when the backend reports
+ * currentStatus === "active" (or accessGranted). Never sets subscription.status = "active" on the client.
  */
 export default function PayfastReturn() {
   const navigate = useNavigate();
@@ -25,6 +27,7 @@ export default function PayfastReturn() {
   const [phase, setPhase] = useState("waiting"); // waiting | active | failed | timeout
   const [statusLabel, setStatusLabel] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [activeSubscription, setActiveSubscription] = useState(null);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -59,6 +62,7 @@ export default function PayfastReturn() {
         const granted = Boolean(result?.accessGranted) || status === "active" || status === "trialing";
 
         if (granted) {
+          setActiveSubscription(result);
           setPhase("active");
           try {
             await refreshUser();
@@ -66,7 +70,6 @@ export default function PayfastReturn() {
             /* display uses backend status; profile refresh is best-effort */
           }
           invalidateProfileCaches();
-          navigate(createPageUrl("Dashboard"), { replace: true });
           return;
         }
 
@@ -91,12 +94,28 @@ export default function PayfastReturn() {
   }, [navigate, queryClient, refreshUser]);
 
   if (phase === "active") {
+    const planName = activeSubscription?.currentPlanName || activeSubscription?.currentPlan || null;
+    const trialing = String(activeSubscription?.currentStatus || "").toLowerCase() === "trialing";
+    const nextBilling = longDate(activeSubscription?.nextBillingDate || activeSubscription?.renewDate);
     return (
       <div className="min-h-[60vh] flex items-center justify-center px-4 py-16">
-        <div className="max-w-md w-full text-center space-y-4">
-          <CheckCircle2 className="mx-auto h-14 w-14 text-orange-500" aria-hidden />
-          <h1 className="text-2xl font-bold">Subscription confirmed</h1>
-          <p className="text-sm text-muted-foreground">Taking you to your dashboard…</p>
+        <div className="max-w-lg w-full">
+          <DoneState
+            title={planName ? `You're on Paidly ${planName}` : "Subscription active"}
+            reference={{
+              number: "Subscription",
+              counterparty: planName ? `Paidly ${planName}` : null,
+              meta: nextBilling ? `${trialing ? "Trial ends" : "Next billing date"} ${nextBilling}` : null,
+            }}
+            message="PayFast confirmed your payment. Everything in your plan is unlocked now."
+            actions={[
+              { label: "Go to dashboard", icon: LayoutDashboard, to: createPageUrl("Dashboard") },
+              { label: "Create an invoice", icon: FilePlus2, to: createPageUrl("CreateInvoice"), variant: "outline" },
+              { label: "Billing", to: createPageUrl("BillingAndInvoices"), variant: "ghost" },
+            ]}
+            status={{ label: "Subscription status", value: trialing ? "Trial active" : "Active", tone: "success" }}
+            followUp={nextBilling ? `PayFast charges the same card automatically on ${nextBilling}.` : null}
+          />
         </div>
       </div>
     );

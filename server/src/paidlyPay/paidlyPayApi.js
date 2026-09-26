@@ -509,7 +509,7 @@ async function handleSimulatePaymentIntent(req, res, requestId, auth, id) {
     intentId: intent.id,
     nextStatus,
     externalId: eventKey,
-    // Mock stands in for a card terminal only; it never pays an Ozow or cash intent.
+    // Mock stands in for a card terminal only; it never pays an online-provider or cash intent.
     provider: "card_terminal",
     metadata: {
       mock: true,

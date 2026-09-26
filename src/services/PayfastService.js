@@ -19,7 +19,7 @@ import { formatHttpStatusMessage } from "@/utils/apiErrorText";
  * `POST /api/payfast/subscription` returns 410 and must not be used.
  *
  * PayFast is Paidly's own SaaS billing only. Customer invoice / POS money goes through the Payment
- * Engine (POST /api/payment-intents/document-pay → Ozow); the old once-off invoice checkout
+ * Engine (POST /api/payment-intents/document-pay → configured payment provider); the old once-off invoice checkout
  * (`/api/payfast/once`) returns 410 and its client helper was removed.
  */
 const buildReturnUrl = (path) => {

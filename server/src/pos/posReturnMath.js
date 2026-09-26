@@ -33,7 +33,7 @@ export function isCountableReturnEvent(row) {
 
 /**
  * Cash leaves the drawer now. Card / digital restock goods but do not call
- * Ozow or a card terminal — that rail is pending_provider until a later
+ * the online provider or a card terminal — that rail is pending_provider until a later
  * payment_intents row with refund_of_intent_id exists (refund_rail = provider).
  *
  * refund_as_cash: manager can take cash from the drawer for a card/digital sale.

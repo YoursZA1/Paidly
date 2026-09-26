@@ -13,11 +13,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DollarSign, Calendar, CreditCard, Save, AlertCircle, Building2, Banknote, Smartphone, CheckCircle } from 'lucide-react';
+import { DollarSign, Calendar, CreditCard, Save, AlertCircle, Building2, Banknote, Smartphone, Download, Eye, Plus } from 'lucide-react';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { Payment } from '@/api/entities';
+import DoneState from '@/components/shared/DoneState';
+import { longDate, paymentMethodLabel, paymentMilestoneCelebration } from '@/components/shared/doneStateLabels';
+import { invoiceOutcome } from '@shared/ux/doneStates.js';
+import { createPageUrl, createViewDocumentUrl } from '@/utils';
 
-export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, defaultValues = null }) {
+/**
+ * Record money received offline. Completion is a persistent Done State (Paidly Done Screen standard):
+ * what was received, what is still outstanding, and the next useful actions — it does not auto-close.
+ */
+export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, defaultValues = null, showViewInvoice = true }) {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState('');
@@ -27,6 +35,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [phase, setPhase] = useState('form'); // 'form' | 'recording' | 'success'
+  const [outcome, setOutcome] = useState(null);
   // One key per opening: a retry after a lost response replays instead of recording the money twice.
   const [idempotencyKey, setIdempotencyKey] = useState(null);
 
@@ -69,6 +78,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
     if (!isOpen) return;
     setPhase('form');
     setIdempotencyKey(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    setOutcome(null);
     const presetAmount = defaultValues?.amount;
     setAmount(presetAmount ? Number(presetAmount).toFixed(2) : '');
     setDate(toDateInputValue(defaultValues?.payment_date));
@@ -111,7 +121,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
     setPhase('recording');
     setError('');
     try {
-      await onSave({
+      const result = await onSave({
         amount: parsedAmount,
         payment_date: new Date(date).toISOString(),
         payment_method: method,
@@ -119,14 +129,16 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
         notes,
         idempotency_key: idempotencyKey,
       });
+      const amountDue = result?.amountDue ?? Math.max(0, remainingBalance - parsedAmount);
+      setOutcome({
+        amount: parsedAmount,
+        amountDue,
+        isFullyPaid: result?.isFullyPaid ?? amountDue <= 0,
+        paidAt: date,
+        method,
+        milestone: result?.milestone || null,
+      });
       setPhase('success');
-      setTimeout(() => {
-        setAmount('');
-        setDate(new Date().toISOString().slice(0, 10));
-        setMethod('');
-        setNotes('');
-        onClose();
-      }, 1500);
     } catch (err) {
       setError(err?.message || 'Failed to record payment. Please try again.');
       setPhase('form');
@@ -135,10 +147,44 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
 
   const showForm = phase === 'form';
   const showRecording = phase === 'recording';
-  const showSuccess = phase === 'success';
+  const showSuccess = phase === 'success' && outcome;
+
+  const recordAnother = () => {
+    // A fresh key: this is a new payment, not a retry of the last one.
+    setIdempotencyKey(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    setExistingPayments((prev) => [...prev, { amount: outcome?.amount || 0 }]);
+    setAmount('');
+    setNotes('');
+    setOutcome(null);
+    setPhase('form');
+  };
+
+  const currency = invoice?.currency || 'USD';
+  const doneOutcome = outcome
+    ? invoiceOutcome({
+        status: outcome.isFullyPaid ? 'paid' : 'partial_paid',
+        total: invoiceTotal,
+        amountDue: outcome.amountDue,
+        dueDate: invoice?.delivery_date,
+      })
+    : null;
+  const invoiceHref = invoice?.id ? createViewDocumentUrl('invoice', invoice.id) : null;
+  const doneActions = !outcome
+    ? []
+    : outcome.isFullyPaid
+      ? [
+          { label: 'Download PDF', icon: Download, to: createPageUrl(`InvoicePDF?id=${invoice.id}&download=true`) },
+          showViewInvoice && invoiceHref ? { label: 'View invoice', icon: Eye, to: invoiceHref, variant: 'outline' } : null,
+          { label: 'Done', onClick: onClose, variant: showViewInvoice ? 'ghost' : 'outline' },
+        ].filter(Boolean)
+      : [
+          { label: 'Done', onClick: onClose },
+          { label: 'Record another payment', icon: Plus, onClick: recordAnother, variant: 'outline' },
+          showViewInvoice && invoiceHref ? { label: 'View invoice', icon: Eye, to: invoiceHref, variant: 'ghost' } : null,
+        ].filter(Boolean);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && phase === 'form' && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && phase !== 'recording' && onClose()}>
       <DialogContent className={showSuccess ? 'sm:max-w-md' : ''} aria-describedby={undefined}>
         <AnimatePresence mode="wait">
           {showForm && (
@@ -367,21 +413,42 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
           {showSuccess && (
             <motion.div
               key="success"
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              className="flex flex-col items-center justify-center py-12 gap-4"
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="pt-2"
             >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 25, delay: 0.1 }}
-                className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center"
-              >
-                <CheckCircle className="w-10 h-10 text-white" strokeWidth={2.5} />
-              </motion.div>
-              <p className="text-lg font-semibold text-foreground">Payment recorded</p>
-              <p className="text-sm text-muted-foreground text-center">Dashboard updated</p>
+              <DialogHeader className="sr-only">
+                <DialogTitle>{outcome.isFullyPaid ? 'Invoice paid in full' : 'Payment recorded'}</DialogTitle>
+              </DialogHeader>
+              <DoneState
+                variant="dialog"
+                title={outcome.isFullyPaid ? 'Invoice paid in full' : 'Payment recorded'}
+                reference={{
+                  number: invoice.invoice_number ? `Invoice ${invoice.invoice_number}` : null,
+                  counterparty: invoice.client_name || invoice.client?.name || null,
+                  amount: formatCurrency(outcome.amount, currency),
+                  meta: [longDate(outcome.paidAt) && `Received ${longDate(outcome.paidAt)}`, paymentMethodLabel(outcome.method)]
+                    .filter(Boolean)
+                    .join(' · '),
+                }}
+                message={`Payment of ${formatCurrency(outcome.amount, currency)} received${
+                  invoice.invoice_number ? ` for ${invoice.invoice_number}` : ''
+                }.`}
+                actions={doneActions}
+                status={{
+                  label: 'Invoice status',
+                  value: doneOutcome.statusLabel,
+                  tone: outcome.isFullyPaid ? 'success' : 'pending',
+                }}
+                pending={
+                  outcome.isFullyPaid
+                    ? 'Nothing outstanding on this invoice.'
+                    : `${formatCurrency(outcome.amountDue, currency)} is still outstanding.`
+                }
+                followUp={outcome.isFullyPaid ? null : doneOutcome.followUp}
+                {...paymentMilestoneCelebration(outcome.milestone, currency)}
+              />
             </motion.div>
           )}
         </AnimatePresence>

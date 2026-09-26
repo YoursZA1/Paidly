@@ -24,6 +24,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { INVOICE_STATUS, normalizeInvoiceStatus } from "@shared/commercial/documentStatuses.js";
 import { createPageUrl } from "@/utils";
+import { dueFollowUpLabel } from "@shared/ux/doneStates.js";
 
 function isOverdue(invoice) {
   if (!invoice?.delivery_date) return false;
@@ -93,7 +94,7 @@ export default function DocumentPaymentActionBar({
       }
       toast({
         title: "Payment could not start",
-        description: "Ozow did not return a payment link.",
+        description: "The payment provider did not return a payment link.",
         variant: "destructive",
       });
     } catch (err) {
@@ -112,9 +113,14 @@ export default function DocumentPaymentActionBar({
     setBusy("remind");
     try {
       await remindDocumentPayment(invoice.id);
+      // Toast tier (Done Screen standard): what happened + what is still pending + the next loop.
+      const due = dueFollowUpLabel(invoice?.delivery_date);
       toast({
         title: "Reminder sent",
-        description: client?.email ? `Sent to ${client.email}` : "The customer was emailed a payment link.",
+        description: [
+          client?.email ? `Sent to ${client.email} with a payment link.` : "The customer was emailed a payment link.",
+          `${formatCurrency(amountDue, currency)} still outstanding${due ? ` · ${due}` : ""}.`,
+        ].join(" "),
         variant: "success",
       });
       onRefresh?.();

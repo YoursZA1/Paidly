@@ -20,7 +20,7 @@ import ManualShareModal from '../shared/ManualShareModal';
 import QuoteEmailPreviewModal from './QuoteEmailPreviewModal';
 import { useToast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
-import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
+import DocumentSentDialog from '@/components/shared/DocumentSentDone';
 import { createTrackableQuoteLink, sendQuotePdfEmailToClient } from '@/services/InvoiceSendService';
 import { canConvertQuote, convertQuoteToInvoice, invoiceUrlFromConversion, isQuoteImmutable } from '@/services/QuoteConversionService';
 import { QUOTE_STATUS, allowedNextQuoteStatuses, canTransitionQuoteStatus } from '@shared/commercial/documentStatuses.js';
@@ -33,6 +33,7 @@ function QuoteActions({ quote, onActionSuccess }) {
     const [showEmailPreview, setShowEmailPreview] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
     const [clientData, setClientData] = useState(null);
+    const [sentTo, setSentTo] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const navigate = useNavigate();
 
@@ -80,19 +81,11 @@ function QuoteActions({ quote, onActionSuccess }) {
                     status: 'sent',
                     sent_date: new Date().toISOString(),
                 });
-                onActionSuccess();
             }
 
             setShowEmailPreview(false);
-            toast({
-                title: 'Quote sent successfully',
-                description: documentSendSuccessDescription({
-                    mode: 'quote',
-                    recipientEmail: clientData.email?.trim() || '',
-                }),
-                variant: 'success',
-                duration: 6500,
-            });
+            // "Quote sent" Done State; the list refreshes when it is closed.
+            setSentTo(clientData.email?.trim() || 'the client');
         } catch (error) {
             console.error("Failed to send email:", error);
             toast({
@@ -154,7 +147,7 @@ function QuoteActions({ quote, onActionSuccess }) {
         if (quote.status === 'draft') {
             await handleStatusChange('sent');
         }
-        setShowManualShare(false);
+        // The share modal now shows the "Quote sent" Done State; the user closes it.
     };
 
     const handleDownloadPDF = () => {
@@ -293,6 +286,8 @@ function QuoteActions({ quote, onActionSuccess }) {
                     shareUrl={shareUrl}
                     itemType="quote"
                     onMarkAsSent={handleMarkAsSentFromModal}
+                    document={quote}
+                    client={clientData || null}
                 />
             )}
 
@@ -306,6 +301,19 @@ function QuoteActions({ quote, onActionSuccess }) {
                     getTrackableLink={() => createTrackableQuoteLink(quote, 'email', clientData.email)}
                 />
             )}
+
+            <DocumentSentDialog
+                open={Boolean(sentTo)}
+                onOpenChange={(next) => {
+                    if (next) return;
+                    setSentTo('');
+                    onActionSuccess?.();
+                }}
+                docType="quote"
+                record={{ ...quote, status: quote.status === 'draft' ? 'sent' : quote.status }}
+                client={clientData}
+                recipient={sentTo}
+            />
         </>
     );
 }

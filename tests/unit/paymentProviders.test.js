@@ -17,7 +17,10 @@ describe("customer payment rails", () => {
   it("maps cash, digital, and card to distinct rails", () => {
     expect(mapPosPaymentMethodToProvider("cash")).toBe("cash");
     expect(isTillCashSettlement("cash")).toBe(true);
-    expect(mapPosPaymentMethodToProvider("digital")).toBe("ozow");
+    // Digital is not bound to a provider: it maps to whichever online provider the engine resolved.
+    expect(mapPosPaymentMethodToProvider("digital")).toBeNull();
+    expect(mapPosPaymentMethodToProvider("digital", { onlineProvider: "ozow" })).toBe("ozow");
+    expect(mapPosPaymentMethodToProvider("digital", { onlineProvider: "card_terminal" })).toBeNull();
     expect(isOnlinePaymentProvider("ozow")).toBe(true);
     expect(mapPosPaymentMethodToProvider("card")).toBe("card_terminal");
     expect(isCardTerminalSettlement("card_terminal")).toBe(true);

@@ -31,6 +31,10 @@ import {
   MoreHorizontal,
   ExternalLink,
   QrCode,
+  LayoutGrid,
+  UtensilsCrossed,
+  ChefHat,
+  ListOrdered,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -104,6 +108,15 @@ import { resolveAssignedTill } from "../../../server/src/pos/posRegisterMath.js"
 import { WALK_IN_CUSTOMER_LABEL } from "@/lib/pos/posCustomerSearch";
 import { invalidateClientDomain, invalidateRevenueReadModels } from "@/lib/queryInvalidation";
 import PosCustomerDialog from "@/components/pos/PosCustomerDialog";
+import PosFloorView from "@/components/pos/restaurant/PosFloorView";
+import PosTabPanel from "@/components/pos/restaurant/PosTabPanel";
+import PosBillDialog from "@/components/pos/restaurant/PosBillDialog";
+import PosKitchenView from "@/components/pos/restaurant/PosKitchenView";
+import PosOrdersView from "@/components/pos/restaurant/PosOrdersView";
+import PosTabActionDialog from "@/components/pos/restaurant/PosTabActionDialog";
+import { printTabBill } from "@/components/pos/restaurant/printTabBill";
+import { RESTAURANT_VIEW, usePosRestaurant } from "@/components/pos/restaurant/usePosRestaurant";
+import { ORDER_TYPE, ORDER_TYPE_OPTIONS } from "@shared/pos/restaurant.js";
 import PosReceiptSheet from "@/components/pos/PosReceiptSheet";
 import PosCashKeypad from "@/components/pos/PosCashKeypad";
 import PosConnectivityBar from "@/components/pos/PosConnectivityBar";
@@ -114,6 +127,10 @@ import {
   receiptPdfFilename,
 } from "../../../server/src/pos/posReceipt.js";
 import generatePdfFromElement, { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
+
+/** In-flight digital checkout, restored when the provider redirects back to the till. */
+const POS_DIGITAL_CHECKOUT_KEY = "paidly_pos_digital_checkout";
+const LEGACY_POS_DIGITAL_CHECKOUT_KEY = "paidly_pos_ozow_checkout";
 
 function roundMoney(value) {
   const n = Number(value);
@@ -336,7 +353,7 @@ function CartLineList({ cart, currency, onQty }) {
 export default function PosTerminal({ requestedTillId = null } = {}) {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { user, profile, logout } = useAuth();
   const { hasPermission, jobFunction, companyRole, isOrgOwner, ctx: companyCtx } = useCompanyContext();
@@ -376,6 +393,10 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   const [cashOpen, setCashOpen] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
   const [cardRail, setCardRail] = useState(null);
+  // Online provider the Payment Engine will use for EFT / Digital. undefined = not reported yet, null = none connected.
+  const [digitalProvider, setDigitalProvider] = useState(undefined);
+  const digitalAvailable = digitalProvider !== null;
+  const digitalProviderLabel = digitalProvider?.label || "your connected payment provider";
   const [cardWait, setCardWait] = useState(null);
   const [digitalOpen, setDigitalOpen] = useState(false);
   const [payMethodOpen, setPayMethodOpen] = useState(false);
@@ -416,6 +437,23 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   const [shiftPinDraft, setShiftPinDraft] = useState("");
   const [closingDraft, setClosingDraft] = useState("");
   const [shiftBusy, setShiftBusy] = useState(false);
+  // Restaurant mode: floor → table → order → kitchen → pay. The cart is reused as the tab's NEW ITEMS.
+  const restaurant = usePosRestaurant({
+    businessType: companyCtx?.businessType,
+    registerId: activeRegister?.id || null,
+    cashierName,
+    cart,
+    setCart,
+    toast,
+    searchParams,
+    setSearchParams,
+  });
+  const restaurantMode = restaurant.enabled && restaurant.orderType !== ORDER_TYPE.COUNTER;
+  const [billOpen, setBillOpen] = useState(false);
+  const [billMode, setBillMode] = useState("full");
+  const [tabDialog, setTabDialog] = useState(null);
+  const setLineNote = (productId, note) =>
+    setCart((prev) => prev.map((line) => (line.product_id === productId ? { ...line, note: note.slice(0, 200) } : line)));
   const registerBrand = useMemo(
     () => brands.find((row) => row.id === activeRegister?.company_id) || null,
     [brands, activeRegister?.company_id]
@@ -432,6 +470,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       const rows = Array.isArray(catalog?.products) ? catalog.products : Array.isArray(catalog) ? catalog : [];
       setProducts(rows);
       if (catalog?.card_rail) setCardRail(catalog.card_rail);
+      if (catalog && "digital_provider" in catalog) setDigitalProvider(catalog.digital_provider || null);
       const ids = new Set(rows.map((row) => row.id));
       setCart((prev) => prev.filter((line) => ids.has(line.product_id)));
     } catch (err) {
@@ -992,7 +1031,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       if (result.pending && result.next_action?.redirect_url) {
         try {
           sessionStorage.setItem(
-            "paidly_pos_ozow_checkout",
+            POS_DIGITAL_CHECKOUT_KEY,
             JSON.stringify({
               payload: checkoutPayload,
               intentId: result.payment_intent?.id || null,
@@ -1121,12 +1160,19 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
 
   useEffect(() => {
     const intentId = searchParams.get("intent");
-    if (searchParams.get("ozow") !== "return" || !intentId) return undefined;
+    // `ozow=return` is the legacy return flag from redirects issued before the provider-neutral URL.
+    const returned = searchParams.get("payment") === "return" || searchParams.get("ozow") === "return";
+    // Table bills return with &tab= and are handled by usePosRestaurant.
+    if (!returned || !intentId || searchParams.get("tab")) return undefined;
     let cancelled = false;
     const finishDigital = async () => {
       let stored = null;
       try {
-        stored = JSON.parse(sessionStorage.getItem("paidly_pos_ozow_checkout") || "null");
+        stored = JSON.parse(
+          sessionStorage.getItem(POS_DIGITAL_CHECKOUT_KEY) ||
+            sessionStorage.getItem(LEGACY_POS_DIGITAL_CHECKOUT_KEY) ||
+            "null"
+        );
       } catch {
         stored = null;
       }
@@ -1136,7 +1182,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         if (status.payment_intent?.status !== "paid") {
           toast({
             title: "Payment not confirmed yet",
-            description: "Ozow must notify Paidly before this sale can complete. Stay on this till.",
+            description: "The payment provider must notify Paidly before this sale can complete. Stay on this till.",
           });
           return;
         }
@@ -1150,7 +1196,8 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
           void loadToday();
           void loadSession(activeRegister);
           try {
-            sessionStorage.removeItem("paidly_pos_ozow_checkout");
+            sessionStorage.removeItem(POS_DIGITAL_CHECKOUT_KEY);
+            sessionStorage.removeItem(LEGACY_POS_DIGITAL_CHECKOUT_KEY);
           } catch {
             /* ignore */
           }
@@ -1159,7 +1206,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         if (!cancelled) {
           toast({
             title: "Could not finish digital sale",
-            description: err?.message || "Retry checkout after Ozow confirms.",
+            description: err?.message || "Retry checkout after the payment provider confirms.",
             variant: "destructive",
           });
         }
@@ -1313,7 +1360,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     setCloseShiftOpen(true);
   };
 
-  const confirmCloseShift = async () => {
+  const confirmCloseShift = async ({ allowOpenTabs = false } = {}) => {
     if (!openSession?.id || shiftBusy) return;
     if (!serverWriteAllowed) {
       toast({
@@ -1327,6 +1374,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     try {
       const closed = await closePosSession(openSession.id, {
         closing_cash: Number(closingDraft),
+        ...(allowOpenTabs ? { allow_open_tabs: true } : {}),
       });
       setOpenSession(null);
       setCloseShiftOpen(false);
@@ -1338,6 +1386,12 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
           : "Cash counted and locked.",
       });
     } catch (err) {
+      // Restaurant: open table bills on this till fall outside the cash-up — confirm before closing.
+      if (err?.code === "OPEN_TABS" && !allowOpenTabs) {
+        setShiftBusy(false);
+        if (window.confirm(`${err.message}\n\nClose the shift anyway?`)) void confirmCloseShift({ allowOpenTabs: true });
+        return;
+      }
       toast({
         title: "Could not close shift",
         description: err?.message || "Completed sessions cannot be edited.",
@@ -1580,6 +1634,59 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     );
   }
 
+  const openBill = (mode) => {
+    if (needsShift) {
+      setOpeningDraft(String(activeRegister?.opening_balance ?? 0));
+      setStartShiftOpen(true);
+      return;
+    }
+    setBillMode(mode);
+    setBillOpen(true);
+  };
+
+  const tabPanelProps = {
+    bundle: restaurant.bundle,
+    orderType: restaurant.orderType,
+    newItems: cart,
+    currency,
+    busy: restaurant.busy,
+    canRefund,
+    canDiscount,
+    onQty: setQty,
+    onNote: setLineNote,
+    onSend: () => void restaurant.sendNewItems(),
+    onSave: () => void restaurant.saveNewItems(),
+    onPay: () => openBill("full"),
+    onSplit: () => openBill("equal"),
+    onTransfer: () => setTabDialog("transfer"),
+    onMerge: () => setTabDialog("merge"),
+    onDiscount: () => setTabDialog("discount"),
+    onServiceCharge: () => setTabDialog("service_charge"),
+    onDetails: () => setTabDialog("details"),
+    onVoidTab: () => setTabDialog("void"),
+    onRequestBill: () =>
+      void restaurant.safeAction(
+        "request_bill",
+        { value: !restaurant.bundle?.tab?.bill_requested_at },
+        { success: restaurant.bundle?.tab?.bill_requested_at ? "Bill request cleared" : "Marked as bill requested" }
+      ),
+    onPrintBill: () => {
+      if (!printTabBill(restaurant.bundle, { brandName: tillBrandName, currency })) {
+        toast({ title: "Allow pop-ups to print the bill", variant: "destructive" });
+      }
+    },
+    onCloseTab: () => void restaurant.closeTab(),
+    onVoidItem: (item) => void restaurant.safeAction("void_item", { item_id: item.id }),
+    onLeave: restaurant.bundle ? restaurant.leaveTab : null,
+  };
+
+  const restaurantViews = [
+    { id: RESTAURANT_VIEW.FLOOR, label: "Floor", icon: LayoutGrid },
+    { id: RESTAURANT_VIEW.MENU, label: "Menu", icon: UtensilsCrossed },
+    { id: RESTAURANT_VIEW.KITCHEN, label: "Kitchen", icon: ChefHat },
+    { id: RESTAURANT_VIEW.ORDERS, label: "Orders", icon: ListOrdered },
+  ];
+
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-background">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:h-16 sm:gap-3 sm:px-5">
@@ -1791,6 +1898,52 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
           {formatCurrency(todayTotal, currency)}
         </button>
       </div>
+      {restaurant.enabled ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5">
+          <div role="radiogroup" aria-label="Order type" className="flex rounded-lg border border-border p-0.5">
+            {ORDER_TYPE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="radio"
+                aria-checked={restaurant.orderType === option.id}
+                className={cn(
+                  "min-h-10 rounded-md px-3 text-sm font-medium touch-manipulation",
+                  restaurant.orderType === option.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                )}
+                onClick={() => {
+                  if (cart.length && restaurant.orderType !== option.id && restaurantMode !== (option.id !== ORDER_TYPE.COUNTER)) {
+                    toast({ title: "Items kept", description: "Your new items stay in the order panel." });
+                  }
+                  restaurant.setOrderType(option.id);
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {restaurantMode ? (
+            <nav className="ml-auto flex gap-1 overflow-x-auto" aria-label="Restaurant views">
+              {restaurantViews.map(({ id, label, icon: Icon }) => (
+                <Button
+                  key={id}
+                  type="button"
+                  variant={restaurant.view === id ? "secondary" : "ghost"}
+                  className="h-10 shrink-0 px-3"
+                  aria-current={restaurant.view === id ? "page" : undefined}
+                  onClick={() => {
+                    restaurant.setView(id);
+                    if (id === RESTAURANT_VIEW.FLOOR) void restaurant.refreshFloor();
+                  }}
+                >
+                  <Icon className="size-4 sm:mr-1.5" />
+                  <span className="hidden sm:inline">{label}</span>
+                </Button>
+              ))}
+            </nav>
+          ) : null}
+        </div>
+      ) : null}
       {blockedReason ? (
         <div
           className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-950 dark:text-amber-100 sm:text-sm"
@@ -1802,6 +1955,25 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {restaurantMode && restaurant.view !== RESTAURANT_VIEW.MENU ? (
+            restaurant.view === RESTAURANT_VIEW.FLOOR ? (
+              <PosFloorView
+                floorState={restaurant.floorState}
+                loading={restaurant.floorLoading}
+                currency={currency}
+                canSell={canSell}
+                onOpenTab={(id) => void restaurant.openTab(id)}
+                onOpenTakeaway={(id) => void restaurant.openTab(id)}
+                onSeatTable={(table, guests) => restaurant.seatTable(table, guests)}
+                onMarkClean={(table) => void restaurant.markClean(table)}
+              />
+            ) : restaurant.view === RESTAURANT_VIEW.KITCHEN ? (
+              <PosKitchenView />
+            ) : (
+              <PosOrdersView currency={currency} onOpenTab={(id) => void restaurant.openTab(id)} />
+            )
+          ) : (
+          <>
           <div className="shrink-0 space-y-2 px-3 py-2 sm:px-3">
             <div className="flex gap-1.5">
               <form onSubmit={handleSearchSubmit} className="min-w-0 flex-1">
@@ -1989,9 +2161,15 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
               </div>
             </div>
           )}
+          </>
+          )}
         </section>
 
         <aside className="hidden min-h-0 w-[22rem] shrink-0 flex-col border-l border-border bg-card xl:w-[26rem] lg:flex">
+          {restaurantMode ? (
+            <PosTabPanel {...tabPanelProps} />
+          ) : (
+          <>
           <section className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center justify-between gap-2 px-4 py-3">
               <h2 className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wider">
@@ -2088,10 +2266,30 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
                     : "No sell access"}
             </Button>
           </section>
+          </>
+          )}
         </aside>
       </div>
 
-      {cartCount > 0 || (orgId && heldCart) ? (
+      {restaurantMode && (restaurant.bundle || cart.length > 0) ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
+          <button
+            type="button"
+            className="pointer-events-auto flex min-h-11 w-full flex-col gap-0.5 rounded-md bg-primary px-4 py-2 text-primary-foreground shadow-sm touch-manipulation"
+            onClick={() => setCartSheetOpen(true)}
+          >
+            <span className="flex items-center justify-between gap-3 text-sm font-semibold uppercase tracking-wide">
+              <span className="truncate">{restaurant.bundle?.tab?.label || "New takeaway order"}</span>
+              <span className="tabular-nums">
+                {formatCurrency((restaurant.bundle?.tab?.balance?.due ?? 0) + cart.reduce((sum, l) => sum + l.quantity * (Number(l.unit_price) || 0), 0), currency)}
+              </span>
+            </span>
+            <span className="text-center text-xs font-bold uppercase tracking-wide">
+              {cartCount ? `${cartCount} new · ` : ""}View order
+            </span>
+          </button>
+        </div>
+      ) : !restaurantMode && (cartCount > 0 || (orgId && heldCart)) ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
           <button
             type="button"
@@ -2140,7 +2338,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
             <li>USB or Bluetooth scanners type into search and add on Enter. Camera Scan requests permission only when you open it.</li>
             <li>Search or scan to add products. Out of stock items cannot be sold.</li>
             <li>Walk-in Customer is the default. Attach a POS customer only when you need a name.</li>
-            <li>Cash is counted on this till. EFT / Digital waits for Ozow to confirm. Card-present is not available yet.</li>
+            <li>Cash is counted on this till. EFT / Digital waits for your connected payment provider to confirm. Card-present is not available yet.</li>
             <li>Stock decreases only after a sale is paid — not when you add to the cart.</li>
           </ul>
           {posOnlyStaff ? null : (
@@ -2156,6 +2354,30 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
 
       <Sheet open={cartSheetOpen} onOpenChange={setCartSheetOpen}>
         <SheetContent side="bottom" className="flex max-h-[85dvh] flex-col rounded-t-2xl p-0">
+          {restaurantMode ? (
+            <>
+              <SheetHeader className="sr-only">
+                <SheetTitle>{restaurant.bundle?.tab?.label || "Order"}</SheetTitle>
+                <SheetDescription>Order items and actions</SheetDescription>
+              </SheetHeader>
+              <PosTabPanel
+                {...tabPanelProps}
+                onPay={() => {
+                  setCartSheetOpen(false);
+                  openBill("full");
+                }}
+                onSplit={() => {
+                  setCartSheetOpen(false);
+                  openBill("equal");
+                }}
+                onLeave={() => {
+                  setCartSheetOpen(false);
+                  if (restaurant.bundle) restaurant.leaveTab();
+                }}
+              />
+            </>
+          ) : (
+          <>
           <SheetHeader className="px-4 pt-4">
             <SheetTitle>Cart</SheetTitle>
             <SheetDescription>{cartCount} items</SheetDescription>
@@ -2234,8 +2456,47 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
               ) : null}
             </div>
           ) : null}
+          </>
+          )}
         </SheetContent>
       </Sheet>
+
+      <PosBillDialog
+        open={billOpen}
+        onOpenChange={(open, opts) => {
+          setBillOpen(open);
+          if (!open) void restaurant.reloadTab();
+          if (opts?.receiptSale) setCompletedSale(opts.receiptSale);
+          if (opts?.closeTab) void restaurant.closeTab();
+        }}
+        bundle={restaurant.bundle}
+        currency={currency}
+        digitalProvider={digitalProvider}
+        initialMode={billMode}
+        registerId={activeRegister?.id || null}
+        cashierName={cashierName}
+        brandName={tillBrandName}
+        onPaid={() => void restaurant.reloadTab()}
+        onRedirect={(url, payload) => {
+          restaurant.rememberTabPayment(payload);
+          window.location.assign(url);
+        }}
+      />
+
+      <PosTabActionDialog
+        kind={tabDialog}
+        onOpenChange={(open) => {
+          if (!open) setTabDialog(null);
+        }}
+        bundle={restaurant.bundle}
+        floorState={restaurant.floorState}
+        currency={currency}
+        onSubmit={async (kind, body) => {
+          const next = await restaurant.runAction(kind, body);
+          if (kind === "void") restaurant.leaveTab();
+          if (kind === "transfer" || kind === "merge") toast({ title: kind === "merge" ? "Tables merged" : `Moved to ${next?.tab?.label || "the new table"}`, variant: "success" });
+        }}
+      />
 
       <Dialog
         open={discountOpen}
@@ -2320,16 +2581,22 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
               type="button"
               variant="secondary"
               className="h-14 min-h-11 text-base font-semibold uppercase tracking-wide touch-manipulation"
-              disabled={submitting || !checkoutAllowed}
+              disabled={submitting || !checkoutAllowed || !digitalAvailable}
+              title={digitalAvailable ? undefined : "No digital payment provider is connected"}
               onClick={openDigital}
             >
               {submitting ? <Loader2 className="size-5 animate-spin" /> : <Smartphone className="size-5" />}
               EFT / Digital
+              {digitalAvailable ? null : (
+                <span className="text-xs font-medium normal-case tracking-normal text-muted-foreground">
+                  Not connected
+                </span>
+              )}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cash is counted on this till. EFT / Digital uses Ozow and settles only after Ozow confirms.
-            Card-present is disabled until Paidly Pay can complete a verified settlement.
+            Cash is counted on this till. EFT / Digital goes through {digitalProviderLabel} and settles only after the
+            provider confirms. Card-present is disabled until Paidly Pay can complete a verified settlement.
           </p>
         </DialogContent>
       </Dialog>
@@ -2434,21 +2701,22 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
           <DialogHeader>
             <DialogTitle>Digital Payment</DialogTitle>
             <DialogDescription>
-              Ozow confirms this sale. Tapping Continue does not mark it paid unless Ozow succeeds.
+              {digitalProvider?.label ? `Payment provider: ${digitalProvider.label}. ` : ""}
+              The sale is marked paid only after the payment provider confirms it.
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            There is no trusted click-to-paid digital workflow. If Ozow is not configured, the cart stays unpaid.
+            There is no trusted click-to-paid digital workflow. If the payment is not confirmed, the cart stays unpaid.
           </p>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button
               type="button"
               className="h-12 w-full"
-              disabled={submitting || !checkoutAllowed}
+              disabled={submitting || !checkoutAllowed || !digitalAvailable}
               onClick={() => void completeCheckout({ paymentMethod: "digital" })}
             >
               {submitting ? <Loader2 className="size-5 animate-spin" /> : <Smartphone className="size-5" />}
-              Request Ozow payment
+              {digitalProvider?.label ? `Continue to ${digitalProvider.label}` : "Request digital payment"}
             </Button>
             <Button type="button" variant="ghost" className="h-12 min-h-11 w-full" onClick={closePayStage}>
               Back
@@ -2464,7 +2732,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
         <DialogContent className="max-w-md gap-4 sm:rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl">Cash</DialogTitle>
-            <DialogDescription>Counted on the till. Not sent to Ozow or PayFast.</DialogDescription>
+            <DialogDescription>Counted on the till. Not sent to a payment provider.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4 text-sm">

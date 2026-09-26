@@ -97,6 +97,12 @@ function waitForSyncJobResult(jobId, { timeoutMs = 30000 } = {}) {
   });
 }
 
+/** Document view with the "created" Done State (Paidly Done Screen standard — no bounce to the list). */
+function createdDoneUrl(viewUrl, extra = "") {
+  if (!viewUrl) return null;
+  return `${viewUrl}${viewUrl.includes("?") ? "&" : "?"}done=created${extra}`;
+}
+
 function readQuoteBankingPreference(quoteId) {
   if (!quoteId) return "";
   try {
@@ -1024,19 +1030,19 @@ function CreateDocumentCore({ docType }) {
           () => {}
         );
       }
-      toast({
-        title: converted.already_converted ? "Quote already converted" : "Invoice created from quote",
-        description: converted.invoice_number
-          ? `${converted.already_converted ? "Opening" : "Saved"} ${converted.invoice_number}.`
-          : "Opening the invoice.",
-        variant: converted.already_converted ? "default" : "success",
-      });
+      if (converted.already_converted) {
+        toast({
+          title: "Quote already converted",
+          description: converted.invoice_number ? `Opening ${converted.invoice_number}.` : "Opening the invoice.",
+          variant: "default",
+        });
+      }
       if (sendNow && viewUrl) {
         navigate(`${viewUrl}${viewUrl.includes("?") ? "&" : "?"}autosend=1`);
         return;
       }
       if (viewUrl) {
-        navigate(viewUrl);
+        navigate(converted.already_converted ? viewUrl : createdDoneUrl(viewUrl, "&from=quote"));
         return;
       }
       navigate(createPageUrl("Invoices"));
@@ -1093,6 +1099,20 @@ function CreateDocumentCore({ docType }) {
       return;
     }
 
+    // Online: wait briefly for the real id and land on the invoice's "created" Done State.
+    // Offline (or slow sync): keep the offline-first behaviour — queued, back to the list.
+    const online = typeof navigator === "undefined" || navigator.onLine !== false;
+    if (online) {
+      try {
+        const result = await waitForSyncJobResult(queuedCreate.id, { timeoutMs: 12000 });
+        if (result?.id) {
+          navigate(createdDoneUrl(createViewDocumentUrl("invoice", result.id)));
+          return;
+        }
+      } catch (err) {
+        console.warn("Invoice created-state route fell back to the list:", err?.message || err);
+      }
+    }
     toast({
       title: "Invoice queued",
       description: customNumber
@@ -1179,6 +1199,10 @@ function CreateDocumentCore({ docType }) {
             targetType: "quote",
             targetId: createdQuote?.id || null,
           }).catch(() => {});
+        }
+        if (createdQuote?.id) {
+          navigate(createdDoneUrl(createViewDocumentUrl("quote", createdQuote.id)));
+          return;
         }
         toast({
           title: "Quote created",

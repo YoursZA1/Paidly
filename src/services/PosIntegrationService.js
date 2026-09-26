@@ -6,13 +6,13 @@ import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequest } from "@/utils/apiRequest";
 import { posApiFetch, posAuthHeaders } from "@/lib/pos/posAccessClient";
 
-async function authHeaders({ includeJsonContentType = true } = {}) {
+export async function authHeaders({ includeJsonContentType = true } = {}) {
   const headers = await posAuthHeaders({ includeJsonContentType });
   if (!headers.Authorization) throw new Error("Not authenticated");
   return headers;
 }
 
-async function posServiceRequest(url, init = {}) {
+export async function posServiceRequest(url, init = {}) {
   const headers = await authHeaders({
     includeJsonContentType: Boolean(init.body),
   });
@@ -30,7 +30,7 @@ async function posServiceRequest(url, init = {}) {
   return posApiFetch(url, merged);
 }
 
-function parseApiJsonError(res, raw, fallbackMessage) {
+export function parseApiJsonError(res, raw, fallbackMessage) {
   let json = {};
   if (raw) {
     try {
@@ -52,7 +52,7 @@ function parseApiJsonError(res, raw, fallbackMessage) {
   throw err;
 }
 
-function apiBase() {
+export function apiBase() {
   return import.meta.env.DEV ? "" : getBackendBaseUrl();
 }
 
@@ -143,10 +143,26 @@ export async function fetchPosCatalog({ registerId } = {}) {
   const res = await posServiceRequest(`${apiBase()}/api/pos/catalog${qs}`, { headers });
   const raw = await res.text().catch(() => "");
   const json = parseApiJsonError(res, raw, "Could not load POS catalog");
-  return {
+  const catalog = {
     products: Array.isArray(json.products) ? json.products : [],
     card_rail: json.card_rail && typeof json.card_rail === "object" ? json.card_rail : null,
   };
+  // Only forwarded when the server reports it: null means "no digital payment provider connected".
+  if ("digital_provider" in json) {
+    catalog.digital_provider =
+      json.digital_provider && typeof json.digital_provider === "object" ? json.digital_provider : null;
+  }
+  return catalog;
+}
+
+/** Customer payment providers registered with the Payment Engine (public view, no credentials). */
+export async function listPaymentProviders({ sourceKind = "pos" } = {}) {
+  const headers = await authHeaders({ includeJsonContentType: false });
+  const qs = sourceKind ? `?source_kind=${encodeURIComponent(sourceKind)}` : "";
+  const res = await posServiceRequest(`${apiBase()}/api/payment-intents/providers${qs}`, { method: "GET", headers });
+  const raw = await res.text().catch(() => "");
+  const json = parseApiJsonError(res, raw, "Could not load payment providers");
+  return Array.isArray(json.providers) ? json.providers : [];
 }
 
 export async function listPosRegisters() {

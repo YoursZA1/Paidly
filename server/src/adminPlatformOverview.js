@@ -178,7 +178,7 @@ export async function buildAdminPlatformOverviewLegacy(supabase, opts = {}) {
     countInRange(supabase, "payslips", "created_at", window.from, window.to),
     countInRange(supabase, "pos_sales_events", "occurred_at", window.from, window.to),
     countInRange(supabase, "pos_sales_events", "occurred_at", today, null),
-    countTable(supabase, "organizations", (q) => q.in("business_type", ["retail", "mixed"])),
+    countTable(supabase, "organizations", (q) => q.in("business_type", ["retail", "mixed", "restaurant"])),
     countTable(supabase, "pos_connections"),
     countInRange(supabase, "recurring_invoices", "created_at", window.from, window.to),
     countTable(supabase, "memberships"),

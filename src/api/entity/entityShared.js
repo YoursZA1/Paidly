@@ -53,7 +53,7 @@ export const SUPABASE_SELECT_COLUMNS = {
     "stock_quantity, cost_price, low_stock_threshold, barcode, image_url, stock_capacity, " +
     "role, hourly_rate, unit_type, cost_rate, cost_type, default_cost, " +
     "category, pricing_type, min_quantity, tags, estimated_duration, requirements, price_locked, " +
-    "company_id, created_at, updated_at",
+    "company_id, pos_station, created_at, updated_at",
   payments: "id, org_id, invoice_id, document_id, client_id, amount, currency, exchange_rate, status, paid_at, method, reference, notes, created_at, updated_at",
   profiles:
     "id, full_name, email, avatar_url, logo_url, company_name, company_address, phone, company_website, subscription_plan, plan, subscription_status, trial_ends_at, currency, timezone, role, user_role, invoice_template, invoice_header, document_brand_primary, document_brand_secondary, business, list_filter_prefs, reminder_settings, quote_reminder_settings, created_at, updated_at",

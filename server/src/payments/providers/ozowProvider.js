@@ -12,8 +12,10 @@ import { mapOzowStatusToIntentStatus } from "../../../../shared/payments/payment
 import { resolvePublicAppOrigin } from "../../companyInviteAppUrl.js";
 
 /**
- * Instant EFT rail for POS digital and document Pay Now.
+ * Ozow adapter — one online (instant EFT) provider behind the Payment Engine.
+ * Serves the POS digital tender and invoice Pay Now when it is the configured online provider.
  * Charge never marks paid. Paid is only applied after a verified Notify/ITN.
+ * Credentials are server-side env (OZOW_SITE_CODE / OZOW_API_KEY / OZOW_PRIVATE_KEY).
  */
 export function ozowCredentialsPresent(env = process.env) {
   const creds = ozowCredentials(env);
@@ -34,7 +36,7 @@ function defaultNotifyUrl(chargeCtx = {}) {
 function defaultReturnUrls(intent, chargeCtx = {}) {
   const origin = defaultAppOrigin(chargeCtx);
   if (intent.source_kind === "pos") {
-    const till = `${origin}/pos?ozow=return&intent=${encodeURIComponent(intent.id)}`;
+    const till = `${origin}/pos?payment=return&intent=${encodeURIComponent(intent.id)}`;
     return {
       successUrl: chargeCtx.successUrl || till,
       cancelUrl: chargeCtx.cancelUrl || `${till}&result=cancel`,
@@ -59,7 +61,10 @@ function defaultReturnUrls(intent, chargeCtx = {}) {
 
 export const ozowProvider = {
   id: CUSTOMER_PAYMENT_PROVIDERS.OZOW,
+  kind: "online",
   sourceKinds: ["pos", "document"],
+  /** Ozow settles in South African rand only. */
+  currencies: ["ZAR"],
   isConfigured() {
     return ozowCredentialsPresent();
   },
@@ -68,8 +73,7 @@ export const ozowProvider = {
       return {
         status: "failed",
         code: "PROVIDER_NOT_CONFIGURED",
-        error:
-          "Ozow is the digital payment rail, but merchant credentials are not configured. The sale was not completed.",
+        error: "Ozow is not configured on this deployment. The payment was not started.",
       };
     }
     const urls = defaultReturnUrls(intent, chargeCtx);
@@ -138,7 +142,7 @@ export const ozowProvider = {
       nextStatus,
       externalId: String(fields.TransactionId || "").trim() || null,
       amount: ozowAmountString(fields.Amount),
-      ozowStatus: fields.Status,
+      providerStatus: fields.Status,
       verified: true,
     };
   },

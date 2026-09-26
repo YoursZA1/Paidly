@@ -34,7 +34,7 @@ export async function requirePosCapability(res, orgId) {
   const ok = await orgHasPosCapability(orgId);
   if (ok) return true;
   res.status(403).json({
-    error: "POS is not enabled for this business type. Choose Retail or Mixed in Settings → Company Profile.",
+    error: "POS is not enabled for this business type. Choose Retail, Mixed or Restaurant in Settings → Company Profile.",
     code: "POS_NOT_ENABLED",
   });
   return false;

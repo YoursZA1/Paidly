@@ -15,6 +15,8 @@ import { renderIcon } from "@/utils/renderIcon";
 import { useOrgBrands } from "@/hooks/useOrgBrands";
 import BarcodeScannerDialog from "@/components/inventory/BarcodeScannerDialog";
 import { generatePosProductBarcode } from "@/lib/pos/posBarcode";
+import { useCompanyContext } from "@/hooks/useCompanyContext";
+import { normalizeStation, stationLabel } from "@shared/pos/restaurant.js";
 
 function normalizeTags(raw) {
     if (Array.isArray(raw)) return raw;
@@ -41,6 +43,7 @@ function buildFormStateFromService(service, defaultType) {
         price_locked: service?.price_locked || false,
         sku: service?.sku || "",
         barcode: service?.barcode || "",
+        pos_station: service?.pos_station || "",
         stock_quantity: service?.stock_quantity ?? null,
         cost_price: service?.cost_price ?? null,
         low_stock_threshold: service?.low_stock_threshold ?? 5,
@@ -163,6 +166,9 @@ export default function ServiceForm({
     const { brands } = useOrgBrands();
     // BASE FIELDS (Shared by all catalog items - Mandatory)
     const [formData, setFormData] = useState(() => buildFormStateFromService(service, defaultType));
+    const { ctx: companyCtx } = useCompanyContext();
+    // Kitchen station only matters for restaurant POS (or items that already have one).
+    const showStation = String(companyCtx?.businessType || "").toLowerCase() === "restaurant" || Boolean(service?.pos_station);
     const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
 
     const [newTag, setNewTag] = useState("");
@@ -239,6 +245,10 @@ export default function ServiceForm({
             ...(formData.item_type === 'product' && {
                 ...(formData.sku && { sku: formData.sku }),
                 barcode: String(formData.barcode || "").trim() || null,
+                // Only sent when chosen (or already set) so databases without the restaurant migration still save.
+                ...((formData.pos_station || service?.pos_station) && {
+                    pos_station: formData.pos_station ? normalizeStation(formData.pos_station) : null,
+                }),
                 ...(formData.unit && { unit: formData.unit }),
                 ...(formData.price !== undefined && { price: Number(formData.price) || 0 }),
                 ...(formData.stock_quantity !== null && formData.stock_quantity !== undefined && {
@@ -508,6 +518,33 @@ export default function ServiceForm({
                                 {/* PRODUCT FIELDS (including inventory) */}
                                 {formData.item_type === 'product' && (
                                     <div className="space-y-6">
+                                        {showStation ? (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="pos_station" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Kitchen station</Label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {["kitchen", "bar"].map((station) => (
+                                                        <Button
+                                                            key={station}
+                                                            type="button"
+                                                            variant={normalizeStation(formData.pos_station) === station ? "default" : "outline"}
+                                                            className="h-10 rounded-xl"
+                                                            onClick={() => handleInputChange('pos_station', station)}
+                                                        >
+                                                            {stationLabel(station)}
+                                                        </Button>
+                                                    ))}
+                                                    <Input
+                                                        id="pos_station"
+                                                        value={["kitchen", "bar"].includes(normalizeStation(formData.pos_station)) ? "" : formData.pos_station || ""}
+                                                        onChange={(e) => handleInputChange('pos_station', e.target.value)}
+                                                        placeholder="Or a custom station, e.g. Grill"
+                                                        maxLength={40}
+                                                        className="h-10 w-56 rounded-xl"
+                                                    />
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">Restaurant POS sends this item&apos;s kitchen ticket to this station.</p>
+                                            </div>
+                                        ) : null}
                                         <div className="space-y-2">
                                             <Label htmlFor="sku" className="text-sm font-semibold text-slate-700 dark:text-slate-300">SKU / Product Code</Label>
                                             <Input

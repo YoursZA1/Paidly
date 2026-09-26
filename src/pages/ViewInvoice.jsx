@@ -21,13 +21,12 @@ import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from '@/utils/fetchWithTimeout';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
-import { runPaidConfetti } from '@/utils/confetti';
 import { canEditInvoice, canRecordPayment } from '@/logic';
 import { resolveInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
 import { parseDocumentBrandHex } from '@/utils/documentBrandColors';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 import { useToast } from '@/components/ui/use-toast';
-import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
+import DocumentSentDialog from '@/components/shared/DocumentSentDone';
 /** Payments for one invoice only — avoids Payment.list() pulling a large slice of the org. */
 async function fetchPaymentsForInvoice(invoiceId) {
     if (!invoiceId) return [];
@@ -55,6 +54,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
     const [payments, setPayments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
+    const [sentTo, setSentTo] = useState('');
     const [showPaymentDialog, setShowPaymentDialog] = useState(false);
     const [showScheduleDialog, setShowScheduleDialog] = useState(false);
     const [paymentSchedule, setPaymentSchedule] = useState([]);
@@ -160,15 +160,7 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                         : prev
                 );
             }
-            toast({
-                title: "Invoice sent to email successfully!",
-                description: documentSendSuccessDescription({
-                    mode: "invoice",
-                    recipientEmail: client.email?.trim() || "",
-                }),
-                variant: "success",
-                duration: 6500,
-            });
+            setSentTo(client.email?.trim() || 'the client');
         } catch (error) {
             console.error("Failed to send email:", error);
             const message = isAbortError(error)
@@ -267,11 +259,10 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
     const { recordPayment } = usePaymentActions(
         invoice ? { ...invoice, payments } : null,
         {
-            onSuccess: ({ invoice: updatedInvoice, payments: mergedPayments, isFullyPaid }) => {
+            onSuccess: ({ invoice: updatedInvoice, payments: mergedPayments }) => {
                 setInvoice(updatedInvoice);
                 setPayments(mergedPayments);
                 setPaymentPreset(null);
-                if (isFullyPaid) runPaidConfetti();
                 queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
             },
         }
@@ -549,8 +540,9 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                     setShowPaymentDialog(false);
                     setPaymentPreset(null);
                 }}
-                onSave={recordPayment}
+                onSave={(paymentData) => recordPayment(paymentData, { showToast: false })}
                 defaultValues={paymentPreset}
+                showViewInvoice={false}
             />
 
             {/* Payment Schedule Dialog */}
@@ -559,6 +551,18 @@ export default function ViewInvoice({ invoiceId: invoiceIdProp, embedded, embedd
                 isOpen={showScheduleDialog}
                 onClose={() => setShowScheduleDialog(false)}
                 onSave={handleSaveSchedule}
+            />
+            <DocumentSentDialog
+                open={Boolean(sentTo)}
+                onOpenChange={(next) => !next && setSentTo('')}
+                docType="invoice"
+                record={invoice || {}}
+                client={client}
+                recipient={sentTo}
+                actions={[
+                    { label: 'Download PDF', onClick: () => { setSentTo(''); handleDownloadPDF(); } },
+                    { label: 'Done', onClick: () => setSentTo(''), variant: 'outline' },
+                ]}
             />
         </div>
     );

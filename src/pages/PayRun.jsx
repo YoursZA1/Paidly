@@ -16,6 +16,7 @@ import FeatureGate from "@/components/subscription/FeatureGate";
 import AdjustmentRunBanner from "@/components/payroll/AdjustmentRunBanner";
 import PayrollReconciliationPanel from "@/components/payroll/PayrollReconciliationPanel";
 import PayRunItemDetail from "@/components/payroll/PayRunItemDetail";
+import DoneState from "@/components/shared/DoneState";
 
 const STATUS_LABEL = {
   draft: "Draft",
@@ -38,6 +39,8 @@ export default function PayRunPage() {
   const [validation, setValidation] = useState(null);
   const [breakdown, setBreakdown] = useState(null);
   const [creatingAdjustment, setCreatingAdjustment] = useState(false);
+  // Payslips the last finalize/send could not email (missing SA ID) — shown in the completion summary.
+  const [blockedPayslips, setBlockedPayslips] = useState([]);
 
   const load = async () => {
     if (!id) return;
@@ -57,12 +60,13 @@ export default function PayRunPage() {
 
   const money = (n) => formatCurrency(Number(n || 0), currency);
 
-  const act = async (key, fn) => {
+  const act = async (key, fn, { quiet = false } = {}) => {
     setBusy(key);
     try {
       const next = await fn();
       setRun(next);
-      toast({ title: "Updated", description: STATUS_LABEL[next.status] || "Pay run saved" });
+      // Finalize / mark paid are shown by the persistent completion summary, not a toast.
+      if (!quiet) toast({ title: "Updated", description: STATUS_LABEL[next.status] || "Pay run saved" });
     } catch (err) {
       toast({ title: "Action failed", description: err.message, variant: "destructive" });
     } finally {
@@ -73,6 +77,7 @@ export default function PayRunPage() {
   // Secure payslip PDFs need each employee's SA ID number; tell the admin who was not emailed.
   const warnBlockedPayslips = (delivery) => {
     const blocked = delivery?.blocked_missing_id || [];
+    if (delivery) setBlockedPayslips(blocked);
     if (!blocked.length) return;
     toast({
       variant: "destructive",
@@ -184,7 +189,7 @@ export default function PayRunPage() {
                     const next = await payrollApi.finalizeRun(id);
                     warnBlockedPayslips(next?.payslip_delivery);
                     return next;
-                  })
+                  }, { quiet: true })
                 }>
                 <Lock className="h-4 w-4 mr-1" /> Finalize payslips
               </Button>
@@ -200,7 +205,7 @@ export default function PayRunPage() {
               </Button>
             ) : null}
             {canPay ? (
-              <Button className="rounded-xl h-9" disabled={Boolean(busy)} onClick={() => act("paid", () => payrollApi.markPaid(id))}>
+              <Button className="rounded-xl h-9" disabled={Boolean(busy)} onClick={() => act("paid", () => payrollApi.markPaid(id), { quiet: true })}>
                 Mark paid
               </Button>
             ) : null}
@@ -252,6 +257,65 @@ export default function PayRunPage() {
                 <p className="mt-1">Pending leave overlaps this period — approve or decline before finalize.</p>
               ) : null}
             </div>
+          ) : null}
+          {run?.finalized_at ? (
+            <DoneState
+              className="mb-6"
+              tone={run.status === "paid" ? "success" : "pending"}
+              title={
+                run.status === "paid"
+                  ? `${run.period_label || "Payroll"} complete`
+                  : `${run.period_label || "Payroll"} finalized`
+              }
+              reference={{
+                number: `${run.employee_count || items.length} payslip${(run.employee_count || items.length) === 1 ? "" : "s"}`,
+                counterparty: run.run_type === "adjustment" ? "Adjustment run" : null,
+                amount: totals.net,
+                meta: `Net pay · Gross ${totals.gross} · Deductions ${totals.deductions}`,
+              }}
+              message={
+                run.status === "paid"
+                  ? "Payslips are locked and the run is marked as paid."
+                  : "Payslips are locked. Pay your employees, then mark the run as paid."
+              }
+              actions={[
+                canPay
+                  ? {
+                      label: busy === "paid" ? "Marking paid…" : "Mark paid",
+                      icon: Check,
+                      disabled: Boolean(busy),
+                      onClick: () => act("paid", () => payrollApi.markPaid(id), { quiet: true }),
+                    }
+                  : null,
+                canSend
+                  ? {
+                      label: busy === "send" ? "Sending…" : "Send payslips",
+                      icon: Mail,
+                      variant: canPay ? "outline" : "default",
+                      disabled: Boolean(busy),
+                      onClick: () =>
+                        act("send", async () => {
+                          warnBlockedPayslips(await payrollApi.sendPayslips(id));
+                          return payrollApi.getRun(id);
+                        }),
+                    }
+                  : null,
+                { label: "Payroll", icon: ArrowLeft, to: createPageUrl("Payroll"), variant: "ghost" },
+              ].filter(Boolean)}
+              status={{
+                label: "Pay run status",
+                value: STATUS_LABEL[run.status] || run.status,
+                tone: run.status === "paid" ? "success" : "pending",
+              }}
+              pending={
+                blockedPayslips.length
+                  ? `${blockedPayslips.length} payslip${blockedPayslips.length === 1 ? " was" : "s were"} not emailed — the employee needs an SA ID number on file.`
+                  : run.status === "paid"
+                    ? null
+                    : "Employees have not been marked as paid yet."
+              }
+              followUp={run.status === "paid" ? null : "Reconcile the bank payments below to close this run."}
+            />
           ) : null}
           <div className="grid gap-3 sm:grid-cols-3 mb-6">
             <Card className="rounded-xl"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Gross</p><p className="text-xl font-semibold tabular-nums">{totals.gross}</p></CardContent></Card>

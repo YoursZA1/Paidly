@@ -41,6 +41,7 @@ import {
 } from "./posInviteActivate.js";
 import { handlePosPinGet, handlePosPinSet, handlePosPinVerify } from "./posPinRoutes.js";
 import { handlePaidlyPayApi } from "../paidlyPay/paidlyPayApi.js";
+import { registerRestaurantRoutes } from "./restaurant/posRestaurantDispatch.js";
 
 /**
  * Mirror Vercel `api/pos/[[...path]].js` for Vite dev proxy (server/src/index.js).
@@ -86,6 +87,8 @@ export function registerPosRoutes(app) {
   app.post("/api/pos/registers", handlePosRegisterCreate);
   app.patch("/api/pos/registers/:id", handlePosRegisterPatch);
   app.delete("/api/pos/registers/:id", handlePosRegisterDelete);
+
+  registerRestaurantRoutes(app);
 
   app.get("/api/pos/sessions", handlePosSessionsList);
   app.post("/api/pos/sessions", handlePosSessionOpen);

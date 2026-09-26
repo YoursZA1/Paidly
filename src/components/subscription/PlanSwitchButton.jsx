@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { changeSubscriptionPlan } from "@/services/subscriptionCheckoutService";
+import DoneState from "@/components/shared/DoneState";
 
 function formatDate(iso) {
   if (!iso) return "your next billing date";
@@ -31,16 +32,24 @@ export default function PlanSwitchButton({ planSlug, planName, priceLabel, direc
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // "Subscription changed" Done State. Billing refreshes when it closes — refreshing first would make
+  // this plan "current" and unmount the button (and its dialog) before the user reads the result.
+  const [changed, setChanged] = useState(null);
   const isUpgrade = direction !== "downgrade";
+
+  const closeDone = () => {
+    const result = changed;
+    setChanged(null);
+    setOpen(false);
+    onChanged?.(result);
+  };
 
   const confirm = async () => {
     setBusy(true);
     try {
       const result = await changeSubscriptionPlan({ planSlug });
       if (result?.changed) {
-        toast({ title: isUpgrade ? `Upgraded to ${planName}` : `Downgrade scheduled`, description: result.message });
-        setOpen(false);
-        onChanged?.(result);
+        setChanged(result);
       }
       // Otherwise the service has redirected to PayFast checkout (no live agreement).
     } catch (err) {
@@ -67,8 +76,48 @@ export default function PlanSwitchButton({ planSlug, planName, priceLabel, direc
       >
         {isUpgrade ? `Upgrade to ${planName}` : `Downgrade to ${planName}`}
       </Button>
-      <AlertDialog open={open} onOpenChange={(next) => !busy && setOpen(next)}>
+      <AlertDialog
+        open={open}
+        onOpenChange={(next) => {
+          if (busy) return;
+          if (!next && changed) closeDone();
+          else setOpen(next);
+        }}
+      >
         <AlertDialogContent>
+          {changed ? (
+            <>
+              <AlertDialogHeader className="sr-only">
+                <AlertDialogTitle>{isUpgrade ? `Upgraded to ${planName}` : "Downgrade scheduled"}</AlertDialogTitle>
+                <AlertDialogDescription>{changed.message || ""}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <DoneState
+                variant="dialog"
+                tone={isUpgrade ? "success" : "pending"}
+                title={isUpgrade ? `You're on ${planName}` : `Downgrade to ${planName} scheduled`}
+                reference={{
+                  number: "Subscription",
+                  counterparty: `Paidly ${planName}`,
+                  amount: priceLabel,
+                  meta: `${isUpgrade ? "New amount charged from" : "Changes on"} ${formatDate(nextBillingDate)}`,
+                }}
+                message={
+                  changed.message ||
+                  (isUpgrade
+                    ? `${planName} features are unlocked now. Same card, no new checkout.`
+                    : `You keep your current features until ${formatDate(nextBillingDate)}.`)
+                }
+                actions={[{ label: "Done", onClick: closeDone }]}
+                status={{
+                  label: "Plan",
+                  value: isUpgrade ? `${planName} · active` : `Current plan until ${formatDate(nextBillingDate)}`,
+                  tone: isUpgrade ? "success" : "pending",
+                }}
+                followUp={`PayFast charges ${priceLabel} from ${formatDate(nextBillingDate)}.`}
+              />
+            </>
+          ) : (
+          <>
           <AlertDialogHeader>
             <AlertDialogTitle>{isUpgrade ? `Upgrade to ${planName}?` : `Downgrade to ${planName}?`}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -89,6 +138,8 @@ export default function PlanSwitchButton({ planSlug, planName, priceLabel, direc
               {busy ? "Updating PayFast…" : isUpgrade ? "Upgrade" : "Schedule downgrade"}
             </AlertDialogAction>
           </AlertDialogFooter>
+          </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
     </>

@@ -121,13 +121,19 @@ const WEBHOOK_TO_INTENT = Object.freeze({
   "payment.refunded": "refunded",
 });
 
+/**
+ * Paidly Pay method → rail. Online methods map to "online": the concrete provider (e.g. Ozow) is
+ * resolved by the Payment Engine registry, never hard-coded on the device contract.
+ */
+export const ONLINE_RAIL = "online";
+
 const METHOD_TO_PROVIDER = Object.freeze({
   tap_to_pay: "card_terminal",
   qr: "card_terminal",
   card: "card_terminal",
   cash: "cash",
-  eft: "ozow",
-  payment_link: "ozow",
+  eft: ONLINE_RAIL,
+  payment_link: ONLINE_RAIL,
 });
 
 const METHOD_TO_TILL = Object.freeze({

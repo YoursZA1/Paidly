@@ -23,7 +23,9 @@ describe("Paidly Pay HMAC and contract", () => {
   it("maps Paidly Pay methods onto existing rails and public statuses", () => {
     expect(providerForPaidlyPayMethod("tap_to_pay")).toBe("card_terminal");
     expect(providerForPaidlyPayMethod("qr")).toBe("card_terminal");
-    expect(providerForPaidlyPayMethod("eft")).toBe("ozow");
+    // Online methods map to the online rail; the Payment Engine resolves the concrete provider.
+    expect(providerForPaidlyPayMethod("eft")).toBe("online");
+    expect(providerForPaidlyPayMethod("payment_link")).toBe("online");
     expect(publicStatusFromIntent({ status: "paid" })).toBe("succeeded");
     expect(publicStatusFromIntent({ status: "pending" })).toBe("created");
   });

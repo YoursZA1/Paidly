@@ -4,6 +4,7 @@ import {
   PAYMENT_ENGINE_SOURCE_LIST,
   assertPaymentEngineSource,
 } from "../../../shared/payments/paymentEngine.js";
+import { ONLINE_TENDER, paymentProviderLabel } from "../../../shared/payments/paymentProviderCatalog.js";
 
 export const PAYMENT_INTENT_SOURCE_KINDS = PAYMENT_ENGINE_SOURCE_LIST;
 
@@ -18,7 +19,11 @@ export const PAYMENT_INTENT_STATUSES = Object.freeze([
   "refunded",
 ]);
 
-/** Customer-facing rails stored on payment_intents. `cash` is till settlement, not a PSP. */
+/**
+ * Customer-facing rails stored on payment_intents (must match the table CHECK).
+ * `cash` is till settlement, not a PSP. Online providers (currently Ozow) are interchangeable
+ * adapters behind the Payment Engine — see paymentProviders.js.
+ */
 export const CUSTOMER_PAYMENT_PROVIDERS = Object.freeze({
   CASH: "cash",
   OZOW: "ozow",
@@ -31,16 +36,18 @@ export const TERMINAL_PAYMENT_PROVIDERS = Object.freeze([CUSTOMER_PAYMENT_PROVID
 /** Paidly platform subscriptions only — never a POS or invoice customer rail. */
 export const SAAS_BILLING_PROVIDER = "payfast";
 
+const ALL_CUSTOMER_PROVIDERS = new Set(Object.values(CUSTOMER_PAYMENT_PROVIDERS));
+
 const POS_PROVIDERS = new Set([
   CUSTOMER_PAYMENT_PROVIDERS.CASH,
-  CUSTOMER_PAYMENT_PROVIDERS.OZOW,
-  CUSTOMER_PAYMENT_PROVIDERS.CARD_TERMINAL,
+  ...ONLINE_PAYMENT_PROVIDERS,
+  ...TERMINAL_PAYMENT_PROVIDERS,
 ]);
 /**
- * Invoice rails: Ozow (verified Notify) and cash = approved settlement of money received offline
- * (cash, EFT into the bank, card machine, cheque) by an owner/manager — never written by the browser.
+ * Invoice rails: online providers (verified webhook) and cash = approved settlement of money received
+ * offline (cash, EFT into the bank, card machine, cheque) by an owner/manager — never written by the browser.
  */
-const DOCUMENT_PROVIDERS = new Set([CUSTOMER_PAYMENT_PROVIDERS.OZOW, CUSTOMER_PAYMENT_PROVIDERS.CASH]);
+const DOCUMENT_PROVIDERS = new Set([...ONLINE_PAYMENT_PROVIDERS, CUSTOMER_PAYMENT_PROVIDERS.CASH]);
 
 /** How offline invoice money was received (payments.method for document cash settlements). */
 export const OFFLINE_PAYMENT_METHODS = Object.freeze([
@@ -56,8 +63,7 @@ export const OFFLINE_PAYMENT_METHODS = Object.freeze([
 export function normalizeCustomerPaymentProvider(raw) {
   const key = String(raw || "").trim().toLowerCase();
   if (key === SAAS_BILLING_PROVIDER) return null;
-  if (key === CUSTOMER_PAYMENT_PROVIDERS.CASH || key === CUSTOMER_PAYMENT_PROVIDERS.OZOW || key === CUSTOMER_PAYMENT_PROVIDERS.CARD_TERMINAL) return key;
-  return null;
+  return ALL_CUSTOMER_PROVIDERS.has(key) ? key : null;
 }
 
 export function assertCustomerPaymentProvider(provider, sourceKind) {
@@ -69,12 +75,12 @@ export function assertCustomerPaymentProvider(provider, sourceKind) {
     throw error;
   }
   if (source === "pos" && !POS_PROVIDERS.has(id)) {
-    const error = new Error("POS payment must be cash, ozow, or card_terminal");
+    const error = new Error("POS payment must use cash, a card terminal, or a supported payment provider");
     error.code = "UNSUPPORTED_POS_PROVIDER";
     throw error;
   }
   if (source === "document" && !DOCUMENT_PROVIDERS.has(id)) {
-    const error = new Error("Document payment provider must be ozow or cash");
+    const error = new Error("Invoice payments must use a supported online payment provider or an approved offline receipt");
     error.code = "UNSUPPORTED_DOCUMENT_PROVIDER";
     throw error;
   }
@@ -94,12 +100,17 @@ export function isCardTerminalSettlement(provider) {
 }
 
 /**
- * Till tender method → payment_intents.provider.
- * cash → till cash; digital → Ozow; card → card_terminal (not click-to-paid).
+ * Till tender method → payment_intents.provider (pure mapping).
+ * cash → till cash; card → card_terminal (not click-to-paid); digital → whichever online provider the
+ * Payment Engine resolved (`onlineProvider`), or null. The POS never names a provider itself —
+ * use resolvePosTenderProvider() in paymentProviders.js to resolve against configured adapters.
  */
-export function mapPosPaymentMethodToProvider(paymentMethod) {
+export function mapPosPaymentMethodToProvider(paymentMethod, { onlineProvider = null } = {}) {
   const method = String(paymentMethod || "").trim().toLowerCase();
-  if (method === "digital") return CUSTOMER_PAYMENT_PROVIDERS.OZOW;
+  if (method === ONLINE_TENDER) {
+    const online = String(onlineProvider || "").trim().toLowerCase();
+    return ONLINE_PAYMENT_PROVIDERS.includes(online) ? online : null;
+  }
   if (method === "card") return CUSTOMER_PAYMENT_PROVIDERS.CARD_TERMINAL;
   if (method === "cash" || method === "other") return CUSTOMER_PAYMENT_PROVIDERS.CASH;
   return null;
@@ -112,6 +123,7 @@ export function publicPaymentIntentView(row) {
     id: row.id,
     source_kind: row.source_kind,
     provider: row.provider,
+    provider_label: paymentProviderLabel(row.provider),
     company_id: row.company_id || null,
     amount: Number(row.amount) || 0,
     currency: row.currency || "ZAR",

@@ -135,8 +135,8 @@ export async function handleDocumentPay(req, res) {
     });
 
     if (!result.redirectUrl) {
-      return jsonError(res, 422, result.charge?.error || "Ozow payment could not be started", {
-        code: result.charge?.code || "OZOW_REDIRECT_MISSING",
+      return jsonError(res, 422, result.charge?.error || "The online payment could not be started", {
+        code: result.charge?.code || "PROVIDER_REDIRECT_MISSING",
         payment_intent: publicPaymentIntentView(result.intent),
       });
     }
@@ -287,9 +287,10 @@ export async function handleDocumentHistory(req, res) {
 }
 
 /**
- * Return URL / poll endpoint. Never marks the invoice paid.
+ * Return URL / poll endpoint for any online provider. Never marks the invoice paid.
+ * GET /api/payment-intents/payment-return (legacy alias: /ozow-return).
  */
-export async function handleOzowReturn(req, res) {
+export async function handlePaymentReturn(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET, OPTIONS");
     return jsonError(res, 405, "Method not allowed");
@@ -325,7 +326,7 @@ export async function handleOzowReturn(req, res) {
     return res.status(200).json({
       ok: true,
       confirmed: false,
-      message: "Payment status is confirmed only after Ozow notifies Paidly.",
+      message: "Payment status is confirmed only after the payment provider notifies Paidly.",
       payment_intent: publicPaymentIntentView(intent),
       snapshot,
     });
@@ -333,3 +334,6 @@ export async function handleOzowReturn(req, res) {
     return schemaError(res, err);
   }
 }
+
+/** @deprecated Legacy name — use handlePaymentReturn. */
+export const handleOzowReturn = handlePaymentReturn;

@@ -49,7 +49,7 @@ Recommended scopes:
 ## Security rules
 
 - The client cannot set `amount` or `status` on payment-intent create.
-- Paid is applied only after a **verified** HMAC webhook (or existing Ozow Notify path).
+- Paid is applied only after a **verified** HMAC webhook (or the online provider's verified webhook, e.g. Ozow Notify).
 - `payment_successful: true` from the phone is ignored.
 - Duplicate `provider_event_id` values are acknowledged and do not write a second `pos_sales_events` row.
 - CORS never uses `Access-Control-Allow-Origin: *` on authenticated routes.

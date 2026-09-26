@@ -5,12 +5,17 @@ import { requirePosPlan } from "../pos/posEntitlement.js";
 import { PERMISSIONS } from "../companyRouteAccess.js";
 import { roundMoney } from "../pos/posCheckoutMath.js";
 import {
-  mapPosPaymentMethodToProvider,
+  isOnlinePaymentProvider,
   normalizeCustomerPaymentProvider,
   publicPaymentIntentView,
   SAAS_BILLING_PROVIDER,
 } from "./paymentIntentContract.js";
-import { getCustomerPaymentProvider, listCustomerPaymentProviders } from "./paymentProviders.js";
+import {
+  getCustomerPaymentProvider,
+  listCustomerPaymentProviders,
+  resolveOnlineProvider,
+  resolvePosTenderProvider,
+} from "./paymentProviders.js";
 import {
   applyVerifiedIntentStatus,
   applyVerifiedProviderEvent,
@@ -79,11 +84,30 @@ export async function handlePaymentIntentCreate(req, res) {
     return jsonError(res, 403, "company_id / client_id must belong to your organization", { code: "ORG_MISMATCH" });
   }
 
-  const provider =
-    normalizeCustomerPaymentProvider(body.provider) ||
-    (sourceKind === "pos" ? mapPosPaymentMethodToProvider(body.payment_method) : null);
+  const currency = String(body.currency || "ZAR").trim().toUpperCase().slice(0, 3) || "ZAR";
+  const requested = body.provider != null && body.provider !== "" ? normalizeCustomerPaymentProvider(body.provider) : null;
+  if (body.provider != null && body.provider !== "" && !requested) {
+    return jsonError(res, 422, "provider is not a supported customer payment provider (PayFast is not a customer rail)", {
+      code: "UNSUPPORTED_PAYMENT_PROVIDER",
+    });
+  }
+  let provider;
+  try {
+    // The Payment Engine decides the rail: an explicit online provider must be registered + configured;
+    // a till tender ("digital") resolves to whichever online provider is configured.
+    provider = requested
+      ? isOnlinePaymentProvider(requested)
+        ? resolveOnlineProvider({ sourceKind, requested, currency }).id
+        : requested
+      : resolvePosTenderProvider(body.payment_method, { currency });
+  } catch (err) {
+    if (err?.code === "PROVIDER_NOT_CONFIGURED" || err?.code === "UNSUPPORTED_PAYMENT_PROVIDER" || err?.code === "UNSUPPORTED_CURRENCY") {
+      return jsonError(res, 422, err.message, { code: err.code });
+    }
+    throw err;
+  }
   if (!provider) {
-    return jsonError(res, 422, "provider must be cash, ozow, or card_terminal (PayFast is not a customer rail)");
+    return jsonError(res, 422, "provider or payment_method is required", { code: "UNSUPPORTED_PAYMENT_PROVIDER" });
   }
 
   const amount = roundMoney(body.amount);
@@ -97,7 +121,7 @@ export async function handlePaymentIntentCreate(req, res) {
       sourceKind,
       provider,
       amount,
-      currency: String(body.currency || "ZAR").trim().toUpperCase().slice(0, 3) || "ZAR",
+      currency,
       idempotencyKey: body.idempotency_key ? String(body.idempotency_key).trim() : null,
       clientId: client.id,
       companyId: company.id,
@@ -109,10 +133,15 @@ export async function handlePaymentIntentCreate(req, res) {
     return res.status(201).json({
       ok: true,
       payment_intent: publicPaymentIntentView(intent),
-      providers: listCustomerPaymentProviders(),
+      providers: listCustomerPaymentProviders({ sourceKind }),
     });
   } catch (err) {
-    if (err?.code === "PAYFAST_NOT_CUSTOMER_RAIL" || err?.code === "CARD_RAIL_UNAVAILABLE") {
+    if (
+      err?.code === "PAYFAST_NOT_CUSTOMER_RAIL" ||
+      err?.code === "CARD_RAIL_UNAVAILABLE" ||
+      err?.code === "UNSUPPORTED_POS_PROVIDER" ||
+      err?.code === "UNSUPPORTED_DOCUMENT_PROVIDER"
+    ) {
       return jsonError(res, 422, err.message, { code: err.code });
     }
     return schemaError(res, err);
@@ -136,7 +165,9 @@ export async function handlePaymentIntentGet(req, res) {
 export async function handlePaymentProvidersList(req, res) {
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate.response;
-  return res.status(200).json({ ok: true, providers: listCustomerPaymentProviders() });
+  const source = String(req.query?.source_kind || "").trim().toLowerCase();
+  const sourceKind = source === "pos" || source === "document" ? source : null;
+  return res.status(200).json({ ok: true, providers: listCustomerPaymentProviders({ sourceKind }) });
 }
 
 /**
@@ -199,7 +230,7 @@ export async function handlePaymentIntentAction(req, res) {
       intentId: intent.id,
       nextStatus,
       externalId: `mock:${intent.id}:${nextStatus}`,
-      // Mock stands in for a card terminal only; it never pays an Ozow or cash intent.
+      // Mock stands in for a card terminal only; it never pays an online-provider or cash intent.
       provider: "card_terminal",
       metadata: {
         mock: true,
@@ -257,6 +288,11 @@ export async function handleCustomerPaymentWebhook(req, res) {
         code: result?.code || "PROVIDER_WEBHOOK_FAILED",
       });
     }
+    // The adapter was chosen by the URL; it may only settle intents of its own provider.
+    if (result.provider && String(result.provider).toLowerCase() !== provider.id) {
+      console.error("[payment-webhook] adapter reported a different provider", providerId, result.provider);
+      return jsonError(res, 400, "Provider webhook mismatch", { code: "PROVIDER_MISMATCH" });
+    }
     if (!result.intentId || !result.nextStatus) {
       return res.status(200).json({ ok: true, ...result });
     }
@@ -266,9 +302,9 @@ export async function handleCustomerPaymentWebhook(req, res) {
         nextStatus: result.nextStatus,
         externalId: result.externalId,
         amount: result.amount,
-        provider: result.provider || providerId,
+        provider: provider.id,
         metadata: {
-          ozow_status: result.ozowStatus || null,
+          provider_status: result.providerStatus || null,
           webhook_verified: true,
         },
       });

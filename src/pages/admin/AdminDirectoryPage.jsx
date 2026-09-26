@@ -165,7 +165,7 @@ const KIND_META = {
   },
   "payment-intents": {
     title: "Payment intents",
-    description: "Customer Payment Engine monitoring (Ozow / cash / card). Not PayFast SaaS billing.",
+    description: "Customer Payment Engine monitoring across payment providers, till cash and card terminals. Not PayFast SaaS billing.",
     columns: [
       { key: "title", label: "Source" },
       { key: "business", label: "Business" },
@@ -198,7 +198,7 @@ const KIND_META = {
   },
   integrations: {
     title: "Integrations",
-    description: "POS connections across businesses. Platform rails (PayFast, Ozow, email) are on System Health.",
+    description: "POS connections across businesses. Customer payment providers are listed on Payment intents.",
     columns: [
       { key: "title", label: "Integration" },
       { key: "business", label: "Business" },
@@ -248,6 +248,30 @@ export default function AdminDirectoryPage({ kind }) {
           {data.usage.enabledBusinesses != null ? <MetricCard title="POS-enabled businesses" value={data.usage.enabledBusinesses} /> : null}
           {data.usage.connections != null ? <MetricCard title="POS connections" value={data.usage.connections} /> : null}
         </div>
+      ) : null}
+      {Array.isArray(data?.providers) && data.providers.length ? (
+        <section className="mb-4 rounded-2xl border border-border/80 bg-card p-4">
+          <h2 className="text-sm font-semibold text-foreground">Payment providers</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Supported providers behind the Payment Engine. Businesses use whichever provider is configured.
+          </p>
+          <ul className="mt-3 divide-y divide-border">
+            {data.providers.map((provider) => (
+              <li key={provider.id} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm text-foreground">{provider.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {provider.kind === "terminal" ? "Card terminal" : "Online payment provider"} ·{" "}
+                    {(provider.sourceKinds || []).map((s) => (s === "pos" ? "POS" : "Invoices")).join(", ")}
+                  </p>
+                </div>
+                <span className={`text-xs font-medium ${provider.configured ? "text-foreground" : "text-muted-foreground"}`}>
+                  {provider.configured ? "Configured" : "Not configured"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
       <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
         <div className="px-4 pt-4">

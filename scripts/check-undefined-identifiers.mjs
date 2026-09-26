@@ -3,7 +3,7 @@
  * Fail the build if app code (src/, shared/, server/, api/) references an identifier that is never
  * defined or imported (ESLint no-undef).
  * Vite does not catch these; they surface as a ReferenceError only when the code path runs
- * (e.g. the POS Ozow return path once called an un-imported fetchOrgPaymentIntent).
+ * (e.g. the POS online-payment return path once called an un-imported fetchOrgPaymentIntent).
  * Run: node scripts/check-undefined-identifiers.mjs
  */
 import { ESLint } from "eslint";

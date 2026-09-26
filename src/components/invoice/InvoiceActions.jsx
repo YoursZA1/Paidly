@@ -19,6 +19,7 @@ import { createPageUrl } from '@/utils';
 import { Invoice } from '@/api/entities';
 import ConfirmationDialog from '../shared/ConfirmationDialog';
 import RecordPaymentModal from './RecordPaymentModal';
+import DocumentSentDialog from '@/components/shared/DocumentSentDone';
 import { RecordPaymentForm } from './RecordPaymentForm';
 import ManualShareModal from '../shared/ManualShareModal';
 import EmailPreviewModal from './EmailPreviewModal';
@@ -33,7 +34,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
-import { documentSendSuccessDescription } from '@/components/shared/DocumentSendSuccessToast';
 
 const statusOptions = [
     { value: INVOICE_STATUS.sent, label: 'Mark as Sent', icon: Mail },
@@ -64,7 +64,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     const { recordPayment, isProcessing: isRecordingPayment } = usePaymentActions(invoice, {
         onSuccess: (result) => {
             onActionSuccess?.();
-            if (result?.isFullyPaid) onPaymentFullyPaid?.();
+            if (result?.isFullyPaid) onPaymentFullyPaid?.(result);
             queryClient.invalidateQueries({ queryKey: ['cashflow-page'] });
         },
     });
@@ -74,6 +74,13 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showManualShare, setShowManualShare] = useState(false);
+    // "Invoice sent" Done State. The list refresh waits until it closes so the row (and dialog)
+    // is not unmounted by a status filter the moment the invoice stops being a draft.
+    const [sentDone, setSentDone] = useState(null);
+    const closeSentDone = () => {
+        setSentDone(null);
+        onActionSuccess?.();
+    };
     const [showEmailPreview, setShowEmailPreview] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
     const [drawerOpen, setDrawerOpen] = useState(false);
@@ -141,19 +148,8 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
             });
             onOptimisticUpdate?.(invoice.id, 'sent');
             setSendPhase('success');
-            toast({
-                title: "Invoice sent successfully",
-                description: documentSendSuccessDescription({
-                    mode: 'invoice',
-                    recipientEmail: client?.email?.trim() || '',
-                }),
-                variant: "success",
-                duration: 6500,
-            });
-            setTimeout(() => {
-                onActionSuccess();
-                setSendPhase('idle');
-            }, 900);
+            setSentDone({ recipient: client?.email?.trim() || '' });
+            setTimeout(() => setSendPhase('idle'), 900);
         } catch (error) {
             console.error("Error sending draft invoice:", error);
             onOptimisticUpdate?.(invoice.id, 'draft');
@@ -270,18 +266,8 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                     })
                 );
             }
-            onActionSuccess?.();
-
             setShowEmailPreview(false);
-            toast({
-                title: "Invoice sent to email successfully!",
-                description: documentSendSuccessDescription({
-                    mode: 'invoice',
-                    recipientEmail: client.email?.trim() || '',
-                }),
-                variant: "success",
-                duration: 6500,
-            });
+            setSentDone({ recipient: client.email?.trim() || '' });
         } catch (error) {
             console.error("Failed to send email:", error);
             const message = isAbortError(error)
@@ -363,17 +349,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                 ...updates,
                 version_history: appendHistory(invoice.version_history, historyEntry),
             });
-            onActionSuccess();
-            setShowManualShare(false);
-            toast({
-                title: "Invoice marked as sent",
-                description: documentSendSuccessDescription({
-                    mode: 'invoice',
-                    recipientEmail: sentToEmail?.trim() || '',
-                }),
-                variant: "success",
-                duration: 6500,
-            });
+            // The share modal now shows the "Invoice sent" Done State; the list refreshes when it closes.
         } catch (error) {
             console.error("Failed to mark invoice as sent or save email:", error);
             toast({
@@ -816,20 +792,33 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                     invoice={invoice}
                     isOpen={showPaymentModal}
                     onClose={() => setShowPaymentModal(false)}
-                    onSave={recordPayment}
+                    onSave={(paymentData) => recordPayment(paymentData, { showToast: false })}
                 />
             )}
 
             {showManualShare && (
                 <ManualShareModal
                     isOpen={showManualShare}
-                    onClose={() => setShowManualShare(false)}
+                    onClose={() => {
+                        setShowManualShare(false);
+                        onActionSuccess?.();
+                    }}
                     shareUrl={shareUrl}
                     itemType="invoice"
                     onMarkAsSent={handleMarkAsSentFromModal}
                     invoice={invoice}
+                    client={client}
                 />
             )}
+
+            <DocumentSentDialog
+                open={Boolean(sentDone)}
+                onOpenChange={(next) => !next && closeSentDone()}
+                docType="invoice"
+                record={{ ...invoice, status: invoice.status === 'draft' ? 'sent' : invoice.status }}
+                client={client}
+                recipient={sentDone?.recipient || ''}
+            />
 
             {showEmailPreview && (
                 <EmailPreviewModal

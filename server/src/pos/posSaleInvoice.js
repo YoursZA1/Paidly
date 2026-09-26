@@ -66,7 +66,7 @@ async function linkSaleInvoice(saleId, invoiceId) {
  */
 /**
  * Was this sale's money received through a verified path?
- *  - native Paidly till: written only after its payment_intent is paid (Ozow notify / till cash)
+ *  - native Paidly till: written only after its payment_intent is paid (verified provider webhook / till cash)
  *  - Square: app-level webhook signed with Paidly's Square key
  *  - Yoco: Yoco-connect connection (secret issued by Yoco, never shown to the merchant)
  * Sales from retired manual / generic webhook connections are not.

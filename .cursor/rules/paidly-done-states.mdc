@@ -1,0 +1,41 @@
+---
+description: Paidly Done Screen standard — every important action ends in a deliberate done state
+alwaysApply: true
+---
+
+# Paidly — Done Screen standard
+
+Optimise the completion state for the user's **business outcome** (getting paid, getting accepted,
+paying staff) — not for confirming a database write.
+
+Every important completion answers:
+
+1. **What happened?** — "Invoice INV-2026-0042 sent to ABC Trading." (number, counterparty, amount)
+2. **What next?** — 2–3 useful actions (View invoice · Download PDF · Send reminder), never just "Close"
+3. **How important?** — tier decides the surface
+4. **What is still pending?** — "Payment is still outstanding."
+5. **What is the next loop?** — "Due in 14 days", "Track payment status →"
+6. **Celebrate only milestones** — first invoice (subtle), first payment (strong), R100k collected (milestone). Never on every send or payment.
+7. **One state** — Done → Result → Next actions → Status → Follow-up. No `Success → Close → list → open → act` bouncing.
+
+## Where it lives
+
+- Policy (pure, tested): `shared/ux/doneStates.js` — `doneTierFor`, `invoiceOutcome`, `dueFollowUpLabel`, `paymentMilestone`, `paymentReturnOutcome`
+- UI: `src/components/shared/DoneState.jsx` (`variant="panel" | "dialog"`)
+- Reusable states: `DocumentSentDone` / `DocumentSentDialog`, `DocumentCreatedDone`, `PaymentReturnDone`
+- Milestones (once per org/device): `src/services/milestoneService.js`
+
+## Tiers
+
+| Tier | Use for |
+|---|---|
+| toast | save/update, reminder sent (still say what is outstanding) |
+| panel | invoice/quote created or sent, quote accepted, payslip generated, payment failed, plan changed |
+| persistent | payment received, payroll completed, POS sale receipt, subscription activated |
+
+## Do not
+
+- `alert()` for success, or a bare "Success!" toast on a money flow
+- Auto-close a confirmation or auto-redirect to a list/dashboard after an important action
+- Call `runPaidConfetti()` directly — pass `celebration` to `DoneState`
+- Refresh a list while its row's Done dialog is open (the row can unmount under a status filter) — refresh on close

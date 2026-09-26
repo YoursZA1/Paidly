@@ -4,11 +4,13 @@ Paidly ingests completed POS sales via **`/api/pos/*`** (Vercel serverless + opt
 
 **Native till:** sidebar **POS** (`/POS`) is a Paidly checkout surface on the same catalog, customers, and sales table. It is not a separate database. Apply `supabase/migrations/20260828160000_native_pos_checkout.sql` so `provider = paidly` connections and receipt/return columns exist.
 
-**Native till tenders (not a fake card machine):** Pay is **Cash | Card | Digital Payment**. Cash is counted on the till (trusted cashier workflow). Card uses the **connected payment rail** automatically: a paired Paidly Pay device, else an active Yoco/Square connection from Settings → Integrations, else native **Paidly Pay**. The till never marks card paid from a cashier click — Paidly waits for that rail’s verified webhook. Digital Payment (`ozow`) completes only after Ozow confirms. Yoco/Square **webhook** sales from an external POS still ingest on `/api/pos/webhook`. Do not POST `manual_complete`, `force_paid`, or `mark_paid` to `/api/pos/checkout`.
+**Native till tenders (not a fake card machine):** Pay is **Cash | Card | Digital Payment**. Cash is counted on the till (trusted cashier workflow). Card uses the **connected payment rail** automatically: a paired Paidly Pay device, else an active Yoco/Square connection from Settings → Integrations, else native **Paidly Pay**. The till never marks card paid from a cashier click — Paidly waits for that rail’s verified webhook. Digital Payment goes through the **online payment provider the Payment Engine resolves** (currently Ozow is the only registered one) and completes only after that provider confirms via a verified webhook. When no online provider is configured the till disables Digital and the API returns `PROVIDER_NOT_CONFIGURED` without opening an intent. Yoco/Square **webhook** sales from an external POS still ingest on `/api/pos/webhook`. Do not POST `manual_complete`, `force_paid`, or `mark_paid` to `/api/pos/checkout`.
 
 **Native till inventory:** adding to cart, opening Pay, or creating a `payment_intents` row does **not** decrement `services.stock_quantity`. After verified cash/digital/card settlement, checkout writes `pos_sales_events` then calls `adjust_inventory_stock` (`source = pos`, `reference_id` = the sale event). Returns restock only when that original sale already applied inventory.
 
 **Native till receipts:** A completed sale opens a receipt (brand, sale number, time, staff, lines, discount, tax, total, tender, change). Print, download PDF, or email (`POST /api/pos/receipt/email`). This is not an invoice and does not use `/api/send-invoice`.
+
+**Restaurant mode:** business type `restaurant` (or any POS business that adds tables in Settings → Integrations → Restaurant setup) opens the till on the floor plan: Floor → Table → running order (one open tab per table) → rounds sent as kitchen tickets per station (`services.pos_station`) → KDS (New → Preparing → Ready → Complete) → bill (full, or split equally / by item / by amount) → close table → cleaning. Order types: Dine-in, Takeaway, Counter (Counter = the retail cart, unchanged). Each bill portion is a `payment_intents` row settled by `settlePosIntent` into `pos_sales_events`; stock moves once per item with the portion that carries it. Routes: `GET /api/pos/floor`, `POST /api/pos/floor-setup`, `GET|POST /api/pos/tab`, `POST /api/pos/tab-pay`, `GET|POST /api/pos/kitchen`, `GET /api/pos/orders`. Closing a shift with open tables on that till returns `OPEN_TABS` unless `allow_open_tabs` is sent.
 
 **Product surface:** **POS** (till) · Settings → **Integrations** (Yoco/Square/generic) · Dashboard **POS sales today** card.
 
@@ -42,8 +44,9 @@ Apply in Supabase **SQL Editor** (paste and run **`scripts/apply-pos-integration
 1. `supabase/migrations/20260709180000_pos_integrations.sql` — `pos_connections`, `pos_sales_events` (members SELECT; company admins/owners write via `is_company_admin_for_org`)
 2. `supabase/migrations/20260709183000_pos_oauth_states.sql` — OAuth CSRF state (service_role only)
 4. `supabase/migrations/20260828160000_native_pos_checkout.sql` — native till (`provider = paidly`), receipt numbers, returns
-5. `supabase/migrations/20260828180000_payment_intents.sql` — customer payment intents (cash / ozow)
+5. `supabase/migrations/20260828180000_payment_intents.sql` — customer payment intents (cash / online provider)
 6. `supabase/migrations/20260828190000_payment_intents_card_terminal.sql` — allow `card_terminal` on POS intents (not click-to-paid)
+7. `supabase/migrations/20260927100000_pos_restaurant_tables.sql` — restaurant mode: floors, tables, tabs, tab items, kitchen tickets, bill portions, `services.pos_station`, `restaurant` business type
 
 ---
 

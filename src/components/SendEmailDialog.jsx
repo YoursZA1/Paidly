@@ -6,8 +6,10 @@ import { createPageUrl } from "@/utils";
 
 /**
  * Ensures a public share token, builds the client-facing URL, then reuses ManualShareModal for copy + email.
+ * After an email is sent, a draft is marked sent (same rule as the invoice/quote lists) and the modal
+ * shows the "sent" Done State.
  */
-export default function SendEmailDialog({ open, onOpenChange, docType, record, client = null, onRecordUpdate }) {
+export default function SendEmailDialog({ open, onOpenChange, docType, record, client = null, onRecordUpdate, doneActions = null }) {
   const [shareUrl, setShareUrl] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
@@ -62,6 +64,21 @@ export default function SendEmailDialog({ open, onOpenChange, docType, record, c
 
   const itemType = docType === "quote" ? "quote" : "invoice";
 
+  const markSent = async (sentToEmail) => {
+    if (!record?.id) return;
+    const updates = {};
+    if (docType === "invoice") updates.sent_to_email = sentToEmail;
+    if (String(record.status || "").toLowerCase() === "draft") {
+      updates.status = "sent";
+      // sent_date exists on quotes only (20260418180000_quotes_sent_date.sql).
+      if (docType === "quote") updates.sent_date = new Date().toISOString();
+    }
+    if (!Object.keys(updates).length) return;
+    if (docType === "invoice") await Invoice.update(record.id, updates);
+    else await Quote.update(record.id, updates);
+    onRecordUpdateRef.current?.(updates);
+  };
+
   if (!open) return null;
 
   if (error) {
@@ -102,6 +119,8 @@ export default function SendEmailDialog({ open, onOpenChange, docType, record, c
       invoice={docType === "invoice" ? record : undefined}
       document={record}
       client={client}
+      onMarkAsSent={markSent}
+      doneActions={doneActions}
     />
   );
 }

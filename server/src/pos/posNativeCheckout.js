@@ -23,7 +23,7 @@ import {
   summarizeSaleRefunds,
   withSaleLineIds,
 } from "./posReturnMath.js";
-import { mapPosPaymentMethodToProvider, isTillCashSettlement, isCardTerminalSettlement, publicPaymentIntentView } from "../payments/paymentIntentContract.js";
+import { isTillCashSettlement, isCardTerminalSettlement, publicPaymentIntentView } from "../payments/paymentIntentContract.js";
 import {
   attachPosSaleToIntent,
   confirmCustomerPaymentIntent,
@@ -33,6 +33,8 @@ import {
   findSaleForIntent,
   mapPaymentIntentSchemaError,
   settleTillCashIntent,
+  describeOnlineProvider,
+  resolvePosTenderProvider,
 } from "../payments/paymentEngine.js";
 import {
   filterCatalogForRegister,
@@ -61,7 +63,7 @@ function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
 }
 
-async function ensureNativePosConnection(orgId, userId) {
+export async function ensureNativePosConnection(orgId, userId) {
   const { data: existing, error: lookupError } = await supabaseAdmin
     .from("pos_connections")
     .select("id, org_id, provider, status")
@@ -121,7 +123,7 @@ function applyCatalogBrandFilter(query, registerCompanyId) {
   return query.is("company_id", null);
 }
 
-async function loadPosCatalogRows(orgId, opts = {}) {
+export async function loadPosCatalogRows(orgId, opts = {}) {
   const { productIds, activeOnly = false, registerCompanyId = null, enforceBrand = false } = opts;
   const ids = Array.isArray(productIds) ? [...new Set(productIds.filter(Boolean))] : null;
   if (ids && ids.length === 0) return [];
@@ -176,7 +178,7 @@ function mapMissingSchema(message) {
   return mapPaymentIntentSchemaError(msg);
 }
 
-function salePublicView(row) {
+export function salePublicView(row) {
   if (!row) return null;
   const snap = row.raw_payload && typeof row.raw_payload === "object" && !Array.isArray(row.raw_payload)
     ? row.raw_payload
@@ -374,6 +376,8 @@ export async function handleNativePosCatalog(req, res, gate) {
       register_id: register?.id || null,
       company_id: registerCompanyId,
       card_rail: cardRail,
+      // Online provider the Payment Engine would use for the digital tender (null = none connected).
+      digital_provider: describeOnlineProvider({ sourceKind: "pos" }),
     });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Could not load catalog");
@@ -392,12 +396,12 @@ export async function handleNativePosCheckout(req, res, gate) {
     return jsonError(res, 422, "payment_method must be cash, card, digital, or other");
   }
   // Card-present (Paidly Pay / Yoco / Square till) cannot complete settlement in-product yet.
-  // Do not open unpaid intents that cashiers cannot finish. Cash + Ozow digital remain.
+  // Do not open unpaid intents that cashiers cannot finish. Cash + the connected digital provider remain.
   if (paymentMethod === "card") {
     return jsonError(
       res,
       422,
-      "Card-present checkout is not available yet. Use Cash or EFT / Digital (Ozow).",
+      "Card-present checkout is not available yet. Use Cash or EFT / Digital.",
       { code: "POS_CARD_UNAVAILABLE" }
     );
   }
@@ -408,6 +412,20 @@ export async function handleNativePosCheckout(req, res, gate) {
   }
 
   const currency = String(body.currency || "ZAR").trim().toUpperCase().slice(0, 3) || "ZAR";
+
+  // The Payment Engine picks the rail. The till only says which tender the customer chose;
+  // it never names (or depends on) a specific online provider.
+  let rail;
+  try {
+    rail = resolvePosTenderProvider(paymentMethod, { currency });
+  } catch (err) {
+    if (err?.status === 422) return jsonError(res, 422, err.message, { code: err.code });
+    throw err;
+  }
+  if (!rail) {
+    return jsonError(res, 422, "Unsupported POS payment method");
+  }
+
   const idempotencyKey = String(body.idempotency_key || "").trim() || crypto.randomUUID();
   const clientId = body.client_id ? String(body.client_id).trim() : null;
   const registerIdFromBody = body.register_id ? String(body.register_id).trim() : null;
@@ -510,11 +528,6 @@ export async function handleNativePosCheckout(req, res, gate) {
     if (!loaded.ok) {
       return jsonError(res, loaded.status, loaded.message, { code: loaded.code });
     }
-  }
-
-  const rail = mapPosPaymentMethodToProvider(paymentMethod);
-  if (!rail) {
-    return jsonError(res, 422, "Unsupported POS payment method");
   }
 
   const checkoutSnapshot = {
@@ -708,7 +721,7 @@ export async function handleNativePosCheckout(req, res, gate) {
       return res.status(202).json({
         ok: true,
         pending: true,
-        code: charge.code || (redirectUrl ? "OZOW_REDIRECT" : "TERMINAL_ACTION_REQUIRED"),
+        code: charge.code || (redirectUrl ? "PROVIDER_REDIRECT" : "TERMINAL_ACTION_REQUIRED"),
         payment_intent: publicPaymentIntentView(intent),
         next_action: nextAction || { type: "redirect", redirect_url: redirectUrl },
       });

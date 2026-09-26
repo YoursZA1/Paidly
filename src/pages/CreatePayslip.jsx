@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Save, Plus, Trash2, Calculator, Info } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Calculator, Info, Eye, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
@@ -23,6 +23,8 @@ import { buildEmployerSnapshot } from "@shared/payroll/employerSnapshot.js";
 import { fetchOrganizationProfile } from "@/services/OrganizationProfileService";
 import { useCompanyContext } from "@/contexts/CompanyContext";
 import { useAppStore } from "@/stores/useAppStore";
+import DoneState from "@/components/shared/DoneState";
+import { longDate } from "@/components/shared/doneStateLabels";
 
 export default function CreatePayslip() {
     const navigate = useNavigate();
@@ -30,6 +32,8 @@ export default function CreatePayslip() {
     const { authUserId } = useAuth();
     const { companyId } = useCompanyContext();
     const userProfile = useAppStore((s) => s.userProfile);
+    // "Payslip generated" Done State (replaces the silent redirect to the list).
+    const [createdPayslip, setCreatedPayslip] = useState(null);
     const lastDraftNoticeIdRef = useRef(null);
     const [employees, setEmployees] = useState([]);
     const [employeeUuid, setEmployeeUuid] = useState("");
@@ -348,7 +352,7 @@ export default function CreatePayslip() {
                 }
             }
 
-            await Payroll.create({
+            const created = await Payroll.create({
                 ...payslipData,
                 payslip_number: payslipNumber,
                 employee_user_id: employee_user_id || undefined,
@@ -373,7 +377,20 @@ export default function CreatePayslip() {
             });
             await clearDraft();
 
-            navigate(createPageUrl("Payslips"));
+            if (created?.id) {
+                setCreatedPayslip({
+                    id: created.id,
+                    number: created.payslip_number || payslipNumber,
+                    employee: payslipData.employee_name,
+                    periodStart: payslipData.pay_period_start,
+                    periodEnd: payslipData.pay_period_end,
+                    payDate: payslipData.pay_date,
+                    netPay,
+                });
+                window.scrollTo?.({ top: 0, behavior: "smooth" });
+            } else {
+                navigate(createPageUrl("Payslips"));
+            }
         } catch (error) {
             console.error("Error creating payslip:", error);
             toast({
@@ -383,6 +400,47 @@ export default function CreatePayslip() {
             });
         }
     };
+
+    if (createdPayslip) {
+        const periodMonth = createdPayslip.periodEnd || createdPayslip.periodStart;
+        const monthLabel = periodMonth ? new Date(periodMonth).toLocaleDateString(undefined, { month: "long", year: "numeric" }) : "";
+        return (
+            <div className="min-h-screen bg-background p-4 sm:p-6">
+                <div className="max-w-2xl mx-auto pt-4">
+                    <DoneState
+                        title={monthLabel ? `Payslip for ${monthLabel} generated` : "Payslip generated"}
+                        reference={{
+                            number: createdPayslip.number ? `Payslip ${createdPayslip.number}` : null,
+                            counterparty: createdPayslip.employee || null,
+                            amount: formatCurrency(createdPayslip.netPay, userProfile?.currency || "ZAR"),
+                            meta: [
+                                createdPayslip.periodStart && createdPayslip.periodEnd
+                                    ? `${longDate(createdPayslip.periodStart)} – ${longDate(createdPayslip.periodEnd)}`
+                                    : null,
+                                createdPayslip.payDate ? `Pay date ${longDate(createdPayslip.payDate)}` : null,
+                            ].filter(Boolean).join(" · ") || "Net pay",
+                        }}
+                        message="Saved as a draft payslip. The employee can't see it until you send it."
+                        actions={[
+                            { label: "View payslip", icon: Eye, to: createPageUrl(`ViewPayslip?id=${createdPayslip.id}`) },
+                            { label: "Download PDF", icon: Download, to: createPageUrl(`PayslipPDF?id=${createdPayslip.id}&download=true`) },
+                            {
+                                // Back to the form with the same period kept — the usual next step is the
+                                // next employee. The "period already covered" guard blocks duplicates.
+                                label: "Create another",
+                                icon: Plus,
+                                variant: "ghost",
+                                onClick: () => setCreatedPayslip(null),
+                            },
+                        ]}
+                        status={{ label: "Status", value: "Not sent to the employee yet", tone: "neutral" }}
+                        pending="Send it from the payslip so the employee receives a secure copy."
+                        followUp={{ label: "All payslips", to: createPageUrl("Payslips") }}
+                    />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background p-4 sm:p-6">

@@ -295,7 +295,7 @@ export async function markPortalMessagesRead(supabase, orgId, clientId, messageI
 
 /**
  * Portal must NEVER write customer money from a browser click / simulated card form.
- * Customer settlement only via Payment Engine (verified Ozow Notify → payment_intents → payments).
+ * Customer settlement only via Payment Engine (verified provider webhook → payment_intents → payments).
  * Kept as a hard-fail stub so any leftover client callers get a clear rejection.
  */
 export async function recordPortalPayment(_supabase, _orgId, _clientId, _invoiceId, _amountRaw, _method, _notes) {
@@ -303,7 +303,7 @@ export async function recordPortalPayment(_supabase, _orgId, _clientId, _invoice
     ok: false,
     code: "PORTAL_PAYMENT_DISABLED",
     error:
-      "Online payment from the client portal is not available. Pay via the secure invoice link (Ozow) sent by the business, or contact them to arrange payment.",
+      "Online payment from the client portal is not available. Pay via the secure invoice link sent by the business, or contact them to arrange payment.",
   };
 }
 

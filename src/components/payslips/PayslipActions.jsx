@@ -57,7 +57,6 @@ export default function PayslipActions({
         } catch (error) {
             console.error("Failed to mark payslip as sent:", error);
         }
-        setShowManualShare(false);
     };
 
     const handleDownloadPDF = () => {
@@ -145,6 +144,7 @@ export default function PayslipActions({
                     shareUrl={shareUrl}
                     itemType="payslip"
                     onMarkAsSent={handleMarkAsSent}
+                    document={payslip}
                 />
             )}
         </>

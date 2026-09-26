@@ -15,7 +15,7 @@ import { motion } from "framer-motion";
 import ProjectDetails from "../components/invoice/ProjectDetails";
 import QuoteStatusBadge from "../components/quote/QuoteStatusBadge";
 import { useToast } from "@/components/ui/use-toast";
-import { documentSendSuccessDescription } from "@/components/shared/DocumentSendSuccessToast";
+import DocumentSentDialog from "@/components/shared/DocumentSentDone";
 import { sendQuoteToClient } from "@/services/InvoiceSendService";
 import { canConvertQuote, convertQuoteToInvoice, invoiceUrlFromConversion } from "@/services/QuoteConversionService";
 import { formatCurrency } from "@/utils/currencyCalculations";
@@ -51,6 +51,7 @@ function sanitizeQuotePayload(data) {
 
 export default function EditQuote() {
     const [quoteData, setQuoteData] = useState(null);
+    const [sentTo, setSentTo] = useState("");
     const [originalStatus, setOriginalStatus] = useState(null);
     const [clients, setClients] = useState([]);
     const { data: services = [], refetch: refetchCatalog } = useServicesCatalogQuery();
@@ -208,15 +209,7 @@ export default function EditQuote() {
                     duration: 10000,
                 });
             } else {
-                toast({
-                    title: "Quote sent",
-                    description: documentSendSuccessDescription({
-                        mode: "quote",
-                        recipientEmail: String(client?.email || "").trim(),
-                    }),
-                    variant: "success",
-                    duration: 6500,
-                });
+                setSentTo(String(client?.email || "").trim() || "the client");
             }
         } catch (e) {
             console.error(e);
@@ -525,6 +518,14 @@ export default function EditQuote() {
                     </motion.div>
                 </div>
             </div>
+            <DocumentSentDialog
+                open={Boolean(sentTo)}
+                onOpenChange={(next) => !next && setSentTo("")}
+                docType="quote"
+                record={quoteData || {}}
+                client={client}
+                recipient={sentTo}
+            />
         </div>
     );
 }

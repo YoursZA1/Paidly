@@ -4,6 +4,7 @@ import { Invoice, Payment } from '@/api/entities';
 import { recordDocumentPayment } from '@/api/documentPaymentApi';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
 import { formatCurrency } from '@/utils/currencyCalculations';
+import { detectPaymentMilestone } from '@/services/milestoneService';
 
 /**
  * Hook for recording money received offline (cash, EFT, card machine, cheque) against an invoice.
@@ -14,14 +15,17 @@ import { formatCurrency } from '@/utils/currencyCalculations';
  *
  * @param {Object} invoice - The invoice to record payment against
  * @param {Object} options
- * @param {Function} [options.onSuccess] - Called after successful payment with { invoice, payments, isFullyPaid }
+ * @param {Function} [options.onSuccess] - Called after successful payment with { invoice, payments, isFullyPaid, milestone }
+ * @returns recordPayment(paymentData, { showToast = true }) resolves with
+ *   { amount, amountDue, isFullyPaid, invoiceStatus, currency, milestone }.
+ *   Pass showToast: false when the caller renders its own Done State (RecordPaymentModal).
  */
 export function usePaymentActions(invoice, options = {}) {
   const { onSuccess } = options;
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const recordPayment = async (paymentData) => {
+  const recordPayment = async (paymentData, { showToast = true } = {}) => {
     if (!invoice?.id) throw new Error('Invoice is required');
     const totalAmount = invoice?.total_amount || 0;
     const remainingBalance = totalAmount - (invoice?.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -80,18 +84,31 @@ export function usePaymentActions(invoice, options = {}) {
       }
 
       const currency = invoice.currency || 'USD';
-      const isFullyPaid = Number(result?.amount_due ?? 1) <= 0;
+      const amountDue = Number(result?.amount_due ?? Math.max(0, remainingBalance - paymentData.amount));
+      const isFullyPaid = amountDue <= 0;
+      // Celebrate only milestones (first payment ever, collection thresholds) — never every payment.
+      const milestone = await detectPaymentMilestone({ amount: paymentData.amount });
 
-      toast({
-        title: isFullyPaid ? 'Invoice fully paid' : 'Payment recorded',
-        description: isFullyPaid
-          ? `${formatCurrency(paymentData.amount, currency)} received. Invoice is now fully paid.`
-          : `Partial payment of ${formatCurrency(paymentData.amount, currency)} recorded.`,
-        duration: 4000,
-      });
+      if (showToast) {
+        toast({
+          title: isFullyPaid ? 'Invoice fully paid' : 'Payment recorded',
+          description: isFullyPaid
+            ? `${formatCurrency(paymentData.amount, currency)} received. Invoice is now fully paid.`
+            : `${formatCurrency(paymentData.amount, currency)} received. ${formatCurrency(amountDue, currency)} still outstanding.`,
+          duration: 4000,
+        });
+      }
 
       const updatedInvoice = { ...invoice, status: nextStatus, version_history };
-      onSuccess?.({ invoice: updatedInvoice, payments: invoicePayments, isFullyPaid });
+      onSuccess?.({ invoice: updatedInvoice, payments: invoicePayments, isFullyPaid, milestone });
+      return {
+        amount: paymentData.amount,
+        amountDue,
+        isFullyPaid,
+        invoiceStatus: nextStatus,
+        currency,
+        milestone,
+      };
     } catch (error) {
       console.error('Failed to record payment:', error);
       toast({

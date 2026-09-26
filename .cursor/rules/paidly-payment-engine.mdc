@@ -10,7 +10,8 @@ Customer money goes through **one Payment Engine**. This is the same class of ru
 ```
 POS + Invoices + future payable modules
         → Payment Engine
-        → Ozow / cash / card_terminal
+        → provider adapter (registry: Ozow today, others later) | cash | card_terminal
+        → verified webhook → payment_intents
         → settlement adapter
 ```
 
@@ -19,18 +20,23 @@ POS + Invoices + future payable modules
 - Table: `payment_intents` (`source_kind` = `document` | `pos`)
 - Contract: `shared/payments/paymentEngine.js`
 - Runtime facade: `server/src/payments/paymentEngine.js`
-- API: existing `api/payment-intents` (Hobby — do not add `api/ozow.js` or `api/invoice-pay.js`)
+- Provider registry: `server/src/payments/paymentProviders.js` (adapters in `server/src/payments/providers/`)
+- Public provider catalog (labels only): `shared/payments/paymentProviderCatalog.js`
+- API: existing `api/payment-intents` (Hobby — do not add `api/ozow.js`, `api/<provider>.js` or `api/invoice-pay.js`)
 
 ## Do
 
 - Create/reuse intents through the Payment Engine facade
 - Add a **source adapter** (document, POS, future) that calls the engine
 - Add a **settlement adapter** that writes the existing domain table after a **verified** provider event
-- Reuse Ozow hash, webhook, and provider registry
+- Reuse the provider registry and the generic `/api/payment-intents/webhook/:provider` path
+- Resolve online providers through the engine (`resolveOnlineProvider` / `resolvePosTenderProvider`)
 
 ## Do not
 
 - Create a second payment-intent table, provider client, or webhook path for a new module
+- Hard-code a provider (e.g. `"ozow"`) in POS, invoice, or UI code — Ozow is one adapter, not the POS
+- Describe any provider as Paidly's official, default, or exclusive payment provider
 - Put PayFast on `payment_intents` (SaaS only → `payment_history`)
 - Merge invoice `payments`, POS `pos_sales_events`, and SaaS `payment_history`
 - Mark paid from a Success URL / browser callback

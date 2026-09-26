@@ -12,7 +12,10 @@ import StatusBadge from "@/components/StatusBadge";
 import SendEmailDialog from "@/components/SendEmailDialog";
 import DocumentPaymentActionBar from "@/components/invoice/DocumentPaymentActionBar";
 import InvoicePaymentHistory from "@/components/invoice/InvoicePaymentHistory";
-import { fetchDocumentPaymentHistory, fetchDocumentTimeline, fetchOzowReturnStatus } from "@/api/documentPaymentApi";
+import { fetchDocumentPaymentHistory, fetchDocumentTimeline } from "@/api/documentPaymentApi";
+import DoneState from "@/components/shared/DoneState";
+import DocumentCreatedDone from "@/components/documents/DocumentCreatedDone";
+import PaymentReturnDone from "@/components/invoice/PaymentReturnDone";
 import { DocumentTimeline } from "@/components/documents/DocumentTimeline";
 import { createPageUrl, createViewDocumentUrl } from "@/utils";
 import CommercialSourceLink from "@/components/documents/CommercialSourceLink";
@@ -25,7 +28,7 @@ import {
   isQuoteImmutable,
 } from "@/services/QuoteConversionService";
 import { useToast } from "@/components/ui/use-toast";
-import { ToastAction } from "@/components/ui/toast";
+import { formatCurrency } from "@/components/CurrencySelector";
 import { withTimeoutRetry, ENTITY_GET_TIMEOUT_MS } from "@/utils/fetchWithTimeout";
 import { startLoadingFailSafe } from "@/hooks/useLoadingFailSafe";
 import { downloadDocumentPreviewFromElement, waitForPreviewPaint } from "@/utils/documentPreviewPdf";
@@ -46,7 +49,7 @@ export default function ViewDocument() {
   const { docType: docTypeParam, id } = useParams();
   const docType = parseRouteDocumentTypeStrict(docTypeParam);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
   const [record, setRecord] = useState(null);
@@ -58,6 +61,18 @@ export default function ViewDocument() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [activityEvents, setActivityEvents] = useState([]);
+  // Quote accepted Done State — the open loop is converting it to an invoice.
+  const [quoteAcceptedDone, setQuoteAcceptedDone] = useState(false);
+  const doneParam = searchParams.get("done");
+  const payReturnIntent = searchParams.get("pay") === "return" ? searchParams.get("intent") : null;
+  const dismissDoneParams = useCallback(
+    (keys) => {
+      const next = new URLSearchParams(searchParams);
+      keys.forEach((key) => next.delete(key));
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
   const previewPdfRef = useRef(null);
 
   const loadDocument = useCallback(async () => {
@@ -175,33 +190,7 @@ export default function ViewDocument() {
         }
       }
       if (docType === "quote" && status === "accepted") {
-        toast({
-          title: "Quote accepted",
-          description: "Convert it to an invoice when you are ready.",
-          variant: "success",
-          duration: 8000,
-          action: (
-            <ToastAction
-              altText="Convert to invoice"
-              className="border-white/40 bg-white/20 text-white hover:bg-white/30"
-              onClick={async () => {
-                try {
-                  const result = await convertQuoteToInvoice(record);
-                  const url = invoiceUrlFromConversion(result);
-                  if (url) navigate(url);
-                } catch (error) {
-                  toast({
-                    title: "Could not convert quote",
-                    description: error?.message || "Please try again.",
-                    variant: "destructive",
-                  });
-                }
-              }}
-            >
-              Convert
-            </ToastAction>
-          ),
-        });
+        setQuoteAcceptedDone(true);
       } else {
         toast({ title: "Status updated", description: status, variant: "success" });
       }
@@ -289,16 +278,7 @@ export default function ViewDocument() {
       }
     };
     void load();
-    const intentId = searchParams.get("intent");
-    if (searchParams.get("pay") === "return" && intentId) {
-      void fetchOzowReturnStatus({ intentId }).then((status) => {
-        if (cancelled) return;
-        if (status.snapshot?.history) setPaymentHistory(status.snapshot.history);
-        if (status.snapshot?.invoice_status && status.snapshot.invoice_status !== record?.status) {
-          setRecord((prev) => (prev ? { ...prev, status: status.snapshot.invoice_status } : prev));
-        }
-      }).catch(() => {});
-    }
+    // ?pay=return is handled by <PaymentReturnDone>, which polls and reports back via onStatus.
     return () => {
       cancelled = true;
     };
@@ -378,6 +358,76 @@ export default function ViewDocument() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto pb-28 md:pb-6">
+      {doneParam === "created" && (
+        <DocumentCreatedDone
+          docType={docType}
+          record={record}
+          client={client}
+          fromQuote={searchParams.get("from") === "quote"}
+          onSend={() => {
+            dismissDoneParams(["done", "from"]);
+            setEmailOpen(true);
+          }}
+          onDownload={() => void downloadPDF()}
+          onEdit={() =>
+            navigate(
+              `${createPageUrl(docType === "quote" ? "EditQuote" : "EditInvoice")}?id=${encodeURIComponent(record.id)}`
+            )
+          }
+          onDismiss={() => dismissDoneParams(["done", "from"])}
+        />
+      )}
+      {docType === "invoice" && payReturnIntent && (
+        <PaymentReturnDone
+          invoice={record}
+          intentId={payReturnIntent}
+          resultParam={searchParams.get("result")}
+          onDownload={() => void downloadPDF()}
+          onStatus={(status) => {
+            if (status?.snapshot?.history) setPaymentHistory(status.snapshot.history);
+            const nextStatus = status?.snapshot?.invoice_status;
+            if (nextStatus) setRecord((prev) => (prev && prev.status !== nextStatus ? { ...prev, status: nextStatus } : prev));
+          }}
+          onDismiss={() => dismissDoneParams(["pay", "intent", "result"])}
+        />
+      )}
+      {docType === "quote" && quoteAcceptedDone && record?.status === "accepted" && (
+        <DoneState
+          title="Quote accepted"
+          reference={{
+            number: record.quote_number ? `Quote ${record.quote_number}` : null,
+            counterparty: client?.name || null,
+            amount: record.total_amount != null ? formatCurrency(record.total_amount, record.currency || "ZAR") : null,
+          }}
+          message="Your client said yes. Turn it into an invoice to get paid."
+          actions={[
+            canConvertQuote(record)
+              ? {
+                  label: "Convert to invoice",
+                  icon: ArrowRightSquare,
+                  onClick: async () => {
+                    try {
+                      const result = await convertQuoteToInvoice(record);
+                      const url = invoiceUrlFromConversion(result);
+                      if (url) navigate(result.already_converted ? url : `${url}${url.includes("?") ? "&" : "?"}done=created&from=quote`);
+                    } catch (error) {
+                      toast({
+                        title: "Could not convert quote",
+                        description: error?.message || "Please try again.",
+                        variant: "destructive",
+                      });
+                    }
+                  },
+                }
+              : null,
+            { label: "Download PDF", icon: Download, onClick: () => void downloadPDF(), variant: "outline" },
+            { label: "Later", onClick: () => setQuoteAcceptedDone(false), variant: "ghost" },
+          ].filter(Boolean)}
+          status={{ label: "Quote status", value: "Accepted · not invoiced yet", tone: "pending" }}
+          pending="No invoice exists for this work yet."
+          onDismiss={() => setQuoteAcceptedDone(false)}
+        />
+      )}
       {docType === "invoice" && (
         <DocumentPaymentActionBar
           invoice={record}
@@ -533,6 +583,17 @@ export default function ViewDocument() {
         record={record}
         client={client}
         onRecordUpdate={(next) => setRecord((prev) => (prev ? { ...prev, ...next } : prev))}
+        doneActions={[
+          {
+            label: "Download PDF",
+            icon: Download,
+            onClick: () => {
+              setEmailOpen(false);
+              void downloadPDF();
+            },
+          },
+          { label: "Done", onClick: () => setEmailOpen(false), variant: "outline" },
+        ]}
       />
     </div>
   );

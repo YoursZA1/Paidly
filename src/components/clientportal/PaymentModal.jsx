@@ -8,7 +8,7 @@ import { formatCurrency } from "../CurrencySelector";
 /**
  * Client portal never captures card details or records payments from the browser.
  * "Pay" hands off to the invoice's secure payment page (/view/:token), which runs the Payment Engine:
- * document-pay → payment_intent → Ozow → verified Notify → settlement.
+ * document-pay → payment_intent → configured payment provider → verified webhook → settlement.
  */
 export default function PaymentModal({ isOpen, onClose, invoice }) {
   const outstandingAmount = invoiceAmountDue(invoice, invoice?.payments || []);
@@ -37,8 +37,8 @@ export default function PaymentModal({ isOpen, onClose, invoice }) {
           {payUrl ? (
             <>
               <p className="text-sm text-muted-foreground">
-                You&apos;ll continue on the invoice&apos;s secure payment page and pay by instant EFT (Ozow). The
-                invoice is marked paid only after Ozow confirms the payment to Paidly.
+                You&apos;ll continue on the invoice&apos;s secure payment page to pay online. The invoice is
+                marked paid only after the payment provider confirms the payment to Paidly.
               </p>
               <Button asChild className="w-full">
                 <a href={payUrl}>Continue to secure payment</a>

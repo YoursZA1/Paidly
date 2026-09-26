@@ -19,7 +19,7 @@ import { CARD_RAIL_UNAVAILABLE, cardTerminalRailEnabled } from "../../../shared/
 /** Throws when the card / terminal rail is off (production: no acquirer can prove a card charge). */
 export function assertCardRailAvailable(provider) {
   if (!isCardTerminalSettlement(provider) || cardTerminalRailEnabled()) return;
-  const error = new Error("Card payments are not available yet. Take cash, or use Ozow (instant EFT).");
+  const error = new Error("Card payments are not available yet. Take cash, or use a connected digital payment provider.");
   error.code = CARD_RAIL_UNAVAILABLE;
   error.status = 422;
   throw error;

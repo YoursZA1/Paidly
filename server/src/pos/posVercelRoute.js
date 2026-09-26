@@ -7,6 +7,8 @@
  * Express (`server/src/pos/posApiRoutes.js`) still uses the nested URLs.
  */
 
+import { RESTAURANT_ROUTE_BY_HEAD } from "./restaurant/posRestaurantRouteNames.js";
+
 const DUMMY_SEGMENT = "route";
 
 export function firstQueryValue(value) {
@@ -142,6 +144,7 @@ export function resolvePosRoute(req) {
   }
   if (head === "catalog") return { route: "catalog" };
   if (head === "checkout") return { route: "checkout" };
+  if (RESTAURANT_ROUTE_BY_HEAD[head] && parts.length === 1) return { route: RESTAURANT_ROUTE_BY_HEAD[head] };
   if (head === "return") return { route: "return" };
   if (head === "receipt" && second === "email") return { route: "receipt-email" };
   if (head === "invoice") return { route: "invoice" };
@@ -222,6 +225,8 @@ export function resolvePosRoute(req) {
   if (urlPath.endsWith("/invoice") || /\/invoice$/i.test(urlPath)) {
     return { route: "invoice" };
   }
+  const restaurantHead = urlPath.match(/\/api\/pos\/(floor-setup|floor|tab-pay|tab|kitchen|orders)$/i)?.[1]?.toLowerCase();
+  if (restaurantHead && RESTAURANT_ROUTE_BY_HEAD[restaurantHead]) return { route: RESTAURANT_ROUTE_BY_HEAD[restaurantHead] };
   if (/\/registers$/i.test(urlPath)) return { route: "registers-list" };
   const registerMatch = urlPath.match(/\/registers\/([^/]+)/i);
   if (registerMatch?.[1]) return { route: "register-by-id", id: registerMatch[1] };

@@ -9,6 +9,7 @@ import { breakApi } from '@/api/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchEmailTemplates } from '@/services/EmailTemplatesService';
 import { effectiveEmailTemplate, renderEmailTemplate } from '@shared/emailTemplates.js';
+import { DocumentSentDone } from '@/components/shared/DocumentSentDone';
 
 function escapeHtml(text) {
     return String(text)
@@ -18,8 +19,15 @@ function escapeHtml(text) {
         .replace(/"/g, '&quot;');
 }
 
-export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType = "invoice", onMarkAsSent, invoice, document: docRecord = null, client = null }) {
+/**
+ * Share a document by link or email. After an email is sent the modal becomes the Done State
+ * (what was sent, to whom, what is still pending, next actions) instead of closing.
+ * `doneActions` lets the caller supply page-specific next actions (e.g. Download PDF).
+ */
+export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType = "invoice", onMarkAsSent, invoice, document: docRecord = null, client = null, doneActions = null }) {
     const { profile } = useAuth();
+    const [sentTo, setSentTo] = useState('');
+    const [sendError, setSendError] = useState('');
     const [copied, setCopied] = useState(false);
     const [emailTo, setEmailTo] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
@@ -29,6 +37,8 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
     // Prefill from the company's email template (Business+) or Paidly's default wording.
     useEffect(() => {
         if (!isOpen) return undefined;
+        setSentTo('');
+        setSendError('');
         let cancelled = false;
         const record = docRecord || invoice || {};
         const docType = itemType === 'quote' ? 'quote' : 'invoice';
@@ -71,10 +81,11 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
 
     const handleSendEmail = async () => {
         if (!emailTo || !emailSubject) {
-            alert('Please fill in the recipient email and subject.');
+            setSendError('Please fill in the recipient email and subject.');
             return;
         }
 
+        setSendError('');
         setIsSending(true);
         try {
             const emailBody = `
@@ -107,18 +118,52 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
                 body: emailBody
             });
 
-            alert('Email sent successfully!');
             if (onMarkAsSent) {
-                await onMarkAsSent(emailTo);
+                try {
+                    await onMarkAsSent(emailTo);
+                } catch (markErr) {
+                    // The email went out; a failed status update must not hide that.
+                    console.warn('Email sent; could not update document status:', markErr);
+                }
             }
-            onClose();
+            setSentTo(emailTo.trim());
         } catch (error) {
             console.error('Failed to send email:', error);
-            alert('Failed to send email. Please try again.');
+            setSendError('The email could not be sent. Check the address and try again.');
         } finally {
             setIsSending(false);
         }
     };
+
+    const copyAction = {
+        label: copied ? 'Link copied' : 'Copy link',
+        icon: copied ? CheckCircle : Copy,
+        onClick: handleCopyLink,
+        variant: 'outline',
+    };
+
+    if (sentTo) {
+        return (
+            <Dialog open={isOpen} onOpenChange={onClose}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>{itemType === 'quote' ? 'Quote sent' : itemType === 'payslip' ? 'Payslip sent' : 'Invoice sent'}</DialogTitle>
+                        <DialogDescription>Sent to {sentTo}</DialogDescription>
+                    </DialogHeader>
+                    <DocumentSentDone
+                        docType={itemType === 'quote' ? 'quote' : itemType === 'payslip' ? 'payslip' : 'invoice'}
+                        record={docRecord || invoice || {}}
+                        client={client}
+                        recipient={sentTo}
+                        currency={profile?.currency}
+                        actions={doneActions}
+                        extraActions={itemType === 'payslip' ? [copyAction] : []}
+                        onDone={onClose}
+                    />
+                </DialogContent>
+            </Dialog>
+        );
+    }
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -194,6 +239,10 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
                         </div>
                     </div>
                 </div>
+
+                {sendError ? (
+                    <p className="text-sm text-destructive" role="alert">{sendError}</p>
+                ) : null}
 
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose}>

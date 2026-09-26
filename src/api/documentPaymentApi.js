@@ -107,11 +107,12 @@ export async function fetchDocumentPaymentHistory({ invoiceId, shareToken = null
   return parseJson(res, "Could not load payment history");
 }
 
-export async function fetchOzowReturnStatus({ intentId, shareToken = null }) {
+/** Poll after returning from the online payment provider. Never settles the invoice. */
+export async function fetchPaymentReturnStatus({ intentId, shareToken = null }) {
   const headers = shareToken ? publicHeaders(shareToken) : await authHeaders();
   const qs = new URLSearchParams({ intent: intentId });
   if (shareToken) qs.set("token", shareToken);
-  const res = await apiRequest(`${apiBase()}/api/payment-intents/ozow-return?${qs}`, {
+  const res = await apiRequest(`${apiBase()}/api/payment-intents/payment-return?${qs}`, {
     method: "GET",
     headers,
   });

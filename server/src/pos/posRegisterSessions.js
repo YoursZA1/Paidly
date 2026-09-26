@@ -335,6 +335,19 @@ export async function handlePosSessionOpen(req, res) {
 /**
  * POST /api/pos/sessions/:id/close — snapshot cash and freeze the row.
  */
+/** Open restaurant tabs on a register (0 when restaurant tables are not installed). */
+async function countOpenRestaurantTabs(orgId, registerId) {
+  if (!registerId) return 0;
+  const { data, error } = await supabaseAdmin
+    .from("pos_tabs")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("register_id", registerId)
+    .eq("status", "open");
+  if (error) return 0;
+  return (data || []).length;
+}
+
 export async function handlePosSessionClose(req, res) {
   const gate = await requirePosPermission(req, res, PERMISSIONS.POS_CLOSE_REGISTER);
   if (!gate.ok) return gate.response;
@@ -358,6 +371,17 @@ export async function handlePosSessionClose(req, res) {
     if (!row) return jsonError(res, 404, "Session not found");
     if (row.status === "closed") {
       return jsonError(res, 422, "Completed POS sessions cannot be edited", { code: "SESSION_CLOSED" });
+    }
+
+    // Restaurant: unpaid table bills on this register would fall outside the shift's cash-up.
+    if (body.allow_open_tabs !== true) {
+      const openTabs = await countOpenRestaurantTabs(orgId, row.register_id);
+      if (openTabs > 0) {
+        return jsonError(res, 409, `${openTabs} table order${openTabs === 1 ? " is" : "s are"} still open on this till. Settle or transfer them, or close the shift anyway.`, {
+          code: "OPEN_TABS",
+          open_tabs: openTabs,
+        });
+      }
     }
 
     const sales = await loadSessionSales(row.id);

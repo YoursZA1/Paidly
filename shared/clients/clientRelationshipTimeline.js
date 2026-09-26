@@ -15,6 +15,7 @@ import {
 } from "../commercial/documentStatuses.js";
 import { invoiceAmountDue, isConfirmedInvoicePayment } from "../payments/invoiceBalance.js";
 import { DOCUMENT_EVENT_TYPE } from "../documents/documentEvents.js";
+import { isOnlineProviderId, paymentProviderLabel } from "../payments/paymentProviderCatalog.js";
 
 export const CLIENT_TIMELINE_PAGE_SIZE = 40;
 export const CLIENT_TIMELINE_MAX_PAGE_SIZE = 100;
@@ -215,8 +216,9 @@ export function mapActorType(raw) {
 export function formatActorLabel(actorType, metadata = {}) {
   const actor = mapActorType(actorType);
   const source = String(metadata.source || metadata.provider || "").trim().toLowerCase();
-  if (actor === CLIENT_TIMELINE_ACTOR.PAYMENT_GATEWAY || source === "ozow") {
-    return source === "ozow" || metadata.provider === "ozow" ? "Via Ozow" : "Payment gateway";
+  const onlineProvider = [source, String(metadata.provider || "").trim().toLowerCase()].find(isOnlineProviderId);
+  if (actor === CLIENT_TIMELINE_ACTOR.PAYMENT_GATEWAY || onlineProvider) {
+    return onlineProvider ? `Via ${paymentProviderLabel(onlineProvider)}` : "Payment gateway";
   }
   if (actor === CLIENT_TIMELINE_ACTOR.CLIENT) return "By client";
   if (actor === CLIENT_TIMELINE_ACTOR.USER) {
@@ -852,7 +854,7 @@ export function paymentIntentFallbackItem(intent, invoiceNumber = null) {
     documentNumber: invoiceNumber,
     clientId: intent.client_id || null,
     actorType: CLIENT_TIMELINE_ACTOR.PAYMENT_GATEWAY,
-    source: intent.provider || "ozow",
+    source: intent.provider || "payment_gateway",
     occurredAt: intent.updated_at || intent.created_at,
     amount: intent.amount,
     paymentIntentId: intent.id,

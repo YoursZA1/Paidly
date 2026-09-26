@@ -10,7 +10,7 @@ import {
   handleDocumentPay,
   handleDocumentRecord,
   handleDocumentRemind,
-  handleOzowReturn,
+  handlePaymentReturn,
 } from "./documentPaymentRoutes.js";
 import {
   handleDocumentEngagement,
@@ -29,7 +29,9 @@ export function registerPaymentIntentRoutes(app) {
   app.get("/api/payment-intents/document-timeline", handleDocumentTimeline);
   app.get("/api/payment-intents/document-engagement", handleDocumentEngagement);
   app.post("/api/payment-intents/document-event", handleDocumentEventIngest);
-  app.get("/api/payment-intents/ozow-return", handleOzowReturn);
+  app.get("/api/payment-intents/payment-return", handlePaymentReturn);
+  // Legacy alias kept for clients built before the provider-neutral path.
+  app.get("/api/payment-intents/ozow-return", handlePaymentReturn);
   app.post("/api/payment-intents/webhook/:provider", handleCustomerPaymentWebhook);
   app.get("/api/payment-intents/:id", handlePaymentIntentGet);
   app.post("/api/payment-intents/:id", handlePaymentIntentAction);

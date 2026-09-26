@@ -998,7 +998,7 @@ app.post("/api/payfast/subscription", requireAuthMiddleware, (req, res) => {
   });
 });
 
-/** Legacy one-time invoice PayFast checkout — disabled (410). Customer invoices pay via the Payment Engine (Ozow). */
+/** Legacy one-time invoice PayFast checkout — disabled (410). Customer invoices pay via the Payment Engine (configured online provider). */
 app.post("/api/payfast/once", payfastOnceHandler);
 
 /**

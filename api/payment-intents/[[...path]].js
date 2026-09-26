@@ -12,7 +12,7 @@ import {
   handleDocumentRecord,
   handleDocumentRemind,
   handleDocumentHistory,
-  handleOzowReturn,
+  handlePaymentReturn,
 } from "../../server/src/payments/documentPaymentRoutes.js";
 import {
   handleDocumentEngagement,
@@ -81,7 +81,8 @@ export default async function handler(req, res) {
   if (head === "document-timeline") return handleDocumentTimeline(req, res);
   if (head === "document-engagement") return handleDocumentEngagement(req, res);
   if (head === "document-event") return handleDocumentEventIngest(req, res);
-  if (head === "ozow-return") return handleOzowReturn(req, res);
+  // "ozow-return" is the legacy alias of the provider-neutral return/poll path.
+  if (head === "payment-return" || head === "ozow-return") return handlePaymentReturn(req, res);
 
   if (!head && req.method === "POST") return handlePaymentIntentCreate(req, res);
   if (!head && req.method === "GET") return handlePaymentProvidersList(req, res);

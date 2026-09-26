@@ -28,7 +28,7 @@ export async function appendDocumentPaymentStatusEvent(intent, nextStatus, extra
     metadata: {
       payment_intent_id: intent.id,
       amount: intent.amount,
-      provider: intent.provider || extra.provider || "ozow",
+      provider: intent.provider || extra.provider || null,
       status: nextStatus,
       source: extra.source || "payment_engine",
       ...((extra.metadata && typeof extra.metadata === "object") ? extra.metadata : {}),

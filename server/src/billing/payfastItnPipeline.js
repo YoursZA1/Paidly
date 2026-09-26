@@ -317,12 +317,12 @@ export function createPayfastItnProductionHandler(deps) {
       return res.status(400).send("Merchant mismatch");
     }
 
-    // Legacy customer invoice PayFast path — DISABLED (Payment Engine / Ozow only).
+    // Legacy customer invoice PayFast path — DISABLED (customer money goes through the Payment Engine).
     // SaaS subscription ITN continues below. Acknowledge so PayFast does not retry forever.
     const customStr1 = String(payload.custom_str1 || "");
     if (customStr1.startsWith("invoice:")) {
       console.warn(
-        "[payfast-itn] Ignoring legacy customer invoice ITN — use Payment Engine (Ozow). custom_str1=",
+        "[payfast-itn] Ignoring legacy customer invoice ITN — use the Payment Engine. custom_str1=",
         customStr1.slice(0, 48)
       );
       await updateItnLog(supabase, itnLogId, {

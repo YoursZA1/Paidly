@@ -107,7 +107,7 @@ describe("Task 28 POS acceptance", () => {
   });
 
   it("TEST 6 Successful digital payment — verified paid intent may complete the sale", () => {
-    expect(mapPosPaymentMethodToProvider("digital")).toBe("ozow");
+    expect(mapPosPaymentMethodToProvider("digital", { onlineProvider: "ozow" })).toBe("ozow");
     expect(posSaleCompletesWhenPaid({ status: "paid" })).toBe(true);
     expect(
       paymentIntentMatchesPayable(

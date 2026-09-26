@@ -6,7 +6,7 @@ import { ArrowLeft, CheckCircle, FileText, Download, Send } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 import { sendInvoicePdfEmailToClient } from "@/services/InvoiceSendService";
-import { documentSendSuccessDescription } from "@/components/shared/DocumentSendSuccessToast";
+import DocumentSentDialog from "@/components/shared/DocumentSentDone";
 import { createPageUrl } from "@/utils";
 import DocumentPreview from "@/components/DocumentPreview";
 import {
@@ -36,6 +36,7 @@ function InvoicePreview({
 }) {
   const { toast } = useToast();
   const [isSending, setIsSending] = useState(false);
+  const [sentTo, setSentTo] = useState("");
 
   const clientList = Array.isArray(clients) ? clients : [];
   const clientResolved = clientList.find((c) => c.id === invoiceData?.client_id) ?? null;
@@ -111,15 +112,7 @@ function InvoicePreview({
     setIsSending(true);
     try {
       await sendInvoicePdfEmailToClient(invoiceData, sendClient, {});
-      toast({
-        title: "Invoice sent to email successfully!",
-        description: documentSendSuccessDescription({
-          mode: "invoice",
-          recipientEmail: clientEmail,
-        }),
-        variant: "success",
-        duration: 6500,
-      });
+      setSentTo(clientEmail);
     } catch (error) {
       console.error("Send invoice error:", error);
       toast({
@@ -264,6 +257,14 @@ function InvoicePreview({
           </section>
         </CardContent>
       </Card>
+      <DocumentSentDialog
+        open={Boolean(sentTo)}
+        onOpenChange={(next) => !next && setSentTo("")}
+        docType="invoice"
+        record={{ ...invoiceData, status: invoiceData?.status === "draft" ? "sent" : invoiceData?.status }}
+        client={clientProp ?? clientResolved ?? client}
+        recipient={sentTo}
+      />
     </div>
   );
 }

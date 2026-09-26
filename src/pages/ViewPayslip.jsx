@@ -97,7 +97,6 @@ export default function ViewPayslip() {
         } catch (error) {
             console.error("Failed to mark payslip as sent:", error);
         }
-        setShowManualShare(false);
     };
 
     return (
@@ -175,6 +174,7 @@ export default function ViewPayslip() {
                     shareUrl={shareUrl}
                     itemType="payslip"
                     onMarkAsSent={handleMarkAsSent}
+                    document={payslip}
                 />
             )}
         </div>

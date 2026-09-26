@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plug, Copy, Trash2, RefreshCw, Loader2, Check, Link2 } from "lucide-react";
+import { Plug, Copy, Trash2, RefreshCw, Loader2, Check, Link2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,7 @@ import {
   getPosOAuthStatus,
   startSquareOAuthConnect,
   connectYocoPos,
+  listPaymentProviders,
 } from "@/services/PosIntegrationService";
 import { posAccessPath } from "@shared/posStaffInvite.js";
 
@@ -61,6 +62,67 @@ function CopyField({ label, value, description }) {
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Read-only view of the online payment providers the Payment Engine supports for the POS digital tender.
+ * Only providers that are actually registered on the server are listed — nothing here is a placeholder.
+ */
+function PosPaymentProviderCard() {
+  const [providers, setProviders] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    listPaymentProviders({ sourceKind: "pos" })
+      .then((rows) => {
+        if (!cancelled) setProviders(rows.filter((p) => p.kind === "online"));
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="rounded-xl border border-border p-4 space-y-3">
+      <div className="flex items-start gap-3">
+        <Wallet className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold">POS payment provider</h3>
+          <p className="text-sm text-muted-foreground">
+            EFT / Digital payments on Paidly POS go through a supported payment provider. The sale is paid only
+            after that provider confirms it to Paidly.
+          </p>
+        </div>
+      </div>
+      {failed ? (
+        <p className="text-sm text-muted-foreground">Payment providers could not be loaded.</p>
+      ) : providers == null ? (
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </p>
+      ) : providers.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No online payment provider is supported yet. Cash still works.</p>
+      ) : (
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {providers.map((provider) => (
+            <li key={provider.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{provider.label}</p>
+                <p className="text-xs text-muted-foreground">Payment provider</p>
+              </div>
+              <Badge variant={provider.configured ? "default" : "secondary"}>
+                {provider.configured ? "Available" : "Not configured"}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -219,6 +281,7 @@ export default function PosIntegrationSettings() {
         value={posAccessUrl}
         description="Dedicated POS link for this business. Staff still sign in. Bookmark it on devices, or copy a till-specific link from Registers below."
       />
+      <PosPaymentProviderCard />
       <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/30 p-4">
         <Plug className="h-5 w-5 text-primary mt-0.5 shrink-0" />
         <div className="space-y-1">

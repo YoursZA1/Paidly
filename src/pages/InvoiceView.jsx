@@ -24,7 +24,8 @@ import { isValidShareToken } from '@/utils/inputSanitization';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 import DocumentPaymentActionBar from '@/components/invoice/DocumentPaymentActionBar';
 import InvoicePaymentHistory from '@/components/invoice/InvoicePaymentHistory';
-import { fetchDocumentPaymentHistory } from '@/api/documentPaymentApi';
+import { fetchDocumentPaymentHistory, startDocumentPayment } from '@/api/documentPaymentApi';
+import PaymentReturnDone from '@/components/invoice/PaymentReturnDone';
 
 /**
  * Public read-only invoice view at /view/:token.
@@ -33,7 +34,7 @@ import { fetchDocumentPaymentHistory } from '@/api/documentPaymentApi';
  */
 export default function InvoiceView() {
   const { token } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const trackingTokenRecorded = useRef(false);
   const [invoice, setInvoice] = useState(null);
   const [client, setClient] = useState(null);
@@ -299,6 +300,36 @@ export default function InvoiceView() {
             <p className="text-xs text-muted-foreground">Due {invoice.delivery_date}</p>
           ) : null}
         </div>
+        {searchParams.get('pay') === 'return' && searchParams.get('intent') ? (
+          <div className="mb-4">
+            <PaymentReturnDone
+              publicMode
+              invoice={invoice}
+              intentId={searchParams.get('intent')}
+              resultParam={searchParams.get('result')}
+              shareToken={token}
+              onStatus={(status) => {
+                if (status?.snapshot?.history) setPaymentHistory(status.snapshot.history);
+              }}
+              onDownload={() =>
+                window.open(`${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(token)}&download=true`, '_blank', 'noopener,noreferrer')
+              }
+              onRetry={async () => {
+                try {
+                  const result = await startDocumentPayment({ invoiceId: invoice.id, shareToken: token, retry: true });
+                  if (result?.redirect_url) window.location.assign(result.redirect_url);
+                } catch {
+                  /* the payment bar below still offers Retry payment */
+                }
+              }}
+              onDismiss={() => {
+                const next = new URLSearchParams(searchParams);
+                ['pay', 'intent', 'result'].forEach((key) => next.delete(key));
+                setSearchParams(next, { replace: true });
+              }}
+            />
+          </div>
+        ) : null}
         <DocumentPaymentActionBar
           invoice={invoice}
           client={client}

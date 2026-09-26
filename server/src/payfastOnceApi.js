@@ -1,6 +1,6 @@
 /**
  * POST /api/payfast/once — legacy one-time invoice PayFast checkout.
- * DISABLED: customer invoice money uses Payment Engine (document-pay → Ozow).
+ * DISABLED: customer invoice money uses the Payment Engine (document-pay → configured online provider).
  * SaaS subscription checkout remains on /api/payfast + /api/subscriptions.
  */
 import { applyPaidlyServerlessCors } from "./vercelPaidlyCors.js";
@@ -15,7 +15,7 @@ export default async function payfastOnceHandler(req, res) {
 
   return res.status(410).json({
     error:
-      "Legacy PayFast one-time invoice checkout is disabled. Customers pay via the Payment Engine (Ozow).",
+      "Legacy PayFast one-time invoice checkout is disabled. Customers pay via the Payment Engine.",
     code: "CUSTOMER_PAYFAST_DISABLED",
   });
 }

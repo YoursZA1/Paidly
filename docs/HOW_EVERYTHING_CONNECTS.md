@@ -131,7 +131,7 @@ flowchart LR
 
 ## 4b. Payment Engine (one capture path)
 
-POS, invoices, and future payable modules do **not** each own Ozow/PayFast/webhooks. They call one engine; settlement stays in the existing domain tables.
+POS, invoices, and future payable modules do **not** each own provider integrations, PayFast, or webhooks. They call one engine, which resolves the configured provider adapter; settlement stays in the existing domain tables. Ozow is one registered online provider, not the POS itself.
 
 ```mermaid
 flowchart LR
@@ -139,7 +139,9 @@ flowchart LR
   Inv[Invoices]
   Fut[Future modules]
   Eng[Payment Engine]
-  Ozow[Ozow / cash / card_terminal]
+  Reg[Provider registry]
+  Online[Online providers: Ozow, future]
+  Rails[cash / card_terminal]
   Pay[invoice payments]
   Till[pos_sales_events]
   SaaS[PayFast SaaS only]
@@ -147,13 +149,22 @@ flowchart LR
   POS --> Eng
   Inv --> Eng
   Fut --> Eng
-  Eng --> Ozow
-  Ozow --> Pay
-  Ozow --> Till
+  Eng --> Reg
+  Reg --> Online
+  Eng --> Rails
+  Online -->|verified webhook| Eng
+  Eng --> Pay
+  Eng --> Till
   SaaS -.->|not payment_intents| Eng
 ```
 
-Contract: `shared/payments/paymentEngine.js`. Facade: `server/src/payments/paymentEngine.js`. API: existing `api/payment-intents` (do not add a 13th Vercel function).
+Contract: `shared/payments/paymentEngine.js`. Facade: `server/src/payments/paymentEngine.js`. Provider registry: `server/src/payments/paymentProviders.js`; public provider catalog: `shared/payments/paymentProviderCatalog.js`. API: existing `api/payment-intents` (do not add a 13th Vercel function).
+
+**Adding a payment provider** (no POS or invoice code changes):
+1. Descriptor in `shared/payments/paymentProviderCatalog.js` (id = `payment_intents.provider`, label, kind).
+2. Adapter `server/src/payments/providers/<id>Provider.js` implementing `isConfigured`, `createCharge`, `handleWebhook` (verify only), and `currencies`/`sourceKinds`; register it in `paymentProviders.js` and add it to `ONLINE_PAYMENT_PROVIDERS` in `paymentIntentContract.js`.
+3. New migration extending the `payment_intents_provider_*` CHECK constraint.
+4. Webhook URL is `/api/payment-intents/webhook/<id>`. Credentials stay server-side env; never `VITE_*`.
 
 ---
 

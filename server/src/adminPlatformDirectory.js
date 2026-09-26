@@ -14,6 +14,8 @@ import {
   planFamilyLabel,
   successRate,
 } from "../../shared/admin/adminPlatformMetrics.js";
+import { listCustomerPaymentProviders } from "./payments/paymentProviders.js";
+import { paymentProviderLabel } from "../../shared/payments/paymentProviderCatalog.js";
 
 function unavailable(kind, reason) {
   return {
@@ -373,7 +375,7 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     const names = await loadOrgNames(supabase, sales.data.map((r) => r.org_id));
     const [usage, enabled, connections] = await Promise.all([
       usageSnapshot(supabase, "pos_sales_events", "occurred_at"),
-      countTable(supabase, "organizations", (q) => q.in("business_type", ["retail", "mixed"])),
+      countTable(supabase, "organizations", (q) => q.in("business_type", ["retail", "mixed", "restaurant"])),
       countTable(supabase, "pos_connections"),
     ]);
     return {
@@ -543,6 +545,14 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     return {
       kind: "payment-intents",
       view: "operations",
+      // Registered provider adapters and whether this deployment has their server-side credentials.
+      providers: listCustomerPaymentProviders().map(({ id, label, kind, sourceKinds, configured }) => ({
+        id,
+        label,
+        kind,
+        sourceKinds,
+        configured,
+      })),
       usage: {
         total: countExact(total),
         successful: ok,
@@ -558,7 +568,7 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
         business: names.get(String(r.org_id)) || "—",
         amount: money(r.amount),
         status: r.status || "pending",
-        extra: r.provider || "—",
+        extra: r.provider ? paymentProviderLabel(r.provider, r.provider) : "—",
         date: r.created_at,
       })),
     };

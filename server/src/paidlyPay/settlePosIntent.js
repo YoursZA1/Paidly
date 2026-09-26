@@ -91,8 +91,17 @@ export async function settlePosIntent(intent, { actorType = POS_AUDIT_ACTOR.WEBH
       discount_amount: snapshot.discount_amount ?? 0,
       tax_amount: snapshot.tax_amount ?? 0,
       tax_rate: snapshot.tax_rate ?? 0,
-      settlement: "terminal",
-      origin: "paidly_pay",
+      // Restaurant tabs pass their own settlement/origin; Paidly Pay terminal sales keep the defaults.
+      settlement: snapshot.settlement || "terminal",
+      origin: snapshot.origin || "paidly_pay",
+      ...(snapshot.tab_id
+        ? {
+            tab_id: snapshot.tab_id,
+            tab_label: snapshot.tab_label || null,
+            order_number: snapshot.order_number ?? null,
+            bill_label: snapshot.bill_label || null,
+          }
+        : {}),
     },
   };
   if (!insertPayload.register_id) delete insertPayload.register_id;

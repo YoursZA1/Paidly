@@ -8,7 +8,7 @@
  *
  * Therefore:
  * - Do not enqueue POS sales on the invoice sync queue.
- * - Do not store card / Ozow / PayFast credentials on the device.
+ * - Do not store card, payment-provider, or PayFast credentials on the device.
  * - Do not mark card or digital paid while offline.
  * - Do not treat a queued cash row as a completed `pos_sales_events` sale.
  * Cash checkout is online-only in V1 (same as card/digital). Cart hold stays

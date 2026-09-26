@@ -12,7 +12,8 @@ import {
   markPaymentIntentExpired,
   publicPaymentIntentView,
 } from "./paymentIntentService.js";
-import { ozowAmountString } from "./ozowHash.js";
+import { onlineProviderIdsForSource, resolveOnlineProvider } from "./paymentProviders.js";
+import { paymentProviderLabel } from "../../../shared/payments/paymentProviderCatalog.js";
 import {
   ACTIVE_PAYMENT_INTENT_STATUSES,
   isActivePaymentIntentStatus,
@@ -36,6 +37,12 @@ const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
 function money(value) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+
+/** Two-decimal string for comparing a notified amount with the intent (non-numeric → "", never equal). */
+function amountString(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(2) : "";
 }
 
 function escapeHtml(value) {
@@ -77,7 +84,7 @@ export async function findActiveDocumentIntent(orgId, invoiceId) {
     .select("*")
     .eq("org_id", orgId)
     .eq("source_kind", "document")
-    .eq("provider", CUSTOMER_PAYMENT_PROVIDERS.OZOW)
+    .in("provider", onlineProviderIdsForSource("document"))
     .eq("document_id", invoiceId)
     .in("status", ACTIVE_PAYMENT_INTENT_STATUSES)
     .order("created_at", { ascending: false })
@@ -146,12 +153,8 @@ export async function createOrReuseDocumentPaymentIntent({
   }
 
   const currency = String(invoice.currency || invoice.owner_currency || "ZAR").trim().toUpperCase();
-  if (currency !== "ZAR") {
-    const error = new Error("Ozow invoice payments are only available in ZAR");
-    error.code = "UNSUPPORTED_CURRENCY";
-    error.status = 422;
-    throw error;
-  }
+  // The Payment Engine picks the online provider (configured + accepts this currency). Throws 422 when none.
+  const onlineProvider = resolveOnlineProvider({ sourceKind: "document", currency });
 
   const payments = await listConfirmedInvoicePayments(orgId, invoice.id);
   const amountDue = invoiceAmountDue(invoice, payments);
@@ -164,6 +167,11 @@ export async function createOrReuseDocumentPaymentIntent({
 
   const withToken = await ensureInvoiceShareToken(invoice);
   let intent = forceNewAttempt ? null : await findActiveDocumentIntent(orgId, invoice.id);
+  if (intent && intent.provider !== onlineProvider.id) {
+    // The business's online provider changed since this attempt started; begin a fresh attempt.
+    await markPaymentIntentExpired(intent);
+    intent = null;
+  }
   if (intent && money(intent.amount) !== amountDue) {
     await markPaymentIntentExpired(intent);
     intent = null;
@@ -174,7 +182,7 @@ export async function createOrReuseDocumentPaymentIntent({
     intent = await createPaymentIntentRow({
       orgId,
       sourceKind: "document",
-      provider: CUSTOMER_PAYMENT_PROVIDERS.OZOW,
+      provider: onlineProvider.id,
       amount: amountDue,
       currency,
       idempotencyKey: `document:${invoice.id}:attempt:${randomUUID()}`,
@@ -250,12 +258,12 @@ async function insertSettledInvoicePayment(intent, invoice, amount) {
     amount,
     status: "paid",
     paid_at: (offline && meta.paid_at) || new Date().toISOString(),
-    method: offline ? meta.offline_method || "cash" : "ozow",
+    method: offline ? meta.offline_method || "cash" : intent.provider,
     // Always the intent id: the link back to the Payment Engine (and the idempotency key).
     reference,
     notes: offline
       ? [meta.payer_reference ? `Ref ${meta.payer_reference}` : null, meta.notes || null].filter(Boolean).join(" · ") || null
-      : `Ozow ${intent.external_id || intent.id}`,
+      : `${paymentProviderLabel(intent.provider)} ${intent.external_id || intent.id}`,
   };
 
   const { data, error } = await supabaseAdmin.from("payments").insert(row).select("*").single();
@@ -459,14 +467,14 @@ export async function applyVerifiedProviderEvent({ intentId, nextStatus, externa
     throw missing;
   }
 
-  // A provider only settles its own rail's intents (an Ozow notify never pays a cash / card intent).
+  // A provider only settles its own rail's intents (an online-provider notify never pays a cash / card intent).
   if (provider && String(intent.provider || "").toLowerCase() !== String(provider).toLowerCase()) {
     const mismatch = new Error("This payment intent belongs to a different payment rail");
     mismatch.code = "PROVIDER_MISMATCH";
     throw mismatch;
   }
 
-  if (amount != null && amount !== "" && ozowAmountString(intent.amount) !== ozowAmountString(amount)) {
+  if (amount != null && amount !== "" && amountString(intent.amount) !== amountString(amount)) {
     console.error("[document-payment] amount mismatch", {
       intentId: intent.id,
       expected: intent.amount,

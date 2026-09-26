@@ -4,9 +4,12 @@
  * POS, invoices, and future payable modules enter here.
  * They do not own providers, webhooks, or payment tables.
  *
- *   POS ────────┐
- *   Invoices ───┼──→ Payment Engine ──→ Ozow | cash | card_terminal
- *   Future ─────┘                    └──→ PayFast (SaaS only)
+ *   POS ────────┐                     ┌─→ provider adapters (registry) ─→ Ozow | future providers
+ *   Invoices ───┼──→ Payment Engine ──┼─→ card_terminal · cash (till)
+ *   Future ─────┘                     └─→ PayFast (SaaS only, never customer money)
+ *
+ * Modules never import a provider. They create/confirm payment_intents through the engine,
+ * which resolves the configured provider (server/src/payments/paymentProviders.js).
  *                    │
  *                    ↓
  *           Settlement adapters
