@@ -9,6 +9,8 @@ import { useSessionHealthStore, isTerminalSessionStatus } from "@/stores/session
 import { useAuthSessionStore } from "@/stores/authSessionStore";
 import { authFlowLog } from "@/lib/auth/authFlowLog";
 import { isProfileReady } from "@/lib/auth/profileRestorePolicy";
+import { isEmailVerifiedUser } from "@shared/auth/emailVerification.js";
+import VerifyEmailRequired from "@/components/auth/VerifyEmailRequired";
 
 const PROFILE_RESTORE_ATTEMPTS = 3;
 const PROFILE_RESTORE_BACKOFF_MS = [400, 800];
@@ -97,6 +99,12 @@ export default function RequireAuth({ children, roles }) {
         state={{ from: location }}
       />
     );
+  }
+
+  // Email verification is required before normal Paidly access. Rendered in place (no redirect →
+  // no loop) and before the profile restore, so no business data is requested for this session.
+  if (session?.user && !isEmailVerifiedUser(session.user)) {
+    return <VerifyEmailRequired email={session.user.email} />;
   }
 
   // Never render protected routes without a restored profiles query (JWT-only is not enough).

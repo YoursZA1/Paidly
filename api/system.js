@@ -6,6 +6,7 @@
  *           /api/drafts/get|save|delete → ?op=drafts-get|drafts-save|drafts-delete
  */
 import { createClient } from "@supabase/supabase-js";
+import { isEmailVerifiedUser } from "../shared/auth/emailVerification.js";
 import dashboardBootstrapHandler from "../server/src/dashboardBootstrapHandler.js";
 import sendEmailHandler from "../server/src/sendEmailApi.js";
 
@@ -29,6 +30,9 @@ async function handleDrafts(req, res, draftOp) {
   if (!token) return res.status(401).json({ error: "Missing token" });
   const { data: authData, error: authErr } = await admin.auth.getUser(token);
   if (authErr || !authData?.user?.id) return res.status(401).json({ error: "Unauthorized" });
+  if (!isEmailVerifiedUser(authData.user)) {
+    return res.status(403).json({ error: "Verify your email to continue.", code: "EMAIL_NOT_VERIFIED" });
+  }
 
   const body = req.body || {};
   const userId = String(body.user_id || "");

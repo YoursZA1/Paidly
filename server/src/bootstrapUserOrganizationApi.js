@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { isEmailVerifiedUser } from "../../shared/auth/emailVerification.js";
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -34,6 +35,9 @@ export default async function bootstrapUserOrganizationHandler(req, res) {
   const { data: authData, error: authError } = await admin.auth.getUser(token);
   if (authError || !authData?.user?.id) {
     return res.status(401).json({ error: authError?.message || "Invalid or expired token" });
+  }
+  if (!isEmailVerifiedUser(authData.user)) {
+    return res.status(403).json({ error: "Verify your email to continue.", code: "EMAIL_NOT_VERIFIED" });
   }
 
   const requestedUserId = String(req.body?.user_id || "").trim();

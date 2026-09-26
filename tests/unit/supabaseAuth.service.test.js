@@ -144,10 +144,11 @@ describe("SupabaseAuthService (mocked)", () => {
       const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
       mockSupabase.auth.resend.mockResolvedValue({ error: null });
       await expect(SupabaseAuthService.resendSignupEmail("n@e.com")).resolves.toBe(true);
-      expect(mockSupabase.auth.resend).toHaveBeenCalledWith({
-        type: "signup",
-        email: "n@e.com",
-      });
+      // In the browser the resent link lands on `${origin}/auth/verified`; this Node test has no
+      // origin, so no redirect is sent (Supabase then uses the Site URL, which forwards the token).
+      expect(mockSupabase.auth.resend).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "signup", email: "n@e.com", options: expect.any(Object) })
+      );
     });
   });
 });

@@ -1,3 +1,5 @@
+import { isEmailVerifiedUser } from "../../../shared/auth/emailVerification.js";
+
 /**
  * @param {import("http").IncomingMessage} req
  * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
@@ -12,6 +14,9 @@ export async function requireBearerUser(req, supabaseAdmin) {
   const { data, error } = await supabaseAdmin.auth.getUser(bearerMatch[1].trim());
   if (error || !data?.user?.id) {
     return { error: "Invalid or expired token", status: 401 };
+  }
+  if (!isEmailVerifiedUser(data.user)) {
+    return { error: "Verify your email to continue.", status: 403 };
   }
   return { user: data.user };
 }

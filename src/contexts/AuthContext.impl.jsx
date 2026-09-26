@@ -162,6 +162,12 @@ function minimalUserFromJwtUser(su) {
 async function consumeAuthCallbackFromUrl() {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
+  // A confirmation link that fell back to the Site URL (redirect not allow-listed) still carries its
+  // token hash: hand it to Paidly's verification page, which asks Supabase to verify it.
+  if (url.searchParams.has("token_hash") && !url.pathname.startsWith("/auth/verified")) {
+    window.location.replace(`/auth/verified${url.search}`);
+    return;
+  }
   const hash = String(window.location.hash || "");
   const hasPkceCode = url.searchParams.has("code");
   const hasHashTokens = /access_token=|refresh_token=|type=/.test(hash);
@@ -1233,6 +1239,9 @@ export function AuthProvider({ children }) {
         deferAfterAuthLock(() => {
           void tryAcceptStoredInviteToken();
           void refreshUserRef.current();
+          // Welcome email fallback (e.g. verified via an older link or OAuth): the server sends it
+          // at most once and only to verified business owners, so repeat sign-ins send nothing.
+          if (norm.user?.email_confirmed_at) void SupabaseAuthService.requestWelcomeEmail(norm.accessToken);
         });
         touchAuthHeartbeatIfValid(norm);
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "SIGNED_IN" });

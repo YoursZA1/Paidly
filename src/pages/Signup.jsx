@@ -326,7 +326,7 @@ export default function Signup() {
         const pendingToken = peekPendingInviteToken();
         const posEmailRedirect =
           posInviteSignup && pendingToken && typeof window !== "undefined"
-            ? `${window.location.origin}/pos/invite/${encodeURIComponent(pendingToken)}`
+            ? `${window.location.origin}/auth/verified/pos-invite/${encodeURIComponent(pendingToken)}`
             : null;
         const { user: createdAuthUser } = await SupabaseAuthService.signUpWithEmail(
           normalizedEmail,
@@ -359,9 +359,13 @@ export default function Signup() {
         }
         const msg = getSupabaseErrorMessage(supabaseErr, "Failed to create account");
         const isSchemaOrDbError = /database error saving new user|company_address|schema cache|profiles|trigger|column.*does not exist|relation.*does not exist|signup.*failed/i.test(msg);
+        if (isSchemaOrDbError) {
+          // Operator detail stays in the console (fix: scripts/fix-signup-trigger.sql); customers see Paidly copy.
+          console.error("[signup] account creation failed on the database:", msg);
+        }
         setError(
           isSchemaOrDbError
-            ? "Signup failed due to database setup. If you're the administrator, open your Supabase project → SQL Editor, run the script in scripts/fix-signup-trigger.sql (or apply supabase/schema.postgres.sql), then try again."
+            ? "We couldn't create your Paidly account right now. Please try again in a few minutes, or contact Paidly support if it keeps happening."
             : msg
         );
         return;
@@ -621,9 +625,9 @@ export default function Signup() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-green-700 font-medium">
-            We&apos;ve sent a confirmation link to <span className="font-semibold">{email}</span>.
-            Please check your inbox and click the link to verify your account
-            {posInviteSignup ? ", then Paidly POS will open on your assigned till." : ", then continue with the setup below."}.
+            We&apos;ve sent a verification link to <span className="font-semibold">{email}</span>.
+            Confirm your email to activate your Paidly account
+            {posInviteSignup ? " — Paidly POS will then open on your assigned till" : ", then continue with the setup"}.
           </p>
           <p className="text-sm text-muted-foreground">
             If you don&apos;t see it, check your spam or junk folder.
@@ -668,7 +672,7 @@ export default function Signup() {
             <div className="text-center space-y-6 py-8">
               <div className="text-3xl">🎉</div>
               <div className="text-lg font-semibold text-zinc-50">Account created!</div>
-              <div className="text-zinc-400">Please check your email and click the confirmation link to activate your account before logging in.</div>
+              <div className="text-zinc-400">Check your email and click the verification link to activate your Paidly account.</div>
               <div className="text-sm text-zinc-400">If you don&apos;t see the email, check your spam or junk folder.</div>
               <Button
                 className="mt-4"
@@ -677,13 +681,13 @@ export default function Signup() {
                   try {
                     const { default: SupabaseAuthService } = await import("@/services/SupabaseAuthService");
                     await SupabaseAuthService.resendSignupEmail(email);
-                    setResendStatus("success:Confirmation email sent — please check your inbox.");
+                    setResendStatus("success:Verification email sent — please check your inbox.");
                   } catch (err) {
-                    setResendStatus("error:" + (err?.message || "Failed to resend confirmation email."));
+                    setResendStatus("error:" + (err?.message || "Failed to resend the verification email."));
                   }
                 }}
               >
-                Resend confirmation email
+                Resend verification email
               </Button>
               {resendStatus && (
                 <p className={`text-sm mt-2 ${resendStatus.startsWith("success:") ? "text-green-400" : "text-red-400"}`}>

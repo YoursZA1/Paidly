@@ -6,6 +6,7 @@ import AuthLayout from "@/components/layout/AuthLayout";
 import FeatureGate from "@/components/subscription/FeatureGate";
 const Dashboard = lazy(() => import("./Dashboard"));
 const Signup = lazy(() => import("./Signup"));
+const AuthVerified = lazy(() => import("./AuthVerified"));
 const Home = lazy(() => import("./Home"));
 const CreateInvoice = lazy(() => import("./CreateInvoice"));
 const CreateDocument = lazy(() => import("./CreateDocument"));
@@ -145,6 +146,9 @@ const AUTH_ROUTES = [
     { path: "/signup", element: <AuthLayout><Signup /></AuthLayout> },
     { path: "/ForgotPassword", element: <AuthLayout><ForgotPassword /></AuthLayout> },
     { path: "/ResetPassword", element: <ResetPassword /> },
+    // Email verification landing (confirmation email → Supabase verifyOtp → Paidly). Public route.
+    { path: "/auth/verified", element: <AuthVerified /> },
+    { path: "/auth/verified/pos-invite/:inviteToken", element: <AuthVerified /> },
     { path: "/AcceptInvite", element: <AcceptInvite /> },
     { path: "/invite", element: <InvitePage /> },
     { path: "/Invite", element: <InvitePage /> },

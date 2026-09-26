@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { applyPaidlyServerlessCors } from "./vercelPaidlyCors.js";
 import { buildDashboardBootstrapPayload } from "./dashboardBootstrapPayload.js";
+import { isEmailVerifiedUser } from "../../shared/auth/emailVerification.js";
 
 function getServiceSupabase() {
   const url = process.env.SUPABASE_URL;
@@ -48,6 +49,9 @@ export default async function dashboardBootstrapHandler(req, res) {
   const { data: authData, error: authErr } = await admin.auth.getUser(token);
   if (authErr || !authData?.user?.id) {
     return res.status(401).json({ error: authErr?.message || "Invalid or expired token" });
+  }
+  if (!isEmailVerifiedUser(authData.user)) {
+    return res.status(403).json({ error: "Verify your email to continue.", code: "EMAIL_NOT_VERIFIED" });
   }
 
   const userSb = createClient(url, anonKey, {

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabaseAdmin.js";
+import { EMAIL_NOT_VERIFIED, isEmailVerifiedUser } from "../../shared/auth/emailVerification.js";
 
 /**
  * Resolve the caller from `Authorization: Bearer <jwt>`.
@@ -22,6 +23,12 @@ export const getUserFromRequest = async (req) => {
   // Validate that data exists and contains a user object
   if (!data || !data.user) {
     return { user: null, error: "Invalid authentication response: user data missing" };
+  }
+
+  // Email verification is required before normal Paidly access — also enforced here so an unverified
+  // session (e.g. if "Confirm email" were ever switched off in Supabase) cannot use the API.
+  if (!isEmailVerifiedUser(data.user)) {
+    return { user: null, error: "Email not verified", code: EMAIL_NOT_VERIFIED };
   }
 
   return { user: data.user, error: null };

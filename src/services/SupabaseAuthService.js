@@ -91,10 +91,13 @@ function getSafeResetRedirect(redirectTo) {
   }
 }
 
+/** Paidly's email-verification landing page (the confirmation email links here with a token hash). */
+export const AUTH_VERIFIED_PATH = "/auth/verified";
+
 function getSafeSignupOnboardingRedirect(redirectTo) {
   const fallback =
     typeof window !== "undefined"
-      ? `${window.location.origin}/Signup?signup_onboarding=1`
+      ? `${window.location.origin}${AUTH_VERIFIED_PATH}`
       : null;
   const candidate = redirectTo || fallback;
   if (!candidate) return null;
@@ -241,14 +244,65 @@ const SupabaseAuthService = {
     }
   },
 
-  /** Resend signup confirmation email (does not reveal whether the email exists). */
-  async resendSignupEmail(email) {
+  /**
+   * Resend signup confirmation email (does not reveal whether the email exists).
+   * @param {string} email
+   * @param {string | null} [redirectTo] same-origin landing (default /auth/verified)
+   */
+  async resendSignupEmail(email, redirectTo = null) {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email: (email || "").trim().toLowerCase(),
+      options: { emailRedirectTo: getSafeSignupOnboardingRedirect(redirectTo) || undefined },
     });
     if (error) throwIfSupabaseAuthError(error, { abortMessage: "Could not resend the email. Please try again." });
     return true;
+  },
+
+  /**
+   * Complete email verification from the confirmation link (token_hash). Supabase checks the token
+   * (single use, bound to the account it was issued for) and returns that account's session.
+   * Throws the raw Supabase error so the caller can tell "expired / already used" apart.
+   */
+  async verifyEmailTokenHash(tokenHash, type = "email") {
+    const { data, error } = await supabase.auth.verifyOtp({ token_hash: String(tokenHash || ""), type });
+    if (error) throw error;
+    invalidateSessionSnapshot();
+    return { session: data?.session || null, user: data?.user || null };
+  },
+
+  /**
+   * This browser's session, only if the server confirms the account's email is verified
+   * (getUser asks Supabase, not the cached JWT). Otherwise null.
+   */
+  async getVerifiedSession() {
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data?.user?.email_confirmed_at) return null;
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    return refreshed?.session || null;
+  },
+
+  /**
+   * Ask the API to send the Paidly welcome email. The server decides (verified business owner,
+   * once ever); safe to call repeatedly. Best-effort: never throws.
+   */
+  async requestWelcomeEmail(accessToken) {
+    if (!accessToken) return { sent: false, reason: "no_session" };
+    try {
+      const { data, status } = await backendApi.post(
+        "/api/auth/welcome",
+        {},
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          validateStatus: () => true,
+          __paidlySilent: true,
+          timeout: 10000,
+        }
+      );
+      return status === 200 && data ? data : { sent: false, reason: `http_${status}` };
+    } catch {
+      return { sent: false, reason: "unreachable" };
+    }
   },
 
   /**

@@ -86,6 +86,7 @@ import { registerPaymentIntentRoutes } from "./payments/registerPaymentIntentRou
 import { registerAdminCompanyInviteRoutes } from "./adminCompanyInviteRoutes.js";
 import authSignInHandler from "./auth/authSignInApi.js";
 import authSignUpHandler from "./auth/authSignUpApi.js";
+import authWelcomeEmailHandler from "./auth/authWelcomeEmailApi.js";
 import authForgotPasswordHandler from "./auth/authForgotPasswordApi.js";
 import authRefreshHandler from "./auth/authRefreshApi.js";
 import sendEmailHandler from "./sendEmailApi.js";
@@ -810,6 +811,8 @@ app.post("/api/auth/sign-in", authSignInHandler);
 app.post("/api/auth/refresh", authRefreshHandler);
 
 app.post("/api/auth/sign-up", authSignUpHandler);
+/** Paidly welcome email — once per verified business owner (server/src/auth/authWelcomeEmailApi.js). */
+app.post("/api/auth/welcome", authWelcomeEmailHandler);
 
 /**
  * Track when a client opens an invoice link (tracking_token in message_logs).

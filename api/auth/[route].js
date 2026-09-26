@@ -1,6 +1,6 @@
 /**
  * Auth routes in one function (Vercel Hobby ≤12 functions).
- * Handles /api/auth/sign-in, sign-up, refresh, forgot-password, bootstrap-user.
+ * Handles /api/auth/sign-in, sign-up, refresh, forgot-password, bootstrap-user, welcome.
  * /api/bootstrap-org → vercel.json rewrite → /api/auth/bootstrap-user
  */
 import authSignInHandler from "../../server/src/auth/authSignInApi.js";
@@ -8,6 +8,7 @@ import authSignUpHandler from "../../server/src/auth/authSignUpApi.js";
 import authRefreshHandler from "../../server/src/auth/authRefreshApi.js";
 import authForgotPasswordHandler from "../../server/src/auth/authForgotPasswordApi.js";
 import bootstrapUserOrganizationHandler from "../../server/src/bootstrapUserOrganizationApi.js";
+import authWelcomeEmailHandler from "../../server/src/auth/authWelcomeEmailApi.js";
 
 const ROUTES = {
   "sign-in": authSignInHandler,
@@ -15,6 +16,7 @@ const ROUTES = {
   refresh: authRefreshHandler,
   "forgot-password": authForgotPasswordHandler,
   "bootstrap-user": bootstrapUserOrganizationHandler,
+  welcome: authWelcomeEmailHandler,
 };
 
 function resolveAuthRoute(req) {
