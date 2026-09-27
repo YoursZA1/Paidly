@@ -13,6 +13,7 @@ const PUBLIC_PATH_PATTERNS = [
   /^\/auth/i,
   /^\/signup/i,
   /^\/home/i,
+  /^\/how-?to\/?$/i,
   /^\/forgotpassword/i,
   /^\/resetpassword/i,
   /^\/acceptinvite/i,

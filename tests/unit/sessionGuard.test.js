@@ -17,6 +17,12 @@ describe("isPathAllowedWithoutSession", () => {
     expect(isPathAllowedWithoutSession("/LeaveApproval/abc-token")).toBe(true);
   });
 
+  it("lets guests (and search engines) open the public How-to guide", () => {
+    expect(isPathAllowedWithoutSession("/HowTo")).toBe(true);
+    expect(isPathAllowedWithoutSession("/how-to")).toBe(true);
+    expect(isPathAllowedWithoutSession("/HowToAdmin")).toBe(false);
+  });
+
   it("still treats back-office routes as session-required", () => {
     expect(isPathAllowedWithoutSession("/Dashboard")).toBe(false);
     expect(isPathAllowedWithoutSession("/Invoices")).toBe(false);

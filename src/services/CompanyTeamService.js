@@ -45,7 +45,10 @@ function parseApiJsonError(res, raw, fallbackMessage) {
     res.status >= 500 &&
     (!detail || detail === "Internal Server Error" || /ECONNREFUSED|connect ECONNREFUSED/i.test(detail))
   ) {
-    detail = `Company team API is unavailable. ${TEAM_INVITE_API_SETUP_HINT}`;
+    // Setup instructions are for developers; customers get what happened and what to do next.
+    detail = import.meta.env.DEV
+      ? `Company team API is unavailable. ${TEAM_INVITE_API_SETUP_HINT}`
+      : "We couldn't reach Paidly's team service. Your team is unchanged — please try again in a moment.";
   }
 
   throw new Error(detail || res.statusText || fallbackMessage);

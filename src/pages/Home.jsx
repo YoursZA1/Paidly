@@ -38,7 +38,7 @@ export default function Home({
 
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] pb-32 font-sans text-zinc-100 antialiased selection:bg-[#FF4F00]/30 sm:pb-28">
+    <div className="min-h-screen overflow-x-clip bg-[#0a0a0a] pb-32 font-sans text-zinc-100 antialiased selection:bg-[#FF4F00]/30 sm:pb-28">
       <JsonLd id="home" data={buildHomeStructuredDataGraph()} />
       <Navbar active={navActive} onLoginClick={openLogin} />
       <Hero onLoginClick={openLogin} />

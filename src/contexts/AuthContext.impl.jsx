@@ -1540,7 +1540,9 @@ export function AuthProvider({ children }) {
       const msg =
         err?.response?.data?.error ||
         err?.message ||
-        "Invite failed. Ensure the backend is running and configured (SUPABASE_SERVICE_ROLE_KEY).";
+        (import.meta.env.DEV
+          ? "Invite failed. Ensure the backend is running and configured (SUPABASE_SERVICE_ROLE_KEY)."
+          : "We couldn't send the invitation. No invite was created — please try again in a moment.");
       throw new Error(msg);
     }
   }, []);

@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import Layout from "./Layout.jsx";
+import { RouteDocumentMeta } from "@/lib/routeDocumentMeta";
 import AuthenticatedShell from "@/components/layout/AuthenticatedShell";
 import AuthLayout from "@/components/layout/AuthLayout";
 
@@ -563,6 +564,7 @@ function getPageName(pathname) {
 const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/$/i,
     /^\/home$/i,
+    /^\/how-?to\/?$/i,
     /^\/auth/i,
     /^\/login$/i,
     /^\/signup$/i,
@@ -634,6 +636,7 @@ function PagesContent() {
     const content = (
         <>
             <AuthProtectedRouteInvariant />
+            <RouteDocumentMeta pathname={location.pathname} />
             {routes}
         </>
     );

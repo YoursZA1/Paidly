@@ -287,10 +287,13 @@ export default function RecurringInvoices() {
                                 <BarChart3 className="w-4 h-4" />
                                 Analytics
                             </TabsTrigger>
-                            <TabsTrigger value="testing" className="flex items-center gap-2">
-                                <CheckCircle className="w-4 h-4" />
-                                Testing
-                            </TabsTrigger>
+                            {/* Dev-only: the tester generates real invoices from live templates. */}
+                            {import.meta.env.DEV && (
+                                <TabsTrigger value="testing" className="flex items-center gap-2">
+                                    <CheckCircle className="w-4 h-4" />
+                                    Testing
+                                </TabsTrigger>
+                            )}
                         </TabsList>
 
                         <TabsContent value="templates" className="space-y-6">
@@ -391,9 +394,11 @@ export default function RecurringInvoices() {
                             <RecurringInvoiceAnalytics recurringInvoices={recurringInvoices} />
                         </TabsContent>
 
-                        <TabsContent value="testing">
-                            <RecurringInvoiceAutoGenerationTester_UI />
-                        </TabsContent>
+                        {import.meta.env.DEV && (
+                            <TabsContent value="testing">
+                                <RecurringInvoiceAutoGenerationTester_UI />
+                            </TabsContent>
+                        )}
                     </Tabs>
                 )}
             </div>
