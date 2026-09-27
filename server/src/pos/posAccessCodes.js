@@ -288,6 +288,25 @@ async function tillBusinessName(till) {
  * GET /api/pos/till-info?id= — what the code screen shows ("Main Till · CoffeeShop").
  * The till id comes from the till link; it is not a credential and reveals no operators.
  */
+/**
+ * Can this deployment verify codes? (secret configured + operator-access schema installed).
+ * Lets the code screen say "not set up yet" instead of failing every attempt.
+ */
+export async function posAccessCodesReady(orgId, env = process.env) {
+  try {
+    codeSecret(env);
+  } catch {
+    return { ready: false, reason: "secret_missing" };
+  }
+  const { error } = await supabaseAdmin.from("pos_access_codes").select("id").eq("org_id", orgId).limit(1);
+  if (error) return { ready: false, reason: isMissingSchema(error.message) ? "schema_missing" : "unavailable" };
+  return { ready: true };
+}
+
+function supportRef() {
+  return crypto.randomBytes(4).toString("hex").toUpperCase();
+}
+
 export async function handlePosTillInfo(req, res) {
   const tillId = String(req.query?.id || "").trim();
   try {
@@ -295,9 +314,18 @@ export async function handlePosTillInfo(req, res) {
     if (!till || !(await orgHasPosCapability(till.org_id))) {
       return res.status(404).json({ error: "This till link is not active. Ask your manager for a new one.", code: "TILL_NOT_FOUND" });
     }
-    return res.status(200).json({ ok: true, till: { id: till.id, name: till.name }, business: { name: await tillBusinessName(till) } });
+    const readiness = await posAccessCodesReady(till.org_id);
+    if (!readiness.ready) console.error("[pos-till-info] access codes not ready", readiness.reason, till.org_id);
+    return res.status(200).json({
+      ok: true,
+      till: { id: till.id, name: till.name },
+      business: { name: await tillBusinessName(till) },
+      access_codes: readiness.ready ? "ready" : "unavailable",
+    });
   } catch (err) {
-    return res.status(500).json({ error: err?.message || "Could not load the till" });
+    const ref = supportRef();
+    console.error(`[pos-till-info] ref=${ref}`, err?.message || err);
+    return res.status(500).json({ error: "Could not load this till. Try again in a moment.", code: "TILL_INFO_ERROR", ref });
   }
 }
 
@@ -416,7 +444,14 @@ export async function handlePosCodeUnlock(req, res) {
     });
   } catch (err) {
     if (err?.status) return denied(err.status, err.message, err.code);
-    console.error("[pos-code-unlock]", err?.message || err);
-    return denied(500, "Could not verify the code. Try again.", "POS_CODE_ERROR");
+    // A system fault, not a wrong code: the attempt is not counted against the till. The reference ties
+    // what the operator sees to the server log line.
+    const ref = supportRef();
+    console.error(`[pos-code-unlock] ref=${ref} code=${err?.code || ""}`, err?.message || err);
+    return res.status(500).json({
+      error: `Paidly couldn't open the till just now — this isn't your code. Try again, or give your manager reference ${ref}.`,
+      code: "POS_CODE_ERROR",
+      ref,
+    });
   }
 }

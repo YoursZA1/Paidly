@@ -37,6 +37,9 @@ const { memory, tables } = vi.hoisted(() => {
             if (table === "pos_tabs") rec.opened_at ||= now;
             if (table === "pos_access_code_failures") rec.failed_at ||= now;
             if (violates(table, rec, null)) return { error: { code: "23505", message: `duplicate key ${table}` } };
+            if (table === "pos_access_sessions" && tables.__failSessionInsert) {
+              return { error: { code: "XX000", message: "connection reset by peer" } };
+            }
             if (table === "pos_access_sessions" && rec.user_id && !(tables.auth_users || []).some((u) => u.id === rec.user_id)) {
               return { error: { code: "23503", message: 'insert or update on table "pos_access_sessions" violates foreign key constraint "pos_access_sessions_user_id_fkey"' } };
             }
@@ -192,7 +195,7 @@ describe("POS access codes (credential)", () => {
 describe("/pos code entry → scoped POS session", () => {
   it("till info shows the till and business, not operators", async () => {
     const r = await call(codes.handlePosTillInfo, { query: { id: TILL_A } });
-    expect(r.body).toEqual({ ok: true, till: { id: TILL_A, name: "Main Till" }, business: { name: "CoffeeShop" } });
+    expect(r.body).toEqual({ ok: true, till: { id: TILL_A, name: "Main Till" }, business: { name: "CoffeeShop" }, access_codes: "ready" });
     expect((await call(codes.handlePosTillInfo, { query: { id: randomUUID() } })).statusCode).toBe(404);
   });
 
@@ -238,6 +241,36 @@ describe("/pos code entry → scoped POS session", () => {
     const { code } = await generate(MANDO);
     expect((await unlock(TILL_A, code)).statusCode).toBe(200);
     expect(tables.pos_access_sessions[0].user_id).toBe("real-user");
+  });
+
+  it("a refreshed page restores the code session (GET /api/pos/access) without asking for a PIN", async () => {
+    const { handlePosAccessGet } = await import("../../server/src/pos/posInviteActivate.js");
+    const { code } = await generate(MANDO);
+    const token = (await unlock(TILL_A, code)).body.access_token;
+    const again = await call(handlePosAccessGet, { headers: bearer(token) });
+    expect(again.statusCode).toBe(200);
+    expect(again.body).toMatchObject({ auth_method: "code", membership_id: MANDO, register: { id: TILL_A, name: "Main Till" }, org: { id: ORG_A } });
+  });
+
+  it("till info says whether codes can be verified on this deployment", async () => {
+    expect((await call(codes.handlePosTillInfo, { query: { id: TILL_A } })).body.access_codes).toBe("ready");
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    expect((await call(codes.handlePosTillInfo, { query: { id: TILL_A } })).body.access_codes).toBe("unavailable");
+  });
+
+  it("a system fault returns a support reference, says it isn't the code, and doesn't count as a failed attempt", async () => {
+    const { code } = await generate(MANDO);
+    tables.__failSessionInsert = true;
+    const r = await unlock(TILL_A, code);
+    expect(r.statusCode).toBe(500);
+    expect(r.body.code).toBe("POS_CODE_ERROR");
+    expect(r.body.ref).toMatch(/^[0-9A-F]{8}$/);
+    expect(r.body.error).toContain("isn't your code");
+    expect(r.body.error).toContain(r.body.ref);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining(`ref=${r.body.ref}`), expect.anything());
+    expect(tables.pos_access_code_failures || []).toHaveLength(0);
+    tables.__failSessionInsert = false;
+    expect((await unlock(TILL_A, code)).statusCode).toBe(200);
   });
 
   it("rejects wrong codes with one generic message and rate-limits a till", async () => {

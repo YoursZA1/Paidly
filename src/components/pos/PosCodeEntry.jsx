@@ -18,6 +18,8 @@ export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, loc
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // "code" = the code was wrong / locked out (operator can fix); "system" = Paidly's side.
+  const [errorKind, setErrorKind] = useState("code");
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -45,7 +47,12 @@ export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, loc
       const access = await unlockTillWithCode(tillId, value);
       onUnlocked?.(access);
     } catch (err) {
-      setError(err?.message || "That code is not valid for this till.");
+      const system = !err?.status || err.status >= 500;
+      setErrorKind(system ? "system" : "code");
+      setError(
+        err?.message ||
+          (system ? "Paidly couldn't open the till just now — this isn't your code. Try again." : "That code is not valid for this till.")
+      );
       setCode("");
       inputRef.current?.focus();
     } finally {
@@ -62,6 +69,8 @@ export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, loc
     setCode(next);
     if (next.length === CODE_LENGTH) void submit(next);
   };
+
+  const codesUnavailable = till?.access_codes === "unavailable";
 
   if (tillMissing) {
     return (
@@ -124,15 +133,27 @@ export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, loc
                 className={cn(
                   "flex size-10 items-center justify-center rounded-lg border-2 text-2xl",
                   i < code.length ? "border-primary" : "border-border",
-                  error && "border-destructive"
+                  error && errorKind === "code" && "border-destructive"
                 )}
               >
                 {i < code.length ? "•" : ""}
               </span>
             ))}
           </div>
+          {codesUnavailable ? (
+            <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" role="status">
+              POS access codes aren&apos;t set up for this business yet. Ask your manager.
+            </p>
+          ) : null}
           {error ? (
-            <p id="pos-access-code-error" className="mt-3 text-sm text-destructive" role="alert">
+            <p
+              id="pos-access-code-error"
+              className={cn(
+                "mt-3 text-sm",
+                errorKind === "system" ? "rounded-lg bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-200" : "text-destructive"
+              )}
+              role="alert"
+            >
               {error}
             </p>
           ) : null}
@@ -146,7 +167,7 @@ export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, loc
                   variant="outline"
                   className="h-14 text-xl font-semibold touch-manipulation"
                   aria-label={key === "back" ? "Delete last digit" : key}
-                  disabled={busy}
+                  disabled={busy || codesUnavailable}
                   onClick={() => press(key)}
                 >
                   {key === "back" ? <Delete className="size-5" /> : key}
@@ -156,7 +177,7 @@ export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, loc
               )
             )}
           </div>
-          <Button type="submit" className="mt-4 h-12 w-full text-base font-semibold" disabled={busy || code.length !== CODE_LENGTH}>
+          <Button type="submit" className="mt-4 h-12 w-full text-base font-semibold" disabled={busy || codesUnavailable || code.length !== CODE_LENGTH}>
             {busy ? <Loader2 className="size-5 animate-spin" /> : null}
             Continue
           </Button>

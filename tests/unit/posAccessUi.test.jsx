@@ -158,6 +158,21 @@ describe("PosCodeEntry", () => {
   });
 });
 
+describe("PosCodeEntry error kinds", () => {
+  it("a system fault is shown as Paidly's problem (with the reference), not as a wrong code", async () => {
+    state.unlock = async () => {
+      const err = new Error("Paidly couldn't open the till just now — this isn't your code. Try again, or give your manager reference AB12CD34.");
+      err.status = 500;
+      throw err;
+    };
+    await render(<PosCodeEntry tillId="till-1" onUnlocked={() => {}} />);
+    for (const d of "482913") await act(async () => document.querySelector(`button[aria-label="${d}"]`).click());
+    await act(async () => new Promise((r) => setTimeout(r, 0)));
+    expect(text()).toContain("reference AB12CD34");
+    expect(document.querySelector(".border-destructive")).toBeNull();
+  });
+});
+
 describe("recent shifts", () => {
   const shift = (i, status) => ({
     id: `s${i}`,
