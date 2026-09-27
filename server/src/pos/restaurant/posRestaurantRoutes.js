@@ -6,11 +6,12 @@
  *   GET  /api/pos/tab?id=               one running table order (items by round, kitchen, bill)
  *   POST /api/pos/tab                   { action: open | add_items | update_item | void_item | send |
  *                                         details | discount | service_charge | request_bill |
- *                                         transfer | merge | close | void | mark_clean }
+ *                                         transfer | merge | serve | close | void | mark_clean }
  *   POST /api/pos/tab-pay               pay the bill or one split portion (Payment Engine)
  *   GET  /api/pos/kitchen               live kitchen tickets (KDS), optional ?station=
  *   POST /api/pos/kitchen               { ticket_id, status } (accept → ready → complete)
- *   GET  /api/pos/orders                live dine-in + takeaway tabs and today's completed ones
+ *   GET  /api/pos/orders                open orders (dine-in, takeaway, counter) with stage + payment
+ *                                       state, the live kitchen queue, and today's completed orders
  *
  * Money: a bill portion is a payment_intent (source pos) with a checkout snapshot. Cash settles on
  * the till; online providers settle by verified webhook. Either way settlePosIntent writes the
@@ -42,6 +43,7 @@ import {
   DEFAULT_STATION,
   KITCHEN_STATUS,
   ORDER_TYPE,
+  PAYMENT_STATE,
   TABLE_STATUS,
   canMoveKitchenTicket,
   deriveTableStatus,
@@ -49,6 +51,8 @@ import {
   itemsShare,
   kitchenTicketNumber,
   normalizeStation,
+  orderStage,
+  paymentState,
   splitEqually,
   tabBalance,
   tabLabel,
@@ -61,6 +65,9 @@ const ACTIVE_INTENT = new Set(["pending", "requires_action", "processing"]);
 const LIVE_KITCHEN = [KITCHEN_STATUS.NEW, KITCHEN_STATUS.PREPARING, KITCHEN_STATUS.READY];
 
 export const RESTAURANT_MIGRATION = "supabase/migrations/20260927100000_pos_restaurant_tables.sql";
+export const COUNTER_ORDERS_MIGRATION = "supabase/migrations/20260927140000_pos_counter_orders.sql";
+const FAILED_INTENT = new Set(["failed", "cancelled", "expired"]);
+const ORDER_TYPES = new Set(Object.values(ORDER_TYPE));
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -160,6 +167,9 @@ function summarizeTab(tab, { table = null, items = [], tickets = [], portions = 
   const balance = tabBalance({ total: totals.total, portions });
   const status = table ? deriveTableStatus({ table, tab, items, tickets, balance }) : null;
   const liveTickets = tickets.filter((t) => LIVE_KITCHEN.includes(t.status));
+  const waiting = liveTickets.filter((t) => t.status === KITCHEN_STATUS.NEW || t.status === KITCHEN_STATUS.PREPARING);
+  const lastPortion = portions[portions.length - 1] || null;
+  const payState = paymentState(balance);
   return {
     id: tab.id,
     order_number: tab.order_number,
@@ -187,13 +197,21 @@ function summarizeTab(tab, { table = null, items = [], tickets = [], portions = 
     kitchen: {
       live: liveTickets.length,
       ready: liveTickets.filter((t) => t.status === KITCHEN_STATUS.READY).length,
+      waiting: waiting.length,
+      oldest_waiting_at: waiting.reduce((min, t) => (!min || String(t.sent_at) < min ? t.sent_at : min), null),
+      ready_at: liveTickets.filter((t) => t.status === KITCHEN_STATUS.READY).reduce((min, t) => (!min || String(t.ready_at) < min ? t.ready_at : min), null),
       state: liveTickets.some((t) => t.status === KITCHEN_STATUS.READY)
         ? "ready"
         : liveTickets.length
           ? "preparing"
           : "idle",
     },
+    stage: orderStage({ items, tickets }),
+    payment_state: payState,
+    // The latest payment attempt failed / was cancelled and nothing covers the bill yet.
+    payment_failed: payState !== PAYMENT_STATE.PAID && Boolean(lastPortion && FAILED_INTENT.has(lastPortion.status)),
     pending_items: items.filter((i) => i.status === "pending").length,
+    sent_items: items.filter((i) => i.status === "sent").length,
   };
 }
 
@@ -516,7 +534,7 @@ async function nextOrderNumber(orgId) {
 
 async function openTab(gate, body) {
   const orgId = gate.membership.orgId;
-  const orderType = body.order_type === ORDER_TYPE.TAKEAWAY ? ORDER_TYPE.TAKEAWAY : ORDER_TYPE.DINE_IN;
+  const orderType = ORDER_TYPES.has(body.order_type) ? body.order_type : ORDER_TYPE.DINE_IN;
   let table = null;
   if (orderType === ORDER_TYPE.DINE_IN) {
     table = await assertOrgRow("pos_tables", orgId, body.table_id, "Table");
@@ -531,7 +549,10 @@ async function openTab(gate, body) {
     registerSessionId = shift?.ok ? shift.session?.id || null : null;
   }
   // Operator attribution comes from the authenticated session, never from the browser.
-  const sessionName = gate.posAccess ? gate.user?.user_metadata?.full_name || null : null;
+  let sessionName = gate.posAccess ? gate.user?.user_metadata?.full_name || null : null;
+  if (!sessionName && gate.posAccess && gate.membership?.id) {
+    sessionName = (await loadMemberNames(orgId, [gate.membership.id])).get(gate.membership.id) || null;
+  }
   const base = {
     org_id: orgId,
     company_id: saleCompanyIdFromRegister(register),
@@ -565,6 +586,9 @@ async function openTab(gate, body) {
         await supabaseAdmin.from("pos_tables").update({ cleaning_since: null }).eq("id", table.id);
       }
       return data;
+    }
+    if (error.code === "23514" && orderType === ORDER_TYPE.COUNTER && /order_type/i.test(error.message || "")) {
+      throw httpError(503, "Counter kitchen orders need the latest Paidly database update. Takeaway works in the meantime.", "COUNTER_ORDERS_UNAVAILABLE");
     }
     if (error.code !== "23505") throw error;
     // Either the table already has an open order (one table = one open order) or another till took
@@ -860,6 +884,38 @@ export async function handleTabAction(req, res, gate) {
         );
         break;
       }
+      case "serve": {
+        // Front of house: everything the kitchen marked ready has been served (dine-in) or collected
+        // (takeaway / counter). Moves READY tickets to completed — the same KOT state machine the
+        // kitchen display uses — and never touches payment.
+        assertOpen(bundle);
+        const ready = bundle.tickets.filter((t) => t.status === KITCHEN_STATUS.READY);
+        if (!ready.length) throw httpError(409, "Nothing is ready to hand over yet", "NOTHING_READY");
+        ensure(
+          await supabaseAdmin
+            .from("pos_kitchen_tickets")
+            .update({ status: KITCHEN_STATUS.COMPLETED, completed_at: now, updated_at: now })
+            .eq("org_id", orgId)
+            .eq("tab_id", bundle.tab.id)
+            .eq("status", KITCHEN_STATUS.READY)
+        );
+        // A paid takeaway / counter order that has been collected is finished: complete it.
+        const after = await loadTabBundle(orgId, bundle.tab.id);
+        const stillCooking = after.tickets.some((t) => LIVE_KITCHEN.includes(t.status));
+        const pendingItems = after.items.some((i) => i.status === "pending");
+        const inFlight = after.portions.some((p) => ACTIVE_INTENT.has(p.status));
+        if (after.tab.order_type !== ORDER_TYPE.DINE_IN && after.summary.balance.settled && !stillCooking && !pendingItems && !inFlight) {
+          ensure(
+            await supabaseAdmin
+              .from("pos_tabs")
+              .update({ status: "closed", closed_at: now, closed_by: gate.user?.id || null, updated_at: now })
+              .eq("id", bundle.tab.id)
+              .eq("status", "open")
+          );
+          extra = { completed: true };
+        }
+        break;
+      }
       case "close": {
         assertOpen(bundle);
         const live = bundle.items.filter((i) => i.status !== "void");
@@ -872,12 +928,20 @@ export async function handleTabAction(req, res, gate) {
         ensure(
           await supabaseAdmin
             .from("pos_tabs")
-            .update({ status: live.length ? "closed" : "void", closed_at: now, closed_by: gate.user.id, updated_at: now })
+            .update({ status: live.length ? "closed" : "void", closed_at: now, closed_by: gate.user?.id || null, updated_at: now })
             .eq("id", bundle.tab.id)
             .eq("status", "open")
         );
-        if (bundle.table && live.length) {
-          ensure(await supabaseAdmin.from("pos_tables").update({ cleaning_since: now, updated_at: now }).eq("id", bundle.table.id));
+        // Closing frees the table (Available). Venues that reset tables first ask for cleaning.
+        if (bundle.table) {
+          const cleaning = body.cleaning === true && live.length > 0;
+          ensure(
+            await supabaseAdmin
+              .from("pos_tables")
+              .update({ cleaning_since: cleaning ? now : null, updated_at: now })
+              .eq("org_id", orgId)
+              .eq("id", bundle.table.id)
+          );
         }
         break;
       }
@@ -1215,13 +1279,25 @@ export async function handleKitchenAction(req, res, gate) {
 
 // ── Orders screen ──────────────────────────────────────────────────────────────────
 
+/** Compact lines for order cards: what was ordered and whether the kitchen has it. */
+function orderLines(items = []) {
+  return items
+    .filter((i) => i.status !== "void")
+    .map((i) => ({ id: i.id, name: i.name, quantity: Number(i.quantity) || 0, note: i.note || null, status: i.status, round: i.round || null }));
+}
+
+/**
+ * Orders screen: every open order (dine-in, takeaway, counter) with its stage and payment state,
+ * the live kitchen queue with items, and today's completed orders — one payload, so switching
+ * order type or status filter on the till never refetches.
+ */
 export async function handleRestaurantOrders(req, res, gate) {
   if (forbidUnlessPermission(res, gate.membership, PERMISSIONS.POS_ACCESS)) return;
   const orgId = gate.membership.orgId;
   try {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
-    const [open, done] = await Promise.all([
+    const [open, done, live] = await Promise.all([
       supabaseAdmin.from("pos_tabs").select("*").eq("org_id", orgId).eq("status", "open").order("opened_at", { ascending: true }),
       supabaseAdmin
         .from("pos_tabs")
@@ -1231,26 +1307,64 @@ export async function handleRestaurantOrders(req, res, gate) {
         .gte("closed_at", startOfDay.toISOString())
         .order("closed_at", { ascending: false })
         .limit(50),
+      supabaseAdmin
+        .from("pos_kitchen_tickets")
+        .select("*")
+        .eq("org_id", orgId)
+        .in("status", LIVE_KITCHEN)
+        .order("sent_at", { ascending: true })
+        .limit(200),
     ]);
     const tabs = [...(ensure(open) || []), ...(ensure(done) || [])];
+    const liveTickets = ensure(live) || [];
     const tableIds = tabs.map((t) => t.table_id).filter(Boolean);
-    const tables = tableIds.length
-      ? new Map((ensure(await supabaseAdmin.from("pos_tables").select("*").in("id", [...new Set(tableIds)])) || []).map((t) => [t.id, t]))
-      : new Map();
-    const children = await loadTabChildren(orgId, tabs.map((t) => t.id));
-    const rows = tabs.map((tab) =>
-      summarizeTab(tab, {
+    const [tableRows, children, ticketItems] = await Promise.all([
+      tableIds.length
+        ? supabaseAdmin.from("pos_tables").select("*").eq("org_id", orgId).in("id", [...new Set(tableIds)])
+        : Promise.resolve({ data: [] }),
+      loadTabChildren(orgId, tabs.map((t) => t.id)),
+      liveTickets.length
+        ? supabaseAdmin.from("pos_tab_items").select("id, kot_id, name, quantity, note, status").eq("org_id", orgId).in("kot_id", liveTickets.map((t) => t.id))
+        : Promise.resolve({ data: [] }),
+    ]);
+    const tables = new Map((ensure(tableRows) || []).map((t) => [t.id, t]));
+    const names = await loadMemberNames(orgId, tabs.map((t) => t.server_membership_id));
+    const now = new Date();
+    const rows = tabs.map((tab) => {
+      const items = children.items.get(tab.id) || [];
+      const summary = summarizeTab(tab, {
         table: tables.get(tab.table_id) || null,
-        items: children.items.get(tab.id) || [],
+        items,
         tickets: children.tickets.get(tab.id) || [],
         portions: children.portions.get(tab.id) || [],
-      })
-    );
+        now,
+      });
+      return { ...summary, server_display: names.get(tab.server_membership_id) || summary.server_name || null, lines: orderLines(items) };
+    });
+
+    const itemsByTicket = new Map();
+    for (const item of ensure(ticketItems) || []) {
+      if (item.status === "void") continue;
+      if (!itemsByTicket.has(item.kot_id)) itemsByTicket.set(item.kot_id, []);
+      itemsByTicket.get(item.kot_id).push({ id: item.id, name: item.name, quantity: Number(item.quantity), note: item.note });
+    }
+    const orderNumberByTab = new Map(tabs.map((t) => [t.id, t.order_number]));
+    const tickets = liveTickets.map((t) => ({
+      ...publicTicket(t, itemsByTicket.get(t.id) || []),
+      order_number: orderNumberByTab.get(t.tab_id) || null,
+    }));
+
+    const openRows = rows.filter((r) => r.status === "open");
     return res.status(200).json({
       ok: true,
-      live: rows.filter((r) => r.status === "open" && r.order_type === ORDER_TYPE.DINE_IN),
-      takeaway: rows.filter((r) => r.status === "open" && r.order_type === ORDER_TYPE.TAKEAWAY),
+      orders: rows,
+      tickets,
+      // Legacy grouping (kept for older tills).
+      live: openRows.filter((r) => r.order_type === ORDER_TYPE.DINE_IN),
+      takeaway: openRows.filter((r) => r.order_type === ORDER_TYPE.TAKEAWAY),
+      counter: openRows.filter((r) => r.order_type === ORDER_TYPE.COUNTER),
       completed: rows.filter((r) => r.status === "closed"),
+      generated_at: now.toISOString(),
     });
   } catch (err) {
     return sendError(res, err);

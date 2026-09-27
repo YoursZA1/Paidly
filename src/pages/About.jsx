@@ -7,7 +7,7 @@ export default function About() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto py-8">
-        <div className="mb-8">
+        <div className="mb-8 page-header-sticky">
           <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1 font-display">About Paidly</h1>
           <p className="text-muted-foreground">
             Our mission and what we stand for.

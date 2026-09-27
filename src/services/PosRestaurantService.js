@@ -22,7 +22,7 @@ export const restaurantSetup = (body) => request("/api/pos/floor-setup", { metho
 
 export const fetchTab = (id) => request("/api/pos/tab", { query: { id }, fallback: "Could not load the order" });
 
-/** action: open | add_items | update_item | void_item | send | details | discount | service_charge |
+/** action: open | add_items | update_item | void_item | send | serve | details | discount | service_charge |
  *  request_bill | transfer | merge | close | void | mark_clean */
 export const tabAction = (action, body = {}) =>
   request("/api/pos/tab", { method: "POST", body: { action, ...body }, fallback: "Could not update the order" });

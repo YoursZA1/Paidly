@@ -1,4 +1,4 @@
-import { TABLE_STATUS_META } from "@shared/pos/restaurant.js";
+import { KITCHEN_STATUS, TABLE_STATUS_META } from "@shared/pos/restaurant.js";
 
 /** Visual tokens per table-status tone. One place so floor, orders and panel agree. */
 const TONE_CLASS = {
@@ -47,3 +47,10 @@ export function minutesLabel(minutes) {
   const h = Math.floor(minutes / 60);
   return `${h}h ${minutes % 60}m`;
 }
+
+/** KOT lifecycle on the kitchen display: New → Preparing → Ready → served / collected (completed). */
+export const KITCHEN_COLUMNS = [
+  { status: KITCHEN_STATUS.NEW, title: "New", action: { next: KITCHEN_STATUS.PREPARING, label: "Start preparing" }, tone: "border-sky-500/50" },
+  { status: KITCHEN_STATUS.PREPARING, title: "Preparing", action: { next: KITCHEN_STATUS.READY, label: "Mark ready" }, tone: "border-amber-500/60" },
+  { status: KITCHEN_STATUS.READY, title: "Ready", action: { next: KITCHEN_STATUS.COMPLETED, label: "Served" }, tone: "border-emerald-600" },
+];

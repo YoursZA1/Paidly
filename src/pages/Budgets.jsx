@@ -124,7 +124,7 @@ export default function BudgetsPage() {
     return (
         <div className="min-h-screen bg-slate-50 p-6">
             <div className="max-w-7xl mx-auto space-y-8">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center page-header-sticky bg-slate-50">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900">Budgets & Forecasting</h1>
                         <p className="text-slate-600">Track spending and predict future cash flow</p>

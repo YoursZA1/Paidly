@@ -226,7 +226,7 @@ export default function NotificationBell() {
       <button
         ref={triggerRef}
         type="button"
-        className="relative flex items-center justify-center w-10 h-10 rounded-full hover:bg-muted transition-colors"
+        className="relative flex size-11 items-center justify-center rounded-full hover:bg-muted transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card lg:size-10"
         onClick={() => setOpen((o) => !o)}
         aria-label="Notifications"
         aria-expanded={open}
@@ -247,7 +247,7 @@ export default function NotificationBell() {
             role="dialog"
             aria-modal="true"
             aria-labelledby={headingId}
-            className="absolute right-0 mt-2 w-80 max-h-[min(24rem,70vh)] bg-card shadow-lg rounded-xl z-50 border border-border"
+            className="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top,0px)+0.5rem)] max-h-[min(24rem,70vh)] bg-card shadow-lg rounded-xl z-50 border border-border sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80"
           >
             <div className="p-3 border-b border-border flex items-center justify-between">
               <span id={headingId} className="font-semibold text-foreground">Activity</span>

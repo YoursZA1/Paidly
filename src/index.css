@@ -1232,6 +1232,47 @@ body {
 }
 
 @layer components {
+  /*
+   * Page header (title + actions) that stays in view while the page scrolls. The scroll container is
+   * the app <main>, or the document on admin pages; layouts with their own sticky bar set
+   * --page-header-sticky-top / --page-header-sticky-bg. A bg-* utility on the element still wins.
+   */
+  .page-header-sticky {
+    position: sticky;
+    top: var(--page-header-sticky-top, 0px);
+    z-index: 20;
+    margin-top: -0.5rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    background-color: var(--page-header-sticky-bg, hsl(var(--background)));
+  }
+  /* The app <main> pads its top (pt-4 / sm:pt-6 / md:pt-8) and sticky honours that padding, so
+     pull the header up by the same amount to sit flush under the app bar. */
+  .dashboard-scroll-area {
+    --page-header-sticky-top: -1rem;
+  }
+  @media (min-width: 640px) {
+    .dashboard-scroll-area {
+      --page-header-sticky-top: -1.5rem;
+    }
+  }
+  @media (min-width: 768px) {
+    .dashboard-scroll-area {
+      --page-header-sticky-top: -2rem;
+    }
+  }
+  /* Hairline under the header once the page has scrolled (progressive: browsers with scroll timelines). */
+  @supports (animation-timeline: scroll()) {
+    .page-header-sticky {
+      animation: page-header-sticky-edge linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 1.5rem;
+    }
+  }
+  @keyframes page-header-sticky-edge {
+    from { box-shadow: 0 1px 0 transparent; }
+    to { box-shadow: 0 1px 0 hsl(var(--border)); }
+  }
   /* Mirrors common Tailwind recipes: px-4 max-w-md mx-auto; pair with .tw-stack-6 for space-y-6 rhythm */
   .tw-mobile-column {
     @apply mx-auto w-full max-w-md px-4;

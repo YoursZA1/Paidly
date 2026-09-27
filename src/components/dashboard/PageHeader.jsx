@@ -25,7 +25,7 @@ export default function PageHeader({
   const showActions = onRefresh || children;
 
   return (
-    <div className="responsive-page-header mb-4">
+    <div className="responsive-page-header page-header-sticky mb-4">
       <div className={icon ? 'flex gap-3' : ''}>
         {icon ? (
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/40">

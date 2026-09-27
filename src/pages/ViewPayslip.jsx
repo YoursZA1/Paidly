@@ -102,7 +102,7 @@ export default function ViewPayslip() {
     return (
         <div className="min-h-screen bg-background">
             {/* Header */}
-            <div className="bg-card border-b border-border px-4 py-4">
+            <div className="bg-card border-b border-border px-4 py-4 page-header-sticky mt-0 bg-card">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <Button

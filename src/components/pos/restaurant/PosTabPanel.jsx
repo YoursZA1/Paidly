@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   ArrowLeftRight,
+  CheckCircle2,
   ChefHat,
   Combine,
   Loader2,
@@ -13,6 +14,7 @@ import {
   Save,
   Scissors,
   Send,
+  Sparkle,
   StickyNote,
   Trash2,
   Wallet,
@@ -30,6 +32,11 @@ import {
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { cn } from "@/lib/utils";
 import { ORDER_TYPE, stationLabel } from "@shared/pos/restaurant.js";
+
+const NEW_ORDER_TITLE = {
+  [ORDER_TYPE.TAKEAWAY]: ["New takeaway order", "Add items, then send to the kitchen or take payment"],
+  [ORDER_TYPE.COUNTER]: ["New counter order", "Add items, then send to the kitchen"],
+};
 import { clockTime, tableDotClass, tableStatusLabel } from "./posRestaurantUi";
 
 const KITCHEN_LABEL = { new: "Sent", preparing: "Preparing", ready: "Ready", completed: "Served", void: "Void" };
@@ -69,6 +76,8 @@ export default function PosTabPanel({
   onPrintBill,
   onDetails,
   onCloseTab,
+  onCloseCleaning,
+  onServe,
   onVoidTab,
   onVoidItem,
   onLeave,
@@ -92,15 +101,23 @@ export default function PosTabPanel({
   const totals = tab?.totals || { subtotal: 0, discount_amount: 0, service_charge: 0, total: 0 };
   const balance = tab?.balance || { paid: 0, due: totals.total, pending: 0, settled: false };
   const hasUnsent = newItems.length > 0 || saved.length > 0;
-  const takeaway = orderType === ORDER_TYPE.TAKEAWAY;
-  const title = tab ? tab.label : takeaway ? "New takeaway order" : "Choose a table";
+  // Takeaway and counter orders start from the menu; dine-in starts from a table or an order.
+  const takeaway = orderType === ORDER_TYPE.TAKEAWAY || orderType === ORDER_TYPE.COUNTER;
+  const dineIn = (tab?.order_type || orderType) === ORDER_TYPE.DINE_IN;
+  const readyCount = Number(tab?.kitchen?.ready) || 0;
+  const sentCount = items.filter((i) => i.status === "sent").length;
+  const [newTitle, newSubtitle] = NEW_ORDER_TITLE[orderType] || ["Choose an order", "Select a table or order to begin."];
+  const title = tab ? tab.label : newTitle;
   const subtitle = tab
-    ? [tab.guests ? `${tab.guests} guest${tab.guests === 1 ? "" : "s"}` : null, tab.server_name, tab.opened_at ? clockTime(tab.opened_at) : null, tab.customer_name]
+    ? [
+        tab.guests ? `${tab.guests} guest${tab.guests === 1 ? "" : "s"}` : null,
+        tab.server_display || tab.server_name ? `Server: ${tab.server_display || tab.server_name}` : null,
+        tab.opened_at ? clockTime(tab.opened_at) : null,
+        tab.customer_name,
+      ]
         .filter(Boolean)
         .join(" · ")
-    : takeaway
-      ? "Add items, then send to the kitchen or take payment"
-      : "Pick a table on the floor plan to start its order";
+    : newSubtitle;
 
   return (
     <section className={cn("flex min-h-0 flex-1 flex-col", className)} aria-label="Order">
@@ -109,6 +126,9 @@ export default function PosTabPanel({
           <h2 className="flex items-center gap-2 font-display text-lg font-bold uppercase tracking-wide">
             {tab?.table_status ? <span className={cn("size-2.5 shrink-0 rounded-full", tableDotClass(tab.table_status))} aria-hidden /> : null}
             <span className="truncate">{title}</span>
+            {tab && balance.settled ? (
+              <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-900 dark:text-emerald-200">PAID</span>
+            ) : null}
           </h2>
           <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
           {tab ? (
@@ -158,8 +178,13 @@ export default function PosTabPanel({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={onCloseTab} disabled={!balance.settled && totals.total > 0}>
-                  <X className="mr-2 size-4" /> Close table
+                  <X className="mr-2 size-4" /> {dineIn ? "Close table" : "Complete order"}
                 </DropdownMenuItem>
+                {dineIn && onCloseCleaning ? (
+                  <DropdownMenuItem onSelect={onCloseCleaning} disabled={!balance.settled && totals.total > 0}>
+                    <Sparkle className="mr-2 size-4" /> Close · needs cleaning
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem onSelect={onVoidTab} disabled={balance.paid > 0 || balance.pending > 0} className="text-destructive focus:text-destructive">
                   <Trash2 className="mr-2 size-4" /> Void order
                 </DropdownMenuItem>
@@ -283,7 +308,7 @@ export default function PosTabPanel({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">{tab || takeaway ? "Tap menu items to add them." : "No table selected."}</p>
+            <p className="text-sm text-muted-foreground">{tab || takeaway ? "Tap menu items to add them." : "Pick a table on the floor, or open an order from Orders."}</p>
           )}
         </div>
       </div>
@@ -318,10 +343,22 @@ export default function PosTabPanel({
             Send to kitchen
           </Button>
         ) : null}
+        {tab && readyCount > 0 && onServe ? (
+          <Button type="button" variant="outline" className="h-12 w-full border-emerald-600 text-sm font-semibold uppercase tracking-wide" disabled={Boolean(busy)} onClick={onServe}>
+            <CheckCircle2 className="size-4" />
+            {dineIn ? "Mark served" : "Mark collected"}
+          </Button>
+        ) : null}
+        {tab && dineIn && !balance.settled && sentCount > 0 && !tab.bill_requested_at && onRequestBill ? (
+          <Button type="button" variant="ghost" className="h-11 w-full text-sm" disabled={Boolean(busy)} onClick={onRequestBill}>
+            <Receipt className="size-4" />
+            Request bill
+          </Button>
+        ) : null}
         {tab ? (
           balance.settled ? (
             <Button type="button" variant="secondary" className="h-12 w-full text-sm font-semibold uppercase tracking-wide" disabled={Boolean(busy)} onClick={onCloseTab}>
-              Close table
+              {dineIn ? "Close table" : "Complete order"}
             </Button>
           ) : (
             <Button

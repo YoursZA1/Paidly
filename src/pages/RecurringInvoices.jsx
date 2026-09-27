@@ -182,7 +182,7 @@ export default function RecurringInvoices() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4"
+                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 page-header-sticky"
                 >
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-2 flex items-center gap-2 font-display">

@@ -366,7 +366,7 @@ export default function CalendarPage() {
   return (
     <div className="min-h-0 bg-slate-50/50 dark:bg-slate-900/50">
       <div className="responsive-page-shell py-4 lg:py-6 space-y-4">
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 page-header-sticky">
           <h1 className="truncate font-display text-xl font-semibold tracking-tight text-foreground">
             Calendar & Tasks
           </h1>

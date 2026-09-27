@@ -1082,7 +1082,7 @@ export default function DocumentDetailPage() {
   return (
     <PageTemplate>
       {/* ── Page header ── */}
-      <div className="mb-6 space-y-4">
+      <div className="mb-6 space-y-4 page-header-sticky">
         <Button
           variant="ghost"
           size="sm"

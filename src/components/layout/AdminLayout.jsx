@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import AdminSidebar from "@/components/admin/shell/AdminSidebar";
@@ -9,9 +9,22 @@ export default function AdminLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const shellRef = useRef(null);
+
+  // Page headers (.page-header-sticky) lock just below the sticky admin bar, so pass its height down.
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    const bar = shell?.querySelector(":scope > div > header");
+    if (!shell || !bar || typeof ResizeObserver === "undefined") return undefined;
+    const apply = () => shell.style.setProperty("--page-header-sticky-top", `${bar.offsetHeight}px`);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-[#F4F5F7] text-slate-900">
+    <div ref={shellRef} className="min-h-screen bg-[#F4F5F7] text-slate-900 [--page-header-sticky-bg:#F4F5F7]">
       <AdminSidebar
         collapsed={collapsed}
         setCollapsed={setCollapsed}

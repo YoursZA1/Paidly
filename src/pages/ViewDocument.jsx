@@ -438,7 +438,7 @@ export default function ViewDocument() {
           onRefresh={loadDocument}
         />
       )}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 page-header-sticky">
         <div className="flex items-center gap-4 min-w-0">
           <Button variant="ghost" size="icon" onClick={() => navigate(listHref)} aria-label="Back">
             <ArrowLeft className="w-5 h-5" />

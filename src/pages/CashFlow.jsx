@@ -421,13 +421,13 @@ export default function CashFlowPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="w-full min-w-0 h-full overflow-x-hidden mobile-page bg-background"
+            className="w-full min-w-0 h-full overflow-x-clip mobile-page bg-background"
         >
             <div className="responsive-page-shell py-4 sm:py-6 md:py-8 space-y-6 min-w-0">
                 <motion.div 
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="responsive-page-header"
+                    className="responsive-page-header page-header-sticky"
                 >
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-semibold text-foreground font-display">Cash Flow</h1>

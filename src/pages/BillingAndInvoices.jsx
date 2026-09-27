@@ -94,7 +94,7 @@ export default function BillingAndInvoices() {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8">
+        <div className="mb-8 page-header-sticky">
           <Button variant="ghost" size="sm" asChild className="-ml-2 mb-4 text-muted-foreground hover:text-foreground">
             <Link to={`${createPageUrl("Settings")}?tab=subscription`} className="inline-flex items-center gap-2">
               <ArrowLeft className="h-4 w-4" aria-hidden />

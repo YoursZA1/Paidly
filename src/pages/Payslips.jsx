@@ -185,7 +185,7 @@ function PayslipsMain() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6 md:mb-8"
+                    className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6 md:mb-8 page-header-sticky"
                 >
                     <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0">
                         <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold text-foreground font-display truncate">

@@ -533,6 +533,66 @@ describe("root-cause regressions", () => {
     expect(e.plan).toBeNull();
     expect(e.features).toEqual([]);
   });
+
+  it("a verified payment recovers a locked past_due subscription — access restored immediately, no manual step", async () => {
+    const row = seed({ plan: "business", status: "past_due", extra: { grace_ends_at: iso(-DAY) } });
+    expect(await entitlementFor()).toMatchObject({ plan: "business", accessGranted: false });
+
+    await upsertSubscriptionFromItn(
+      memory,
+      { payment_status: "COMPLETE", token: "tok-recover", custom_str2: "business_monthly", amount_gross: "150" },
+      { userIdHint: OWNER }
+    );
+
+    expect(row).toMatchObject({ status: "active", grace_ends_at: null });
+    expect(await entitlementFor()).toMatchObject({ plan: "business", accessGranted: true });
+  });
+
+  it("a verified payment recovers a fully expired (locked) subscription — access restored", async () => {
+    const row = seed({ plan: "starter", status: "expired" });
+    expect(await entitlementFor()).toMatchObject({ accessGranted: false });
+
+    await upsertSubscriptionFromItn(
+      memory,
+      { payment_status: "COMPLETE", token: "tok-recover-2", custom_str2: "growth_monthly", amount_gross: "350" },
+      { userIdHint: OWNER }
+    );
+
+    expect(row.status).toBe("active");
+    expect(await entitlementFor()).toMatchObject({ plan: "growth", accessGranted: true });
+  });
+});
+
+/**
+ * Spec: a locked company (no active subscription/trial/admin access) keeps its existing business
+ * records — invoices, quotes, clients, expenses, etc. It just cannot create NEW ones. The DB guard
+ * is a BEFORE INSERT trigger only; it must never also fire on UPDATE/DELETE of the guarded tables,
+ * or a downgraded/expired/suspended company would lose the ability to edit or remove what it already
+ * has (e.g. correcting an existing invoice, deleting a duplicate client).
+ */
+describe("locked company keeps read/write access to its existing records (insert-only guard)", () => {
+  const guardSql = [
+    readFileSync(new URL("../../supabase/migrations/20260924120000_plan_feature_db_guard.sql", import.meta.url), "utf8"),
+    readFileSync(new URL("../../supabase/migrations/20260924160000_plan_feature_guard_core_documents.sql", import.meta.url), "utf8"),
+  ];
+
+  it("the plan-feature guard trigger is BEFORE INSERT only on every guarded table (never UPDATE/DELETE)", () => {
+    for (const sql of guardSql) {
+      const triggerStatements = [...sql.matchAll(/CREATE TRIGGER paidly_plan_feature_guard[^;]*;/g)].map((m) => m[0]);
+      expect(triggerStatements.length).toBeGreaterThan(0);
+      for (const stmt of triggerStatements) {
+        expect(stmt).toMatch(/BEFORE INSERT ON public\.%I/);
+        expect(stmt).not.toMatch(/UPDATE|DELETE/);
+      }
+    }
+  });
+
+  it("expired subscription still resolves an entitlement (locked, not erased) so existing data stays attributable to the company", async () => {
+    seed({ plan: "business", status: "expired" });
+    const e = await entitlementFor();
+    // Locked: no access, no features — but the company and its plan are still known, nothing is deleted.
+    expect(e).toMatchObject({ plan: "business", accessGranted: false, companyId: COMPANY });
+  });
 });
 
 /** The Paidly package access matrix, row for row (✓ = included, — = not included). */

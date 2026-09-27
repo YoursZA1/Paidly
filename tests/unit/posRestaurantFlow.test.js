@@ -354,7 +354,8 @@ describe("bill and split payments (Payment Engine → settlePosIntent → sale)"
       [[P.burger, 2], [P.coke, 1], [P.capp, 2], [P.cake, 1]].sort()
     );
 
-    const closed = await tab({ action: "close", tab_id: id }, WAITER);
+    // Venues that reset tables first close with "needs cleaning"; a plain close frees the table.
+    const closed = await tab({ action: "close", tab_id: id, cleaning: true }, WAITER);
     expect(closed.body.tab.status).toBe("closed");
     const floor = await call("restaurant-floor", "GET");
     expect(floor.body.tables.find((t) => t.name === "12").status).toBe("cleaning");
@@ -456,5 +457,170 @@ describe("orders screen", () => {
     expect(orders.body.live.map((o) => o.id)).toEqual([id]);
     expect(orders.body.takeaway.map((o) => o.customer_name)).toEqual(["Sam"]);
     expect(orders.body.completed).toEqual([]);
+  });
+});
+
+// ── Order lifecycle: order type × status filters (Orders screen) ─────────────────────────────
+
+const OPERATOR_ID = "cccccccc-0000-4000-8000-000000000001";
+const CODE_OPERATOR = {
+  ok: true,
+  posAccess: true,
+  user: { id: null },
+  membership: { id: OPERATOR_ID, orgId: ORG, companyRole: "employee", jobFunction: "pos", permissions: ["pos_access", "pos_sell"] },
+};
+const OUTSIDER = { ok: true, user: { id: "outsider" }, membership: { orgId: OTHER, companyRole: "owner" } };
+
+const orders = async (as = WAITER) => (await call("restaurant-orders", "GET", { as })).body;
+const orderById = async (id, as) => (await orders(as)).orders.find((o) => o.id === id);
+const kitchenMove = (ticketId, status, as = WAITER) => call("restaurant-kitchen", "POST", { body: { ticket_id: ticketId, status }, as });
+async function moveAll(tabId, status) {
+  for (const t of (tables.pos_kitchen_tickets || []).filter((k) => k.tab_id === tabId && k.status !== "completed" && k.status !== "void")) {
+    await kitchenMove(t.id, status);
+  }
+}
+
+describe("order lifecycle through the orders screen", () => {
+  it("dine-in: create → kitchen → preparing → ready → served → bill → paid → close frees the table", async () => {
+    const { t12 } = await setupFloor();
+    const opened = await tab({ action: "open", table_id: t12.id, guests: 4, register_id: "reg-1" }, CODE_OPERATOR);
+    const id = opened.body.tab.id;
+    await tab({ action: "add_items", tab_id: id, items: [{ product_id: P.burger, quantity: 2 }, { product_id: P.coke, quantity: 2 }] }, CODE_OPERATOR);
+    let o = await orderById(id);
+    expect(o).toMatchObject({ stage: "open", payment_state: "unpaid", pending_items: 2 });
+    expect(o.totals.total).toBe(230);
+
+    await tab({ action: "send", tab_id: id }, CODE_OPERATOR);
+    let body = await orders();
+    o = body.orders.find((x) => x.id === id);
+    expect(o).toMatchObject({ stage: "kitchen", kitchen: expect.objectContaining({ waiting: 2, ready: 0 }) });
+    // The kitchen queue has this order's tickets, with their items.
+    const mine = body.tickets.filter((t) => t.tab_id === id);
+    expect(mine.map((t) => t.station).sort()).toEqual(["bar", "grill"]);
+    expect(mine.find((t) => t.station === "grill").items).toEqual([{ id: expect.any(String), name: "Chicken Burger", quantity: 2, note: null }]);
+    expect(mine.every((t) => t.order_number === o.order_number && t.order_type === "dine_in")).toBe(true);
+
+    await moveAll(id, "preparing");
+    expect((await orderById(id)).kitchen.waiting).toBe(2);
+    await moveAll(id, "ready");
+    o = await orderById(id);
+    expect(o).toMatchObject({ stage: "ready", payment_state: "unpaid", kitchen: expect.objectContaining({ waiting: 0, ready: 2 }) });
+
+    // Serving never pays; paying never serves.
+    const served = await tab({ action: "serve", tab_id: id }, CODE_OPERATOR);
+    expect(served.statusCode).toBe(200);
+    expect(served.body.tab).toMatchObject({ stage: "served", payment_state: "unpaid", status: "open" });
+    expect((await tab({ action: "serve", tab_id: id }, CODE_OPERATOR)).body.code).toBe("NOTHING_READY");
+
+    await tab({ action: "request_bill", tab_id: id }, CODE_OPERATOR);
+    const paid = await pay({ tab_id: id, payment_method: "cash", amount_tendered: 250 }, CODE_OPERATOR);
+    expect(paid.body).toMatchObject({ paid: true, change_due: 20 });
+    expect(paid.body.tab).toMatchObject({ payment_state: "paid", stage: "served", status: "open" });
+
+    const closed = await tab({ action: "close", tab_id: id }, CODE_OPERATOR);
+    expect(closed.body.tab.status).toBe("closed");
+    const floor = await call("restaurant-floor", "GET");
+    expect(floor.body.tables.find((t) => t.id === t12.id)).toMatchObject({ status: "available", tab: null });
+
+    // Kept in history, with operator / register / shift attribution from the session.
+    body = await orders();
+    expect(body.completed.map((x) => x.id)).toEqual([id]);
+    const row = tables.pos_tabs.find((t) => t.id === id);
+    expect(row).toMatchObject({ server_membership_id: OPERATOR_ID, register_id: "reg-1", register_session_id: "shift-1", table_id: t12.id, org_id: ORG });
+  });
+
+  it("the operator name comes from the session's membership, not the browser", async () => {
+    tables.memberships = [{ id: OPERATOR_ID, org_id: ORG, user_id: null, invited_name: "Mando" }];
+    const { t12 } = await setupFloor();
+    const opened = await tab({ action: "open", table_id: t12.id, server_name: "Somebody Else" }, CODE_OPERATOR);
+    expect(opened.body.tab.server_name).toBe("Mando");
+  });
+
+  it("a second round sends only the new items, and the first round's KOTs are not duplicated", async () => {
+    const { id } = await seatTable12WithFirstRound();
+    await tab({ action: "send", tab_id: id }, WAITER);
+    const before = tables.pos_kitchen_tickets.length;
+    // Opening the order again creates nothing.
+    await call("restaurant-tab", "GET", { query: { id } });
+    await orders();
+    expect(tables.pos_kitchen_tickets).toHaveLength(before);
+    await tab({ action: "add_items", tab_id: id, items: [{ product_id: P.cake, quantity: 1 }, { product_id: P.capp, quantity: 2 }] }, WAITER);
+    const round2 = await tab({ action: "send", tab_id: id }, WAITER);
+    const names = round2.body.sent_tickets.flatMap((t) => t.items.map((i) => i.name)).sort();
+    expect(names).toEqual(["Cappuccino", "Cheesecake"]);
+    expect(round2.body.sent_tickets.every((t) => t.round === 2)).toBe(true);
+    expect(tables.pos_tab_items.filter((i) => i.round === 1)).toHaveLength(4);
+  });
+
+  it("takeaway: kitchen → ready → paid → collected completes the order (no table)", async () => {
+    const opened = await tab({ action: "open", order_type: "takeaway", customer_name: "John", items: [{ product_id: P.burger, quantity: 1 }] }, WAITER);
+    const id = opened.body.tab.id;
+    expect(opened.body.tab).toMatchObject({ table_id: null, label: `Takeaway #${opened.body.tab.order_number}` });
+    await tab({ action: "send", tab_id: id }, WAITER);
+    await moveAll(id, "preparing");
+    await moveAll(id, "ready");
+    expect(await orderById(id)).toMatchObject({ stage: "ready", payment_state: "unpaid" });
+    await pay({ tab_id: id, payment_method: "cash", amount_tendered: 90 }, WAITER);
+    // Paid but not collected: still open, still ready.
+    expect(await orderById(id)).toMatchObject({ status: "open", stage: "ready", payment_state: "paid" });
+    const collected = await tab({ action: "serve", tab_id: id }, WAITER);
+    expect(collected.body.completed).toBe(true);
+    expect(collected.body.tab.status).toBe("closed");
+  });
+
+  it("takeaway collected before payment stays open until it is paid and completed", async () => {
+    const opened = await tab({ action: "open", order_type: "takeaway", items: [{ product_id: P.coke, quantity: 1 }] }, WAITER);
+    const id = opened.body.tab.id;
+    await tab({ action: "send", tab_id: id }, WAITER);
+    await moveAll(id, "preparing");
+    await moveAll(id, "ready");
+    const collected = await tab({ action: "serve", tab_id: id }, WAITER);
+    expect(collected.body.completed).toBeUndefined();
+    expect(collected.body.tab).toMatchObject({ status: "open", stage: "served", payment_state: "unpaid" });
+    await pay({ tab_id: id, payment_method: "cash", amount_tendered: 25 }, WAITER);
+    expect((await tab({ action: "close", tab_id: id }, WAITER)).body.tab.status).toBe("closed");
+  });
+
+  it("counter: order → kitchen → pay first → ready → collected → complete", async () => {
+    const opened = await tab({ action: "open", order_type: "counter", items: [{ product_id: P.capp, quantity: 2 }] }, WAITER);
+    expect(opened.statusCode).toBe(201);
+    const id = opened.body.tab.id;
+    expect(opened.body.tab).toMatchObject({ order_type: "counter", table_id: null, label: `Counter #${opened.body.tab.order_number}` });
+    const sent = await tab({ action: "send", tab_id: id }, WAITER);
+    expect(sent.body.sent_tickets[0]).toMatchObject({ order_type: "counter", table_label: `Counter #${opened.body.tab.order_number}` });
+    const paid = await pay({ tab_id: id, payment_method: "cash", amount_tendered: 70 }, WAITER);
+    expect(paid.body.tab).toMatchObject({ payment_state: "paid", stage: "kitchen" });
+    expect(tables.pos_sales_events.at(-1).raw_payload).toMatchObject({ origin: "pos_table", tab_label: `Counter #${opened.body.tab.order_number}` });
+    await moveAll(id, "preparing");
+    await moveAll(id, "ready");
+    const collected = await tab({ action: "serve", tab_id: id }, WAITER);
+    expect(collected.body).toMatchObject({ completed: true, tab: expect.objectContaining({ status: "closed" }) });
+  });
+
+  it("payment states: pending while the provider confirms, then unpaid with a failure flag if it fails", async () => {
+    process.env.OZOW_SITE_CODE = "TSTSTE0001";
+    process.env.OZOW_API_KEY = "k";
+    process.env.OZOW_PRIVATE_KEY = "p";
+    const { id } = await seatTable12WithFirstRound();
+    await tab({ action: "send", tab_id: id }, WAITER);
+    expect((await pay({ tab_id: id, payment_method: "digital" }, WAITER)).statusCode).toBe(202);
+    expect(await orderById(id)).toMatchObject({ payment_state: "pending", payment_failed: false });
+    // The provider reports a failure (webhook): the bill is unpaid again and says why.
+    tables.payment_intents[0].status = "failed";
+    expect(await orderById(id)).toMatchObject({ payment_state: "unpaid", payment_failed: true });
+    const retry = await pay({ tab_id: id, payment_method: "cash", amount_tendered: 400 }, WAITER);
+    expect(retry.body.tab).toMatchObject({ payment_state: "paid", payment_failed: false });
+  });
+
+  it("another business can't see or act on these orders", async () => {
+    const { id } = await seatTable12WithFirstRound();
+    await tab({ action: "send", tab_id: id }, WAITER);
+    const theirs = await orders(OUTSIDER);
+    expect(theirs.orders).toEqual([]);
+    expect(theirs.tickets).toEqual([]);
+    expect((await tab({ action: "serve", tab_id: id }, OUTSIDER)).statusCode).toBe(404);
+    expect((await pay({ tab_id: id, payment_method: "cash", amount_tendered: 400 }, OUTSIDER)).statusCode).toBe(404);
+    const ticket = tables.pos_kitchen_tickets[0];
+    expect((await kitchenMove(ticket.id, "preparing", OUTSIDER)).statusCode).toBe(404);
   });
 });

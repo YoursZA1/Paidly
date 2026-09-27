@@ -366,11 +366,11 @@ export default function Clients() {
   }, [activeInvoices]);
 
   return (
-    <div className="flex flex-col lg:flex-row lg:h-[calc(100dvh-4rem)] lg:min-h-0 min-h-0 w-full min-w-0 overflow-x-hidden bg-slate-50/50 dark:bg-slate-900/50">
+    <div className="flex flex-col lg:flex-row lg:h-[calc(100dvh-4rem)] lg:min-h-0 min-h-0 w-full min-w-0 overflow-x-clip lg:overflow-x-hidden bg-slate-50/50 dark:bg-slate-900/50">
       {/* Mobile: single scroll with Layout main (no nested viewport height) */}
       <div className="lg:hidden flex flex-col w-full min-w-0">
         <div className="flex flex-col w-full px-4 pt-2 sm:pt-4 space-y-3 pb-4">
-          <div className="flex justify-between items-center mb-2 shrink-0">
+          <div className="flex justify-between items-center mb-2 shrink-0 page-header-sticky">
             <h2 className="text-xl font-semibold text-foreground tracking-tight font-display">Clients</h2>
             <div className="flex gap-2">
               <button

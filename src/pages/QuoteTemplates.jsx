@@ -94,7 +94,7 @@ export default function QuoteTemplates() {
     if (isEditing) {
         return (
             <div className="p-6 max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-6 page-header-sticky">
                     <h1 className="text-2xl font-bold">{currentTemplate.id ? 'Edit Template' : 'New Template'}</h1>
                     <div className="flex gap-2">
                         <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
@@ -168,7 +168,7 @@ export default function QuoteTemplates() {
     return (
         <div className="min-h-screen bg-slate-50 p-6">
             <div className="max-w-6xl mx-auto">
-                <div className="flex justify-between items-center mb-8">
+                <div className="flex justify-between items-center mb-8 page-header-sticky bg-slate-50">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900">Quote Templates</h1>
                         <p className="text-slate-600">Create reusable templates to speed up your workflow.</p>

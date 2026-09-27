@@ -5,7 +5,7 @@ import {
   isValidLogoStorageObjectKey,
   markStorageAssetFailed,
 } from "@/lib/paidlyStorageAssetGuard";
-import { readLogoUrlDiskCache, writeLogoUrlDiskCache } from "@/lib/logoUrlDiskCache";
+import { clearLogoUrlDiskCacheForSrc, readLogoUrlDiskCache, writeLogoUrlDiskCache } from "@/lib/logoUrlDiskCache";
 
 const LOGO_BUCKET = "paidly";
 const LEGACY_LOGO_BUCKET = "company-logos";
@@ -146,6 +146,26 @@ function getLogo(path) {
   return url;
 }
 
+/**
+ * Public URL computed straight from the path — skips the session map, the disk cache and the failure TTL.
+ * Used as a retry after a cached URL failed to load.
+ */
+function getFreshPublicUrl(path) {
+  const { bucket, cleaned } = resolveLogoSource(path);
+  if (!cleaned || cleaned.startsWith("blob:") || cleaned.startsWith("data:")) return cleaned || null;
+  if (!isValidLogoStorageObjectKey(cleaned)) return null;
+  const { data } = supabase.storage.from(bucket).getPublicUrl(cleaned);
+  return data?.publicUrl || null;
+}
+
+/** Drop every cached URL for a path so the next getLogo() rebuilds it. */
+function forgetLogo(path) {
+  const rawInput = String(path || "").trim();
+  if (!rawInput) return;
+  SESSION_LOGO_BY_INPUT.delete(rawInput);
+  clearLogoUrlDiskCacheForSrc(rawInput);
+}
+
 async function listLogoAssets(limit = 100) {
   const { data, error } = await supabase.storage.from(LOGO_BUCKET).list("", { limit });
   if (error) throw error;
@@ -190,6 +210,8 @@ const AssetService = {
   FALLBACK_LOGO,
   cleanPath,
   getLogo,
+  getFreshPublicUrl,
+  forgetLogo,
   signLogoUrl,
   deleteLogo,
   listLogoAssets,
@@ -202,6 +224,8 @@ export default AssetService;
 export {
   cleanPath,
   getLogo,
+  getFreshPublicUrl,
+  forgetLogo,
   signLogoUrl,
   deleteLogo,
   markStorageAssetFailed,

@@ -1098,7 +1098,7 @@ function DashboardMain() {
   return (
     <div className="min-h-full w-full min-w-0 mobile-page">
       <div className="responsive-page-shell w-full min-w-0 py-2 sm:py-6 md:py-8">
-        <header className="mb-6 sm:mb-8">
+        <header className="mb-6 sm:mb-8 page-header-sticky">
           <p className="mb-1 hidden text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:block">{timeGreeting}</p>
           <h1 className="font-display text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
             {user?.company_name || userName}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ORDER_TYPE, defaultOrderType, restaurantModeEnabled } from "@shared/pos/restaurant.js";
+import { ORDER_TYPE, defaultOrderType, restaurantModeEnabled, serveVerb } from "@shared/pos/restaurant.js";
 import { fetchRestaurantFloor, fetchTab, tabAction } from "@/services/PosRestaurantService";
 import { fetchPosPaymentIntent } from "@/services/PosIntegrationService";
 
@@ -19,6 +19,9 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
   const [view, setView] = useState(() => (Object.values(RESTAURANT_VIEW).includes(initialView) ? initialView : RESTAURANT_VIEW.FLOOR));
   const [bundle, setBundle] = useState(null);
   const [busy, setBusy] = useState("");
+  // Bumped after every order change made on this till so lists (orders, kitchen) refresh at once.
+  const [changeTick, setChangeTick] = useState(0);
+  const bumpChanges = useCallback(() => setChangeTick((n) => n + 1), []);
   const bundleIdRef = useRef(null);
   bundleIdRef.current = bundle?.tab?.id || null;
 
@@ -44,13 +47,21 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
     void refreshFloor();
   }, [refreshFloor]);
 
+  // Live table status while the floor is on screen (the orders and kitchen views keep their own feed).
   useEffect(() => {
-    if (!enabled) return undefined;
+    if (!enabled || view !== RESTAURANT_VIEW.FLOOR) return undefined;
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void refreshFloor();
     }, FLOOR_POLL_MS);
-    return () => clearInterval(timer);
-  }, [enabled, refreshFloor]);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshFloor();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [enabled, refreshFloor, view]);
 
   const applyBundle = useCallback((next) => {
     setBundle(next?.tab ? next : null);
@@ -62,7 +73,8 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
       setBusy("open");
       try {
         const next = applyBundle(await fetchTab(tabId));
-        setOrderTypeState(next?.tab?.order_type === ORDER_TYPE.TAKEAWAY ? ORDER_TYPE.TAKEAWAY : ORDER_TYPE.DINE_IN);
+        const type = next?.tab?.order_type;
+        setOrderTypeState(Object.values(ORDER_TYPE).includes(type) ? type : ORDER_TYPE.DINE_IN);
         if (toMenu) setView(RESTAURANT_VIEW.MENU);
         return next;
       } catch (err) {
@@ -75,20 +87,28 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
     [applyBundle, toast]
   );
 
+  /** Dine-in goes back to the floor; takeaway and counter back to the menu for the next order. */
   const leaveTab = useCallback(() => {
     setBundle(null);
-    setView(RESTAURANT_VIEW.FLOOR);
+    setView((current) =>
+      current === RESTAURANT_VIEW.ORDERS || current === RESTAURANT_VIEW.KITCHEN
+        ? current
+        : effectiveOrderType === ORDER_TYPE.DINE_IN
+          ? RESTAURANT_VIEW.FLOOR
+          : RESTAURANT_VIEW.MENU
+    );
     void refreshFloor();
-  }, [refreshFloor]);
+  }, [effectiveOrderType, refreshFloor]);
 
-  const setOrderType = useCallback(
-    (next) => {
-      setOrderTypeState(next);
-      setBundle(null);
-      setView(next === ORDER_TYPE.DINE_IN ? RESTAURANT_VIEW.FLOOR : RESTAURANT_VIEW.MENU);
-    },
-    []
-  );
+  /** Order type (top navigation). Orders and Kitchen stay put so the status filters combine with it. */
+  const setOrderType = useCallback((next) => {
+    setOrderTypeState(next);
+    setBundle(null);
+    setView((current) => {
+      if (current === RESTAURANT_VIEW.ORDERS || current === RESTAURANT_VIEW.KITCHEN) return current;
+      return next === ORDER_TYPE.DINE_IN ? RESTAURANT_VIEW.FLOOR : RESTAURANT_VIEW.MENU;
+    });
+  }, []);
 
   const cartItems = useCallback(
     () => cart.map((line) => ({ product_id: line.product_id, quantity: line.quantity, note: line.note || undefined })),
@@ -104,6 +124,7 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
         setOrderTypeState(ORDER_TYPE.DINE_IN);
         setView(RESTAURANT_VIEW.MENU);
         void refreshFloor();
+        bumpChanges();
         return next;
       } catch (err) {
         if (err?.code === "TABLE_OCCUPIED") {
@@ -113,7 +134,7 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
         throw err;
       }
     },
-    [applyBundle, cashierName, refreshFloor, registerId, toast]
+    [applyBundle, bumpChanges, cashierName, refreshFloor, registerId, toast]
   );
 
   /** Persist the cart onto the tab (creating a takeaway tab when needed); optionally send it. */
@@ -125,12 +146,13 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
       try {
         let current = bundle;
         if (!current) {
-          if (effectiveOrderType !== ORDER_TYPE.TAKEAWAY) {
+          if (effectiveOrderType === ORDER_TYPE.DINE_IN) {
             toast({ title: "Choose a table first", description: "Pick a table on the floor plan to start its order." });
             setView(RESTAURANT_VIEW.FLOOR);
             return null;
           }
-          current = await tabAction("open", { order_type: ORDER_TYPE.TAKEAWAY, items, register_id: registerId || undefined, server_name: cashierName || undefined });
+          // Takeaway and counter orders need no table.
+          current = await tabAction("open", { order_type: effectiveOrderType, items, register_id: registerId || undefined, server_name: cashierName || undefined });
         } else if (items.length) {
           current = await tabAction("add_items", { tab_id: current.tab.id, items });
         }
@@ -149,6 +171,7 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
           toast({ title: "Order saved", description: "Not sent to the kitchen yet." });
         }
         void refreshFloor();
+        bumpChanges();
         return current;
       } catch (err) {
         toast({ title: send ? "Not sent to the kitchen" : "Order not saved", description: err?.message, variant: "destructive" });
@@ -157,7 +180,7 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
         setBusy("");
       }
     },
-    [applyBundle, bundle, cartItems, cashierName, effectiveOrderType, refreshFloor, registerId, setCart, toast]
+    [applyBundle, bumpChanges, bundle, cartItems, cashierName, effectiveOrderType, refreshFloor, registerId, setCart, toast]
   );
 
   const runAction = useCallback(
@@ -166,9 +189,10 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
       const next = await tabAction(action, { tab_id: bundle.tab.id, ...body });
       applyBundle(next);
       void refreshFloor();
+      bumpChanges();
       return next;
     },
-    [applyBundle, bundle, refreshFloor]
+    [applyBundle, bumpChanges, bundle, refreshFloor]
   );
 
   const safeAction = useCallback(
@@ -185,10 +209,45 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
     [runAction, toast]
   );
 
-  const closeTab = useCallback(async () => {
-    const next = await safeAction("close", {}, { success: bundle?.tab?.table_id ? `${bundle.tab.label} closed · marked for cleaning` : "Order closed" });
-    if (next) leaveTab();
-  }, [bundle, leaveTab, safeAction]);
+  /** Close a paid order. Dine-in frees the table (or marks it for cleaning when asked). */
+  const closeTab = useCallback(
+    async ({ cleaning = false } = {}) => {
+      const label = bundle?.tab?.label || "Order";
+      const success = bundle?.tab?.table_id ? (cleaning ? `${label} closed · marked for cleaning` : `${label} closed · table available`) : `${label} complete`;
+      const next = await safeAction("close", cleaning ? { cleaning: true } : {}, { success });
+      if (next) leaveTab();
+    },
+    [bundle, leaveTab, safeAction]
+  );
+
+  /**
+   * Served (dine-in) / collected (takeaway, counter): hands over everything the kitchen marked ready.
+   * Works for the open order or any order in the lists. A paid takeaway/counter order completes.
+   */
+  const serveTab = useCallback(
+    async (tabId = bundleIdRef.current) => {
+      if (!tabId) return null;
+      try {
+        const next = await tabAction("serve", { tab_id: tabId });
+        if (bundleIdRef.current === tabId) {
+          if (next?.completed) setBundle(null);
+          else applyBundle(next);
+        }
+        const label = next?.tab?.label || "Order";
+        toast({
+          title: next?.completed ? `${label} collected · order complete` : `${label} ${serveVerb(next?.tab?.order_type)}`,
+          variant: "success",
+        });
+        void refreshFloor();
+        bumpChanges();
+        return next;
+      } catch (err) {
+        toast({ title: "Order not updated", description: err?.message, variant: "destructive" });
+        return null;
+      }
+    },
+    [applyBundle, bumpChanges, refreshFloor, toast]
+  );
 
   const markClean = useCallback(
     async (table) => {
@@ -207,8 +266,9 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
     const next = await fetchTab(bundleIdRef.current).catch(() => null);
     if (next) applyBundle(next);
     void refreshFloor();
+    bumpChanges();
     return next;
-  }, [applyBundle, refreshFloor]);
+  }, [applyBundle, bumpChanges, refreshFloor]);
 
   /** Before redirecting to the online provider, remember which tab we were paying. */
   const rememberTabPayment = useCallback((payload) => {
@@ -274,7 +334,10 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
     runAction,
     safeAction,
     closeTab,
+    serveTab,
     reloadTab,
+    changeTick,
+    bumpChanges,
     rememberTabPayment,
   };
 }

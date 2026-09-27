@@ -442,9 +442,9 @@ export default function MessagesPage() {
     }
 
     return (
-        <div className="w-full min-w-0 mobile-page bg-slate-50/50 dark:bg-slate-900/50 p-4 lg:p-6 overflow-x-hidden">
+        <div className="w-full min-w-0 mobile-page bg-slate-50/50 dark:bg-slate-900/50 p-4 lg:p-6 overflow-x-clip">
             <div className="max-w-7xl mx-auto min-w-0">
-                <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="flex items-center justify-between gap-3 mb-4 page-header-sticky">
                     <h1 className="text-xl font-semibold text-foreground tracking-tight font-display">Messages</h1>
                     <Button
                         size="sm"
@@ -613,7 +613,7 @@ export default function MessagesPage() {
                             </div>
                         </div>
                         {selectedMessageDetail && (
-                            <div className="rounded-2xl border border-border bg-card shadow-sm h-fit sm:sticky sm:top-4 overflow-hidden">
+                            <div className="rounded-2xl border border-border bg-card shadow-sm h-fit sm:sticky sm:top-20 overflow-hidden">
                                 <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                         <h3 className="text-sm font-medium text-foreground truncate">{selectedMessageDetail.documentLabel}</h3>

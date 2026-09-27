@@ -162,7 +162,7 @@ function PosCatalogProductCard({ product, currency, inCart, onAdd, onQty }) {
   const stock = posProductStock(product);
   const stockUi = posStockLabel(stock, { compact: true });
   const out = stockUi.tone === "out";
-  const hasImage = Boolean(product.image_url);
+  const hasImage = Boolean(product.image_url || product.image_src);
 
   return (
     <div
@@ -187,6 +187,7 @@ function PosCatalogProductCard({ product, currency, inCart, onAdd, onQty }) {
         >
           <ProductThumbnail
             imageUrl={product.image_url}
+            fallbackSrc={product.image_src}
             name={product.name}
             fit="contain"
             className="h-full w-full rounded-none border-0 bg-transparent"
@@ -450,7 +451,13 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
     setSearchParams,
     initialView,
   });
-  const restaurantMode = restaurant.enabled && restaurant.orderType !== ORDER_TYPE.COUNTER;
+  // Order panel (tab) instead of the retail cart: dine-in and takeaway always; counter while a
+  // counter order the kitchen is preparing is open. Plain counter sales keep the retail checkout.
+  const restaurantMode = restaurant.enabled && (restaurant.orderType !== ORDER_TYPE.COUNTER || Boolean(restaurant.bundle));
+  const restaurantScreen =
+    restaurant.enabled &&
+    restaurant.view !== RESTAURANT_VIEW.MENU &&
+    !(restaurant.view === RESTAURANT_VIEW.FLOOR && restaurant.orderType !== ORDER_TYPE.DINE_IN);
   const [billOpen, setBillOpen] = useState(false);
   const [billMode, setBillMode] = useState("full");
   const [tabDialog, setTabDialog] = useState(null);
@@ -1683,16 +1690,44 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
       }
     },
     onCloseTab: () => void restaurant.closeTab(),
+    onCloseCleaning: () => void restaurant.closeTab({ cleaning: true }),
+    onServe: () => void restaurant.serveTab(),
     onVoidItem: (item) => void restaurant.safeAction("void_item", { item_id: item.id }),
     onLeave: restaurant.bundle ? restaurant.leaveTab : null,
   };
 
+  // Floor is tables (dine-in only); Menu is products; Kitchen is the KDS; Orders is the lifecycle.
   const restaurantViews = [
     { id: RESTAURANT_VIEW.FLOOR, label: "Floor", icon: LayoutGrid },
     { id: RESTAURANT_VIEW.MENU, label: "Menu", icon: UtensilsCrossed },
     { id: RESTAURANT_VIEW.KITCHEN, label: "Kitchen", icon: ChefHat },
     { id: RESTAURANT_VIEW.ORDERS, label: "Orders", icon: ListOrdered },
-  ];
+  ].filter((v) => v.id !== RESTAURANT_VIEW.FLOOR || restaurant.orderType === ORDER_TYPE.DINE_IN);
+
+  // Counter orders the kitchen prepares (e.g. coffee): send the cart as a counter order, then take
+  // payment from the order panel or later from Orders → Payment. Plain sales still use Pay.
+  const counterKitchenButton =
+    restaurant.enabled && restaurant.orderType === ORDER_TYPE.COUNTER && !restaurant.bundle && canSell && cart.length > 0 ? (
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-2 h-12 w-full text-sm font-semibold uppercase tracking-wide touch-manipulation"
+        disabled={Boolean(restaurant.busy) || !serverWriteAllowed}
+        onClick={() => {
+          setCartSheetOpen(false);
+          void restaurant.sendNewItems();
+        }}
+      >
+        {restaurant.busy === "send" ? <Loader2 className="size-4 animate-spin" /> : <ChefHat className="size-4" />}
+        Send to kitchen
+      </Button>
+    ) : null;
+
+  /** Pay (or split) an order from the Orders list: open it, then the bill dialog (Payment Engine). */
+  const payOrder = async (tabId, mode = "full") => {
+    const next = await restaurant.openTab(tabId, { toMenu: false });
+    if (next) openBill(mode);
+  };
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-background">
@@ -1940,7 +1975,7 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
               </button>
             ))}
           </div>
-          {restaurantMode ? (
+          {restaurant.enabled ? (
             <nav className="ml-auto flex gap-1 overflow-x-auto" aria-label="Restaurant views">
               {restaurantViews.map(({ id, label, icon: Icon }) => (
                 <Button
@@ -1973,7 +2008,7 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {restaurantMode && restaurant.view !== RESTAURANT_VIEW.MENU ? (
+          {restaurantScreen ? (
             restaurant.view === RESTAURANT_VIEW.FLOOR ? (
               <PosFloorView
                 myMembershipId={operatorMembershipId}
@@ -1989,7 +2024,19 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
             ) : restaurant.view === RESTAURANT_VIEW.KITCHEN ? (
               <PosKitchenView />
             ) : (
-              <PosOrdersView currency={currency} onOpenTab={(id) => void restaurant.openTab(id)} />
+              <PosOrdersView
+                orderType={restaurant.orderType}
+                currency={currency}
+                canSell={canSell}
+                refreshKey={restaurant.changeTick}
+                onOpenTab={(id) => void restaurant.openTab(id, { toMenu: false })}
+                onPay={(id, mode) => void payOrder(id, mode)}
+                onServe={(id) => restaurant.serveTab(id)}
+                onKitchenChanged={() => {
+                  void restaurant.reloadTab();
+                }}
+                onNewOrder={() => restaurant.setView(restaurant.orderType === ORDER_TYPE.DINE_IN ? RESTAURANT_VIEW.FLOOR : RESTAURANT_VIEW.MENU)}
+              />
             )
           ) : (
           <>
@@ -2284,6 +2331,7 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
                     ? `Pay ${formatCurrency(cartTotal, currency)}`
                     : "No sell access"}
             </Button>
+            {counterKitchenButton}
           </section>
           </>
           )}
@@ -2298,7 +2346,7 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
             onClick={() => setCartSheetOpen(true)}
           >
             <span className="flex items-center justify-between gap-3 text-sm font-semibold uppercase tracking-wide">
-              <span className="truncate">{restaurant.bundle?.tab?.label || "New takeaway order"}</span>
+              <span className="truncate">{restaurant.bundle?.tab?.label || (restaurant.orderType === ORDER_TYPE.COUNTER ? "New counter order" : "New takeaway order")}</span>
               <span className="tabular-nums">
                 {formatCurrency((restaurant.bundle?.tab?.balance?.due ?? 0) + cart.reduce((sum, l) => sum + l.quantity * (Number(l.unit_price) || 0), 0), currency)}
               </span>
@@ -2468,6 +2516,7 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
                   {needsShift ? "Start shift" : `Pay ${formatCurrency(cartTotal, currency)}`}
                 </Button>
               ) : null}
+              {counterKitchenButton}
               {cart.length > 0 ? (
                 <Button type="button" variant="ghost" className="h-11 w-full" onClick={clearCart}>
                   Clear cart

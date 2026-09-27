@@ -2273,7 +2273,7 @@ export default function Settings() {
 
     if (companyLoading) {
         return (
-            <div className="w-full min-w-0 mobile-page overflow-x-hidden">
+            <div className="w-full min-w-0 mobile-page overflow-x-clip">
                 <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-[max(6rem,calc(4rem+env(safe-area-inset-bottom,0px)))] lg:pb-16">
                     <div className="flex min-h-[40vh] items-center justify-center">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-label="Loading settings" />
@@ -2284,9 +2284,9 @@ export default function Settings() {
     }
 
     return (
-        <div className="w-full min-w-0 mobile-page overflow-x-hidden">
+        <div className="w-full min-w-0 mobile-page overflow-x-clip">
             <div className="max-w-5xl mx-auto py-6 sm:py-10 px-4 sm:px-6 lg:px-8 min-w-0 pb-[max(6rem,calc(4rem+env(safe-area-inset-bottom,0px)))] lg:pb-16">
-                <header className="mb-6 sm:mb-8">
+                <header className="mb-6 sm:mb-8 page-header-sticky">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                         <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Settings</h1>
                         {companyRole ? (

@@ -12,6 +12,8 @@ const MIGRATION = readFileSync(
   "utf8"
 );
 
+const COUNTER = readFileSync(path.resolve(__dirname, "../../supabase/migrations/20260927140000_pos_counter_orders.sql"), "utf8");
+
 const STUB = `
 create role service_role bypassrls; create role authenticated; create role anon;
 create schema auth;
@@ -65,6 +67,8 @@ beforeAll(async () => {
   await db.exec(STUB);
   await db.exec(MIGRATION);
   await db.exec(MIGRATION); // idempotent
+  await db.exec(COUNTER);
+  await db.exec(COUNTER); // idempotent
   await q(`insert into public.organizations (id) values ($1), ($2)`, [ORG, OTHER]);
   await q(`insert into public.org_members (org_id, user_id) values ($1, $2)`, [ORG, USER]);
   floorId = (await q(`insert into public.pos_floors (org_id, name) values ($1, 'Main Floor') returning id`, [ORG]))[0].id;
@@ -119,5 +123,15 @@ describe("restaurant schema", () => {
     expect(write.ok).toBe(false);
     const engine = await as("engine", `insert into public.pos_floors (org_id, name) values ($1, 'Patio')`, [ORG]);
     expect(engine.ok).toBe(true);
+  });
+});
+
+describe("counter orders migration", () => {
+  it("allows counter orders without a table and still rejects unknown order types", async () => {
+    const org = (await db.query("select id from public.organizations limit 1")).rows[0]?.id;
+    expect(org).toBeTruthy();
+    await db.query(`insert into public.pos_tabs (org_id, order_type, order_number) values ($1, 'counter', 90001)`, [org]);
+    await expect(db.query(`insert into public.pos_tabs (org_id, order_type, order_number) values ($1, 'drive_thru', 90002)`, [org])).rejects.toThrow(/order_type/);
+    await expect(db.query(`insert into public.pos_tabs (org_id, order_type, order_number) values ($1, 'dine_in', 90003)`, [org])).rejects.toThrow(/pos_tabs_table_for_dine_in/);
   });
 });

@@ -5,17 +5,13 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { KITCHEN_STATUS, minutesSince, stationLabel } from "@shared/pos/restaurant.js";
 import { fetchKitchen, moveKitchenTicket } from "@/services/PosRestaurantService";
-import { clockTime, minutesLabel } from "./posRestaurantUi";
+import { KITCHEN_COLUMNS, clockTime, minutesLabel } from "./posRestaurantUi";
 
 const POLL_MS = 5000;
 
-const COLUMNS = [
-  { status: KITCHEN_STATUS.NEW, title: "New", action: { next: KITCHEN_STATUS.PREPARING, label: "Accept" }, tone: "border-sky-500/50" },
-  { status: KITCHEN_STATUS.PREPARING, title: "Preparing", action: { next: KITCHEN_STATUS.READY, label: "Ready" }, tone: "border-amber-500/60" },
-  { status: KITCHEN_STATUS.READY, title: "Ready", action: { next: KITCHEN_STATUS.COMPLETED, label: "Complete" }, tone: "border-emerald-600" },
-];
+const COLUMNS = KITCHEN_COLUMNS;
 
-function Ticket({ ticket, column, busy, onMove }) {
+export function KitchenTicket({ ticket, column, busy, onMove }) {
   const age = minutesSince(ticket.sent_at);
   const late = age != null && age >= 15 && ticket.status !== KITCHEN_STATUS.READY;
   return (
@@ -27,12 +23,13 @@ function Ticket({ ticket, column, busy, onMove }) {
             {ticket.table_label || "Order"}
           </p>
           <p className="text-[11px] text-muted-foreground">
-            KOT #{ticket.ticket_number} · {stationLabel(ticket.station)}
+            KOT #{ticket.ticket_number} · {stationLabel(ticket.station)} · {(ticket.items || []).reduce((n, i) => n + (Number(i.quantity) || 0), 0)} items
             {ticket.server_name ? ` · ${ticket.server_name}` : ""}
           </p>
         </div>
         <span className={cn("shrink-0 text-xs tabular-nums", late ? "font-semibold text-destructive" : "text-muted-foreground")}>
-          {clockTime(ticket.sent_at)} · {minutesLabel(age)}
+          {column.status === KITCHEN_STATUS.PREPARING && ticket.accepted_at ? `Started ${clockTime(ticket.accepted_at)}` : `Waiting ${minutesLabel(age)}`}
+          <span className="block text-right">{clockTime(ticket.sent_at)}</span>
         </span>
       </header>
       <ul className="space-y-1">
@@ -128,9 +125,11 @@ export default function PosKitchenView() {
                   <span className="rounded-full bg-muted px-2 py-0.5 tabular-nums">{list.length}</span>
                 </h3>
                 {list.length ? (
-                  list.map((ticket) => <Ticket key={ticket.id} ticket={ticket} column={column} busy={busyId === ticket.id} onMove={move} />)
+                  list.map((ticket) => <KitchenTicket key={ticket.id} ticket={ticket} column={column} busy={busyId === ticket.id} onMove={move} />)
                 ) : (
-                  <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">Nothing {column.title.toLowerCase()}</p>
+                  <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                    {column.status === KITCHEN_STATUS.NEW ? "No new tickets." : column.status === KITCHEN_STATUS.PREPARING ? "Nothing being prepared." : "Nothing waiting to be served."}
+                  </p>
                 )}
               </section>
             );

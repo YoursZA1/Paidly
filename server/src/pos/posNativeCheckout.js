@@ -123,6 +123,21 @@ function applyCatalogBrandFilter(query, registerCompanyId) {
   return query.is("company_id", null);
 }
 
+/**
+ * Absolute, public URL for a product photo in the public `paidly` bucket, built on the server so the till
+ * never depends on client-side URL resolution or a browser's cached copy of it. Full http(s) URLs pass through.
+ */
+export function posProductImageSrc(imageUrl) {
+  const raw = String(imageUrl || "").trim();
+  if (!raw) return null;
+  if (/^https:\/\//i.test(raw)) return raw;
+  const key = raw.replace(/^\/+/, "").replace(/^(storage\/v1\/object\/public\/)?paidly\//, "");
+  if (!/^[a-zA-Z0-9._\-/%+]+$/.test(key) || key.includes("..") || key.includes("//")) return null;
+  const base = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  if (!/^https:\/\//i.test(base)) return null;
+  return `${base}/storage/v1/object/public/paidly/${key}`;
+}
+
 export async function loadPosCatalogRows(orgId, opts = {}) {
   const { productIds, activeOnly = false, registerCompanyId = null, enforceBrand = false } = opts;
   const ids = Array.isArray(productIds) ? [...new Set(productIds.filter(Boolean))] : null;
@@ -370,7 +385,7 @@ export async function handleNativePosCatalog(req, res, gate) {
     });
     const cardRail = await resolveTillCardRail(gate.membership.orgId).catch(() => null);
     return res.status(200).json({
-      products,
+      products: products.map((p) => ({ ...p, image_src: posProductImageSrc(p.image_url) })),
       register_id: register?.id || null,
       company_id: registerCompanyId,
       card_rail: cardRail,

@@ -218,6 +218,7 @@ export function minutesSince(iso, now = new Date()) {
 export function tabLabel(tab, table = null) {
   if (table?.name) return /^\d+$/.test(String(table.name).trim()) ? `Table ${String(table.name).trim()}` : String(table.name);
   if (tab?.order_type === ORDER_TYPE.TAKEAWAY) return `Takeaway #${tab.order_number}`;
+  if (tab?.order_type === ORDER_TYPE.COUNTER) return `Counter #${tab.order_number}`;
   return tab?.order_number ? `Order #${tab.order_number}` : "Order";
 }
 
@@ -228,4 +229,137 @@ export function restaurantModeEnabled({ businessType, tableCount = 0 }) {
 
 export function defaultOrderType({ businessType, tableCount = 0 }) {
   return restaurantModeEnabled({ businessType, tableCount }) ? ORDER_TYPE.DINE_IN : ORDER_TYPE.COUNTER;
+}
+
+// ── Order lifecycle (operational stage and payment are separate concerns) ────────────────
+//
+//   stage:   open (items being added) → kitchen (KOT new/preparing) → ready (KOT ready)
+//            → served (every KOT completed = served / collected)
+//   payment: none (nothing billable) · unpaid · partial · pending (provider confirming) · paid
+//
+// A READY + UNPAID order shows under both Ready and Payment; paying never marks food served and
+// serving never marks it paid. Tab status (open / closed / void) stays the record's lifecycle.
+
+export const ORDER_STAGE = Object.freeze({ OPEN: "open", KITCHEN: "kitchen", READY: "ready", SERVED: "served" });
+
+export const PAYMENT_STATE = Object.freeze({ NONE: "none", UNPAID: "unpaid", PARTIAL: "partial", PENDING: "pending", PAID: "paid" });
+
+export const STATUS_FILTER = Object.freeze({ ALL: "all", ACTIVE: "active", KITCHEN: "kitchen", READY: "ready", PAYMENT: "payment" });
+
+export const STATUS_FILTER_OPTIONS = Object.freeze([
+  { id: STATUS_FILTER.ALL, label: "All" },
+  { id: STATUS_FILTER.ACTIVE, label: "Active" },
+  { id: STATUS_FILTER.KITCHEN, label: "Kitchen" },
+  { id: STATUS_FILTER.READY, label: "Ready" },
+  { id: STATUS_FILTER.PAYMENT, label: "Payment" },
+]);
+
+export const LIVE_KITCHEN_STATUSES = Object.freeze([KITCHEN_STATUS.NEW, KITCHEN_STATUS.PREPARING, KITCHEN_STATUS.READY]);
+
+/** Operational stage from the order's items and kitchen tickets. Ready wins over kitchen (food is waiting). */
+export function orderStage({ items = [], tickets = [] } = {}) {
+  const live = (tickets || []).filter((t) => LIVE_KITCHEN_STATUSES.includes(t.status));
+  if (live.some((t) => t.status === KITCHEN_STATUS.READY)) return ORDER_STAGE.READY;
+  if (live.length) return ORDER_STAGE.KITCHEN;
+  const billable = (items || []).filter((i) => i.status !== "void");
+  if (billable.some((i) => i.status === "pending")) return ORDER_STAGE.OPEN;
+  const sent = billable.filter((i) => i.status === "sent");
+  const served = sent.length > 0 && (tickets || []).some((t) => t.status === KITCHEN_STATUS.COMPLETED);
+  return served ? ORDER_STAGE.SERVED : ORDER_STAGE.OPEN;
+}
+
+/** Payment state from the balance (see {@link tabBalance}). */
+export function paymentState(balance) {
+  if (!balance || !(Number(balance.total) > 0)) return PAYMENT_STATE.NONE;
+  if (balance.settled) return PAYMENT_STATE.PAID;
+  if (Number(balance.pending) > 0) return PAYMENT_STATE.PENDING;
+  if (Number(balance.paid) > 0) return PAYMENT_STATE.PARTIAL;
+  return PAYMENT_STATE.UNPAID;
+}
+
+export const ORDER_STAGE_LABEL = Object.freeze({
+  [ORDER_STAGE.OPEN]: "Open",
+  [ORDER_STAGE.KITCHEN]: "In kitchen",
+  [ORDER_STAGE.READY]: "Ready",
+  [ORDER_STAGE.SERVED]: "Served",
+});
+
+export const PAYMENT_STATE_LABEL = Object.freeze({
+  [PAYMENT_STATE.NONE]: "No items",
+  [PAYMENT_STATE.UNPAID]: "Unpaid",
+  [PAYMENT_STATE.PARTIAL]: "Part paid",
+  [PAYMENT_STATE.PENDING]: "Confirming payment",
+  [PAYMENT_STATE.PAID]: "Paid",
+});
+
+/** Dine-in orders are "served"; takeaway and counter orders are "collected". */
+export function serveVerb(orderType) {
+  return orderType === ORDER_TYPE.DINE_IN ? "served" : "collected";
+}
+
+const isOpenOrder = (order) => order?.status === "open";
+
+/**
+ * Does this open order need payment now? Dine-in: once the bill is asked for, the food is ready or
+ * served, or a payment has started. Takeaway / counter: as soon as anything billable has been sent
+ * (they are usually paid before or at collection). Settled orders never do.
+ */
+export function orderNeedsPayment(order) {
+  if (!isOpenOrder(order)) return false;
+  const state = order.payment_state || paymentState(order.balance);
+  if (state === PAYMENT_STATE.PAID || state === PAYMENT_STATE.NONE) return false;
+  if (state === PAYMENT_STATE.PARTIAL || state === PAYMENT_STATE.PENDING) return true;
+  if (order.order_type !== ORDER_TYPE.DINE_IN) return (order.sent_items ?? 1) > 0;
+  return Boolean(order.bill_requested_at) || order.stage === ORDER_STAGE.READY || order.stage === ORDER_STAGE.SERVED;
+}
+
+/** Order-type filter (top navigation). Unknown/legacy order types count as dine-in. */
+export function matchesOrderType(orderOrTicket, orderType) {
+  if (!orderType) return true;
+  const type = orderOrTicket?.order_type || ORDER_TYPE.DINE_IN;
+  return type === orderType;
+}
+
+/**
+ * Status filter (secondary navigation). Orders are tab summaries; kitchen is judged from the
+ * order's kitchen counts so it agrees with the ticket queue.
+ */
+export function matchesStatusFilter(order, filter) {
+  switch (filter) {
+    case STATUS_FILTER.ALL:
+      return order?.status === "open" || order?.status === "closed";
+    case STATUS_FILTER.ACTIVE:
+      return isOpenOrder(order);
+    case STATUS_FILTER.KITCHEN:
+      return isOpenOrder(order) && Number(order.kitchen?.waiting) > 0;
+    case STATUS_FILTER.READY:
+      return isOpenOrder(order) && Number(order.kitchen?.ready) > 0;
+    case STATUS_FILTER.PAYMENT:
+      return orderNeedsPayment(order);
+    default:
+      return false;
+  }
+}
+
+/** Kitchen queue for an order type: tickets the kitchen still has to start or finish, oldest first. */
+export function kitchenQueue(tickets = [], orderType = null) {
+  return (tickets || [])
+    .filter((t) => (t.status === KITCHEN_STATUS.NEW || t.status === KITCHEN_STATUS.PREPARING) && matchesOrderType(t, orderType))
+    .sort((a, b) => String(a.sent_at || "").localeCompare(String(b.sent_at || "")));
+}
+
+/**
+ * Live counts per status filter for one order type — from the same data the lists use.
+ * Kitchen counts tickets (what the kitchen works through); the rest count orders.
+ */
+export function statusFilterCounts({ orders = [], tickets = [] } = {}, orderType = null) {
+  const scoped = (orders || []).filter((o) => matchesOrderType(o, orderType));
+  const count = (filter) => scoped.filter((o) => matchesStatusFilter(o, filter)).length;
+  return {
+    [STATUS_FILTER.ALL]: count(STATUS_FILTER.ALL),
+    [STATUS_FILTER.ACTIVE]: count(STATUS_FILTER.ACTIVE),
+    [STATUS_FILTER.KITCHEN]: kitchenQueue(tickets, orderType).length,
+    [STATUS_FILTER.READY]: count(STATUS_FILTER.READY),
+    [STATUS_FILTER.PAYMENT]: count(STATUS_FILTER.PAYMENT),
+  };
 }

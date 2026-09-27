@@ -11,6 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import MobileTopBar from "@/components/layout/MobileTopBar";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -79,9 +80,7 @@ import {
   Settings,
   LogOut,
   BarChart2,
-  Search,
   Bell,
-  Menu,
   X,
   Sun,
   Moon,
@@ -938,6 +937,12 @@ export default function Layout({ children, currentPageName }) {
   const mainContentRef = useRef(null);
   const prefersReducedMotion = useReducedMotion();
   const isCompactLayout = useIsCompactLayout();
+  // Slide the header in on desktop only; on phones/tablets it is simply there (read once at mount).
+  const [animateHeaderIn] = useState(
+    () =>
+      !prefersReducedMotion &&
+      !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 1023px)").matches)
+  );
   const { user, session, logout, refreshUser } = useAuth();
   const accessToken = getSessionAccessToken(session);
   const userRef = useRef(user);
@@ -1482,62 +1487,27 @@ export default function Layout({ children, currentPageName }) {
         className={`flex h-full min-h-0 flex-col overflow-hidden bg-background pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 ${currentPageName === "Dashboard" ? "" : "content-area-light"}`}
       >
         {/* Top bar (Rule 7): logo + menu entry + account — no extra nav rows on mobile; rest in drawer + bottom nav */}
+        {/* In-flow bar above the scroll area, so it stays put while pages scroll. Below lg it is a
+            solid bar that grows with the iOS safe area; lg+ keeps the translucent desktop bar. */}
         <motion.header
-          initial={{ y: -100 }}
+          initial={animateHeaderIn ? { y: -100 } : false}
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="relative z-20 safe-top bg-card/95 backdrop-blur-sm border-b border-border shadow-sm min-h-[56px]
-            fixed top-0 left-0 right-0 h-14 z-40 lg:static lg:z-20 lg:h-14 lg:min-h-[56px] flex items-center justify-between gap-element sm:gap-3 app-gutter-x"
+          className="relative z-30 shrink-0 safe-top bg-card border-b border-border flex items-center justify-between gap-element sm:gap-3 app-gutter-x
+            lg:static lg:z-20 lg:h-14 lg:min-h-[56px] lg:bg-card/95 lg:backdrop-blur-sm lg:shadow-sm"
         >
           {/* Mobile (< lg): Menu | Paidly logo | Search | Notifications | Profile */}
-          <div className="flex items-center gap-1.5 w-full lg:hidden">
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen(true)}
-              aria-label="Open menu"
-              className="flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation shrink-0 cursor-pointer select-none w-12 h-12 min-w-[48px] min-h-[48px] p-0 border-0 bg-transparent -ml-1"
-            >
-              <Menu className="size-6 pointer-events-none" aria-hidden />
-            </button>
-            <Link
-              to={createPageUrl("Dashboard")}
-              className="flex min-w-0 flex-1 items-center gap-2 touch-manipulation"
-              aria-label="Paidly home"
-            >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-                <img src="/logo.svg" alt="" className="h-6 w-6" aria-hidden="true" />
-              </div>
-              <span className="truncate font-display text-base font-black tracking-tight text-foreground">Paidly</span>
-              <span className="sr-only">{PAGE_DISPLAY_NAMES[currentPageName] ?? ""}</span>
-            </Link>
-            {user && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="shrink-0 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground min-h-11 min-w-11"
-                aria-label="Search"
-                onClick={() => setQuickSearchOpen(true)}
-              >
-                <Search className="size-5" aria-hidden />
-              </Button>
-            )}
-            {user && <NotificationBell />}
-            {user && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="rounded-xl p-0 min-h-[44px] min-w-[44px] touch-manipulation shrink-0" aria-label="Account menu">
-                    <div className="relative w-9 h-9 rounded-full bg-muted flex items-center justify-center font-medium text-muted-foreground text-sm overflow-hidden border border-border">
-                      <span aria-hidden="true">
-                        {user.full_name ? user.full_name[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : "U")}
-                      </span>
-                      {brand.hasLogo && (
-                        <Logo path={brand.logoPath} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                      )}
-                    </div>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64 rounded-xl border border-border bg-card shadow-elevation-lg">
+          <MobileTopBar
+            homeHref={createPageUrl("Dashboard")}
+            pageLabel={PAGE_DISPLAY_NAMES[currentPageName] ?? ""}
+            onOpenMenu={() => setIsMobileMenuOpen(true)}
+            onOpenSearch={() => setQuickSearchOpen(true)}
+            showActions={Boolean(user)}
+            accountInitial={user?.full_name ? user.full_name[0].toUpperCase() : user?.email ? user.email[0].toUpperCase() : "U"}
+            accountLogoPath={brand.hasLogo ? brand.logoPath : undefined}
+            accountMenu={
+              user ? (
+                <>
                   <div className="px-2 py-2">
                     <p className="text-sm font-semibold text-foreground">{user.company_name || "My Company"}</p>
                     <p className="text-xs text-muted-foreground">{user.full_name || user.email}</p>
@@ -1561,10 +1531,10 @@ export default function Layout({ children, currentPageName }) {
                     <LogOut className="size-4 mr-2" />
                     Logout
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+                </>
+              ) : null
+            }
+          />
 
           {/* Desktop (lg+): Search, theme, notifications, profile */}
           <div className="hidden lg:flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
@@ -1662,7 +1632,7 @@ export default function Layout({ children, currentPageName }) {
         {/* Main Content Area — scrollable, no horizontal overflow, safe areas; pt for fixed mobile header */}
         <main
           ref={mainContentRef}
-          className={`dashboard-scroll-area mobile-page mobile-scale-typography flex-1 min-h-0 overflow-x-hidden scroll-smooth app-gutter-x min-w-0 flex flex-col pt-14 sm:pt-6 md:pt-8 lg:pt-8 ${lockListChrome ? "overflow-hidden pb-3 sm:pb-4" : "overflow-auto pb-8 sm:pb-6 md:pb-8"} ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
+          className={`dashboard-scroll-area mobile-page mobile-scale-typography flex-1 min-h-0 overflow-x-hidden scroll-smooth app-gutter-x min-w-0 flex flex-col pt-4 sm:pt-6 md:pt-8 lg:pt-8 ${lockListChrome ? "overflow-hidden pb-3 sm:pb-4" : "overflow-auto pb-8 sm:pb-6 md:pb-8"} ${currentPageName === "Dashboard" ? "dashboard-fintech-wrap" : ""}`}
         >
           <div className={`max-w-7xl mx-auto w-full min-w-0 mobile-page flex-1 ${lockListChrome ? "flex min-h-0 flex-col" : ""}`}>
           {showBillingLockBanner ? (

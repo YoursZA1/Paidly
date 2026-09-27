@@ -49,7 +49,7 @@ export default function AdminV2Dashboard() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 page-header-sticky">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
             {greetingForHour()}, {firstName}

@@ -107,7 +107,7 @@ export default function VendorsPage() {
     return (
         <div className="min-h-screen bg-background p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 page-header-sticky">
                     <div className="flex items-center gap-4">
                         <Button 
                             variant="outline" 

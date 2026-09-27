@@ -129,6 +129,8 @@ describe("PosTabPanel (context-aware cart)", () => {
     onSplit: vi.fn(),
     onVoidItem: vi.fn(),
     onCloseTab: vi.fn(),
+    onServe: vi.fn(),
+    onRequestBill: vi.fn(),
   });
 
   it("says which table is being edited and separates previous rounds from NEW ITEMS", async () => {
@@ -144,7 +146,7 @@ describe("PosTabPanel (context-aware cart)", () => {
     );
     const t = text();
     expect(t).toContain("Table 12");
-    expect(t).toContain("4 guests · Mando · 18:42");
+    expect(t).toContain("4 guests · Server: Mando · 18:42");
     expect(t).toContain("Round 1");
     expect(t).toContain("– Extra cheese");
     expect(t).toContain("New items (2)");
@@ -176,6 +178,43 @@ describe("PosTabPanel (context-aware cart)", () => {
     await render(<PosTabPanel bundle={null} orderType="takeaway" newItems={[]} currency="ZAR" {...handlers()} />);
     expect(text()).toContain("New takeaway order");
     expect(text()).toContain("Tap menu items to add them.");
+  });
+});
+
+describe("PosTabPanel (lifecycle actions)", () => {
+  const handlers = () => ({
+    onQty: vi.fn(), onNote: vi.fn(), onSend: vi.fn(), onSave: vi.fn(), onPay: vi.fn(), onSplit: vi.fn(),
+    onVoidItem: vi.fn(), onCloseTab: vi.fn(), onServe: vi.fn(), onRequestBill: vi.fn(),
+  });
+
+  it("before anything is selected it asks for an order, not a table", async () => {
+    await render(<PosTabPanel bundle={null} orderType="dine_in" newItems={[]} currency="ZAR" {...handlers()} />);
+    expect(text()).toContain("Choose an order");
+    expect(text()).toContain("Select a table or order to begin.");
+    expect(button("Send to kitchen")).toBeUndefined();
+    expect(button("Pay")).toBeUndefined();
+  });
+
+  it("ready food shows Mark served; an unpaid served table offers Request bill", async () => {
+    const h = handlers();
+    await render(<PosTabPanel bundle={{ tab: { ...tab12, kitchen: { ready: 2, waiting: 0 } }, items: sentItems }} orderType="dine_in" newItems={[]} currency="ZAR" {...h} />);
+    await click(button("Mark served"));
+    expect(h.onServe).toHaveBeenCalled();
+    await click(button("Request bill"));
+    expect(h.onRequestBill).toHaveBeenCalled();
+    // No new items → no Send button (opening an order never re-sends).
+    expect(button("Send")).toBeUndefined();
+  });
+
+  it("a paid takeaway shows PAID, no Pay, and Complete order", async () => {
+    const h = handlers();
+    const tab = { ...tab12, order_type: "takeaway", label: "Takeaway #1053", table_status: null, guests: null, balance: balance(320, 320), kitchen: { ready: 1, waiting: 0 } };
+    await render(<PosTabPanel bundle={{ tab, items: sentItems }} orderType="takeaway" newItems={[]} currency="ZAR" {...h} />);
+    expect(text()).toContain("PAID");
+    expect(button("Pay R")).toBeUndefined();
+    expect(button("Mark collected")).toBeTruthy();
+    await click(button("Complete order"));
+    expect(h.onCloseTab).toHaveBeenCalled();
   });
 });
 

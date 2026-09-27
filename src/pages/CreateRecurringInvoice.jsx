@@ -82,7 +82,7 @@ export default function CreateRecurringInvoice() {
     return (
         <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
             <div className="max-w-4xl mx-auto">
-                <div className="flex items-center gap-4 mb-8">
+                <div className="flex items-center gap-4 mb-8 page-header-sticky">
                     <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
                         <ArrowLeft className="w-4 h-4" />
                     </Button>

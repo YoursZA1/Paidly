@@ -1401,7 +1401,7 @@ function CreateDocumentCore({ docType }) {
 
   return (
     <div className="space-y-6 p-4 pb-28 sm:p-6 md:pb-6 max-w-7xl mx-auto">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between page-header-sticky">
         <div className="flex items-center gap-4">
           <Button variant="outline" asChild className="gap-2 shrink-0">
             <Link to={returnTo}>
