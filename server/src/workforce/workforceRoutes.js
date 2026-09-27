@@ -19,6 +19,7 @@ import {
   getPeopleCalendar,
 } from "./employeeService.js";
 import { requireWorkforcePermission } from "./workforceAuth.js";
+import { POS_ACCESS_ACTIONS, runPosOperatorAction } from "./posOperatorAccess.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { assertUserHasFeature, UpgradeRequiredError } from "../featureGate.js";
 import { canSeeOrgWorkforce } from "../leave/leaveAuthz.js";
@@ -190,6 +191,12 @@ export async function handleWorkforceEmployees(req, res) {
     const gate = await requireWorkforcePermission(req, res, PERMISSIONS.MANAGE_EMPLOYEES);
     if (!gate.ok) return gate.response;
     try {
+      // POS operator access (codes, enable/disable). Business comes from the manager's membership.
+      if (POS_ACCESS_ACTIONS.includes(action)) {
+        if (action !== "pos_operators" && !employeeId) return jsonError(res, 400, "Employee id is required");
+        const data = await runPosOperatorAction(gate.membership.companyId, gate.membership, action, employeeId, body);
+        return res.status(200).json({ ok: true, data });
+      }
       if (action === "portal_invite" || action === "portal_resend") {
         if (!employeeId) return jsonError(res, 400, "Employee id is required");
         const data = await inviteEmployeePortal(gate.membership.companyId, gate.membership, employeeId, {

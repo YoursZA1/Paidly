@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 import { supabaseAdmin } from "../../supabaseAdmin.js";
 import { PERMISSIONS, forbidUnlessPermission, membershipHasPermission } from "../../companyRouteAccess.js";
 import { isValidUuid } from "../../inputValidation.js";
+import { membershipCanEnterPos } from "../../../../shared/posStaffInvite.js";
 import { roundMoney, catalogUnitPrice } from "../posCheckoutMath.js";
 import { resolveCheckoutRegister } from "../posRegisters.js";
 import { resolveOpenSession } from "../posRegisterSessions.js";
@@ -169,6 +170,9 @@ function summarizeTab(tab, { table = null, items = [], tickets = [], portions = 
     label: tabLabel(tab, table),
     guests: tab.guests,
     server_name: tab.server_name,
+    server_membership_id: tab.server_membership_id || null,
+    register_id: tab.register_id || null,
+    register_session_id: tab.register_session_id || null,
     customer_name: tab.customer_name,
     note: tab.note,
     opened_at: tab.opened_at,
@@ -250,6 +254,47 @@ function publicTicket(ticket, items = null) {
   };
 }
 
+// ── Operators (memberships) ─────────────────────────────────────────────────────────
+
+/** Display names for memberships: profile name, else invited name/email (code-only staff). */
+async function loadMemberNames(orgId, membershipIds) {
+  const ids = [...new Set((membershipIds || []).filter((id) => isValidUuid(id)))];
+  if (!ids.length) return new Map();
+  const { data, error } = await supabaseAdmin
+    .from("memberships")
+    .select("id, user_id, invited_name, invited_email")
+    .eq("org_id", orgId)
+    .in("id", ids);
+  if (error) return new Map();
+  const userIds = (data || []).map((m) => m.user_id).filter(Boolean);
+  const profiles = new Map();
+  if (userIds.length) {
+    const { data: rows } = await supabaseAdmin.from("profiles").select("id, full_name, email").in("id", userIds);
+    for (const p of rows || []) profiles.set(p.id, p.full_name || p.email || null);
+  }
+  return new Map((data || []).map((m) => [m.id, profiles.get(m.user_id) || m.invited_name || m.invited_email || "Staff"]));
+}
+
+/** Staff who can work the till in this business — the choices for table assignment. */
+async function loadPosOperators(orgId) {
+  let { data, error } = await supabaseAdmin
+    .from("memberships")
+    .select("id, user_id, role, job_function, pos_register_id, disabled_at, pos_access_disabled_at")
+    .eq("org_id", orgId);
+  if (error && /pos_access_disabled_at/i.test(error.message || "")) {
+    ({ data, error } = await supabaseAdmin.from("memberships").select("id, user_id, role, job_function, pos_register_id, disabled_at").eq("org_id", orgId));
+  }
+  if (error) return [];
+  const eligible = (data || []).filter(
+    (m) =>
+      !m.disabled_at &&
+      !m.pos_access_disabled_at &&
+      membershipCanEnterPos({ companyRole: m.role, job_function: m.job_function, pos_register_id: m.pos_register_id })
+  );
+  const names = await loadMemberNames(orgId, eligible.map((m) => m.id));
+  return eligible.map((m) => ({ id: m.id, name: names.get(m.id) || "Staff" })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // ── Floor plan ──────────────────────────────────────────────────────────────────────
 
 async function loadFloorState(orgId) {
@@ -262,7 +307,12 @@ async function loadFloorState(orgId) {
   const children = await loadTabChildren(orgId, openTabs.map((t) => t.id));
   const tabByTable = new Map(openTabs.filter((t) => t.table_id).map((t) => [t.table_id, t]));
   const now = new Date();
-  const tableRows = (ensure(tables) || []).map((table) => {
+  const tableList = ensure(tables) || [];
+  const names = await loadMemberNames(orgId, [
+    ...tableList.map((t) => t.assigned_membership_id),
+    ...openTabs.map((t) => t.server_membership_id),
+  ]);
+  const tableRows = tableList.map((table) => {
     const tab = tabByTable.get(table.id) || null;
     const summary = tab
       ? summarizeTab(tab, {
@@ -281,8 +331,10 @@ async function loadFloorState(orgId) {
       shape: table.shape,
       pos_x: table.pos_x,
       pos_y: table.pos_y,
+      assigned_membership_id: table.assigned_membership_id || null,
+      assigned_name: table.assigned_membership_id ? names.get(table.assigned_membership_id) || null : null,
       status: summary ? summary.table_status : table.cleaning_since ? TABLE_STATUS.CLEANING : TABLE_STATUS.AVAILABLE,
-      tab: summary,
+      tab: summary ? { ...summary, server_display: names.get(tab.server_membership_id) || summary.server_name || null } : null,
     };
   });
   const takeaway = openTabs
@@ -313,6 +365,17 @@ export async function handleRestaurantFloor(req, res, gate) {
 
 // ── Floor setup (company settings managers) ────────────────────────────────────────
 
+/** GET /api/pos/floor-setup — floor plan plus the staff who can be assigned to tables. */
+export async function handleRestaurantSetupGet(req, res, gate) {
+  try {
+    const orgId = gate.membership.orgId;
+    const [state, operators] = await Promise.all([loadFloorState(orgId), loadPosOperators(orgId)]);
+    return res.status(200).json({ ok: true, ...state, operators });
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
 function parseTableWrite(body, { partial }) {
   const out = {};
   if (!partial || body.name !== undefined) {
@@ -328,6 +391,11 @@ function parseTableWrite(body, { partial }) {
   if (body.shape !== undefined) {
     if (!["square", "round", "long"].includes(body.shape)) throw httpError(422, "Shape must be square, round or long", "TABLE_SHAPE_INVALID");
     out.shape = body.shape;
+  }
+  if (body.assigned_membership_id !== undefined) {
+    const id = body.assigned_membership_id ? String(body.assigned_membership_id).trim() : null;
+    if (id && !isValidUuid(id)) throw httpError(422, "Choose a staff member from this business", "TABLE_ASSIGNEE_INVALID");
+    out.assigned_membership_id = id;
   }
   for (const key of ["pos_x", "pos_y"]) {
     if (body[key] !== undefined) {
@@ -394,6 +462,7 @@ export async function handleRestaurantSetup(req, res, gate) {
       case "create_table": {
         await assertOrgRow("pos_floors", orgId, body.floor_id, "Floor");
         const fields = parseTableWrite(body, { partial: false });
+        if (fields.assigned_membership_id) await assertOrgRow("memberships", orgId, fields.assigned_membership_id, "Staff member");
         const { data, error } = await supabaseAdmin
           .from("pos_tables")
           .insert({ org_id: orgId, floor_id: body.floor_id, is_active: true, created_by: gate.user.id, ...fields })
@@ -405,6 +474,7 @@ export async function handleRestaurantSetup(req, res, gate) {
       case "update_table": {
         await assertOrgRow("pos_tables", orgId, body.id, "Table");
         const fields = parseTableWrite(body, { partial: true });
+        if (fields.assigned_membership_id) await assertOrgRow("memberships", orgId, fields.assigned_membership_id, "Staff member");
         if (body.floor_id !== undefined) {
           await assertOrgRow("pos_floors", orgId, body.floor_id, "Floor");
           fields.floor_id = body.floor_id;
@@ -454,6 +524,14 @@ async function openTab(gate, body) {
   }
   const resolved = await resolveCheckoutRegister(orgId, gate.user.id, cleanText(body.register_id, 64), gate.membership).catch(() => null);
   const register = resolved?.ok ? resolved.register : null;
+  // Shift attribution: the register's open session (if any) when the order is opened.
+  let registerSessionId = null;
+  if (register?.id) {
+    const shift = await resolveOpenSession(orgId, register.id).catch(() => null);
+    registerSessionId = shift?.ok ? shift.session?.id || null : null;
+  }
+  // Operator attribution comes from the authenticated session, never from the browser.
+  const sessionName = gate.posAccess ? gate.user?.user_metadata?.full_name || null : null;
   const base = {
     org_id: orgId,
     company_id: saleCompanyIdFromRegister(register),
@@ -462,18 +540,26 @@ async function openTab(gate, body) {
     order_type: orderType,
     status: "open",
     guests: intOrNull(body.guests, { min: 1, max: 999 }),
-    server_id: gate.user.id,
-    server_name: cleanText(body.server_name, 120),
+    server_id: gate.user?.id || null,
+    server_membership_id: gate.membership?.id || null,
+    register_session_id: registerSessionId,
+    server_name: sessionName || cleanText(body.server_name, 120),
     customer_name: cleanText(body.customer_name, 120),
     note: cleanText(body.note, 500),
-    created_by: gate.user.id,
+    created_by: gate.user?.id || null,
   };
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from("pos_tabs")
       .insert({ ...base, order_number: await nextOrderNumber(orgId) })
       .select("*")
       .single();
+    if (error && /server_membership_id|register_session_id/i.test(error.message || "")) {
+      // Operator-access migration not applied yet — open the order without the new attribution columns.
+      delete base.server_membership_id;
+      delete base.register_session_id;
+      ({ data, error } = await supabaseAdmin.from("pos_tabs").insert({ ...base, order_number: await nextOrderNumber(orgId) }).select("*").single());
+    }
     if (!error) {
       if (table?.cleaning_since) {
         await supabaseAdmin.from("pos_tables").update({ cleaning_since: null }).eq("id", table.id);

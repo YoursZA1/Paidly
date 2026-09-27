@@ -68,7 +68,7 @@ function PosBusinessTypeLock({ posOnlyStaff = false }) {
   );
 }
 
-export default function POS({ requestedTillId = null, posPass = false } = {}) {
+export default function POS({ requestedTillId = null, posPass = false, initialView = null, operatorMembershipId = null } = {}) {
   const { authReady } = useAuth();
   const { loading, posEnabled, isOrgOwner, companyRole, jobFunction } = useCompanyContext();
   const posOnlyStaff = posPass || isPosOnlyStaff({ isOrgOwner, companyRole, jobFunction });
@@ -78,7 +78,7 @@ export default function POS({ requestedTillId = null, posPass = false } = {}) {
   }
 
   const till = posEnabled ? (
-    <PosTerminal requestedTillId={requestedTillId} />
+    <PosTerminal requestedTillId={requestedTillId} initialView={initialView} operatorMembershipId={operatorMembershipId} />
   ) : (
     <PosBusinessTypeLock posOnlyStaff={posOnlyStaff} />
   );

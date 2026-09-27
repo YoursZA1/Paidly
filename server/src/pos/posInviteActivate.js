@@ -242,13 +242,17 @@ async function loadValidPosAccessRow(token) {
   const raw = String(token || "").trim();
   if (!raw) return { error: "missing_token", status: 401 };
   const tokenHash = hashPosAccessToken(raw);
-  const { data, error } = await supabaseAdmin
+  const baseSelect =
+    "id, org_id, invite_id, register_id, user_id, employee_email, employee_name, role, job_function, token_hash, issued_at, expires_at, revoked_at";
+  let { data, error } = await supabaseAdmin
     .from("pos_access_sessions")
-    .select(
-      "id, org_id, invite_id, register_id, user_id, employee_email, employee_name, role, job_function, token_hash, issued_at, expires_at, revoked_at"
-    )
+    .select(`${baseSelect}, membership_id, credential_id`)
     .eq("token_hash", tokenHash)
     .maybeSingle();
+  if (error && /membership_id|credential_id/i.test(error.message || "")) {
+    // Operator-access migration not applied yet: invite sessions keep working.
+    ({ data, error } = await supabaseAdmin.from("pos_access_sessions").select(baseSelect).eq("token_hash", tokenHash).maybeSingle());
+  }
   if (error) {
     if (isMissingAccessSchema(error.message)) {
       return { error: "POS access needs a database update.", status: 503, code: "POS_ACCESS_SCHEMA" };
@@ -266,14 +270,30 @@ async function loadValidPosAccessRow(token) {
       return { error: "This till is not available", status: 403, code: "REGISTER_DISABLED" };
     }
   }
-  if (data.user_id) {
-    const { data: membership, error: memErr } = await supabaseAdmin
-      .from("memberships")
-      .select("id, disabled_at, job_function, role, pos_register_id")
-      .eq("org_id", data.org_id)
-      .eq("user_id", data.user_id)
+  if (data.credential_id) {
+    // Regenerated / revoked codes end their sessions immediately, even if the session row lingers.
+    const { data: credential } = await supabaseAdmin
+      .from("pos_access_codes")
+      .select("id, revoked_at")
+      .eq("id", data.credential_id)
       .maybeSingle();
-    if (!memErr && membership?.disabled_at) {
+    if (!credential || credential.revoked_at) {
+      return { error: "POS access is no longer valid", status: 401, code: "POS_ACCESS_REVOKED" };
+    }
+  }
+  if (data.membership_id || data.user_id) {
+    let query = supabaseAdmin.from("memberships").select("id, disabled_at, pos_access_disabled_at").eq("org_id", data.org_id);
+    query = data.membership_id ? query.eq("id", data.membership_id) : query.eq("user_id", data.user_id);
+    let { data: membership, error: memErr } = await query.maybeSingle();
+    if (memErr && /pos_access_disabled_at/i.test(memErr.message || "")) {
+      let retry = supabaseAdmin.from("memberships").select("id, disabled_at").eq("org_id", data.org_id);
+      retry = data.membership_id ? retry.eq("id", data.membership_id) : retry.eq("user_id", data.user_id);
+      ({ data: membership, error: memErr } = await retry.maybeSingle());
+    }
+    if (data.membership_id && !memErr && !membership) {
+      return { error: "POS access is no longer valid", status: 403, code: "POS_ACCESS_REVOKED" };
+    }
+    if (!memErr && (membership?.disabled_at || membership?.pos_access_disabled_at)) {
       return { error: "POS access is no longer valid", status: 403, code: "POS_ACCESS_REVOKED" };
     }
   }

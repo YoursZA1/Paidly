@@ -46,6 +46,7 @@ import {
 } from "../../server/src/pos/posInviteActivate.js";
 import { handlePosPinGet, handlePosPinSet, handlePosPinVerify } from "../../server/src/pos/posPinRoutes.js";
 import { dispatchRestaurantRoute, isRestaurantRoute } from "../../server/src/pos/restaurant/posRestaurantDispatch.js";
+import { handlePosCodeUnlock, handlePosTillInfo } from "../../server/src/pos/posAccessCodes.js";
 
 /**
  * Vercel: one extra segment reaches this file (`/api/pos/registers`).
@@ -111,6 +112,19 @@ export default async function handler(req, res) {
 
   if (resolved.route === "invite-activate") {
     if (req.method === "POST") return handlePosInviteActivate(req, res);
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // Public till entry: the till link shows the till name; an operator code opens a scoped till session.
+  if (resolved.route === "till-info") {
+    if (req.method === "GET") return handlePosTillInfo(req, res);
+    res.setHeader("Allow", "GET, OPTIONS");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (resolved.route === "code-unlock") {
+    if (req.method === "POST") return handlePosCodeUnlock(req, res);
     res.setHeader("Allow", "POST, OPTIONS");
     return res.status(405).json({ error: "Method not allowed" });
   }

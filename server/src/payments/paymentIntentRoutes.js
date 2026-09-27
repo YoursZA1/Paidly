@@ -155,7 +155,8 @@ export async function handlePaymentIntentGet(req, res) {
   if (!id) return jsonError(res, 422, "id is required");
   try {
     const intent = await getOrgPaymentIntent(gate.membership.orgId, id);
-    if (!intent) return jsonError(res, 404, "Payment intent not found");
+    // A till session only sees till payments — never invoice (document) payment intents.
+    if (!intent || (gate.posAccess && intent.source_kind !== "pos")) return jsonError(res, 404, "Payment intent not found");
     return res.status(200).json({ ok: true, payment_intent: publicPaymentIntentView(intent) });
   } catch (err) {
     return schemaError(res, err);

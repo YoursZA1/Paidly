@@ -1,4 +1,5 @@
 import { requireOrgMember } from "../pos/posConnectionsRoutes.js";
+import { refusePosPassOutsideTill } from "../pos/posScope.js";
 import {
   DOCUMENT_EVENT_ACTOR,
   DOCUMENT_EVENT_SOURCE,
@@ -19,6 +20,7 @@ export async function handleDocumentTimeline(req, res) {
   }
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate.response;
+  if (refusePosPassOutsideTill(gate, res)) return;
 
   const sourceKind = String(req.query?.source_kind || req.query?.document_type || "invoice").trim().toLowerCase();
   const sourceId = String(req.query?.document_id || req.query?.invoice_id || req.query?.quote_id || "").trim();
@@ -46,6 +48,7 @@ export async function handleDocumentEngagement(req, res) {
   }
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate.response;
+  if (refusePosPassOutsideTill(gate, res)) return;
 
   try {
     const [{ data: events }, { data: invoices }, { data: payments }, { data: quotes }] = await Promise.all([
@@ -98,6 +101,7 @@ export async function handleDocumentEventIngest(req, res) {
 
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate.response;
+  if (refusePosPassOutsideTill(gate, res)) return;
 
   const sourceKind = String(body.source_kind || body.document_type || "invoice").trim().toLowerCase();
   const sourceId = String(body.document_id || body.invoice_id || body.quote_id || "").trim();

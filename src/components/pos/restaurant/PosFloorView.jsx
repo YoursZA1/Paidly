@@ -45,6 +45,9 @@ function TableCard({ table, currency, onClick, style }) {
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           <Users className="size-3" aria-hidden />
           {tab?.guests || table.seats} {tab?.guests ? "pax" : "seats"}
+          {tab?.server_display || table.assigned_name ? (
+            <span className="ml-auto truncate">· {tab?.server_display || table.assigned_name}</span>
+          ) : null}
         </p>
         {free ? (
           <p className="text-sm font-semibold">{table.status === TABLE_STATUS.CLEANING ? "Cleaning" : "Free"}</p>
@@ -66,17 +69,21 @@ function TableCard({ table, currency, onClick, style }) {
  * Floor plan: floors as tabs, tables positioned on their grid, live status at a glance.
  * Tapping a free table seats guests (opens a tab); tapping an occupied table opens its order.
  */
-export default function PosFloorView({ floorState, loading, currency, onOpenTab, onSeatTable, onMarkClean, onOpenTakeaway, canSell }) {
+export default function PosFloorView({ floorState, loading, currency, onOpenTab, onSeatTable, onMarkClean, onOpenTakeaway, canSell, myMembershipId = null }) {
   const floors = floorState?.floors || [];
   const [floorId, setFloorId] = useState(null);
   const [seatTable, setSeatTable] = useState(null);
   const [guests, setGuests] = useState("2");
   const [busy, setBusy] = useState(false);
+  const [mineOnly, setMineOnly] = useState(false);
   const wide = useWideLayout();
   const activeFloorId = floorId && floors.some((f) => f.id === floorId) ? floorId : floors[0]?.id || null;
+  // "My tables": tables assigned to me or whose open order I'm serving. One operator can have many.
+  const isMine = (t) => Boolean(myMembershipId) && (t.assigned_membership_id === myMembershipId || t.tab?.server_membership_id === myMembershipId);
   const tables = useMemo(
-    () => (floorState?.tables || []).filter((t) => t.floor_id === activeFloorId),
-    [floorState, activeFloorId]
+    () => (floorState?.tables || []).filter((t) => t.floor_id === activeFloorId && (!mineOnly || isMine(t))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isMine depends only on myMembershipId
+    [floorState, activeFloorId, mineOnly, myMembershipId]
   );
   const cols = Math.min(12, Math.max(4, ...tables.map((t) => (Number(t.pos_x) || 0) + 1)));
   const takeaway = floorState?.takeaway || [];
@@ -135,6 +142,25 @@ export default function PosFloorView({ floorState, loading, currency, onOpenTab,
             {floor.name}
           </Button>
         ))}
+        {myMembershipId ? (
+          <div className="ml-auto flex shrink-0 rounded-lg border border-border p-0.5" role="radiogroup" aria-label="Which tables">
+            {[
+              [false, "All tables"],
+              [true, "My tables"],
+            ].map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                role="radio"
+                aria-checked={mineOnly === value}
+                className={cn("min-h-9 rounded-md px-3 text-sm", mineOnly === value ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+                onClick={() => setMineOnly(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-3 pb-28 lg:pb-3">
         {wide ? (

@@ -13,7 +13,12 @@ const POS_QUERY_KEYS = ["pos", "till", "checkout", "register"];
 /** Dedicated till shell — Layout skips sidebar/header/footer/mobile nav. */
 export function isPosTerminalPath(pathname) {
   const p = String(pathname || "");
-  return /^\/pos\/?$/i.test(p) || /^\/pos\/till\/[^/]+\/?$/i.test(p) || /^\/pay\/?$/i.test(p);
+  return (
+    /^\/pos\/?$/i.test(p) ||
+    /^\/pos\/till\/[^/]+\/?$/i.test(p) ||
+    /^\/pos\/(register|tables|orders|kitchen|shift)\/?$/i.test(p) ||
+    /^\/pay\/?$/i.test(p)
+  );
 }
 
 export function isPosTerminalPage(pageName) {

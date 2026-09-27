@@ -1,17 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plug, Copy, Trash2, RefreshCw, Loader2, Check, Link2, Wallet } from "lucide-react";
+import { Link2, Loader2, Plug, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,444 +21,375 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import {
-  POS_PROVIDERS,
-  listPosConnections,
-  updatePosConnection,
+  archiveCustomPosProvider,
+  connectYocoPos,
   deletePosConnection,
   getPosOAuthStatus,
+  listPosConnections,
+  listPosProviders,
+  requestCustomPosProvider,
   startSquareOAuthConnect,
-  connectYocoPos,
-  listPaymentProviders,
+  updatePosConnection,
 } from "@/services/PosIntegrationService";
-import { posAccessPath } from "@shared/posStaffInvite.js";
+import { CUSTOM_PROVIDER_METHODS, POS_PROVIDER_KIND_LABEL, POS_PROVIDER_NOT_SUPPORTED } from "@shared/pos/posProviderCatalog.js";
 
-function CopyField({ label, value, description }) {
-  const { toast } = useToast();
-  const [copied, setCopied] = useState(false);
+const STATUS_BADGE = {
+  connected: { label: "Connected", variant: "default" },
+  available: { label: "Available", variant: "secondary" },
+  disabled: { label: "Disabled", variant: "outline" },
+};
 
-  const onCopy = async () => {
-    if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      toast({ title: "Copied", description: `${label} copied to clipboard.` });
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "destructive" });
-    }
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-      <div className="flex gap-2">
-        <Input readOnly value={value || ""} className="font-mono text-xs" />
-        <Button type="button" variant="outline" size="icon" onClick={onCopy} title={`Copy ${label}`}>
-          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-        </Button>
-      </div>
-    </div>
-  );
-}
+const EMPTY_CUSTOM = { provider_name: "", display_name: "", method: "other", website: "", contact: "", notes: "" };
 
 /**
- * Read-only view of the online payment providers the Payment Engine supports for the POS digital tender.
- * Only providers that are actually registered on the server are listed — nothing here is a placeholder.
+ * POS → Payment provider. One section for every till payment provider:
+ *   - providers Paidly actually supports (Yoco, Square, Ozow, Paidly Pay when live) with real status
+ *   - custom providers the business asked for (recorded as requests — never "connected")
+ * None is the default. Secrets (Yoco key, Square tokens) are sent once to the server and never shown again.
  */
-function PosPaymentProviderCard() {
-  const [providers, setProviders] = useState(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    listPaymentProviders({ sourceKind: "pos" })
-      .then((rows) => {
-        if (!cancelled) setProviders(rows.filter((p) => p.kind === "online"));
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <div className="rounded-xl border border-border p-4 space-y-3">
-      <div className="flex items-start gap-3">
-        <Wallet className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold">POS payment provider</h3>
-          <p className="text-sm text-muted-foreground">
-            EFT / Digital payments on Paidly POS go through a supported payment provider. The sale is paid only
-            after that provider confirms it to Paidly.
-          </p>
-        </div>
-      </div>
-      {failed ? (
-        <p className="text-sm text-muted-foreground">Payment providers could not be loaded.</p>
-      ) : providers == null ? (
-        <p className="text-sm text-muted-foreground flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </p>
-      ) : providers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No online payment provider is supported yet. Cash still works.</p>
-      ) : (
-        <ul className="divide-y divide-border rounded-lg border border-border">
-          {providers.map((provider) => (
-            <li key={provider.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">{provider.label}</p>
-                <p className="text-xs text-muted-foreground">Payment provider</p>
-              </div>
-              <Badge variant={provider.configured ? "default" : "secondary"}>
-                {provider.configured ? "Available" : "Not configured"}
-              </Badge>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 export default function PosIntegrationSettings() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [catalog, setCatalog] = useState(null);
   const [connections, setConnections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [connectingSquare, setConnectingSquare] = useState(false);
-  const [connectingYoco, setConnectingYoco] = useState(false);
   const [oauthStatus, setOauthStatus] = useState(null);
-  const [newProvider, setNewProvider] = useState("square");
-  const [newLabel, setNewLabel] = useState("");
-  const [yocoApiKey, setYocoApiKey] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [choice, setChoice] = useState("");
+  const [customOpen, setCustomOpen] = useState(false);
+  const [custom, setCustom] = useState(EMPTY_CUSTOM);
+  const [yocoKey, setYocoKey] = useState("");
+  const [busy, setBusy] = useState("");
 
-  const selectedProvider = useMemo(
-    () => POS_PROVIDERS.find((p) => p.id === newProvider) || POS_PROVIDERS[0],
-    [newProvider]
-  );
-
-  const loadConnections = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rows, status] = await Promise.all([listPosConnections(), getPosOAuthStatus().catch(() => null)]);
+      const [providers, rows, status] = await Promise.all([
+        listPosProviders(),
+        listPosConnections().catch(() => []),
+        getPosOAuthStatus().catch(() => null),
+      ]);
+      setCatalog(providers);
       setConnections(rows);
       setOauthStatus(status);
     } catch (err) {
-      const msg = err?.message || "Please try again.";
-      const isMissingTable = /pos_connections|schema cache|could not find the table/i.test(msg);
-      toast({
-        title: "Could not load POS connections",
-        description: isMissingTable
-          ? "POS tables are not in your database yet. Run scripts/apply-pos-integrations.sql in Supabase → SQL Editor, then refresh this page."
-          : msg,
-        variant: "destructive",
-      });
+      toast({ title: "Could not load payment providers", description: err?.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   }, [toast]);
 
   useEffect(() => {
-    void loadConnections();
-  }, [loadConnections]);
+    void load();
+  }, [load]);
 
+  // Square OAuth returns here with ?pos_connected= / ?pos_error=.
   useEffect(() => {
     const connected = searchParams.get("pos_connected");
     const error = searchParams.get("pos_error");
-    if (connected) {
-      toast({
-        title: connected === "square" ? "Square connected" : "POS connected",
-        description: "Sales will sync automatically.",
-      });
-      const next = new URLSearchParams(searchParams);
-      next.delete("pos_connected");
-      next.delete("pos_error");
-      setSearchParams(next, { replace: true });
-      void loadConnections();
-    } else if (error) {
-      toast({
-        title: "Connection failed",
-        description: error.replace(/_/g, " "),
-        variant: "destructive",
-      });
-      const next = new URLSearchParams(searchParams);
-      next.delete("pos_error");
-      setSearchParams(next, { replace: true });
-    }
-  }, [searchParams, setSearchParams, toast, loadConnections]);
+    if (!connected && !error) return;
+    toast(
+      connected
+        ? { title: connected === "square" ? "Square connected" : "Provider connected", description: "Sales will sync automatically." }
+        : { title: "Connection failed", description: error.replace(/_/g, " "), variant: "destructive" }
+    );
+    const next = new URLSearchParams(searchParams);
+    next.delete("pos_connected");
+    next.delete("pos_error");
+    setSearchParams(next, { replace: true });
+    if (connected) void load();
+  }, [searchParams, setSearchParams, toast, load]);
 
-  const handleConnectSquare = async () => {
-    setConnectingSquare(true);
+  const options = catalog?.providers || [];
+  const selected = options.find((p) => p.id === choice) || null;
+  const shown = options.filter((p) => STATUS_BADGE[p.status]);
+  const customRows = catalog?.custom || [];
+  const squareConfigured = oauthStatus?.square?.configured !== false;
+
+  const connectYoco = async () => {
+    if (!yocoKey.trim()) return;
+    setBusy("yoco");
+    try {
+      await connectYocoPos({ api_secret_key: yocoKey.trim() });
+      setYocoKey("");
+      setConnectOpen(false);
+      toast({ title: "Yoco connected", description: "Webhook registered automatically. Sales will sync to Paidly." });
+      await load();
+    } catch (err) {
+      toast({ title: "Could not connect Yoco", description: err?.message, variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const connectSquare = async () => {
+    setBusy("square");
     try {
       const result = await startSquareOAuthConnect();
-      const url = result?.authorize_url;
-      if (!url) throw new Error("Missing Square authorization URL");
-      window.location.assign(url);
+      if (!result?.authorize_url) throw new Error("Missing Square authorization URL");
+      window.location.assign(result.authorize_url);
     } catch (err) {
-      toast({
-        title: "Could not start Square connect",
-        description: err?.message || "Please try again.",
-        variant: "destructive",
-      });
-      setConnectingSquare(false);
+      toast({ title: "Could not start Square connect", description: err?.message, variant: "destructive" });
+      setBusy("");
     }
   };
 
-  const handleConnectYoco = async () => {
-    if (!yocoApiKey.trim()) {
-      toast({ title: "API key required", description: "Paste your Yoco secret key (sk_test_ or sk_live_).", variant: "destructive" });
-      return;
-    }
-    setConnectingYoco(true);
+  const saveCustom = async () => {
+    setBusy("custom");
     try {
-      await connectYocoPos({
-        api_secret_key: yocoApiKey.trim(),
-        label: newLabel.trim() || undefined,
-      });
-      setYocoApiKey("");
-      setNewLabel("");
-      await loadConnections();
-      toast({
-        title: "Yoco connected",
-        description: "Webhook registered automatically. Sales will sync to Paidly.",
-      });
+      await requestCustomPosProvider(custom);
+      setCustomOpen(false);
+      setCustom(EMPTY_CUSTOM);
+      toast({ title: "Provider request saved", description: "It isn't connected — Paidly needs an integration for it first." });
+      await load();
     } catch (err) {
-      toast({
-        title: "Could not connect Yoco",
-        description: err?.message || "Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Not saved", description: err?.message, variant: "destructive" });
     } finally {
-      setConnectingYoco(false);
+      setBusy("");
     }
   };
 
-  const handleToggleStatus = async (connection) => {
+  const toggleConnection = async (connection) => {
     const next = connection.status === "active" ? "disabled" : "active";
     try {
       await updatePosConnection(connection.id, { status: next });
-      await loadConnections();
-      toast({ title: next === "active" ? "Connection enabled" : "Connection disabled" });
+      toast({ title: next === "active" ? "Provider enabled" : "Provider disabled" });
+      await load();
     } catch (err) {
-      toast({
-        title: "Update failed",
-        description: err?.message || "Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Update failed", description: err?.message, variant: "destructive" });
     }
   };
 
-  const handleDelete = async (connectionId) => {
+  const removeConnection = async (id) => {
     try {
-      await deletePosConnection(connectionId);
-      await loadConnections();
-      toast({ title: "POS connection removed" });
+      await deletePosConnection(id);
+      toast({ title: "Provider disconnected" });
+      await load();
     } catch (err) {
-      toast({
-        title: "Delete failed",
-        description: err?.message || "Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Could not disconnect", description: err?.message, variant: "destructive" });
     }
   };
 
-  const squareConfigured = oauthStatus?.square?.configured !== false;
-  const posAccessUrl = posAccessPath(
-    typeof window !== "undefined" ? window.location.origin : "https://www.paidly.co.za"
-  );
+  const legacyWebhook = connections.filter((c) => c.provider === "generic");
 
   return (
-    <div className="space-y-6">
-      <CopyField
-        label="Paidly POS"
-        value={posAccessUrl}
-        description="Dedicated POS link for this business. Staff still sign in. Bookmark it on devices, or copy a till-specific link from Registers below."
-      />
-      <PosPaymentProviderCard />
-      <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/30 p-4">
-        <Plug className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-foreground">Connect your point of sale</p>
-          <p className="text-sm text-muted-foreground">
-            Paidly POS is a till inside the app. Open it at the link above, or from sidebar → POS.
-            These connections are for external hardware — Square or Yoco, signed by the provider. Both
-            write the same sales events and decrement catalog stock when SKU or barcode matches.
-          </p>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-border p-4 space-y-4">
-        <h3 className="text-sm font-semibold">Add connection</h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Provider</Label>
-            <Select value={newProvider} onValueChange={setNewProvider}>
-              <SelectTrigger>
-                <SelectValue placeholder="Choose provider" />
-              </SelectTrigger>
-              <SelectContent>
-                {POS_PROVIDERS.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">{selectedProvider?.description}</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Label (optional)</Label>
-            <Input
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              placeholder="e.g. Main store terminal"
-            />
-          </div>
-        </div>
-
-        {selectedProvider?.connectType === "square_oauth" ? (
-          <div className="space-y-3">
-            <Button onClick={handleConnectSquare} disabled={connectingSquare || !squareConfigured}>
-              {connectingSquare ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Link2 className="h-4 w-4 mr-2" />
-              )}
-              Connect with Square
-            </Button>
-            {!squareConfigured ? (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                Square OAuth is not configured on this deployment yet (SQUARE_APPLICATION_ID / SQUARE_APPLICATION_SECRET).
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {selectedProvider?.connectType === "yoco_key" ? (
-          <div className="space-y-3 max-w-xl">
-            <div className="space-y-1.5">
-              <Label>Yoco secret API key</Label>
-              <Input
-                type="password"
-                value={yocoApiKey}
-                onChange={(e) => setYocoApiKey(e.target.value)}
-                placeholder="sk_live_… or sk_test_…"
-                className="font-mono text-xs"
-                autoComplete="off"
-              />
-              <p className="text-xs text-muted-foreground">
-                From Yoco Developer Hub → API keys. Paidly registers the webhook for you — no manual URL copy.
-              </p>
-            </div>
-            <Button onClick={handleConnectYoco} disabled={connectingYoco}>
-              {connectingYoco ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Link2 className="h-4 w-4 mr-2" />
-              )}
-              Connect Yoco
-            </Button>
-          </div>
-        ) : null}
-
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Active connections</h3>
-          <Button variant="ghost" size="sm" onClick={() => void loadConnections()} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-xl text-sm text-muted-foreground">
+          Connect the payment provider your till uses. Cash always works. Paidly never treats a sale as paid until the provider confirms it.
+        </p>
+        <div className="flex gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={() => void load()} disabled={loading} aria-label="Refresh providers">
+            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+          <Button type="button" size="sm" onClick={() => { setChoice(""); setConnectOpen(true); }}>
+            <Plug className="size-4" /> Connect provider
           </Button>
         </div>
+      </div>
 
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading connections…</p>
-        ) : connections.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No POS connections yet. Connect a provider above.</p>
-        ) : (
-          <div className="space-y-4">
-            {connections.map((connection) => {
-              const isOAuth = connection.oauth_connected;
-              const isManual = !isOAuth;
-
-              return (
-                <div key={connection.id} className="rounded-xl border border-border p-4 space-y-4">
-                  <div className="flex flex-wrap items-center gap-2 justify-between">
-                    <div>
-                      <p className="font-medium">{connection.label}</p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {connection.provider} · {connection.id.slice(0, 8)}
-                        {connection.config?.square_merchant_id
-                          ? ` · merchant ${String(connection.config.square_merchant_id).slice(0, 8)}`
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {isOAuth ? <Badge variant="outline">Connected</Badge> : null}
-                      <Badge variant={connection.status === "active" ? "default" : "secondary"}>
-                        {connection.status}
-                      </Badge>
-                      <Button variant="outline" size="sm" onClick={() => void handleToggleStatus(connection)}>
+      {loading && !catalog ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading…
+        </p>
+      ) : shown.length === 0 && customRows.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No payment provider connected yet.</p>
+      ) : (
+        <ul className="divide-y divide-border rounded-xl border border-border">
+          {shown.map((provider) => {
+            const connection = connections.find((c) => c.id === provider.connection_id);
+            const badge = STATUS_BADGE[provider.status];
+            return (
+              <li key={provider.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="font-medium">{provider.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {POS_PROVIDER_KIND_LABEL[provider.kind]}
+                    {provider.connect === "platform" ? " · managed by Paidly" : ""}
+                    {provider.last_event_at ? ` · last sale ${new Date(provider.last_event_at).toLocaleString()}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                  {connection ? (
+                    <>
+                      <Button variant="outline" size="sm" onClick={() => void toggleConnection(connection)}>
                         {connection.status === "active" ? "Disable" : "Enable"}
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            <Trash2 className="h-4 w-4" />
+                          <Button variant="ghost" size="sm" aria-label={`Disconnect ${provider.label}`}>
+                            <Trash2 className="size-4" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Remove this POS connection?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Sales will stop syncing from this provider.
-                            </AlertDialogDescription>
+                            <AlertDialogTitle>Disconnect {provider.label}?</AlertDialogTitle>
+                            <AlertDialogDescription>Sales stop syncing from {provider.label}. Past sales stay in Paidly.</AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => void handleDelete(connection.id)}>
-                              Remove
-                            </AlertDialogAction>
+                            <AlertDialogAction onClick={() => void removeConnection(connection.id)}>Disconnect</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
-                    </div>
-                  </div>
-
-                  {isManual ? (
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      Manual webhook connections no longer import sales: their signing secret was shared
-                      with the business, so a sale sent through them is not proof of payment. Remove this
-                      connection and connect Yoco or Square instead.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Connected via secure authorization. Webhook is managed automatically
-                      {connection.config?.connected_at
-                        ? ` · since ${new Date(connection.config.connected_at).toLocaleString()}`
-                        : ""}
-                      .
-                    </p>
-                  )}
-
-                  {connection.last_event_at ? (
-                    <p className="text-xs text-muted-foreground">
-                      Last sale received: {new Date(connection.last_event_at).toLocaleString()}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No sales received yet.</p>
-                  )}
+                    </>
+                  ) : null}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </li>
+            );
+          })}
+          {customRows.map((row) => (
+            <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+              <div className="min-w-0">
+                <p className="font-medium">{row.display_name || row.provider_name}</p>
+                <p className="text-xs text-muted-foreground">
+                  Your provider · {CUSTOM_PROVIDER_METHODS.find((m) => m.id === row.method)?.label || "Other"} · needs a Paidly integration before it can take payments
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">Requested — not connected</Badge>
+                <Button variant="ghost" size="sm" aria-label={`Remove ${row.provider_name}`} onClick={() => void archiveCustomPosProvider(row.id).then(load)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
+      {legacyWebhook.length ? (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          {legacyWebhook.length} manual webhook connection{legacyWebhook.length === 1 ? "" : "s"} no longer import sales (their signing secret was shared, so a
+          sale sent through them is not proof of payment). Remove {legacyWebhook.length === 1 ? "it" : "them"} and connect Yoco or Square instead.
+          {legacyWebhook.map((c) => (
+            <Button key={c.id} variant="link" size="sm" className="h-auto px-1 text-xs" onClick={() => void removeConnection(c.id)}>
+              Remove {c.label || "connection"}
+            </Button>
+          ))}
+        </p>
+      ) : null}
+
+      <Dialog open={connectOpen} onOpenChange={setConnectOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect payment provider</DialogTitle>
+            <DialogDescription>Choose your provider. Only providers Paidly has built an integration for are listed.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="pos-provider-choice">Provider</Label>
+            <Select value={choice} onValueChange={setChoice}>
+              <SelectTrigger id="pos-provider-choice" className="h-11">
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.label} · {POS_PROVIDER_KIND_LABEL[p.kind]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {selected ? <p className="text-sm text-muted-foreground">{selected.description}</p> : null}
+
+            {selected?.connect === "yoco_key" ? (
+              selected.status === "connected" ? (
+                <p className="text-sm">Yoco is already connected.</p>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="pos-yoco-key">Yoco secret API key</Label>
+                  <Input id="pos-yoco-key" type="password" autoComplete="off" className="font-mono text-xs" placeholder="sk_live_… or sk_test_…" value={yocoKey} onChange={(e) => setYocoKey(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">Yoco Developer Hub → API keys. Stored encrypted on Paidly&apos;s server and never shown again.</p>
+                  <Button className="w-full" disabled={busy === "yoco" || !yocoKey.trim()} onClick={() => void connectYoco()}>
+                    {busy === "yoco" ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />} Connect Yoco
+                  </Button>
+                </div>
+              )
+            ) : null}
+            {selected?.connect === "square_oauth" ? (
+              selected.status === "connected" ? (
+                <p className="text-sm">Square is already connected.</p>
+              ) : (
+                <div className="space-y-2">
+                  <Button className="w-full" disabled={busy === "square" || !squareConfigured} onClick={() => void connectSquare()}>
+                    {busy === "square" ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />} Connect with Square
+                  </Button>
+                  {!squareConfigured ? <p className="text-xs text-amber-700 dark:text-amber-400">Square isn&apos;t set up on this Paidly deployment yet.</p> : null}
+                </div>
+              )
+            ) : null}
+            {selected?.connect === "platform" ? (
+              <p className="rounded-lg bg-muted p-3 text-sm">
+                {selected.status === "available"
+                  ? `${selected.label} is available on this deployment — the till's EFT / Digital button uses it. There's nothing to connect.`
+                  : `${selected.label} isn't available on this deployment yet. You don't need your own ${selected.label} account for it.`}
+              </p>
+            ) : null}
+            {selected?.connect === "coming_soon" ? (
+              <p className="rounded-lg bg-muted p-3 text-sm">{selected.status === "available" ? `${selected.label} is enabled.` : `${selected.label} isn't live for businesses yet.`}</p>
+            ) : null}
+
+            <div className="border-t border-border pt-3">
+              <p className="text-sm font-medium">Don&apos;t see your provider?</p>
+              <p className="mb-2 text-xs text-muted-foreground">{POS_PROVIDER_NOT_SUPPORTED.payfast}</p>
+              <Button variant="outline" className="w-full" onClick={() => { setConnectOpen(false); setCustomOpen(true); }}>
+                <Plus className="size-4" /> Add your own provider
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={customOpen} onOpenChange={setCustomOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add your own provider</DialogTitle>
+            <DialogDescription>
+              Tell us which provider you use. It&apos;s saved as a request — it won&apos;t take payments or show as connected until Paidly builds an
+              integration for it. Don&apos;t enter passwords or API keys here.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-name">Provider name *</Label>
+              <Input id="cp-name" maxLength={80} value={custom.provider_name} onChange={(e) => setCustom({ ...custom, provider_name: e.target.value })} placeholder="e.g. PayFast, iKhokha, SnapScan" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-display">Display name</Label>
+              <Input id="cp-display" maxLength={80} value={custom.display_name} onChange={(e) => setCustom({ ...custom, display_name: e.target.value })} placeholder="What your staff call it" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-method">Payment type</Label>
+              <Select value={custom.method} onValueChange={(v) => setCustom({ ...custom, method: v })}>
+                <SelectTrigger id="cp-method">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CUSTOM_PROVIDER_METHODS.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-web">Provider website</Label>
+              <Input id="cp-web" maxLength={200} value={custom.website} onChange={(e) => setCustom({ ...custom, website: e.target.value })} placeholder="https://" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cp-notes">Notes</Label>
+              <Textarea id="cp-notes" rows={2} maxLength={1000} value={custom.notes} onChange={(e) => setCustom({ ...custom, notes: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button disabled={busy === "custom" || !custom.provider_name.trim()} onClick={() => void saveCustom()}>
+              {busy === "custom" ? <Loader2 className="size-4 animate-spin" /> : null} Save request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -148,3 +148,60 @@ export async function endPosAccess() {
   }
   clearPosAccessToken();
 }
+
+// ── Till link + operator code ─────────────────────────────────────────────────────
+
+const TILL_KEY = "paidly_pos_device_till";
+
+/** The till this device last opened (a register id — not a secret; it only shows the till name). */
+export function getRememberedTillId() {
+  if (typeof localStorage === "undefined") return "";
+  try {
+    return String(localStorage.getItem(TILL_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+export function rememberTillId(tillId) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (tillId) localStorage.setItem(TILL_KEY, String(tillId));
+    else localStorage.removeItem(TILL_KEY);
+  } catch {
+    /* private mode */
+  }
+}
+
+/** Public till name + business for the code screen. Returns null when the link is not active. */
+export async function fetchTillInfo(tillId) {
+  if (!tillId) return null;
+  const res = await posApiFetch(`/api/pos/till-info?id=${encodeURIComponent(tillId)}`);
+  const raw = await res.text().catch(() => "");
+  const json = parseJson(raw);
+  if (!res.ok || !json.ok) return null;
+  return json;
+}
+
+/**
+ * Verify an operator code for this till. Opens a scoped till session (never a Paidly login).
+ * @returns the POS access view (same shape as /api/pos/access)
+ */
+export async function unlockTillWithCode(tillId, code) {
+  const res = await posApiFetch("/api/pos/code-unlock", {
+    method: "POST",
+    body: JSON.stringify({ till_id: tillId, code }),
+  });
+  const raw = await res.text().catch(() => "");
+  const json = parseJson(raw);
+  if (!res.ok || json.ok === false) {
+    const err = new Error(json.error || "That code is not valid for this till.");
+    err.code = json.code;
+    err.status = res.status;
+    throw err;
+  }
+  if (json.access_token) setPosAccessToken(json.access_token);
+  rememberPosAccessProfile(json);
+  rememberTillId(tillId);
+  return json;
+}

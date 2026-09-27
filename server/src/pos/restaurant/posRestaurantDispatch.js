@@ -10,10 +10,12 @@ import {
   handleRestaurantFloor,
   handleRestaurantOrders,
   handleRestaurantSetup,
+  handleRestaurantSetupGet,
   handleTabAction,
   handleTabGet,
   handleTabPay,
 } from "./posRestaurantRoutes.js";
+import { handlePosProvidersGet, handlePosProvidersPost } from "../posProviders.js";
 
 const SETTINGS = "settings";
 
@@ -22,7 +24,7 @@ export const RESTAURANT_ROUTES = Object.freeze({
   "restaurant-floor": { path: "/api/pos/floor", GET: [PERMISSIONS.POS_ACCESS, handleRestaurantFloor] },
   "restaurant-floor-setup": {
     path: "/api/pos/floor-setup",
-    GET: [PERMISSIONS.POS_ACCESS, handleRestaurantFloor],
+    GET: [SETTINGS, handleRestaurantSetupGet],
     POST: [SETTINGS, handleRestaurantSetup],
   },
   "restaurant-tab": {
@@ -37,6 +39,11 @@ export const RESTAURANT_ROUTES = Object.freeze({
     POST: [PERMISSIONS.POS_ACCESS, handleKitchenAction],
   },
   "restaurant-orders": { path: "/api/pos/orders", GET: [PERMISSIONS.POS_ACCESS, handleRestaurantOrders] },
+  "pos-providers": {
+    path: "/api/pos/providers",
+    GET: [SETTINGS, handlePosProvidersGet],
+    POST: [SETTINGS, handlePosProvidersPost],
+  },
 });
 
 export { RESTAURANT_ROUTE_BY_HEAD } from "./posRestaurantRouteNames.js";

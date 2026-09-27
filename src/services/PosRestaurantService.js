@@ -36,3 +36,6 @@ export const moveKitchenTicket = (ticketId, status) =>
   request("/api/pos/kitchen", { method: "POST", body: { ticket_id: ticketId, status }, fallback: "Could not update the ticket" });
 
 export const fetchRestaurantOrders = () => request("/api/pos/orders", { fallback: "Could not load orders" });
+
+/** Settings: floor plan plus the staff who can be assigned to tables (managers only). */
+export const fetchRestaurantSetup = () => request("/api/pos/floor-setup", { fallback: "Could not load the floor setup" });

@@ -249,6 +249,12 @@ const MAIN_ROUTES = [
     // React Router matches case-insensitively. Do not add /POS → /pos <Navigate> —
     // that redirect matches /pos as well and never commits UI (blank till).
     { path: "/pos/till/:tillId", element: <PosAccessRoute /> },
+    // Till sub-views share the same POS boundary (POS session or Paidly POS access) — never the dashboard.
+    { path: "/pos/register", element: <PosAccessRoute /> },
+    { path: "/pos/tables", element: <PosAccessRoute /> },
+    { path: "/pos/orders", element: <PosAccessRoute /> },
+    { path: "/pos/kitchen", element: <PosAccessRoute /> },
+    { path: "/pos/shift", element: <PosAccessRoute /> },
     { path: "/pos", element: <PosAccessRoute /> },
     { path: "/pay", element: <PaidlyPay /> },
     { path: "/About", element: <RequireAuth><About /></RequireAuth> },

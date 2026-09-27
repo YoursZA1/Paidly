@@ -11,12 +11,12 @@ const FLOOR_POLL_MS = 15000;
  * Restaurant-mode state for the till: floor plan, the table order being edited (a "tab"), order
  * type and view. The till's cart is reused as the tab's NEW ITEMS buffer.
  */
-export function usePosRestaurant({ businessType, registerId, cashierName, cart, setCart, toast, searchParams, setSearchParams }) {
+export function usePosRestaurant({ businessType, registerId, cashierName, cart, setCart, toast, searchParams, setSearchParams, initialView = null }) {
   const [floorState, setFloorState] = useState(null);
   const [floorLoading, setFloorLoading] = useState(true);
   const [schemaMissing, setSchemaMissing] = useState(false);
   const [orderType, setOrderTypeState] = useState(null);
-  const [view, setView] = useState(RESTAURANT_VIEW.FLOOR);
+  const [view, setView] = useState(() => (Object.values(RESTAURANT_VIEW).includes(initialView) ? initialView : RESTAURANT_VIEW.FLOOR));
   const [bundle, setBundle] = useState(null);
   const [busy, setBusy] = useState("");
   const bundleIdRef = useRef(null);

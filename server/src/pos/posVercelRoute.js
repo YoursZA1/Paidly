@@ -93,6 +93,8 @@ export function resolvePosRoute(req) {
   }
 
   if (head === "invite-activate") return { route: "invite-activate" };
+  if (head === "till-info") return { route: "till-info" };
+  if (head === "code-unlock") return { route: "code-unlock" };
   if (head === "access-end") return { route: "access-end" };
   if (head === "access") return { route: "access" };
   if (head === "pin") return { route: "pin" };
@@ -225,7 +227,9 @@ export function resolvePosRoute(req) {
   if (urlPath.endsWith("/invoice") || /\/invoice$/i.test(urlPath)) {
     return { route: "invoice" };
   }
-  const restaurantHead = urlPath.match(/\/api\/pos\/(floor-setup|floor|tab-pay|tab|kitchen|orders)$/i)?.[1]?.toLowerCase();
+  if (/\/till-info$/i.test(urlPath)) return { route: "till-info" };
+  if (/\/code-unlock$/i.test(urlPath)) return { route: "code-unlock" };
+  const restaurantHead = urlPath.match(/\/api\/pos\/(floor-setup|floor|tab-pay|tab|kitchen|orders|providers)$/i)?.[1]?.toLowerCase();
   if (restaurantHead && RESTAURANT_ROUTE_BY_HEAD[restaurantHead]) return { route: RESTAURANT_ROUTE_BY_HEAD[restaurantHead] };
   if (/\/registers$/i.test(urlPath)) return { route: "registers-list" };
   const registerMatch = urlPath.match(/\/registers\/([^/]+)/i);

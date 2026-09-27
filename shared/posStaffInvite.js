@@ -156,7 +156,11 @@ export function isPosInviteUrl(raw) {
 
 export function isPosAccessPath(pathname) {
   const p = String(pathname || "");
-  return /^\/pos\/?$/i.test(p) || /^\/pos\/till\/[^/]+\/?$/i.test(p);
+  return (
+    /^\/pos\/?$/i.test(p) ||
+    /^\/pos\/till\/[^/]+\/?$/i.test(p) ||
+    /^\/pos\/(register|tables|orders|kitchen|shift)\/?$/i.test(p)
+  );
 }
 
 /**

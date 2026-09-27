@@ -6,4 +6,6 @@ export const RESTAURANT_ROUTE_BY_HEAD = Object.freeze({
   "tab-pay": "restaurant-tab-pay",
   kitchen: "restaurant-kitchen",
   orders: "restaurant-orders",
+  // Not restaurant-specific, but shares the same single-segment dispatch table.
+  providers: "pos-providers",
 });

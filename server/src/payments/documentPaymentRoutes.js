@@ -1,4 +1,5 @@
 import { requireOrgMember } from "../pos/posConnectionsRoutes.js";
+import { refusePosPassOutsideTill } from "../pos/posScope.js";
 import { resolvePublicAppOrigin } from "../companyInviteAppUrl.js";
 import {
   bearerTokenFromReq,
@@ -86,6 +87,7 @@ async function resolveDocumentPayAccess(req, res, body) {
 
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return { ok: false, response: gate.response };
+  if (refusePosPassOutsideTill(gate, res)) return { ok: false, response: res };
   return {
     ok: true,
     orgId: gate.membership.orgId,
@@ -236,6 +238,7 @@ export async function handleDocumentRemind(req, res) {
   }
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate.response;
+  if (refusePosPassOutsideTill(gate, res)) return;
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const invoiceId = String(body.invoice_id || body.document_id || "").trim();
   if (!invoiceId) return jsonError(res, 422, "invoice_id is required");
@@ -276,6 +279,7 @@ export async function handleDocumentHistory(req, res) {
     } else {
       const gate = await requireOrgMember(req, res);
       if (!gate.ok) return gate.response;
+      if (refusePosPassOutsideTill(gate, res)) return;
       orgId = gate.membership.orgId;
     }
     const snapshot = await documentPaymentSnapshot(orgId, invoiceId);

@@ -42,6 +42,7 @@ import {
 import { handlePosPinGet, handlePosPinSet, handlePosPinVerify } from "./posPinRoutes.js";
 import { handlePaidlyPayApi } from "../paidlyPay/paidlyPayApi.js";
 import { registerRestaurantRoutes } from "./restaurant/posRestaurantDispatch.js";
+import { handlePosCodeUnlock, handlePosTillInfo } from "./posAccessCodes.js";
 
 /**
  * Mirror Vercel `api/pos/[[...path]].js` for Vite dev proxy (server/src/index.js).
@@ -99,6 +100,8 @@ export function registerPosRoutes(app) {
   app.post("/api/pos/webhook/provider/:provider", handlePosWebhook);
 
   app.post("/api/pos/invite-activate", handlePosInviteActivate);
+  app.get("/api/pos/till-info", handlePosTillInfo);
+  app.post("/api/pos/code-unlock", handlePosCodeUnlock);
   app.get("/api/pos/access", handlePosAccessGet);
   app.post("/api/pos/access-end", handlePosAccessEnd);
   app.get("/api/pos/pin", handlePosPinGet);

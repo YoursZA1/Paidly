@@ -31,6 +31,7 @@ import {
   MoreHorizontal,
   ExternalLink,
   QrCode,
+  Lock,
   LayoutGrid,
   UtensilsCrossed,
   ChefHat,
@@ -65,7 +66,7 @@ import { resolveBusinessLogoUrl } from "@/lib/brandingLogos";
 import LogoImage from "@/components/shared/LogoImage";
 import { useCompanyContext } from "@/hooks/useCompanyContext";
 import { PERMISSIONS } from "@/lib/companyPermissions";
-import { isPosOnlyStaff, posAccessPath } from "@shared/posStaffInvite.js";
+import { isPosOnlyStaff, posAccessPath, posTillPath } from "@shared/posStaffInvite.js";
 import PosStaffInviteSheet from "@/components/pos/PosStaffInviteSheet";
 import PosTillStaffSheet from "@/components/pos/PosTillStaffSheet";
 import { formatCurrency } from "@/utils/currencyCalculations";
@@ -350,7 +351,7 @@ function CartLineList({ cart, currency, onQty }) {
   );
 }
 
-export default function PosTerminal({ requestedTillId = null } = {}) {
+export default function PosTerminal({ requestedTillId = null, initialView = null, operatorMembershipId = null } = {}) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -447,6 +448,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
     toast,
     searchParams,
     setSearchParams,
+    initialView,
   });
   const restaurantMode = restaurant.enabled && restaurant.orderType !== ORDER_TYPE.COUNTER;
   const [billOpen, setBillOpen] = useState(false);
@@ -1607,11 +1609,16 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
       if (hadPosPass) await endPosAccess();
       else await logout();
     } finally {
-      navigate(hadPosPass || posOnlyStaff ? posAccessPath() : `${createPageUrl("Login")}#sign-in`, {
-        replace: true,
-      });
+      if (hadPosPass) {
+        // Lock POS: the till session is revoked server-side. Reload onto this till's code screen so
+        // no in-memory till state survives for the next operator.
+        window.location.assign(activeRegister?.id ? posTillPath(activeRegister.id) : posAccessPath());
+      } else {
+        navigate(posOnlyStaff ? posAccessPath() : `${createPageUrl("Login")}#sign-in`, { replace: true });
+      }
     }
   };
+  const tillPassSession = Boolean(getPosAccessToken());
 
   const moneyRows = [
     { label: "Subtotal", amount: totals.subtotal },
@@ -1690,7 +1697,18 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-background">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:h-16 sm:gap-3 sm:px-5">
-        {posOnlyStaff ? (
+        {tillPassSession ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 shrink-0 touch-manipulation px-3"
+            aria-label="Lock POS"
+            onClick={() => void handlePosLogout()}
+          >
+            <Lock className="size-4" />
+            <span className="hidden sm:inline">Lock POS</span>
+          </Button>
+        ) : posOnlyStaff ? (
           <Button
             type="button"
             variant="ghost"
@@ -1958,6 +1976,7 @@ export default function PosTerminal({ requestedTillId = null } = {}) {
           {restaurantMode && restaurant.view !== RESTAURANT_VIEW.MENU ? (
             restaurant.view === RESTAURANT_VIEW.FLOOR ? (
               <PosFloorView
+                myMembershipId={operatorMembershipId}
                 floorState={restaurant.floorState}
                 loading={restaurant.floorLoading}
                 currency={currency}

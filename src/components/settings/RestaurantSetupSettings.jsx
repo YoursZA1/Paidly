@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { fetchRestaurantFloor, restaurantSetup } from "@/services/PosRestaurantService";
+import { fetchRestaurantSetup, restaurantSetup } from "@/services/PosRestaurantService";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const COLS = 12;
 const MIN_ROWS = 6;
@@ -40,7 +41,7 @@ export default function RestaurantSetupSettings() {
 
   const load = useCallback(async () => {
     try {
-      setState(await fetchRestaurantFloor());
+      setState(await fetchRestaurantSetup());
       setMissing(false);
     } catch (err) {
       if (err?.code === "RESTAURANT_SCHEMA_MISSING") setMissing(true);
@@ -121,7 +122,12 @@ export default function RestaurantSetupSettings() {
 
   const saveEditor = async () => {
     if (!editor) return;
-    const body = { name: editor.name, seats: Number(editor.seats) || 2, shape: editor.shape };
+    const body = {
+      name: editor.name,
+      seats: Number(editor.seats) || 2,
+      shape: editor.shape,
+      assigned_membership_id: editor.assigned && editor.assigned !== "none" ? editor.assigned : null,
+    };
     const ok =
       editor.mode === "create"
         ? await run({ action: "create_table", floor_id: activeFloorId, pos_x: editor.pos_x, pos_y: editor.pos_y, ...body }, `Table ${editor.name} added`)
@@ -136,7 +142,7 @@ export default function RestaurantSetupSettings() {
   };
 
   const openCreate = (x, y) =>
-    setEditor({ mode: "create", pos_x: x, pos_y: y, name: nextTableName(state?.tables || []), seats: "4", shape: "square" });
+    setEditor({ mode: "create", pos_x: x, pos_y: y, name: nextTableName(state?.tables || []), seats: "4", shape: "square", assigned: "none" });
 
   if (loading) {
     return (
@@ -247,7 +253,14 @@ export default function RestaurantSetupSettings() {
                     }}
                     onClick={(e) => {
                       if (drag && (Math.abs(e.clientX - drag.startX) > 4 || Math.abs(e.clientY - drag.startY) > 4)) return;
-                      setEditor({ mode: "edit", table, name: table.name, seats: String(table.seats), shape: table.shape || "square" });
+                      setEditor({
+                        mode: "edit",
+                        table,
+                        name: table.name,
+                        seats: String(table.seats),
+                        shape: table.shape || "square",
+                        assigned: table.assigned_membership_id || "none",
+                      });
                     }}
                     onKeyDown={(e) => {
                       const delta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
@@ -262,6 +275,9 @@ export default function RestaurantSetupSettings() {
                     <span className="flex items-center gap-0.5 text-[10px] font-normal text-muted-foreground">
                       <Users className="size-2.5" /> {table.seats}
                     </span>
+                    {table.assigned_name ? (
+                      <span className="max-w-full truncate px-1 text-[10px] font-normal text-primary">{table.assigned_name}</span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -287,6 +303,23 @@ export default function RestaurantSetupSettings() {
               <div className="space-y-1.5">
                 <Label htmlFor="rs-table-seats">Seats</Label>
                 <Input id="rs-table-seats" inputMode="numeric" value={editor.seats} onChange={(e) => setEditor({ ...editor, seats: e.target.value.replace(/\D/g, "").slice(0, 2) })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rs-table-server">Assigned server</Label>
+                <Select value={editor.assigned || "none"} onValueChange={(v) => setEditor({ ...editor, assigned: v })}>
+                  <SelectTrigger id="rs-table-server">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Anyone</SelectItem>
+                    {(state?.operators || []).map((op) => (
+                      <SelectItem key={op.id} value={op.id}>
+                        {op.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">One server can look after many tables. Staff see theirs under “My tables” on the till.</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Shape</Label>

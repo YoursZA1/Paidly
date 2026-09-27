@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthUserId } from "@/lib/authUserId";
 import { buildCompanyAccessContext, PERMISSIONS } from "@/lib/companyPermissions";
@@ -7,16 +7,25 @@ import { CompanyContextProvider } from "@/contexts/CompanyContext";
 import { OrgBrandProvider } from "@/contexts/OrgBrandContext";
 import useCompanyContext from "@/hooks/useCompanyContext";
 import PosAccessSignIn from "@/components/pos/PosAccessSignIn";
+import PosCodeEntry from "@/components/pos/PosCodeEntry";
+import PosLinkDevice from "@/components/pos/PosLinkDevice";
 import PosErrorBoundary from "@/components/pos/PosErrorBoundary";
 import PosShiftLanding from "@/components/pos/PosShiftLanding";
 import { PosLoadError, PosLoading } from "@/components/pos/PosShellStates";
 import { isPosOnlyStaff, normalizePosTillId, membershipCanEnterPos } from "@shared/posStaffInvite.js";
-import { fetchPosAccess } from "@/lib/pos/posAccessClient";
+import { fetchPosAccess, getRememberedTillId } from "@/lib/pos/posAccessClient";
 import { openPosSession, listPosSessions } from "@/services/PosIntegrationService";
 import { verifyPosPin } from "@/services/PosPinService";
 import { writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
 
 const POS = lazy(() => import("./POS"));
+
+/** /pos/register · /pos/tables · /pos/orders · /pos/kitchen · /pos/shift → the till view to open. */
+const POS_SUBVIEW = { register: "menu", tables: "floor", orders: "orders", kitchen: "kitchen", shift: "menu" };
+function viewFromPath(pathname) {
+  const seg = String(pathname || "").split("/").filter(Boolean)[1]?.toLowerCase() || "";
+  return POS_SUBVIEW[seg] || null;
+}
 const POS_CONTEXT_WAIT_MS = 12_000;
 
 function isLikelyConnectFailure(message) {
@@ -41,6 +50,9 @@ function contextFromPosAccess(access) {
  */
 export default function PosAccess() {
   const { tillId: tillParam } = useParams();
+  const { pathname } = useLocation();
+  const initialView = viewFromPath(pathname);
+  const [ownerSignIn, setOwnerSignIn] = useState(false);
   const { user, loading: authLoading } = useAuth() || {};
   const authUserId = getAuthUserId(user);
   const requestedTillId = normalizePosTillId(tillParam);
@@ -76,26 +88,34 @@ export default function PosAccess() {
     return (
       <CompanyContextProvider forcedContext={forced}>
         <OrgBrandProvider>
-          <PosPassTill access={posAccess} requestedTillId={requestedTillId} tillLinkInvalid={tillLinkInvalid} />
+          <PosPassTill access={posAccess} requestedTillId={requestedTillId} tillLinkInvalid={tillLinkInvalid} initialView={initialView} />
         </OrgBrandProvider>
       </CompanyContextProvider>
     );
   }
 
   if (!authUserId) {
-    return <PosAccessSignIn />;
+    // Owners/managers can still use their Paidly login here; operators use a till code.
+    if (ownerSignIn) return <PosAccessSignIn />;
+    const tillId = requestedTillId || (tillLinkInvalid ? "" : getRememberedTillId());
+    if (tillId) {
+      return <PosCodeEntry tillId={tillId} onUnlocked={(access) => setPosAccess(access)} onUseOwnerSignIn={() => setOwnerSignIn(true)} />;
+    }
+    return <PosLinkDevice onUseOwnerSignIn={() => setOwnerSignIn(true)} />;
   }
 
   return (
     <CompanyContextProvider>
       <OrgBrandProvider>
-        <AuthenticatedPosTill requestedTillId={requestedTillId} tillLinkInvalid={tillLinkInvalid} />
+        <AuthenticatedPosTill requestedTillId={requestedTillId} tillLinkInvalid={tillLinkInvalid} initialView={initialView} />
       </OrgBrandProvider>
     </CompanyContextProvider>
   );
 }
 
-function PosPassTill({ access, requestedTillId, tillLinkInvalid }) {
+function PosPassTill({ access, requestedTillId, tillLinkInvalid, initialView = null }) {
+  // A session opened with the operator's own code is already authenticated — no second PIN.
+  const codeSession = access?.auth_method === "code";
   const [entered, setEntered] = useState(false);
   const [shiftBusy, setShiftBusy] = useState(false);
   const [shiftError, setShiftError] = useState("");
@@ -121,7 +141,7 @@ function PosPassTill({ access, requestedTillId, tillLinkInvalid }) {
           opening_balance: openingBalance,
           pos_pin: posPin,
         });
-      } else {
+      } else if (!codeSession) {
         await verifyPosPin({ pos_pin: posPin });
       }
       setEntered(true);
@@ -143,6 +163,7 @@ function PosPassTill({ access, requestedTillId, tillLinkInvalid }) {
         openingBalance={0}
         busy={shiftBusy}
         error={shiftError}
+        requirePin={!codeSession}
         onStartShift={(opening, pin) => void startOrResume(opening, pin)}
         onResumeShift={(pin) => void startOrResume(0, pin)}
       />
@@ -152,13 +173,18 @@ function PosPassTill({ access, requestedTillId, tillLinkInvalid }) {
   return (
     <PosErrorBoundary>
       <Suspense fallback={<PosLoading />}>
-        <POS requestedTillId={requestedTillId || access.register?.id || null} posPass />
+        <POS
+          requestedTillId={requestedTillId || access.register?.id || null}
+          posPass
+          initialView={initialView}
+          operatorMembershipId={access.membership_id || null}
+        />
       </Suspense>
     </PosErrorBoundary>
   );
 }
 
-function AuthenticatedPosTill({ requestedTillId, tillLinkInvalid }) {
+function AuthenticatedPosTill({ requestedTillId, tillLinkInvalid, initialView = null }) {
   const { user } = useAuth() || {};
   const { loading, error, hasPermission, refresh, isOrgOwner, companyRole, jobFunction, ctx } =
     useCompanyContext();
@@ -243,7 +269,7 @@ function AuthenticatedPosTill({ requestedTillId, tillLinkInvalid }) {
   return (
     <PosErrorBoundary>
       <Suspense fallback={<PosLoading />}>
-        <POS requestedTillId={requestedTillId || null} />
+        <POS requestedTillId={requestedTillId || null} initialView={initialView} operatorMembershipId={ctx?.membershipId || null} />
       </Suspense>
     </PosErrorBoundary>
   );

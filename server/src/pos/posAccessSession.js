@@ -82,6 +82,8 @@ export function membershipFromPosAccessRow(row) {
       .toLowerCase()
       .replace(/\s+/g, "_") || POS_JOB_FUNCTION;
   return {
+    // memberships.id when the session was opened with an operator code (attribution + PIN skip).
+    id: row?.membership_id || null,
     userId: row?.user_id || null,
     companyId: row?.org_id,
     orgId: row?.org_id,
@@ -130,5 +132,7 @@ export function publicPosAccessView(row, extras = {}) {
     issued_at: row.issued_at,
     expires_at: row.expires_at,
     open_shift: extras.openShift || null,
+    auth_method: row.credential_id ? "code" : "invite",
+    membership_id: row.membership_id || null,
   };
 }

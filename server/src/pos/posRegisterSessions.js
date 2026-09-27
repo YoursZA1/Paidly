@@ -99,14 +99,34 @@ async function loadSessionSales(sessionId) {
   return data || [];
 }
 
+/** Names for operators without a Paidly login (code-only POS staff): memberships.invited_name. */
+async function loadMemberNames(orgId, rows) {
+  const ids = [...new Set((rows || []).flatMap((r) => [r.opened_by_membership_id, r.closed_by_membership_id]).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const { data, error } = await supabaseAdmin
+    .from("memberships")
+    .select("id, user_id, invited_name, invited_email")
+    .eq("org_id", orgId)
+    .in("id", ids);
+  if (error) return new Map();
+  const userIds = (data || []).map((m) => m.user_id).filter(Boolean);
+  const profiles = new Map();
+  if (userIds.length) {
+    const { data: rowsP } = await supabaseAdmin.from("profiles").select("id, full_name, email").in("id", userIds);
+    for (const p of rowsP || []) profiles.set(p.id, p.full_name || p.email || null);
+  }
+  return new Map((data || []).map((m) => [m.id, profiles.get(m.user_id) || m.invited_name || m.invited_email || null]));
+}
+
 async function viewSessions(orgId, rows, { liveOpen = true } = {}) {
   const { registers, people } = await loadNameMaps(orgId, rows);
+  const members = await loadMemberNames(orgId, rows);
   const views = [];
   for (const row of rows || []) {
     const extras = {
       register_name: registers.get(row.register_id) || null,
-      opened_by_name: row.opened_by ? people.get(row.opened_by) || null : null,
-      closed_by_name: row.closed_by ? people.get(row.closed_by) || null : null,
+      opened_by_name: (row.opened_by ? people.get(row.opened_by) : null) || members.get(row.opened_by_membership_id) || null,
+      closed_by_name: (row.closed_by ? people.get(row.closed_by) : null) || members.get(row.closed_by_membership_id) || null,
     };
     if (liveOpen && row.status === "open") {
       const sales = await loadSessionSales(row.id);
@@ -169,6 +189,12 @@ export async function handlePosSessionsList(req, res) {
   const scopedRegisterId = till.locked ? till.registerId : registerId;
   const status = String(req.query?.status || "").trim().toLowerCase();
   const limit = Math.min(Math.max(Number(req.query?.limit) || 50, 1), 100);
+  const from = String(req.query?.from || "").trim();
+  const to = String(req.query?.to || "").trim();
+  const operatorId = String(req.query?.operator_membership_id || "").trim();
+  const dateOk = (v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!dateOk(from) || !dateOk(to)) return jsonError(res, 422, "from / to must be YYYY-MM-DD");
+  if (operatorId && !isValidUuid(operatorId)) return jsonError(res, 422, "operator_membership_id is invalid");
   const canReports = companyRoleHasPermission(gate.membership.companyRole, PERMISSIONS.POS_VIEW_REPORTS);
 
   try {
@@ -182,6 +208,9 @@ export async function handlePosSessionsList(req, res) {
       if (!isValidUuid(scopedRegisterId)) return jsonError(res, 422, "register_id is invalid");
       query = query.eq("register_id", scopedRegisterId);
     }
+    if (from) query = query.gte("opened_at", `${from}T00:00:00`);
+    if (to) query = query.lte("opened_at", `${to}T23:59:59.999`);
+    if (operatorId) query = query.eq("opened_by_membership_id", operatorId);
     if (status === "open" || status === "closed") {
       if (status === "closed" && !canReports) {
         return jsonError(res, 403, "Forbidden — POS permission required", {
@@ -269,7 +298,9 @@ export async function handlePosSessionOpen(req, res) {
     const membershipId = gate.membership.id || null;
     const posEnabled = membershipIsPosEnabled(gate.membership);
     // Access pass identifies the employee; PIN authenticates — required even without Auth user.id.
-    if (posEnabled && membershipId) {
+    // A session opened with the operator's own access code is already authenticated by that code.
+    const codeAuthenticated = Boolean(gate.posAccess && gate.session?.credential_id);
+    if (posEnabled && membershipId && !codeAuthenticated) {
       const pinCheck = await verifyMembershipPosPin(orgId, membershipId, body.pos_pin);
       if (!pinCheck.ok) {
         return jsonError(res, pinCheck.status, pinCheck.error, { code: pinCheck.code });

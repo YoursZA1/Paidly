@@ -2,13 +2,15 @@
 
 ## Audit Date
 
-2026-09-26. Branch `fix/admin-escalation-billing-payroll-hr`, base commit `17844a9`, plus fix commit `790530f` and the uncommitted changes listed below.
+2026-09-26, re-verified 2026-09-27. Branch `fix/admin-escalation-billing-payroll-hr`, base commit `17844a9`; fixes in `790530f` and `6cc6aa1`, deployed to production.
 
 ## Overall Status
 
-**FAIL.** Two production blockers are live right now on https://www.paidly.co.za.
+**PASS WITH CONDITIONS.**
 
-Both are fixed in code, and neither fix is deployed. Once deployed, they drop to **PASS WITH CONDITIONS**, subject to the manual checks at the end of this report.
+The audit found two production blockers live on https://www.paidly.co.za. Both are fixed, deployed and re-verified on production (2026-09-27).
+
+The conditions are the open P1 (QA-04) and the manual checks at the end of this report. Signed-in flows were not browser-tested.
 
 ---
 
@@ -36,7 +38,6 @@ Both come from module-load errors that Vite-based unit tests cannot see. Fixed, 
 - Mobile horizontal overflow on landing and sign-up.
 
 **Remains**
-- Deploy the fixes.
 - Production functions read gitignored local `.env` files from the deploy bundle, and PayFast's handler lets them override Vercel's values.
 - Signed-in flows were not exercised in a browser: no test account, and this audit does not create accounts on production.
 
@@ -46,12 +47,12 @@ Both come from module-load errors that Vite-based unit tests cannot see. Fixed, 
 
 | ID | Severity | Area | Finding | Evidence | Status |
 | -- | -------- | ---- | ------- | -------- | ------ |
-| QA-01 | P0 | POS | `/api/pos/*` fails on every request: `SyntaxError: Duplicate export of 'salePublicView'`, introduced in `17844a9` | `vercel logs`: `/api/pos/registers`, `/sales`, `/catalog`, `/floor`, `/health` all `FUNCTION_INVOCATION_FAILED`; `node -e "import('./server/src/pos/posNativeCheckout.js')"` → same error | Fixed in code (`790530f`); **not deployed** |
-| QA-02 | P0 | Invoices / Quotes / Payslips / Leave | `api/public-share.js` fails on every request: `SyntaxError: Unexpected token '<'` (JSX in `server/src/vercelOgImage.js`, loaded as native ESM). Customer invoice, quote, payslip and leave-approval links, `/api/og` and `/api/email-track` are all down | `vercel logs` for `/api/public-invoice`, `/public-quote`, `/public-payslip`, `/og`, `/email-track`; curl → 500 | Fixed in code (`790530f`); **not deployed** |
+| QA-01 | P0 | POS | `/api/pos/*` fails on every request: `SyntaxError: Duplicate export of 'salePublicView'`, introduced in `17844a9` | `vercel logs`: `/api/pos/registers`, `/sales`, `/catalog`, `/floor`, `/health` all `FUNCTION_INVOCATION_FAILED`; `node -e "import('./server/src/pos/posNativeCheckout.js')"` → same error | **Fixed and live**: `/api/pos/*` returns JSON (404 on unknown route) |
+| QA-02 | P0 | Invoices / Quotes / Payslips / Leave | `api/public-share.js` fails on every request: `SyntaxError: Unexpected token '<'` (JSX in `server/src/vercelOgImage.js`, loaded as native ESM). Customer invoice, quote, payslip and leave-approval links, `/api/og` and `/api/email-track` are all down | `vercel logs` for `/api/public-invoice`, `/public-quote`, `/public-payslip`, `/og`, `/email-track`; curl → 500 | **Fixed and live**: `/api/public-invoice`, `-quote`, `-payslip` → 400 JSON `Invalid token`; `/api/og` → PNG; `/api/email-track` → GIF |
 | QA-03 | P1 | Recurring invoices | Customer-facing **Testing** tab: "Run tests" calls `generateInvoiceFromRecurring` and `checkAndGenerateDueInvoices` against the customer's live templates, so it **creates real invoices** | `src/services/RecurringInvoiceAutoGenerationTester.js:133,196` | Fixed (dev builds only; 0 tester strings in `dist/`) |
 | QA-04 | P1 | Deployment / secrets | Deploys are CLI uploads from the local folder, so gitignored `server/.env` and `.env.development` ship in function bundles. Production loads them: `injecting env (6) from server/.env`. The 6 `TURNSTILE_*` vars exist **only** there, not in Vercel env. `api/payfast-handler.js:32` loads `server/.env` with `override: true`, so a local file overrides Vercel's production values in the PayFast ITN handler | `vercel logs`; `vercel env ls production` (names only); `.vercelignore` has no `.env` rule | **Open**: manual (see Recommended Next Steps) |
 | QA-05 | P1 | Test coverage | 2,058 unit tests passed while two production functions could not load. Vitest runs code through Vite, which accepts JSX in `.js` and duplicate exports | Mutation check: reverting the fixes fails the new test on exactly those two functions | Fixed: `tests/unit/apiFunctionsNativeLoad.test.js` |
-| QA-06 | P2 | SEO / public pages | `/HowTo` (in sitemap, allowed by robots.txt) redirected signed-out visitors and crawlers to `/login` | Browser on production: `/HowTo` → `/login` | Fixed (local build verified) |
+| QA-06 | P2 | SEO / public pages | `/HowTo` (in sitemap, allowed by robots.txt) redirected signed-out visitors and crawlers to `/login` | Browser on production: `/HowTo` → `/login` | **Fixed and live**: production `/HowTo` renders for guests |
 | QA-07 | P2 | SEO | Every route used the home page title and canonical (`/HowTo` canonicalised to `/`). No `noindex` on private app pages. No Open Graph or Twitter tags on the landing page | `index.html`; no per-route title code | Fixed |
 
 # Fixed During Audit
@@ -62,8 +63,8 @@ Both come from module-load errors that Vite-based unit tests cannot see. Fixed, 
 | QA-02 | Public share | JSX in a `.js` file loaded as native ESM | Rewrote the OG handler with `React.createElement`, same output (`server/src/vercelOgImage.js`) | Handler renders a 1200×630 PNG (21.7 KB) locally; `api/public-share.js` loads |
 | QA-03 | Recurring invoices | Test harness creating real invoices in production UI | Testing tab and panel render only when `import.meta.env.DEV` (`src/pages/RecurringInvoices.jsx`) | Production `dist/` has 0 occurrences of tester strings |
 | QA-05 | Tests | No native-load coverage for Vercel functions | New test: each `api/**` entry point imported in a child `node` process; also asserts ≤ 12 functions | 13 tests pass; mutation reverted → 2 fail |
-| QA-06 | Routing | `/HowTo` required a session | Added `/how-?to` to session-optional paths (`src/utils/sessionGuard.js`) and to the public layout bypass (`src/pages/index.jsx`) | Browser, production build, 375 px: `/HowTo` renders, `robots: index, follow`, canonical `/HowTo`; unit test added |
-| QA-07 | SEO | One title and canonical for all routes; no noindex; no OG | New `src/lib/routeDocumentMeta.js`: per-route title, description, robots and canonical. Public pages indexable with a self canonical; all others `noindex, nofollow` with no canonical. OG and Twitter tags in `index.html`. Sitemap now lists `/privacy-policy` and `/terms` | Browser: `/Invoices` → noindex, `/Signup` → "Create your account · Paidly"; 3 unit tests |
+| QA-06 | Routing | `/HowTo` required a session | Added `/how-?to` to session-optional paths (`src/utils/sessionGuard.js`) and to the public layout bypass (`src/pages/index.jsx`) | Live on production: `/HowTo` renders for guests, `robots: index, follow`, canonical `/HowTo`; unit test added |
+| QA-07 | SEO | One title and canonical for all routes; no noindex; no OG | New `src/lib/routeDocumentMeta.js`: per-route title, description, robots and canonical. Public pages indexable with a self canonical; all others `noindex, nofollow` with no canonical. OG and Twitter tags in `index.html`. Sitemap now lists `/privacy-policy` and `/terms` | Live on production: `/Invoices` → noindex, no canonical; `og:image` present; 3 unit tests |
 | QA-09 | Error UX | Customer error text said "Start the API with `npm run server`… set SUPABASE_SERVICE_ROLE_KEY" | Developer hint kept for dev builds; production says what happened and what to do next (`src/services/CompanyTeamService.js`, `src/contexts/AuthContext.impl.jsx`) | Lint clean; suite green |
 | QA-10 | Mobile | 8 px horizontal scroll on landing and sign-up at ≤ 375 px: slide-in list items start at `translateX(24px)` | `overflow-x-clip` on the landing root (`src/pages/Home.jsx`); sticky header unaffected | Browser at 320 px: `scrollWidth == clientWidth` on `/`, `/Signup`, `/auth/verified`; header still `position: sticky` |
 
@@ -71,7 +72,6 @@ Both come from module-load errors that Vite-based unit tests cannot see. Fixed, 
 
 | ID | Severity | Area | Issue | Recommended Action |
 | -- | -------- | ---- | ----- | ------------------ |
-| QA-01/02 | P0 | Deploy | Fixes are committed locally (`790530f`, branch ahead of origin by 1) and the working tree has further uncommitted fixes. Production still returns 500 | Commit, deploy, then re-run: `curl https://www.paidly.co.za/api/pos/health` and `/api/public-invoice?token=x` should return JSON 4xx, not `FUNCTION_INVOCATION_FAILED` |
 | QA-04 | P1 | Secrets / config | Local env files ship in the bundle; Turnstile config lives only there; PayFast handler uses `override: true` | 1) Add the 6 `TURNSTILE_*` vars to Vercel Production (Sensitive). 2) Add `.env*` and `server/.env*` to `.vercelignore`. 3) Remove `override: true` in `api/payfast-handler.js`: every other function already runs on Vercel's values. Flagged, not changed: payment path. 4) Redeploy and confirm logs no longer show `injecting env … from server/.env` |
 | QA-08 | P3 | 404 | Signed-out visitors on an unknown URL are redirected to `/login` (soft 404) instead of the branded 404. Signed-in users do get the 404 page | Treat unknown paths as session-optional in `isPathAllowedWithoutSession` (the router already falls through to `NotFoundPage`) |
 | QA-11 | P3 | Secrets | `PAYFAST_PASSPHRASE` and `PAYFAST_LIVE_MERCHANT_KEY` are stored as plain **Config**, not Sensitive, in Vercel | Re-add as Sensitive |
@@ -93,13 +93,13 @@ Both come from module-load errors that Vite-based unit tests cannot see. Fixed, 
 | Authorization | PARTIAL | Code review: payment intents and POS registers verify `company_id`/`client_id` against the caller's org; workforce ignores `body.org_id`. RLS enabled on 78 of 85 created tables; the other 7 are covered (restaurant tables via a loop; rate-limit table revoked). No live cross-tenant test |
 | Dashboard | PARTIAL | Production logs show `/api/dashboard/bootstrap` serving; not browser-verified signed in |
 | Customers | PARTIAL | Unit tests only |
-| Quotes | **FAIL (prod)** / PARTIAL (code) | Public quote link down (QA-02) until deploy |
-| Invoices | **FAIL (prod)** / PARTIAL (code) | Public invoice link, OG preview and email tracking down (QA-02) until deploy. Real-invoice-generating tester removed (QA-03) |
+| Quotes | PARTIAL | Public quote endpoint live again (QA-02); signed-in flow not browser-tested |
+| Invoices | PARTIAL | Public invoice link, OG preview and email tracking live again (QA-02). Real-invoice-generating tester removed (QA-03). Signed-in flow not browser-tested |
 | Payments | PARTIAL | Mock outcomes blocked unless `PAYMENT_PROVIDER_MODE=mock` and not production; the card rail is off in production. Engine audited earlier (intents → verified webhook → settlement). No live Ozow transaction |
-| POS | **FAIL (prod)** / PARTIAL (code) | Entire `/api/pos` down (QA-01) until deploy. Restaurant migration `20260927100000` application unverified |
+| POS | PARTIAL | `/api/pos` live again (QA-01). Till flows not exercised. Restaurant migration `20260927100000` application unverified |
 | Workforce | PARTIAL | Unit tests; not browser-verified |
 | Payroll | PARTIAL | Engine tests (SARS 2026/27, UIF ceiling, SDL, finalisation immutability) pass; calculations not changed in this audit |
-| Payslips | **FAIL (prod)** / PARTIAL (code) | Public payslip link down (QA-02). Encrypted PDF (ID-number password) covered by tests |
+| Payslips | PARTIAL | Public payslip endpoint live again (QA-02). Encrypted PDF (ID-number password) covered by tests |
 | Admin | PARTIAL | Routes role-gated client-side, and server admin gate present. Analytics code reads real tables; not browser-verified |
 | Subscription | PARTIAL | Source of truth is the `subscriptions` table (`server/src/billing/entitlements.js`); 20+ entitlement and plan test files pass. Plan change not live-tested |
 | Email | PARTIAL | Template and branding tests pass; real delivery and Supabase dashboard template config unverified |
@@ -138,16 +138,14 @@ Both come from module-load errors that Vite-based unit tests cannot see. Fixed, 
 
 # Production Blockers
 
-**DO NOT LAUNCH** until these are deployed and re-probed:
+No confirmed production blockers remain.
 
-1. **QA-01**: the POS API returns 500 on every request.
-2. **QA-02**: every customer-facing share link (invoice, quote, payslip, leave approval), invoice preview images and email-open tracking return 500.
+The two found during this audit, QA-01 (POS API) and QA-02 (public share links), are fixed, deployed and re-probed on production.
 
-Both are fixed in the repository and not yet live.
+This covers only what was tested: signed-in flows, real payments and real email were not exercised (see Manual Testing Required).
 
 # Manual Testing Required
 
-- Deploy, then re-probe `/api/pos/health`, `/api/public-invoice`, `/api/og`.
 - Signed-in flows end to end: sign up → verify → business setup → create client → quote → accept → invoice → send → pay → status.
 - POS on a real till: open register, restaurant tables (open, hold, retrieve, split, move), payment, receipt, close.
 - Real Ozow payment and webhook; real PayFast subscription ITN (sandbox then live).
@@ -161,11 +159,10 @@ Both are fixed in the repository and not yet live.
 # Recommended Next Steps
 
 ### Before Launch
-1. Commit the working-tree fixes, push and deploy; re-probe the two blockers.
-2. Close QA-04: move `TURNSTILE_*` into Vercel env, add `.env*` to `.vercelignore`, remove `override: true` from the PayFast handler, redeploy, check logs.
-3. Mark PayFast secrets as Sensitive (QA-11).
-4. Create a dedicated E2E test org and fill in `.env.e2e`, then run `npm run test:e2e`.
-5. Run the manual checks above.
+1. Close QA-04: move `TURNSTILE_*` into Vercel env, add `.env*` to `.vercelignore`, remove `override: true` from the PayFast handler, redeploy, check logs.
+2. Mark PayFast secrets as Sensitive (QA-11).
+3. Create a dedicated E2E test org and fill in `.env.e2e`, then run `npm run test:e2e`.
+4. Run the manual checks above.
 
 ### Launch Day
 - Tail `vercel logs www.paidly.co.za` for `FUNCTION_INVOCATION_FAILED` and 5xx.

@@ -11,6 +11,8 @@ import { authFlowLog } from "@/lib/auth/authFlowLog";
 import { isProfileReady } from "@/lib/auth/profileRestorePolicy";
 import { isEmailVerifiedUser } from "@shared/auth/emailVerification.js";
 import VerifyEmailRequired from "@/components/auth/VerifyEmailRequired";
+import { getPosAccessToken } from "@/lib/pos/posAccessClient";
+import { posAccessPath } from "@shared/posStaffInvite.js";
 
 const PROFILE_RESTORE_ATTEMPTS = 3;
 const PROFILE_RESTORE_BACKOFF_MS = [400, 800];
@@ -89,6 +91,22 @@ export default function RequireAuth({ children, roles }) {
 
   if (loading && !authUserId) {
     return <AuthBootstrapShell />;
+  }
+
+  // A till session (operator code / POS pass) is not a Paidly login. It never opens the dashboard:
+  // keep the operator inside POS instead of bouncing them to the Paidly sign-in page.
+  if (!authUserId && !sessionUserId && getPosAccessToken()) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-3 bg-background px-6 text-center" role="alert">
+        <p className="font-display text-xl font-semibold">POS access only</p>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          This device is signed in to the till. The rest of Paidly needs a business owner or manager login.
+        </p>
+        <Button asChild className="h-12">
+          <a href={posAccessPath()}>Back to POS</a>
+        </Button>
+      </div>
+    );
   }
 
   if (isTerminalSessionStatus(sessionHealthStatus)) {

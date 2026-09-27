@@ -6,6 +6,7 @@ import { listPosRegisters } from "@/services/PosIntegrationService";
 import { PORTAL_STATUS, portalStatusLabel } from "@shared/workforce/portalAccess.js";
 import { posAccessPath, posTillPath } from "@shared/posStaffInvite.js";
 import { useToast } from "@/components/ui/use-toast";
+import PosOperatorAccessControls from "@/components/pos/PosOperatorAccessControls";
 
 /**
  * Admin Overview — Employee Portal and POS Access as separate experiences
@@ -17,6 +18,23 @@ export default function EmployeePortalAccessPanel({ employee, canManage, onUpdat
   const posEnabled = Boolean(employee?.pos_access);
   const tillId = employee?.pos_register_id || "";
   const [tillName, setTillName] = useState(employee?.pos_register_name || "");
+  const [posAccess, setPosAccess] = useState(null);
+
+  useEffect(() => {
+    if (!posEnabled || !employee?.id || !canManage) return undefined;
+    let cancelled = false;
+    workforceApi
+      .posAccessStatus(employee.id)
+      .then((data) => {
+        if (!cancelled) setPosAccess(data?.pos_access || null);
+      })
+      .catch(() => {
+        if (!cancelled) setPosAccess(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [posEnabled, employee?.id, canManage]);
 
   useEffect(() => {
     if (!posEnabled || !tillId || employee?.pos_register_name) {
@@ -205,8 +223,13 @@ export default function EmployeePortalAccessPanel({ employee, canManage, onUpdat
                   {pinSet ? (employee.pos_pin_locked ? "Locked" : "Set") : "Not Set"}
                 </span>
               </div>
+              {posAccess ? (
+                <div className="rounded-lg border border-border p-3">
+                  <PosOperatorAccessControls access={posAccess} onChange={setPosAccess} compact />
+                </div>
+              ) : null}
               <p className="text-muted-foreground">
-                Opens Paidly POS (/pos). Does not open Employee Portal.
+                Opens the till with their POS access code. Never opens the Paidly dashboard or Employee Portal.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" className="rounded-xl" onClick={() => void copyPosLink()}>

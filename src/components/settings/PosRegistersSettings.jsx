@@ -23,8 +23,6 @@ import { useToast } from "@/components/ui/use-toast";
 import useOrgBrands from "@/hooks/useOrgBrands";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { useAuth } from "@/contexts/AuthContext";
-import { PERMISSIONS } from "@/lib/companyPermissions";
-import { useCompanyContext } from "@/hooks/useCompanyContext";
 import {
   listPosRegisters,
   createPosRegister,
@@ -47,13 +45,12 @@ const EMPTY = {
 export default function PosRegistersSettings() {
   const { toast } = useToast();
   const { profile, user } = useAuth();
-  const { hasPermission } = useCompanyContext();
-  const canViewShiftHistory = hasPermission(PERMISSIONS.POS_VIEW_REPORTS);
   const { brands } = useOrgBrands();
   const currency = profile?.currency || user?.currency || "ZAR";
   const [registers, setRegisters] = useState([]);
   const [members, setMembers] = useState([]);
-  const [history, setHistory] = useState([]);
+  // Open shift per register → "Current operator" (full shift history lives in Recent shifts).
+  const [openShifts, setOpenShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -65,16 +62,7 @@ export default function PosRegistersSettings() {
       const data = await listPosRegisters();
       setRegisters(data.registers);
       setMembers(data.members);
-      if (canViewShiftHistory) {
-        try {
-          const sessions = await listPosSessions({ status: "closed", limit: 40 });
-          setHistory(sessions);
-        } catch {
-          setHistory([]);
-        }
-      } else {
-        setHistory([]);
-      }
+      setOpenShifts(await listPosSessions({ status: "open", limit: 20 }).catch(() => []));
     } catch (err) {
       toast({
         title: "Could not load registers",
@@ -84,7 +72,7 @@ export default function PosRegistersSettings() {
     } finally {
       setLoading(false);
     }
-  }, [toast, canViewShiftHistory]);
+  }, [toast]);
 
   useEffect(() => {
     void load();
@@ -220,6 +208,15 @@ export default function PosRegistersSettings() {
                   {" · Float "}
                   {formatCurrency(Number(row.opening_balance) || 0, currency)}
                 </p>
+                {(() => {
+                  const shift = openShifts.find((s) => s.register_id === row.id);
+                  return shift ? (
+                    <p className="mt-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                      Current operator: {shift.opened_by_name || "Staff"} · since{" "}
+                      {new Date(shift.opened_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
+                    </p>
+                  ) : null;
+                })()}
               </div>
               <div className="flex gap-2">
                 <Button
@@ -263,44 +260,6 @@ export default function PosRegistersSettings() {
           ))}
         </ul>
       )}
-
-      {history.length > 0 ? (
-        <div className="space-y-2 pt-4">
-          <p className="text-sm font-medium">Closed shifts</p>
-          <p className="text-xs text-muted-foreground">
-            Historical sessions are read-only. Staff cannot edit opening cash, counted cash, or variance after
-            close.
-          </p>
-          <ul className="space-y-2">
-            {history.map((row) => (
-              <li
-                key={row.id}
-                className="rounded-xl border border-border px-3 py-3 text-sm"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-medium">{row.register_name || "Till"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {row.closed_at ? new Date(row.closed_at).toLocaleString() : "Closed"}
-                  </p>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Open {formatCurrency(Number(row.opening_balance) || 0, currency)}
-                  {" · "}
-                  Cash sales {formatCurrency(Number(row.cash_sales) || 0, currency)}
-                  {" · "}
-                  Refunds {formatCurrency(Number(row.cash_refunds) || 0, currency)}
-                  {" · "}
-                  Expected {formatCurrency(Number(row.expected_cash) || 0, currency)}
-                  {" · "}
-                  Counted {formatCurrency(Number(row.closing_cash) || 0, currency)}
-                  {" · "}
-                  Variance {formatCurrency(Number(row.variance) || 0, currency)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">

@@ -224,6 +224,9 @@ export async function listPosSessions(opts = {}) {
   if (opts.register_id) params.set("register_id", String(opts.register_id));
   if (opts.status) params.set("status", String(opts.status));
   if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.from) params.set("from", String(opts.from));
+  if (opts.to) params.set("to", String(opts.to));
+  if (opts.operator_membership_id) params.set("operator_membership_id", String(opts.operator_membership_id));
   const qs = params.toString() ? `?${params.toString()}` : "";
   const res = await posServiceRequest(`${apiBase()}/api/pos/sessions${qs}`, { headers });
   const raw = await res.text().catch(() => "");
@@ -418,4 +421,35 @@ export async function postPosPaymentIntentAction(intentId, body) {
   });
   const raw = await res.text().catch(() => "");
   return parseApiJsonError(res, raw, "Could not update payment intent");
+}
+
+/** POS payment provider options with real status for this business + custom-provider requests. */
+export async function listPosProviders() {
+  const headers = await authHeaders({ includeJsonContentType: false });
+  const res = await posServiceRequest(`${apiBase()}/api/pos/providers`, { method: "GET", headers });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not load payment providers");
+}
+
+/** Record a provider Paidly has no adapter for. It is a request — never "connected". */
+export async function requestCustomPosProvider(body) {
+  const headers = await authHeaders();
+  const res = await posServiceRequest(`${apiBase()}/api/pos/providers`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action: "request_custom", ...body }),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not save the provider");
+}
+
+export async function archiveCustomPosProvider(id) {
+  const headers = await authHeaders();
+  const res = await posServiceRequest(`${apiBase()}/api/pos/providers`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action: "archive_custom", id }),
+  });
+  const raw = await res.text().catch(() => "");
+  return parseApiJsonError(res, raw, "Could not remove the provider");
 }

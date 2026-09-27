@@ -100,6 +100,22 @@ export const workforceApi = {
       method: "POST",
       body: { id: requireUuid(id, "employee id"), action: "pos_pin_reset" },
     }),
+  /** POS-enabled employees with their access-code status (never the code). */
+  posOperators: () => payrollRequest("/api/company/employees", { method: "POST", body: { action: "pos_operators" } }),
+  posAccessStatus: (id) =>
+    payrollRequest("/api/company/employees", { method: "POST", body: { id: requireUuid(id, "employee id"), action: "pos_access_status" } }),
+  /** Returns { code, pos_access } — the only time the plaintext code is ever sent. */
+  posCodeGenerate: (id, registerId = null) =>
+    payrollRequest("/api/company/employees", {
+      method: "POST",
+      body: { id: requireUuid(id, "employee id"), action: "pos_code_generate", ...(registerId ? { register_id: registerId } : {}) },
+    }),
+  posCodeRevoke: (id) =>
+    payrollRequest("/api/company/employees", { method: "POST", body: { id: requireUuid(id, "employee id"), action: "pos_code_revoke" } }),
+  posAccessEnable: (id) =>
+    payrollRequest("/api/company/employees", { method: "POST", body: { id: requireUuid(id, "employee id"), action: "pos_access_enable" } }),
+  posAccessDisable: (id) =>
+    payrollRequest("/api/company/employees", { method: "POST", body: { id: requireUuid(id, "employee id"), action: "pos_access_disable" } }),
 };
 
 export function employeeProfilePath(id, tab) {

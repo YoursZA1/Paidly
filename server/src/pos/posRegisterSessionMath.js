@@ -114,6 +114,7 @@ export function publicSessionView(row, extras = {}) {
     closing_cash: closing,
     variance,
     opened_by: row.opened_by || null,
+    opened_by_membership_id: row.opened_by_membership_id || null,
     opened_by_name: extras.opened_by_name || null,
     closed_by: row.closed_by || null,
     closed_by_name: extras.closed_by_name || null,

@@ -49,7 +49,8 @@ import SubscriptionSettings from "@/components/subscription/SubscriptionSettings
 import EmailTemplatesSettings from "@/components/settings/EmailTemplatesSettings";
 import PosIntegrationSettings from "@/components/settings/PosIntegrationSettings";
 import PosRegistersSettings from "@/components/settings/PosRegistersSettings";
-import RestaurantSetupSettings from "@/components/settings/RestaurantSetupSettings";
+import PosRecentShifts from "@/components/settings/PosRecentShifts";
+import { PosAccessOverview, RestaurantSummary } from "@/components/settings/PosSetupSections";
 import TwoFactorSettings from "@/components/settings/TwoFactorSettings";
 import InstallPaidlyCard from "@/components/pwa/InstallPaidlyCard";
 import CompanyTeamMembersPanel from "@/components/company/CompanyTeamMembersPanel";
@@ -2118,20 +2119,23 @@ function PosIntegrationsTab() {
     }
     return (
         <div className="space-y-8">
+            <SettingsCard title="POS access" description="Who can open your till, and the link to it.">
+                <PosAccessOverview />
+            </SettingsCard>
             <SettingsCard
-                title="POS registers"
+                title="Registers"
                 description="Each register is a till on a brand. Opening balance is the cash float — not a sale and not an invoice."
             >
                 <PosRegistersSettings />
             </SettingsCard>
-            <SettingsCard
-                title="Restaurant setup"
-                description="Floors and tables for dine-in. When tables exist, the till opens on the floor plan: table → order → kitchen → bill."
-            >
-                <RestaurantSetupSettings />
+            <SettingsCard title="Restaurant" description="Floors and tables for dine-in orders.">
+                <RestaurantSummary />
             </SettingsCard>
-            <SettingsCard title="POS integrations" description="Use Paidly POS in the app, or connect Yoco/Square so external tills write the same sales and inventory.">
+            <SettingsCard title="Payment provider" description="Connect the provider your till takes payments with.">
                 <PosIntegrationSettings />
+            </SettingsCard>
+            <SettingsCard title="Recent shifts" description="The latest shifts across your tills.">
+                <PosRecentShifts />
             </SettingsCard>
         </div>
     );
