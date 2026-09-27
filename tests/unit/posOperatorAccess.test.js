@@ -37,6 +37,9 @@ const { memory, tables } = vi.hoisted(() => {
             if (table === "pos_tabs") rec.opened_at ||= now;
             if (table === "pos_access_code_failures") rec.failed_at ||= now;
             if (violates(table, rec, null)) return { error: { code: "23505", message: `duplicate key ${table}` } };
+            if (table === "pos_access_sessions" && rec.user_id && !(tables.auth_users || []).some((u) => u.id === rec.user_id)) {
+              return { error: { code: "23503", message: 'insert or update on table "pos_access_sessions" violates foreign key constraint "pos_access_sessions_user_id_fkey"' } };
+            }
             tables[table].push(rec);
             out.push(rec);
           }
@@ -217,6 +220,24 @@ describe("/pos code entry → scoped POS session", () => {
     // The gate resolves that session to a POS-only membership of company A.
     const gate = await requireOrgMember({ headers: bearer(r.body.access_token) }, res());
     expect(gate).toMatchObject({ ok: true, posAccess: true, membership: { id: MANDO, orgId: ORG_A, companyRole: "employee", jobFunction: "pos" } });
+  });
+
+  it("opens the till even when the employee's linked Paidly login no longer exists", async () => {
+    tables.memberships.find((m) => m.id === MANDO).user_id = "deleted-auth-user";
+    const { code } = await generate(MANDO);
+    const r = await unlock(TILL_A, code);
+    expect(r.statusCode).toBe(200);
+    expect(tables.pos_access_sessions[0]).toMatchObject({ membership_id: MANDO, user_id: null });
+    const gate = await requireOrgMember({ headers: bearer(r.body.access_token) }, res());
+    expect(gate).toMatchObject({ ok: true, membership: { id: MANDO, orgId: ORG_A } });
+  });
+
+  it("keeps the login link when the employee's Paidly login exists", async () => {
+    tables.auth_users = [{ id: "real-user" }];
+    tables.memberships.find((m) => m.id === MANDO).user_id = "real-user";
+    const { code } = await generate(MANDO);
+    expect((await unlock(TILL_A, code)).statusCode).toBe(200);
+    expect(tables.pos_access_sessions[0].user_id).toBe("real-user");
   });
 
   it("rejects wrong codes with one generic message and rate-limits a till", async () => {

@@ -367,27 +367,32 @@ export async function handlePosCodeUnlock(req, res) {
     const person = await membershipDisplayName(membership);
     const token = generatePosAccessToken();
     const now = new Date();
-    const row = ensure(
-      await supabaseAdmin
-        .from("pos_access_sessions")
-        .insert({
-          org_id: till.org_id,
-          register_id: till.id,
-          membership_id: membership.id,
-          credential_id: credential.id,
-          user_id: membership.user_id || null,
-          employee_email: person.email,
-          employee_name: person.name,
-          // Till operators are always scoped as POS-only staff, whatever their back-office role.
-          role: "employee",
-          job_function: POS_JOB_FUNCTION,
-          token_hash: hashPosAccessToken(token),
-          issued_at: now.toISOString(),
-          expires_at: new Date(now.getTime() + POS_CODE_SESSION_TTL_SECONDS * 1000).toISOString(),
-        })
-        .select("id, org_id, register_id, membership_id, credential_id, user_id, employee_email, employee_name, role, job_function, issued_at, expires_at, revoked_at")
-        .single()
-    );
+    const sessionRow = {
+      org_id: till.org_id,
+      register_id: till.id,
+      membership_id: membership.id,
+      credential_id: credential.id,
+      user_id: membership.user_id || null,
+      employee_email: person.email,
+      employee_name: person.name,
+      // Till operators are always scoped as POS-only staff, whatever their back-office role.
+      role: "employee",
+      job_function: POS_JOB_FUNCTION,
+      token_hash: hashPosAccessToken(token),
+      issued_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + POS_CODE_SESSION_TTL_SECONDS * 1000).toISOString(),
+    };
+    const sessionSelect =
+      "id, org_id, register_id, membership_id, credential_id, user_id, employee_email, employee_name, role, job_function, issued_at, expires_at, revoked_at";
+    let inserted = await supabaseAdmin.from("pos_access_sessions").insert(sessionRow).select(sessionSelect).single();
+    if (inserted.error?.code === "23503" && /user_id/i.test(inserted.error.message || "") && sessionRow.user_id) {
+      // The employee's linked Paidly login no longer exists (deleted/stale user). A code session is
+      // identified by membership_id, so open it without the dangling login link.
+      console.warn("[pos-code-unlock] membership has a stale user_id; opening the till session without it", membership.id);
+      sessionRow.user_id = null;
+      inserted = await supabaseAdmin.from("pos_access_sessions").insert(sessionRow).select(sessionSelect).single();
+    }
+    const row = ensure(inserted);
     await supabaseAdmin.from("pos_access_codes").update({ last_used_at: now.toISOString() }).eq("id", credential.id).then(() => null, () => null);
 
     const { data: openShift } = await supabaseAdmin
