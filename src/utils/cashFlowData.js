@@ -1,6 +1,7 @@
 import { Expense, Invoice, Payment } from "@/api/entities";
 import { listAllCashFlowRecords } from "@/utils/cashFlowTruth";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { resolveSessionActiveOrgId } from "@/api/auth/sessionActiveOrg.js";
 
 /** Shared React Query root for Cash Flow, Reports, and Accuracy read models. */
 export const CASHFLOW_PAGE_QUERY_KEY = ["cashflow-page"];
@@ -18,10 +19,12 @@ function isMissingPosSalesSchema(message) {
 
 /**
  * Paginate pos_sales_events the same way invoices/payments are paged for reports.
- * RLS scopes rows to the org. Writes still go through /api/pos/*.
+ * Scoped to the active business (RLS alone returns every org the user may read). Writes go through /api/pos/*.
  */
 export async function listAllPosSalesEvents() {
   if (!isSupabaseConfigured) return [];
+  const orgId = await resolveSessionActiveOrgId();
+  if (!orgId) return [];
   const byId = new Map();
   let offset = 0;
   let columns = POS_SALES_SELECT;
@@ -29,6 +32,7 @@ export async function listAllPosSalesEvents() {
     const { data, error } = await supabase
       .from("pos_sales_events")
       .select(columns)
+      .eq("org_id", orgId)
       .order("occurred_at", { ascending: false })
       .range(offset, offset + POS_SALES_PAGE - 1);
     if (error) {

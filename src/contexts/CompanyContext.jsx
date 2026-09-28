@@ -21,10 +21,11 @@ import {
   loadCompanyAccessContext,
   clearCompanyAccessContextCache,
 } from "@/services/CompanyContextService";
+import { getActivePortalSlug, PORTAL_CHANGED_EVENT } from "@/lib/workforcePortal/portalState.js";
 
 const CompanyContext = createContext(null);
 
-function companyContextValue({ loading, error, ctx, hasPermission, refresh }) {
+function companyContextValue({ loading, error, ctx, hasPermission, refresh, portalSlug }) {
   return {
     loading,
     error,
@@ -45,7 +46,10 @@ function companyContextValue({ loading, error, ctx, hasPermission, refresh }) {
     isOrgOwner: Boolean(ctx?.isOrgOwner),
     businessType: ctx?.businessType ?? null,
     posEnabled: businessTypeIncludesPos(ctx?.businessType),
-    showBusinessDashboard: showBusinessOwnerDashboard(ctx),
+    // Inside /employee/<slug>: business-owner screens only if they own THAT business; unresolved → closed.
+    showBusinessDashboard: portalSlug ? Boolean(ctx?.isOrgOwner) : showBusinessOwnerDashboard(ctx),
+    /** Employee portal this tab is in ("" = the user's default business context). */
+    portalSlug,
     canCreateDocumentType: (typeKey) => canCreateDocumentType(ctx, typeKey),
     canApproveDocument: (docType, docOwnerUserId) =>
       canApproveDocument(ctx, docType, docOwnerUserId),
@@ -61,6 +65,14 @@ export function CompanyContextProvider({ children, forcedContext = null }) {
   const [ctx, setCtx] = useState(forcedContext || null);
   const [loading, setLoading] = useState(Boolean(userId) && !forcedContext);
   const [error, setError] = useState(null);
+  const [portalSlug, setPortalSlug] = useState(() => getActivePortalSlug());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onChange = () => setPortalSlug(getActivePortalSlug());
+    window.addEventListener(PORTAL_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(PORTAL_CHANGED_EVENT, onChange);
+  }, []);
 
   const refresh = useCallback(async ({ invalidateCache = false } = {}) => {
     if (forcedContext) {
@@ -109,8 +121,8 @@ export function CompanyContextProvider({ children, forcedContext = null }) {
   );
 
   const value = useMemo(
-    () => companyContextValue({ loading, error, ctx, hasPermission, refresh }),
-    [loading, error, ctx, hasPermission, refresh]
+    () => companyContextValue({ loading, error, ctx, hasPermission, refresh, portalSlug }),
+    [loading, error, ctx, hasPermission, refresh, portalSlug]
   );
 
   return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;

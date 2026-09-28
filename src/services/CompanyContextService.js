@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
-import { resolveActiveOrgIdForUser } from "@/api/auth/orgCache.js";
+import { resolveActiveOrgIdForUser, orgCacheKey } from "@/api/auth/orgCache.js";
 import { ensureUserHasOrganization } from "@/api/auth/ensureUserOrganization.js";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { buildCompanyAccessContext, normalizeCompanyRole, COMPANY_ROLES } from "@/lib/companyPermissions";
@@ -16,12 +16,14 @@ let inflightUserId = null;
  */
 export async function loadCompanyAccessContext(userId) {
   if (!userId) return null;
-  if (cachedContext && cachedUserId === userId) return cachedContext;
-  if (inflightLoad && inflightUserId === userId) return inflightLoad;
+  // Same user, different context (own business vs /employee/<slug>) → different cache entry.
+  const key = orgCacheKey(userId);
+  if (cachedContext && cachedUserId === key) return cachedContext;
+  if (inflightLoad && inflightUserId === key) return inflightLoad;
 
-  inflightUserId = userId;
-  inflightLoad = loadCompanyAccessContextInner(userId).finally(() => {
-    if (inflightUserId === userId) {
+  inflightUserId = key;
+  inflightLoad = loadCompanyAccessContextInner(userId, key).finally(() => {
+    if (inflightUserId === key) {
       inflightLoad = null;
       inflightUserId = null;
     }
@@ -29,7 +31,7 @@ export async function loadCompanyAccessContext(userId) {
   return inflightLoad;
 }
 
-async function loadCompanyAccessContextInner(userId) {
+async function loadCompanyAccessContextInner(userId, cacheKey) {
   // Owners sign in to their company; invite-only members use the org they joined.
   let orgId = await resolveActiveOrgIdForUser(userId);
   if (!orgId) {
@@ -69,17 +71,17 @@ async function loadCompanyAccessContextInner(userId) {
     if (retry.error) {
       throw new Error(getSupabaseErrorMessage(retry.error, "Failed to load company membership"));
     }
-    return finishCompanyAccessContext(userId, orgId, org, orgError, retry.data);
+    return finishCompanyAccessContext(userId, orgId, org, orgError, retry.data, cacheKey);
   }
 
   if (error) {
     throw new Error(getSupabaseErrorMessage(error, "Failed to load company membership"));
   }
 
-  return finishCompanyAccessContext(userId, orgId, org, orgError, membership);
+  return finishCompanyAccessContext(userId, orgId, org, orgError, membership, cacheKey);
 }
 
-function finishCompanyAccessContext(userId, orgId, org, orgError, membership) {
+function finishCompanyAccessContext(userId, orgId, org, orgError, membership, cacheKey) {
   let membershipRole = membership?.role;
   if (!orgError && org?.owner_id === userId) {
     membershipRole = "owner";
@@ -96,7 +98,7 @@ function finishCompanyAccessContext(userId, orgId, org, orgError, membership) {
   });
 
   cachedContext = ctx;
-  cachedUserId = userId;
+  cachedUserId = cacheKey;
   return ctx;
 }
 

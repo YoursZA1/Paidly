@@ -4,6 +4,7 @@
  *
  * @see docs/Paidly-Caching-Architecture.md Layer 2
  */
+import { getActivePortalSlug } from "@/lib/workforcePortal/portalState.js";
 
 /** Exact root keys (first segment of `queryKey`) persisted as-is. */
 export const PAIDLY_PERSISTED_QUERY_ROOT_KEYS = new Set([
@@ -47,6 +48,9 @@ const NEVER_PERSIST_PREFIXES = ["sb-", "supabase.auth"];
  */
 export function shouldPersistReactQueryKey(queryKey) {
   if (!Array.isArray(queryKey) || queryKey.length === 0) return false;
+  // Snapshots are keyed by user, not business: an employee-portal tab never writes or hydrates them, so a
+  // person's own-business cache and their employer-portal data can never be served in the other context.
+  if (getActivePortalSlug()) return false;
   const root = String(queryKey[0] || "").trim();
   if (!root) return false;
   const lower = root.toLowerCase();

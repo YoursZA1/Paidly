@@ -2,6 +2,7 @@ import { getBackendBaseUrl } from "@/api/backendClient";
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { POS_ACCESS_BEARER_PREFIX } from "@shared/posStaffInvite.js";
 import { posInvitePublicErrorMessage } from "@shared/companyInviteMessages.js";
+import { withPortalHeader } from "@/lib/workforcePortal/portalState.js";
 
 export { greetingForHour, firstNameFromEmployee } from "@/lib/pos/posAccessCopy";
 
@@ -95,7 +96,7 @@ export async function posApiFetch(path, init = {}) {
   return fetch(url, {
     credentials: "include",
     ...rest,
-    headers,
+    headers: withPortalHeader(url, headers),
   });
 }
 

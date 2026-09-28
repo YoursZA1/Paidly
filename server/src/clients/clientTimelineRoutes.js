@@ -1,7 +1,7 @@
 import { normalizeRequestBody } from "../validateBody.js";
 import { getUserFromRequest } from "../supabaseAuth.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { loadCompanyMembership } from "../companyRouteAccess.js";
+import { loadCompanyMembership, companyMembershipOptions } from "../companyRouteAccess.js";
 import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
 import { canMutateClientTimeline } from "../../../shared/clients/clientRelationshipTimeline.js";
@@ -21,7 +21,7 @@ async function requireClientTimelineAccess(req, res, { mutate = false } = {}) {
   const { user, error: authErr } = await getUserFromRequest(req);
   if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
   try {
-    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+    const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
     if (!membership) return { ok: false, response: jsonError(res, 403, "No company membership") };
     if (isPosOnlyStaff(membership)) {
       return { ok: false, response: jsonError(res, 403, "POS staff cannot access client timeline", { code: "POS_SCOPE" }) };

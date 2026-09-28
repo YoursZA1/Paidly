@@ -45,5 +45,5 @@ export function applyPaidlyServerlessCors(req, res, opts = {}) {
   }
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", methods);
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Paidly-Portal");
 }

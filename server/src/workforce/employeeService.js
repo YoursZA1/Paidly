@@ -34,6 +34,7 @@ import {
 } from "../../../shared/workforce/employeeLifecycle.js";
 import { clearPosPinPatch } from "../pos/posPinCrypto.js";
 import { PORTAL_STATUS, derivePortalStatus } from "../../../shared/workforce/portalAccess.js";
+import { employeePortalPath } from "../../../shared/workforce/portalSlug.js";
 
 export {
   getEmployee,
@@ -782,6 +783,21 @@ export async function inviteEmployeePortal(orgId, actor, employeeId, { resend = 
   return { employee, invite_link: inviteLink, expires_at: expiresAt };
 }
 
+/**
+ * Company employee portal URL (/employee/<slug>) — the slug identifies the portal only; sign-in + an active
+ * membership decide access. Falls back to /Workforce until the portal_slug migration is applied.
+ */
+export async function employeePortalUrl(orgId) {
+  const origin = resolvePublicAppOrigin();
+  const { data, error } = await supabaseAdmin
+    .from("organizations")
+    .select("portal_slug")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error && !/portal_slug/i.test(error.message || "")) throw error;
+  return employeePortalPath(data?.portal_slug, origin) || `${origin}/Workforce`;
+}
+
 export async function getEmployeePortalLink(orgId, actor, employeeId) {
   const membership = await loadEmployeeMembershipForPortal(orgId, employeeId);
   const invite = await loadPendingInviteForMembership(orgId, membership.id);
@@ -794,7 +810,7 @@ export async function getEmployeePortalLink(orgId, actor, employeeId) {
   }
   if (membership.user_id && !membership.portal_revoked_at) {
     return {
-      invite_link: `${resolvePublicAppOrigin()}/Workforce`,
+      invite_link: await employeePortalUrl(orgId),
       expires_at: null,
       portal_status: PORTAL_STATUS.ACTIVATED,
     };

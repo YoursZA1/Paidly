@@ -5,6 +5,7 @@ import {
   loadCompanyMembership,
   companyRoleHasPermission,
   PERMISSIONS,
+  companyMembershipOptions
 } from "../companyRouteAccess.js";
 import { createPosOAuthState, consumePosOAuthState } from "./posOAuthState.js";
 import {
@@ -37,7 +38,7 @@ async function requireSettingsManager(req, res) {
   const { user, error: authErr } = await getUserFromRequest(req);
   if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
 
-  const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+  const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
   if (!membership) {
     return { ok: false, response: jsonError(res, 403, "No company membership") };
   }

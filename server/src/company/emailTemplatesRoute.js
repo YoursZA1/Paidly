@@ -7,7 +7,7 @@
  */
 import { getUserFromRequest } from "../supabaseAuth.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { loadCompanyMembership, membershipHasPermission, PERMISSIONS } from "../companyRouteAccess.js";
+import { loadCompanyMembership, membershipHasPermission, PERMISSIONS, companyMembershipOptions } from "../companyRouteAccess.js";
 import { assertUserHasFeature, UpgradeRequiredError } from "../featureGate.js";
 import { normalizeEmailTemplates } from "../../../shared/emailTemplates.js";
 
@@ -25,7 +25,7 @@ export async function handleCompanyEmailTemplates(req, res) {
   try {
     const { user, error: authErr } = await getUserFromRequest(req);
     if (!user) return res.status(401).json({ error: authErr || "Unauthorized" });
-    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+    const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
     if (!membership) return res.status(403).json({ error: "No company membership" });
     const companyId = membership.companyId;
     const allowed = await planAllows(user.id, companyId);

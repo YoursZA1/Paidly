@@ -9,6 +9,7 @@ import {
   normalizeJobFunction,
   PERMISSIONS,
   COMPANY_ROLES,
+  companyMembershipOptions
 } from "./companyRouteAccess.js";
 import {
   isPosOnlyStaff,
@@ -263,7 +264,7 @@ async function requireCompanyAdmin(req, res) {
     const { user, error: authErr } = await getUserFromRequest(req);
     if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
 
-    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+    const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
     if (!membership) {
       return { ok: false, response: jsonError(res, 403, "No company membership") };
     }
@@ -818,7 +819,7 @@ export async function handleCompanyContextGet(req, res) {
     const { user, error: authErr } = await getUserFromRequest(req);
     if (!user) return jsonError(res, 401, authErr || "Unauthorized");
 
-    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+    const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
     if (!membership) return jsonError(res, 403, "No company membership");
 
     return res.status(200).json({

@@ -67,6 +67,7 @@ export function membershipIsPosEnabled(membership) {
 export function membershipCanEnterPos(membership) {
   if (!membership) return false;
   if (membership.isOrgOwner === true) return true;
+  if (membershipPosAccessDisabled(membership)) return false;
   const role = String(membership.companyRole || membership.role || membership.membershipRole || "")
     .trim()
     .toLowerCase();
@@ -191,6 +192,17 @@ export function appendPosInviteNext(inviteUrl) {
 }
 
 /**
+ * Employer switched off this person's till access (memberships.pos_access_disabled_at). Owners are exempt.
+ * Mirrors org_has_pos_permission in the database.
+ * @param {{ isOrgOwner?: boolean, companyRole?: string | null, membershipRole?: string | null, posAccessDisabledAt?: unknown, pos_access_disabled_at?: unknown } | null | undefined} membership
+ */
+export function membershipPosAccessDisabled(membership) {
+  if (!membership || membership.isOrgOwner === true) return false;
+  if (String(membership.membershipRole || "").trim().toLowerCase() === "owner") return false;
+  return Boolean(membership.posAccessDisabledAt || membership.pos_access_disabled_at);
+}
+
+/**
  * Invited till cashier: employee + job_function pos. Owners/managers keep back office.
  * @param {{ isOrgOwner?: boolean, companyRole?: string | null, jobFunction?: string | null } | null | undefined} membership
  */
@@ -214,6 +226,7 @@ export function isPosOnlyStaff(membership) {
  * @param {(role: string, permission: string) => boolean} roleHasPermission
  */
 export function membershipGrantsPermission(membership, permission, roleHasPermission) {
+  if (membershipPosAccessDisabled(membership) && String(permission || "").startsWith("pos_")) return false;
   if (isPosOnlyStaff(membership)) return posOnlyStaffHasPermission(permission);
   const resolved = resolvePermissionAlias(permission);
   if (roleHasPermission?.(membership?.companyRole, resolved)) return true;

@@ -86,6 +86,7 @@ const ForgotPassword = lazy(() => import("./ForgotPassword"));
 const ResetPassword = lazy(() => import("./ResetPassword"));
 const AcceptInvite = lazy(() => import("./AcceptInvite"));
 const InvitePage = lazy(() => import("./Invite"));
+const EmployeePortalPage = lazy(() => import("./EmployeePortal"));
 const About = lazy(() => import("./About"));
 const PrivacyPolicy = lazy(() => import("./PrivacyPolicy"));
 const TermsAndConditions = lazy(() => import("./TermsAndConditions"));
@@ -158,6 +159,8 @@ const AUTH_ROUTES = [
     { path: "/pos/invite/:token", element: <InvitePage /> },
     { path: "/POS/invite/:token", element: <InvitePage /> },
     { path: "/pos/join", element: <InvitePage /> },
+    // Company employee portal. The slug identifies the portal; sign-in + active membership decide access.
+    { path: "/employee/:slug", element: <EmployeePortalPage /> },
     { path: "/POS/join", element: <InvitePage /> },
     { path: "/PublicInvoice", element: <PublicInvoice /> },
     { path: "/view/:token", element: <InvoiceView /> },
@@ -578,6 +581,7 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/resetpassword$/i,
     /^\/acceptinvite$/i,
     /^\/invite(\/|$)/i,
+    /^\/employee\/[^/]+\/?$/i,
     /^\/pos\/invite\//i,
     /^\/pos\/join$/i,
     /^\/publicinvoice$/i,

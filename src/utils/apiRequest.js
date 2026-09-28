@@ -3,6 +3,7 @@ import { triggerUnauthorizedSession } from "@/lib/unauthorizedSessionHandler";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
 import { formatHttpStatusMessage } from "@/utils/apiErrorText";
 import { getSharedRequestCoordinator } from "@/core/network/sharedRequestCoordinator";
+import { withPortalHeader } from "@/lib/workforcePortal/portalState.js";
 
 /**
  * Low-level fetch for **authenticated / session-cookie** API calls.
@@ -26,6 +27,9 @@ const DEFAULT_PAUSE_WAIT_MS =
 
 export async function safeFetch(input, init = {}) {
   const { __paidlyCritical, ...fetchInit } = init || {};
+  // Inside /employee/<slug> the API must act on that workforce (server re-verifies membership).
+  const portalHeaders = withPortalHeader(input, fetchInit.headers);
+  if (portalHeaders) fetchInit.headers = portalHeaders;
   if (!__paidlyCritical) {
     await getSharedRequestCoordinator().waitUntilUnpaused(DEFAULT_PAUSE_WAIT_MS);
   }

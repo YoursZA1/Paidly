@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 import {
   loadCompanyMembership,
   membershipHasPermission,
+  companyMembershipOptions
 } from "../companyRouteAccess.js";
 import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
 import { parseUuid } from "../../../shared/ids/uuid.js";
@@ -21,7 +22,7 @@ export async function requireWorkforcePermission(req, res, permission) {
   try {
     const { user, error: authErr } = await getUserFromRequest(req);
     if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
-    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+    const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
     if (!membership) return { ok: false, response: jsonError(res, 403, "No company membership") };
     if (membership.portalRevokedAt) {
       return {

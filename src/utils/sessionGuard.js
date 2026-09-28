@@ -18,6 +18,7 @@ const PUBLIC_PATH_PATTERNS = [
   /^\/resetpassword/i,
   /^\/acceptinvite/i,
   /^\/invite(\/|$)/i,
+  /^\/employee\/[^/]+\/?$/i, // company employee portal sign-in (slug is not access)
   /^\/pos\/invite\//i,
   /^\/pos\/join$/i,
   /^\/publicinvoice/i,

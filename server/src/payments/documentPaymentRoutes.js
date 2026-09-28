@@ -10,7 +10,7 @@ import {
 } from "../../../api/_publicInvoiceShared.js";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { getUserFromRequest } from "../supabaseAuth.js";
-import { loadCompanyMembership } from "../companyRouteAccess.js";
+import { loadCompanyMembership, companyMembershipOptions } from "../companyRouteAccess.js";
 import {
   createOrReuseDocumentPaymentIntent,
   documentPaymentSnapshot,
@@ -318,7 +318,7 @@ export async function handlePaymentReturn(req, res) {
     } else {
       const { user } = await getUserFromRequest(req);
       if (!user) return jsonError(res, 401, "Unauthorized");
-      const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+      const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
       if (!membership?.orgId) return jsonError(res, 403, "No organization");
       intent = await getOrgPaymentIntent(membership.orgId, intentId);
     }

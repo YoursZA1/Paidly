@@ -4,6 +4,8 @@
  * In production: VITE_SERVER_URL, but same-origin when apex vs www would otherwise break CORS (see apiOrigin.js).
  */
 import axios from "axios";
+import { getActivePortalSlug, isPaidlyApiUrl } from "@/lib/workforcePortal/portalState.js";
+import { PORTAL_SLUG_HEADER } from "@shared/workforce/portalSlug.js";
 import { resolveProductionBrowserApiBaseUrl } from "@/lib/apiOrigin";
 import { installBackendApiResilience } from "@/api/installBackendApiResilience";
 import { runRpcUnauthorizedPolicy, isReplaySafeHttpMethod } from "@/lib/rpcSessionPolicy";
@@ -124,6 +126,12 @@ export const backendApi = axios.create({
 installBackendApiResilience(backendApi);
 
 backendApi.interceptors.request.use(async (config) => {
+  const portalSlug = getActivePortalSlug();
+  if (portalSlug && isPaidlyApiUrl(`${config.baseURL || ""}${config.url || ""}`)) {
+    config.headers = config.headers || {};
+    if (typeof config.headers.set === "function") config.headers.set(PORTAL_SLUG_HEADER, portalSlug);
+    else config.headers[PORTAL_SLUG_HEADER] = portalSlug;
+  }
   // __paidlyCritical requests (sign-in, sign-up) bypass both the concurrency gate and the
   // recovery-circuit check so an expired session can never block new authentication attempts.
   if (!config?.__paidlyCritical) {

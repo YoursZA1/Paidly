@@ -7,6 +7,7 @@ import {
   mapDashboardInvoiceSummaryRow,
 } from "@/schemas/dashboardInvoiceSummary";
 import { sanitizePostgrestSelect } from "@/lib/postgrestSelect";
+import { resolveSessionActiveOrgId } from "@/api/auth/sessionActiveOrg.js";
 
 export const DASHBOARD_INVOICES_LIMIT = 40;
 export const DASHBOARD_PAYSLIPS_LIMIT = 40;
@@ -31,8 +32,11 @@ const DASHBOARD_FETCH_TIMEOUT_MS = 20_000;
 /**
  * Dashboard invoice strip. RLS does not change the select list; unknown columns yield HTTP 400 from PostgREST.
  * One bounded fallback uses a smaller column set if the primary projection fails (fork DB drift).
+ * Scoped to the active business: RLS alone would merge every company the user belongs to.
  */
 export async function fetchDashboardInvoicesSummary(limit = DASHBOARD_INVOICES_LIMIT) {
+  const orgId = await resolveSessionActiveOrgId();
+  if (!orgId) return [];
   const runSelect = (selectList) => {
     const safeSelect = sanitizePostgrestSelect(selectList);
     return promiseWithTimeout(
@@ -40,6 +44,7 @@ export async function fetchDashboardInvoicesSummary(limit = DASHBOARD_INVOICES_L
         supabase
           .from("invoices")
           .select(safeSelect)
+          .eq("org_id", orgId)
           .order("created_at", { ascending: false })
           .limit(limit),
       DASHBOARD_FETCH_TIMEOUT_MS
@@ -60,6 +65,8 @@ export async function fetchDashboardInvoicesSummary(limit = DASHBOARD_INVOICES_L
 }
 
 export async function fetchDashboardPayslipsSummary(limit = DASHBOARD_PAYSLIPS_LIMIT) {
+  const orgId = await resolveSessionActiveOrgId();
+  if (!orgId) return [];
   const { data, error } = await promiseWithTimeout(
     () =>
       supabase
@@ -67,6 +74,7 @@ export async function fetchDashboardPayslipsSummary(limit = DASHBOARD_PAYSLIPS_L
         .select(
           "id, payslip_number, employee_name, status, net_pay, gross_pay, total_deductions, pay_date, created_at"
         )
+        .eq("org_id", orgId)
         .order("created_at", { ascending: false })
         .limit(limit),
     DASHBOARD_FETCH_TIMEOUT_MS

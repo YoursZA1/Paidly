@@ -9,6 +9,12 @@ import { dashboardInvoicesQueryKey, dashboardPayslipsQueryKey } from "@/services
 import { fetchDashboardBootstrap } from "@/services/dashboardBootstrapService";
 import { mapDashboardInvoiceSummaryRow } from "@/schemas/dashboardInvoiceSummary";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
+import { portalContextKey } from "@/lib/workforcePortal/portalState.js";
+
+/** Persisted data belongs to one user in one context (their business, or one employee portal). */
+export function appStoreOwnerKey(userId) {
+  return userId ? `${userId}|${portalContextKey()}` : null;
+}
 
 /**
  * Global app store for invoices, clients, user profile, payments, invoice views, and expenses.
@@ -45,6 +51,8 @@ export const useAppStore = create(
   isLoading: false,
   error: null,
   lastFetchedAt: null,
+  /** `${authUserId}|${context}` whose data this (localStorage-persisted) store holds. */
+  ownerUserId: null,
 
   /**
    * Fetch all dashboard/invoices data in parallel. Call once when user is present (e.g. in Layout).
@@ -166,6 +174,7 @@ export const useAppStore = create(
               expenses: Array.isArray(expensesData) ? expensesData : [],
               error: null,
               lastFetchedAt: Date.now(),
+              ownerUserId: appStoreOwnerKey(uid),
             });
           }
         } catch (e) {
@@ -227,6 +236,7 @@ export const useAppStore = create(
         expenses: [],
         error: null,
         lastFetchedAt: Date.now(),
+        ownerUserId: appStoreOwnerKey(uid),
       });
 
       // Defer non-critical, heavier reads until after first paint.
@@ -442,6 +452,16 @@ export const useAppStore = create(
   /** Replace expenses list (e.g. after fetch). */
   setExpenses: (expenses) => set({ expenses: Array.isArray(expenses) ? expenses : get().expenses }),
 
+  /**
+   * Drop persisted data that belongs to another signed-in user (shared device, session swap without an
+   * explicit logout). Without this, Layout trusts "fresh" persisted data and never refetches.
+   */
+  ensureOwner: (userId) => {
+    const s = get();
+    const hasData = s.lastFetchedAt != null || s.userProfile != null;
+    if (hasData && s.ownerUserId !== appStoreOwnerKey(userId)) get().reset();
+  },
+
   /** Clear store on logout. */
   reset: () =>
     set({
@@ -456,6 +476,7 @@ export const useAppStore = create(
       isLoading: false,
       error: null,
       lastFetchedAt: null,
+      ownerUserId: null,
     }),
 }),
   {
@@ -471,6 +492,7 @@ export const useAppStore = create(
       invoiceViews: state.invoiceViews,
       expenses: state.expenses,
       lastFetchedAt: state.lastFetchedAt,
+      ownerUserId: state.ownerUserId,
     }),
   })
 );

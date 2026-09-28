@@ -5,6 +5,7 @@ import {
   companyRoleHasPermission,
   membershipHasPermission,
   PERMISSIONS,
+  companyMembershipOptions
 } from "../companyRouteAccess.js";
 import { postgrestErrorToApiBody } from "../postgrestErrorToApiBody.js";
 import { getWebhookPublicUrl } from "./posWebhookAuth.js";
@@ -73,7 +74,7 @@ export async function requireSettingsManager(req, res) {
   if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
 
   try {
-    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+    const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
     if (!membership) {
       return { ok: false, response: jsonError(res, 403, "No company membership") };
     }
@@ -268,7 +269,7 @@ export async function requireOrgMember(req, res) {
   if (!bearerIsPosAccess) {
     const { user } = await getUserFromRequest(req);
     if (user) {
-      const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+      const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
       if (membership) return { ok: true, user, membership };
     }
   }

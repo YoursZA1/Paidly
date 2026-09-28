@@ -21,6 +21,17 @@ import { COMPANY_ROLE_LABELS } from "@/lib/companyPermissions";
 import { resolveCompanyHomePath } from "@/lib/postAuthNavigation.js";
 import { writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
 import { clearCompanyAccessContextCache } from "@/services/CompanyContextService";
+import { supabase } from "@/lib/supabaseClient";
+import { employeePortalPath } from "@shared/workforce/portalSlug.js";
+
+/** `/employee/<slug>` for an org the signed-in user was just employed at, or "". */
+async function employerPortalPath(orgId) {
+  if (!orgId) return "";
+  const { data, error } = await supabase.rpc("my_workforce_portals");
+  if (error || !Array.isArray(data)) return "";
+  const match = data.find((p) => String(p.org_id) === String(orgId));
+  return match ? employeePortalPath(match.slug) : "";
+}
 
 function emailsMatch(a, b) {
   return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
@@ -165,6 +176,14 @@ export default function InvitePage() {
         return;
       }
       const result = await acceptPendingInviteToken(token);
+      // Land on the company's own portal URL (/employee/<slug>): the address employees keep using, and the
+      // context that reaches THIS employer even when the person also owns a Paidly business.
+      const portalPath = await employerPortalPath(result?.org_id);
+      if (portalPath) {
+        clearCompanyAccessContextCache();
+        navigate(portalPath, { replace: true });
+        return;
+      }
       navigate(
         resolveCompanyHomePath({
           companyId: result?.org_id || "joined",

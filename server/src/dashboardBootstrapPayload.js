@@ -38,6 +38,35 @@ function logNonFatal(label, err) {
 }
 
 /**
+ * Active business for the caller — same rule as the SPA entity layer (src/api/auth/orgCache.js) and
+ * server/src/companyRouteAccess.js: the org the user owns, else their earliest membership. Read under the
+ * caller's JWT, so RLS limits it to orgs they actually belong to. Never taken from the request.
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {string} userId
+ */
+export async function resolveBootstrapOrgId(supabase, userId) {
+  const owned = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (owned.error) logNonFatal("organizations(owned)", owned.error);
+  if (owned.data?.id) return owned.data.id;
+
+  const member = await supabase
+    .from("memberships")
+    .select("org_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (member.error) logNonFatal("memberships", member.error);
+  return member.data?.org_id ?? null;
+}
+
+/**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabase — anon key + `Authorization: Bearer <jwt>`
  * @param {{ userId: string, calendarYear: number }} ctx
  */
@@ -48,62 +77,31 @@ export async function buildDashboardBootstrapPayload(supabase, ctx) {
     throw new Error("missing_user_id");
   }
 
-  const [
-    profileRes,
-    membershipRes,
-    invoicesRes,
-    clientsRes,
-    quotesRes,
-    payslipsRes,
-    expensesRes,
-    paymentsRes,
-  ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-    supabase.from("memberships").select("org_id").eq("user_id", userId).limit(1).maybeSingle(),
-    supabase
-      .from("invoices")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(INVOICE_LIMIT),
-    supabase
-      .from("clients")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(CLIENT_LIMIT),
-    supabase
-      .from("quotes")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(QUOTE_LIMIT),
-    supabase
-      .from("payslips")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(PAYSLIP_LIMIT),
-    supabase
-      .from("expenses")
-      .select("*")
-      .order("date", { ascending: false })
-      .limit(EXPENSE_LIMIT),
-    supabase
-      .from("payments")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(PAYMENT_LIMIT),
-  ]);
+  // RLS decides what the caller may read; the org filter decides which business this dashboard is about.
+  // Without it a user who owns Business B and works at Company A gets both companies' rows merged.
+  const orgId = await resolveBootstrapOrgId(supabase, userId);
+  const orgRows = (query) => (orgId ? query.eq("org_id", orgId) : Promise.resolve({ data: [], error: null }));
+
+  const [profileRes, invoicesRes, clientsRes, quotesRes, payslipsRes, expensesRes, paymentsRes, orgRes] =
+    await Promise.all([
+      supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+      orgRows(supabase.from("invoices").select("*").order("created_at", { ascending: false }).limit(INVOICE_LIMIT)),
+      orgRows(supabase.from("clients").select("*").order("created_at", { ascending: false }).limit(CLIENT_LIMIT)),
+      orgRows(supabase.from("quotes").select("*").order("created_at", { ascending: false }).limit(QUOTE_LIMIT)),
+      orgRows(supabase.from("payslips").select("*").order("created_at", { ascending: false }).limit(PAYSLIP_LIMIT)),
+      orgRows(supabase.from("expenses").select("*").order("date", { ascending: false }).limit(EXPENSE_LIMIT)),
+      orgRows(supabase.from("payments").select("*").order("created_at", { ascending: false }).limit(PAYMENT_LIMIT)),
+      orgId
+        ? supabase.from("organizations").select("*").eq("id", orgId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
 
   if (profileRes.error) throw profileRes.error;
 
   const profile = profileRes.data || null;
-  const memRow = membershipRes.data;
   let organization = null;
-  if (!membershipRes.error && memRow?.org_id) {
-    const orgRes = await supabase.from("organizations").select("*").eq("id", memRow.org_id).maybeSingle();
-    if (!orgRes.error) organization = orgRes.data || null;
-    else logNonFatal("organizations", orgRes.error);
-  } else if (membershipRes.error) {
-    logNonFatal("memberships", membershipRes.error);
-  }
+  if (!orgRes.error) organization = orgRes.data || null;
+  else logNonFatal("organizations", orgRes.error);
 
   const goalUid = resolveBusinessGoalsUserIdFromProfile(profile, userId);
   let businessGoal = null;

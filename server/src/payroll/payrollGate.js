@@ -5,6 +5,7 @@ import {
   membershipHasPermission,
   membershipRowHasPermission,
   PERMISSIONS,
+  companyMembershipOptions
 } from "../companyRouteAccess.js";
 import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
 import { assertUserHasFeature, UpgradeRequiredError } from "../featureGate.js";
@@ -26,7 +27,7 @@ export async function requirePayrollPermission(req, res, permission, opts = {}) 
     const { user, error: authErr } = await getUserFromRequest(req);
     if (!user) return { ok: false, response: jsonError(res, 401, authErr || "Unauthorized") };
 
-    const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+    const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
     if (!membership) {
       return { ok: false, response: jsonError(res, 403, "No company membership") };
     }

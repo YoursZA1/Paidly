@@ -9,7 +9,8 @@ import {
   getOrgBootstrapCircuitOpenUntil,
   recordOrgBootstrapFailure,
 } from "@/lib/orgBootstrapApi";
-import { orgIdCache, fetchPrimaryMembershipOrgId } from "@/api/auth/orgCache.js";
+import { orgIdCache, orgCacheKey, fetchPrimaryMembershipOrgId } from "@/api/auth/orgCache.js";
+import { getActivePortalSlug } from "@/lib/workforcePortal/portalState.js";
 import {
   getSessionWithRetry,
   isSupabaseAuthUuid,
@@ -26,7 +27,7 @@ export async function ensureUserHasOrganization(userId) {
   if (!requestedUserId || !isSupabaseAuthUuid(requestedUserId)) {
     throw new Error("Organization setup requires a valid signed-in user (Supabase auth id).");
   }
-  if (orgIdCache[requestedUserId]) return orgIdCache[requestedUserId];
+  if (orgIdCache[orgCacheKey(requestedUserId)]) return orgIdCache[orgCacheKey(requestedUserId)];
 
   let sessionUid = null;
   try {
@@ -49,7 +50,7 @@ export async function ensureUserHasOrganization(userId) {
     console.warn(
       `[Paidly] ensureUserHasOrganization: session/request user mismatch; using active session user ${sessionUid}.`
     );
-    delete orgIdCache[requestedUserId];
+    delete orgIdCache[orgCacheKey(requestedUserId)];
   }
 
   if (!isSupabaseConfigured) {
@@ -59,8 +60,15 @@ export async function ensureUserHasOrganization(userId) {
   try {
     let orgId = await fetchPrimaryMembershipOrgId(effectiveUserId);
     if (orgId) {
-      orgIdCache[effectiveUserId] = orgId;
+      orgIdCache[orgCacheKey(effectiveUserId)] = orgId;
       return orgId;
+    }
+
+    // Inside an employee portal: no active membership there → deny. Never create a business instead.
+    if (getActivePortalSlug()) {
+      const denied = new Error("You don't have access to this employee portal.");
+      denied.code = "PORTAL_ACCESS_DENIED";
+      throw denied;
     }
 
     if (getOrgBootstrapCircuitOpenUntil(effectiveUserId) > Date.now()) {
@@ -87,7 +95,7 @@ export async function ensureUserHasOrganization(userId) {
 
     orgId = await fetchPrimaryMembershipOrgId(effectiveUserId);
     if (orgId) {
-      orgIdCache[effectiveUserId] = orgId;
+      orgIdCache[orgCacheKey(effectiveUserId)] = orgId;
       return orgId;
     }
 

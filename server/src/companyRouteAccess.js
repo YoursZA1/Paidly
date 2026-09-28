@@ -1,4 +1,5 @@
 import { isPosOnlyStaff, membershipGrantsPermission } from "../../shared/posStaffInvite.js";
+import { portalSlugFromRequest } from "../../shared/workforce/portalSlug.js";
 
 /**
  * Server-side company (org) authorization — mirrors client companyPermissions.js.
@@ -206,7 +207,49 @@ async function resolveActiveOrgIdForUser(supabaseAdmin, userId) {
   return invitedMembership?.org_id ?? null;
 }
 
+/**
+ * Org behind an employee portal slug (/employee/<slug>). The slug only picks the portal; the caller still
+ * needs an active membership there. Unknown slug / column not migrated → null (deny, never fall back).
+ */
+async function resolvePortalOrgId(supabaseAdmin, portalSlug) {
+  const { data, error } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("portal_slug", portalSlug)
+    .maybeSingle();
+  if (error) {
+    if (/portal_slug/i.test(error.message || "")) return null;
+    throw error;
+  }
+  return data?.id ?? null;
+}
+
+/**
+ * Options for {@link loadCompanyMembership} from the request: the SPA sends `X-Paidly-Portal: <slug>` while the
+ * user is inside an employee portal. Absent header → default business context.
+ * @param {{ headers?: Record<string, unknown> } | null | undefined} req
+ */
+export function companyMembershipOptions(req) {
+  const { present, slug } = portalSlugFromRequest(req);
+  return present ? { portalSlug: slug } : {};
+}
+
 async function fetchMembershipForOrg(supabaseAdmin, userId, orgId) {
+  const full = await supabaseAdmin
+    .from("memberships")
+    .select(
+      "id, org_id, role, job_function, pos_register_id, employment_status, disabled_at, portal_revoked_at, pos_access_disabled_at, created_at"
+    )
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!full.error || !/pos_access_disabled_at|portal_revoked_at|employment_status|disabled_at|pos_register_id|job_function/i.test(full.error.message || "")) {
+    return full;
+  }
+  return fetchMembershipForOrgWithoutPosDisable(supabaseAdmin, userId, orgId);
+}
+
+async function fetchMembershipForOrgWithoutPosDisable(supabaseAdmin, userId, orgId) {
   const withPortal = await supabaseAdmin
     .from("memberships")
     .select(
@@ -303,8 +346,28 @@ async function fetchMembershipForOrgLegacy(supabaseAdmin, userId, orgId) {
   return withJobFunction;
 }
 
-export async function loadCompanyMembership(supabaseAdmin, userId) {
-  const orgId = await resolveActiveOrgIdForUser(supabaseAdmin, userId);
+/**
+ * The caller's company membership for this request.
+ *
+ * - Default: the business they own, else their earliest membership (deterministic, server-resolved).
+ * - `portalSlug` set (request came from /employee/<slug>): ONLY that org — the caller must hold an active
+ *   membership there. An invalid/unknown slug or no membership → null. Never falls back to another business,
+ *   so a person who owns Business B and works at Company A reaches A only through A's portal.
+ * - Disabled or portal-revoked memberships (non-owner) → null: they grant nothing, matching RLS.
+ *
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabaseAdmin
+ * @param {string} userId
+ * @param {{ portalSlug?: string }} [opts]
+ */
+export async function loadCompanyMembership(supabaseAdmin, userId, opts = {}) {
+  const portalRequested = typeof opts?.portalSlug === "string";
+  let orgId;
+  if (portalRequested) {
+    if (!opts.portalSlug) return null;
+    orgId = await resolvePortalOrgId(supabaseAdmin, opts.portalSlug);
+  } else {
+    orgId = await resolveActiveOrgIdForUser(supabaseAdmin, userId);
+  }
   if (!orgId) return null;
 
   const { data: membership, error } = await fetchMembershipForOrg(supabaseAdmin, userId, orgId);
@@ -323,6 +386,8 @@ export async function loadCompanyMembership(supabaseAdmin, userId) {
     membershipRole = "owner";
   } else if (!membershipRole) {
     return null;
+  } else if (membership?.disabled_at || membership?.portal_revoked_at) {
+    return null;
   }
 
   return {
@@ -337,6 +402,8 @@ export async function loadCompanyMembership(supabaseAdmin, userId) {
     employment_status: membership?.employment_status || "active",
     disabled_at: membership?.disabled_at || null,
     portalRevokedAt: membership?.portal_revoked_at || null,
+    posAccessDisabledAt: membership?.pos_access_disabled_at || null,
+    portalSlug: portalRequested ? opts.portalSlug : null,
   };
 }
 
@@ -355,7 +422,7 @@ export function requireCompanyPermission(permission) {
       if (!supabaseAdmin) {
         return res.status(500).json({ error: "Server misconfigured" });
       }
-      const membership = await loadCompanyMembership(supabaseAdmin, user.id);
+      const membership = await loadCompanyMembership(supabaseAdmin, user.id, companyMembershipOptions(req));
       if (!membership) {
         return res.status(403).json({ error: "No company membership" });
       }
