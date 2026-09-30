@@ -8,7 +8,10 @@ import DoneState from "@/components/shared/DoneState";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import { cn } from "@/lib/utils";
 import { itemsShare, splitEqually } from "@shared/pos/restaurant.js";
-import { payTab } from "@/services/PosRestaurantService";
+import { fetchTab, payTab } from "@/services/PosRestaurantService";
+import { postPosPaymentIntentAction } from "@/services/PosIntegrationService";
+import DemoPaymentPanel from "@/components/demo/DemoPaymentPanel";
+import { isDemoNextAction } from "@shared/demo/demoPayments.js";
 
 const MODES = [
   { id: "full", label: "Full bill" },
@@ -42,6 +45,8 @@ export default function PosBillDialog({ open, onOpenChange, bundle, currency, di
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  // Demo Mode: a simulated payment waiting for the visitor to choose its outcome.
+  const [demoPay, setDemoPay] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -54,6 +59,7 @@ export default function PosBillDialog({ open, onOpenChange, bundle, currency, di
     setTendered("");
     setError("");
     setResult(null);
+    setDemoPay(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when the dialog opens
   }, [open]);
 
@@ -114,6 +120,14 @@ export default function PosBillDialog({ open, onOpenChange, bundle, currency, di
         brand_name: brandName || undefined,
         idempotency_key: globalThis.crypto?.randomUUID?.(),
       });
+      if (response.pending && isDemoNextAction(response.next_action)) {
+        setDemoPay({
+          intentId: response.payment_intent?.id || null,
+          label: response.portion?.label || "Payment",
+          amount: response.portion?.amount ?? portionAmount,
+        });
+        return;
+      }
       if (response.pending && response.next_action?.redirect_url) {
         onRedirect?.(response.next_action.redirect_url, { tabId: tab.id, intentId: response.payment_intent?.id });
         return;
@@ -131,7 +145,47 @@ export default function PosBillDialog({ open, onOpenChange, bundle, currency, di
     }
   };
 
+  const resolveDemoPayment = async (outcome) => {
+    const json = await postPosPaymentIntentAction(demoPay.intentId, { action: "mock", outcome });
+    const status = String(json?.payment_intent?.status || "").toLowerCase();
+    const fresh = await fetchTab(tab.id).catch(() => null);
+    onPaid?.(json);
+    const portion = { label: demoPay.label, amount: demoPay.amount };
+    setDemoPay(null);
+    if (status === "paid") {
+      setResult({ portion, tab: fresh?.tab || tab, sale: null, demo: true });
+      return;
+    }
+    setError(
+      status === "failed"
+        ? "Demo Payment Failed — simulated, nothing was charged. Take the payment again."
+        : "Demo Payment Pending — it stays on the bill as “being confirmed” until you resolve it here."
+    );
+  };
+
+  // Demo Mode: simulated payments still in flight on this bill can be resolved from here.
+  const pendingDemoPortions = digitalProvider?.demo
+    ? portions.filter((p) => p.provider === "card_terminal" && ["pending", "requires_action", "processing"].includes(p.status))
+    : [];
+
   if (!tab) return null;
+
+  if (demoPay) {
+    return (
+      <Dialog open={open} onOpenChange={(next) => (next ? null : setDemoPay(null))}>
+        <DialogContent className="max-w-md sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{tab.label} · Demo payment</DialogTitle>
+            <DialogDescription>{demoPay.label} · choose how this simulated payment ends.</DialogDescription>
+          </DialogHeader>
+          <DemoPaymentPanel amount={demoPay.amount} currency={currency} onOutcome={resolveDemoPayment} />
+          <Button type="button" variant="ghost" className="h-11 w-full" onClick={() => setDemoPay(null)}>
+            Back to the bill
+          </Button>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (result) {
     const next = result.tab?.balance || balance;
@@ -150,7 +204,11 @@ export default function PosBillDialog({ open, onOpenChange, bundle, currency, di
               number: `Order #${tab.order_number}`,
               counterparty: tab.label,
               amount: formatCurrency(result.portion?.amount || 0, currency),
-              meta: result.change_due != null ? `Cash · change ${formatCurrency(result.change_due, currency)}` : "Paid",
+              meta: result.demo
+                ? "Demo payment · simulated"
+                : result.change_due != null
+                  ? `Cash · change ${formatCurrency(result.change_due, currency)}`
+                  : "Paid",
             }}
             message={result.change_due > 0 ? `Give ${formatCurrency(result.change_due, currency)} change.` : null}
             actions={
@@ -184,6 +242,27 @@ export default function PosBillDialog({ open, onOpenChange, bundle, currency, di
             {balance.pending > 0 ? ` · ${formatCurrency(balance.pending, currency)} being confirmed` : ""}
           </DialogDescription>
         </DialogHeader>
+
+        {pendingDemoPortions.length ? (
+          <div className="space-y-2 rounded-xl border border-primary/25 bg-primary/5 p-3" data-testid="demo-pending-portions">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">Demo payment in progress</p>
+            {pendingDemoPortions.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  {p.label || "Payment"} · {formatCurrency(p.amount, currency)}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDemoPay({ intentId: p.payment_intent_id, label: p.label || "Payment", amount: p.amount })}
+                >
+                  Resolve
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" role="radiogroup" aria-label="How to pay">
           {MODES.map((m) => (

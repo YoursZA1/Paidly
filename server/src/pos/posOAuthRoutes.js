@@ -19,6 +19,7 @@ import { encryptPosSecret } from "./posSecretCrypto.js";
 import { completeYocoConnect } from "./yocoConnect.js";
 import { requirePosCapability } from "./posBusinessType.js";
 import { requirePosPlan } from "./posEntitlement.js";
+import { sendDemoRestricted } from "../demo/demoMode.js";
 
 function jsonError(res, status, message) {
   return res.status(status).json({ error: message });
@@ -58,6 +59,7 @@ async function requireSettingsManager(req, res) {
 export async function handleSquareOAuthStart(req, res) {
   const gate = await requireSettingsManager(req, res);
   if (!gate.ok) return gate.response;
+  if (gate.membership?.isDemo) return sendDemoRestricted(res, "Connecting a POS or payment provider");
 
   if (!isSquareOAuthConfigured()) {
     return jsonError(
@@ -159,6 +161,7 @@ export async function handleSquareOAuthCallback(req, res) {
 export async function handleYocoConnect(req, res) {
   const gate = await requireSettingsManager(req, res);
   if (!gate.ok) return gate.response;
+  if (gate.membership?.isDemo) return sendDemoRestricted(res, "Connecting a POS or payment provider");
 
   const apiKey = String(req.body?.api_secret_key || req.body?.api_key || "").trim();
   if (!apiKey) {

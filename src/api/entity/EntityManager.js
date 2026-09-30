@@ -436,7 +436,7 @@ export class EntityManager {
         if (
           error &&
           isPostgrestSelectSchemaDriftError(error) &&
-          (supabaseTable === "invoices" || supabaseTable === "quotes")
+          (supabaseTable === "invoices" || supabaseTable === "quotes" || supabaseTable === "expenses")
         ) {
           const retry = await runPostgrestWithResilience(() => buildListQuery("*"), {
             kind: "read",
@@ -583,7 +583,7 @@ export class EntityManager {
               if (
                 error &&
                 isPostgrestSelectSchemaDriftError(error) &&
-                (supabaseTable === "invoices" || supabaseTable === "quotes")
+                (supabaseTable === "invoices" || supabaseTable === "quotes" || supabaseTable === "expenses")
               ) {
                 const retry = await runPostgrestWithResilience(buildGetQuery("*"), {
                   kind: "read",

@@ -17,6 +17,7 @@ import {
 } from "./leaveApprovalTokens.js";
 import { writeWorkforceAudit } from "../workforce/workforceAudit.js";
 import { isWorkforceEmployeeActive } from "../../../shared/workforce/employeeLifecycle.js";
+import { suppressForDemoOrg } from "../demo/demoMode.js";
 
 const DEFAULT_LEAVE_TYPES = [
   { code: "ANNUAL", name: "Annual leave", paid: true, accrual_method: "monthly", days_per_year: 21, requires_approval: true, sort_order: 1 },
@@ -509,7 +510,7 @@ async function notifyManagerOfLeaveRequest({ orgId, request, profile, leaveType,
         `${employeeName} has requested leave (${leaveType.name}, ${check.workingDays} day(s)).`
       );
     }
-    if (contact?.email) {
+    if (contact?.email && !(await suppressForDemoOrg(orgId, "leave_request"))) {
       const html = `
         <p><strong>${escapeHtml(employeeName)}</strong> has requested leave.</p>
         <p>Leave type: ${escapeHtml(leaveType.name)}<br/>
@@ -929,7 +930,7 @@ export async function decideLeaveRequest(orgId, actorId, requestId, options = {}
         : `Your leave request for ${dateRange} has been declined.`
     );
     const email = request.payroll_profiles?.email;
-    if (email) {
+    if (email && !(await suppressForDemoOrg(orgId, "leave_decision"))) {
       const html = approve
         ? `<p>Your leave request has been approved (${escapeHtml(typeName)}, ${escapeHtml(dateRange)}).</p>`
         : `<p>Your leave request for ${escapeHtml(dateRange)} has been declined.</p>${

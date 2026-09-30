@@ -23,6 +23,8 @@ import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
 import { getOrgPaymentIntent, mapPaymentIntentSchemaError, publicPaymentIntentView } from "./paymentEngine.js";
 import { DOCUMENT_EVENT_ACTOR, DOCUMENT_EVENT_SOURCE, DOCUMENT_EVENT_TYPE } from "../../../shared/documents/documentEvents.js";
 import { appendDocumentEventBestEffort } from "../documents/documentEventService.js";
+import { DEMO_PAYMENT_NOTICE, demoPaymentNextAction, isDemoPaymentOutcome } from "../../../shared/demo/demoPayments.js";
+import { isDemoOrgId, logDemo } from "../demo/demoMode.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -127,6 +129,11 @@ export async function handleDocumentPay(req, res) {
       },
     });
 
+    // Demo Mode: "Pay now" opens the simulated payment flow — no provider, redirect or bank.
+    if (await isDemoOrgId(access.orgId)) {
+      return handleDemoDocumentPay(res, access, body);
+    }
+
     const result = await createOrReuseDocumentPaymentIntent({
       orgId: access.orgId,
       invoiceId: access.invoiceId,
@@ -156,6 +163,57 @@ export async function handleDocumentPay(req, res) {
     if (err?.status) return jsonError(res, err.status, err.message, { code: err.code });
     return schemaError(res, err);
   }
+}
+
+/**
+ * Demo Mode invoice payment. Without `demo_outcome` it returns the amount and the demo hand-off; with
+ * one it applies the outcome: succeeded records the balance through the normal Payment Engine receipt
+ * path (so the invoice, transactions and reports update for real), failed / processing record nothing.
+ */
+async function handleDemoDocumentPay(res, access, body) {
+  const snapshot = await documentPaymentSnapshot(access.orgId, access.invoiceId);
+  if (!snapshot) return jsonError(res, 404, "Invoice not found");
+  const outcome = String(body.demo_outcome || "").trim().toLowerCase();
+  const base = {
+    ok: true,
+    demo: true,
+    simulated: true,
+    invoice_id: snapshot.invoice_id,
+    invoice_number: snapshot.invoice_number,
+    currency: snapshot.currency,
+    notice: DEMO_PAYMENT_NOTICE,
+  };
+  if (!outcome) {
+    return res.status(200).json({ ...base, amount_due: snapshot.amount_due, next_action: demoPaymentNextAction(null) });
+  }
+  if (!isDemoPaymentOutcome(outcome)) {
+    return jsonError(res, 422, "demo_outcome must be succeeded, failed, or processing", { code: "INVALID_DEMO_OUTCOME" });
+  }
+  logDemo("demo_payment_simulated", { source: "invoice", outcome });
+  if (outcome !== "succeeded") {
+    return res.status(200).json({ ...base, outcome, recorded: false, amount_due: snapshot.amount_due, invoice_status: snapshot.invoice_status });
+  }
+  if (!(Number(snapshot.amount_due) > 0)) {
+    return jsonError(res, 422, "This invoice has no outstanding balance.", { code: "INVOICE_NOT_PAYABLE" });
+  }
+  const result = await recordOfflineDocumentPayment({
+    orgId: access.orgId,
+    invoiceId: snapshot.invoice_id,
+    amount: snapshot.amount_due,
+    method: "mobile_payment",
+    payerReference: "DEMO-PAYMENT",
+    notes: "Demo Mode — simulated payment (DEMO_PAYMENT). No money moved.",
+    approvedBy: access.createdBy,
+    idempotencyKey: body.idempotency_key || null,
+  });
+  return res.status(200).json({
+    ...base,
+    outcome,
+    recorded: true,
+    payment_intent: publicPaymentIntentView(result.intent),
+    invoice_status: result.invoice?.status || "paid",
+    amount_due: result.amountDue ?? 0,
+  });
 }
 
 /**

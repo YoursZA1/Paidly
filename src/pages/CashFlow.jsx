@@ -132,7 +132,6 @@ export default function CashFlowPage() {
         action();
     };
     const [showReceiptScanner, setShowReceiptScanner] = useState(false);
-    const [expenseFormFromScan, setExpenseFormFromScan] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [editingExpense, setEditingExpense] = useState(null);
     const [timeRange, setTimeRange] = useState("30D"); // 7D | 30D | 6M | 12M
@@ -372,7 +371,6 @@ export default function CashFlowPage() {
             invalidateCashFlow();
             setShowExpenseForm(false);
             setEditingExpense(null);
-            setExpenseFormFromScan(false);
             toast({
                 title: editingExpense ? "Expense updated" : "Expense added",
                 variant: "default",
@@ -389,7 +387,6 @@ export default function CashFlowPage() {
 
     const handleEditExpense = (expense) => withExpenses(() => {
         setEditingExpense(expense);
-        setExpenseFormFromScan(false);
         setShowExpenseForm(true);
     });
 
@@ -409,10 +406,36 @@ export default function CashFlowPage() {
         }
     };
 
-    const handleScanComplete = (scannedData) => {
-        setEditingExpense(scannedData);
-        setExpenseFormFromScan(true);
+    /** Scan Receipt saved on the server (after review) — show it everywhere without a reload. */
+    const handleReceiptExpenseCreated = (created) => {
+        if (!created?.id) return;
+        patchCachedExpenses((list) => [created, ...list.filter((row) => row.id !== created.id)]);
+        useAppStore.setState((st) => ({
+            expenses: [created, ...(st.expenses || []).filter((row) => row.id !== created.id)],
+        }));
+        invalidateCashFlow();
+    };
+
+    /** "View expense" from Scan Receipt (the new one, or an existing possible duplicate by id). */
+    const handleViewScannedExpense = async (expenseOrId) => {
         setShowReceiptScanner(false);
+        let expense = typeof expenseOrId === "object" ? expenseOrId : null;
+        if (!expense) {
+            const id = String(expenseOrId || "");
+            expense = (storeExpenses || []).find((row) => row.id === id) || null;
+            if (!expense) {
+                try {
+                    expense = await Expense.get(id);
+                } catch {
+                    expense = null;
+                }
+            }
+        }
+        if (!expense) {
+            toast({ title: "Couldn't open that expense", description: "It may have been deleted.", variant: "destructive" });
+            return;
+        }
+        setEditingExpense(expense);
         setShowExpenseForm(true);
     };
 
@@ -466,7 +489,6 @@ export default function CashFlowPage() {
                         <Button
                           onClick={() => withExpenses(() => {
                             setEditingExpense(null);
-                            setExpenseFormFromScan(false);
                             setShowExpenseForm(true);
                           })}
                           className="gap-2"
@@ -611,7 +633,6 @@ export default function CashFlowPage() {
                                   variant="outline"
                                   onClick={() => withExpenses(() => {
                                     setEditingExpense(null);
-                                    setExpenseFormFromScan(false);
                                     setShowExpenseForm(true);
                                   })}
                                 >
@@ -747,7 +768,8 @@ export default function CashFlowPage() {
 
                 {showReceiptScanner && (
                     <ReceiptScanner
-                        onScanComplete={handleScanComplete}
+                        onExpenseCreated={handleReceiptExpenseCreated}
+                        onViewExpense={handleViewScannedExpense}
                         onCancel={() => setShowReceiptScanner(false)}
                     />
                 )}
@@ -765,12 +787,10 @@ export default function CashFlowPage() {
                 {showExpenseForm && (
                     <ExpenseForm
                         expense={editingExpense}
-                        fromReceiptScan={expenseFormFromScan}
                         onSave={handleSaveExpense}
                         onCancel={() => {
                             setShowExpenseForm(false);
                             setEditingExpense(null);
-                            setExpenseFormFromScan(false);
                         }}
                     />
                 )}

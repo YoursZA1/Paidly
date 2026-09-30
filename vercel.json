@@ -85,6 +85,10 @@
       "destination": "/api/cron?job=workforce-events"
     },
     {
+      "source": "/api/cron/demo-cleanup",
+      "destination": "/api/cron?job=demo-cleanup"
+    },
+    {
       "source": "/api/public-invoice",
       "destination": "/api/public-share?doc=invoice&op=get"
     },
@@ -347,6 +351,10 @@
     {
       "path": "/api/cron/admin-broadcast-email",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/demo-cleanup",
+      "schedule": "30 2 * * *"
     }
   ]
 }

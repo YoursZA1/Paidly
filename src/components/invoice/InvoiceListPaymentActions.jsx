@@ -5,6 +5,8 @@ import { remindDocumentPayment, startDocumentPayment } from "@/api/documentPayme
 import { useToast } from "@/components/ui/use-toast";
 import { resolveDocumentPaymentCtas, DOCUMENT_PAYMENT_ACTION } from "@shared/payments/documentPaymentCtas.js";
 import { INVOICE_STATUS, normalizeInvoiceStatus } from "@shared/commercial/documentStatuses.js";
+import DemoInvoicePaymentDialog from "@/components/demo/DemoInvoicePaymentDialog";
+import { notifyDemoNotSent } from "@/lib/demo/demoModeState";
 
 function isOverdue(invoice) {
   if (!invoice?.delivery_date) return false;
@@ -14,6 +16,7 @@ function isOverdue(invoice) {
 export default function InvoiceListPaymentActions({ invoice, onActionSuccess }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState("");
+  const [demoPay, setDemoPay] = useState(null);
   const status = normalizeInvoiceStatus(invoice?.status);
   const ctas = resolveDocumentPaymentCtas({
     invoiceStatus: status,
@@ -25,6 +28,15 @@ export default function InvoiceListPaymentActions({ invoice, onActionSuccess }) 
     setBusy(retry ? "retry" : "pay");
     try {
       const result = await startDocumentPayment({ invoiceId: invoice.id, retry });
+      if (result?.demo && result?.simulated) {
+        setDemoPay({
+          invoiceId: invoice.id,
+          invoiceNumber: result.invoice_number || invoice.invoice_number,
+          amount: result.amount_due,
+          currency: result.currency || invoice.currency || "ZAR",
+        });
+        return;
+      }
       if (result.redirect_url) {
         window.location.assign(result.redirect_url);
         return;
@@ -42,7 +54,11 @@ export default function InvoiceListPaymentActions({ invoice, onActionSuccess }) 
     event.stopPropagation();
     setBusy("remind");
     try {
-      await remindDocumentPayment(invoice.id);
+      const reminded = await remindDocumentPayment(invoice.id);
+      if (reminded?.demo) {
+        notifyDemoNotSent(reminded.preview);
+        return;
+      }
       toast({ title: "Reminder sent", variant: "success" });
       onActionSuccess?.();
     } catch (err) {
@@ -58,6 +74,12 @@ export default function InvoiceListPaymentActions({ invoice, onActionSuccess }) 
 
   return (
     <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+      <DemoInvoicePaymentDialog
+        open={Boolean(demoPay)}
+        onOpenChange={(next) => (next ? null : setDemoPay(null))}
+        demo={demoPay}
+        onSettled={() => onActionSuccess?.()}
+      />
       {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && (
         <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={() => void pay(false)} disabled={Boolean(busy)}>
           {busy === "pay" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}

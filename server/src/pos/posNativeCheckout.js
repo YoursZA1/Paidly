@@ -23,7 +23,12 @@ import {
   summarizeSaleRefunds,
   withSaleLineIds,
 } from "./posReturnMath.js";
-import { isTillCashSettlement, isCardTerminalSettlement, publicPaymentIntentView } from "../payments/paymentIntentContract.js";
+import {
+  CUSTOMER_PAYMENT_PROVIDERS,
+  isTillCashSettlement,
+  isCardTerminalSettlement,
+  publicPaymentIntentView,
+} from "../payments/paymentIntentContract.js";
 import {
   attachPosSaleToIntent,
   confirmCustomerPaymentIntent,
@@ -53,6 +58,7 @@ import { resolveTillCardRail } from "./posCardRail.js";
 import { isActivePaymentIntentStatus } from "../../../shared/payments/paymentIntentStates.js";
 import { resolvePaidlyPayOrigin } from "../../../shared/payments/paidlyPayContract.js";
 import { cardTerminalProvider } from "../payments/providers/cardTerminalProvider.js";
+import { DEMO_PAYMENT_PROVIDER } from "../../../shared/demo/demoPayments.js";
 
 const CATALOG_SELECT =
   "id, org_id, name, sku, barcode, item_type, is_active, price, default_rate, unit_price, rate, stock_quantity, image_url, category, company_id";
@@ -390,7 +396,8 @@ export async function handleNativePosCatalog(req, res, gate) {
       company_id: registerCompanyId,
       card_rail: cardRail,
       // Online provider the Payment Engine would use for the digital tender (null = none connected).
-      digital_provider: describeOnlineProvider({ sourceKind: "pos" }),
+      // Demo Mode: the simulated DEMO_PAYMENT rail — no real provider is ever described or used.
+      digital_provider: gate.membership?.isDemo ? DEMO_PAYMENT_PROVIDER : describeOnlineProvider({ sourceKind: "pos" }),
     });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Could not load catalog");
@@ -428,9 +435,12 @@ export async function handleNativePosCheckout(req, res, gate) {
 
   // The Payment Engine picks the rail. The till only says which tender the customer chose;
   // it never names (or depends on) a specific online provider.
+  // Demo Mode: EFT / Digital is a simulated payment on the card_terminal rail (flagged demo_simulated);
+  // it never resolves an online provider, so no gateway can be contacted from a demo workspace.
+  const demoPayment = gate.membership?.isDemo === true && paymentMethod === "digital";
   let rail;
   try {
-    rail = resolvePosTenderProvider(paymentMethod, { currency });
+    rail = demoPayment ? CUSTOMER_PAYMENT_PROVIDERS.CARD_TERMINAL : resolvePosTenderProvider(paymentMethod, { currency });
   } catch (err) {
     if (err?.status === 422) return jsonError(res, 422, err.message, { code: err.code });
     throw err;
@@ -586,6 +596,7 @@ export async function handleNativePosCheckout(req, res, gate) {
     tax_amount: payable.tax_amount,
     checkout: checkoutSnapshot,
     checkout_fingerprint: checkoutFingerprint,
+    ...(demoPayment ? { demo_simulated: true } : {}),
   };
 
   let createKey = idempotencyKey;
@@ -602,7 +613,10 @@ export async function handleNativePosCheckout(req, res, gate) {
         intent = existingActive;
       } else {
         const byKey = await findPaymentIntentByIdempotency(gate.membership.orgId, createKey);
-        if (byKey && !isActivePaymentIntentStatus(byKey.status)) {
+        if (byKey && byKey.status === "paid") {
+          // Already settled (webhook / demo outcome): return that sale below, never a second charge.
+          intent = byKey;
+        } else if (byKey && !isActivePaymentIntentStatus(byKey.status)) {
           createKey = crypto.randomUUID();
         } else if (byKey && isActivePaymentIntentStatus(byKey.status)) {
           intent = byKey;
@@ -719,6 +733,7 @@ export async function handleNativePosCheckout(req, res, gate) {
     const nextAction = charge.next_action || intent.metadata?.next_action;
     const redirectUrl = nextAction?.redirect_url;
     const terminalWait =
+      nextAction?.type === "demo" ||
       nextAction?.type === "tap_to_pay" ||
       nextAction?.type === "qr" ||
       nextAction?.type === "reader" ||

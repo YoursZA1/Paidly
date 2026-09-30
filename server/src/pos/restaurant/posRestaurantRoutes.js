@@ -36,7 +36,7 @@ import {
   resolvePosTenderProvider,
   settleTillCashIntent,
 } from "../../payments/paymentEngine.js";
-import { isTillCashSettlement } from "../../payments/paymentIntentContract.js";
+import { CUSTOMER_PAYMENT_PROVIDERS, isTillCashSettlement } from "../../payments/paymentIntentContract.js";
 import { settlePosIntent } from "../../paidlyPay/settlePosIntent.js";
 import { resolvePaidlyPayOrigin } from "../../../../shared/payments/paidlyPayContract.js";
 import {
@@ -58,6 +58,7 @@ import {
   tabLabel,
   tabTotals,
 } from "../../../../shared/pos/restaurant.js";
+import { isDemoNextAction } from "../../../../shared/demo/demoPayments.js";
 
 const MAX_ITEMS_PER_ADD = 100;
 const MAX_QTY = 999;
@@ -1067,7 +1068,9 @@ export async function handleTabPay(req, res, gate) {
     const bundle = await loadTabBundle(orgId, String(body.tab_id || "").trim());
     assertOpen(bundle);
     const currency = String(body.currency || "ZAR").trim().toUpperCase().slice(0, 3) || "ZAR";
-    const rail = resolvePosTenderProvider(paymentMethod, { currency });
+    // Demo Mode: EFT / Digital is a simulated payment (card_terminal rail, demo_simulated) — never a provider.
+    const demoPayment = gate.membership?.isDemo === true && paymentMethod === "digital";
+    const rail = demoPayment ? CUSTOMER_PAYMENT_PROVIDERS.CARD_TERMINAL : resolvePosTenderProvider(paymentMethod, { currency });
     const portion = planBillPortion(bundle, body.split || {});
 
     // Same shift rule as the counter: money goes to an open register session.
@@ -1120,7 +1123,7 @@ export async function handleTabPay(req, res, gate) {
       customer_name: bundle.tab.customer_name,
       idempotency_key: idempotencyKey,
       origin: "pos_table",
-      settlement: isTillCashSettlement(rail) ? "till" : "online",
+      settlement: isTillCashSettlement(rail) ? "till" : demoPayment ? "terminal" : "online",
       tab_id: bundle.tab.id,
       tab_label: label,
       order_number: bundle.tab.order_number,
@@ -1144,6 +1147,7 @@ export async function handleTabPay(req, res, gate) {
         paidly_pay_method: paymentMethod === "digital" ? "eft" : "cash",
         tab_id: bundle.tab.id,
         checkout,
+        ...(demoPayment ? { demo_simulated: true } : {}),
       },
     });
     const { error: linkError } = await supabaseAdmin.from("pos_tab_payments").insert({
@@ -1189,6 +1193,16 @@ export async function handleTabPay(req, res, gate) {
       errorUrl: `${back}&result=error`,
     });
     const nextAction = confirmed.charge?.next_action || null;
+    if (isDemoNextAction(nextAction)) {
+      return res.status(202).json({
+        ok: true,
+        pending: true,
+        demo: true,
+        portion: { label: portion.label, amount: portion.amount },
+        payment_intent: publicPaymentIntentView(confirmed.intent),
+        next_action: nextAction,
+      });
+    }
     if (!nextAction?.redirect_url) {
       return jsonError(res, 422, confirmed.charge?.error || "The online payment could not be started", {
         code: confirmed.charge?.code || "PROVIDER_REDIRECT_MISSING",

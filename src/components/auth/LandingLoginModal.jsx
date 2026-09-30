@@ -258,6 +258,17 @@ export default function LandingLoginModal({ open, onOpenChange }) {
                     Don&apos;t have an account? Create one
                   </button>
                 </div>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => closeAndNavigate("/demo")}
+                    className="text-sm font-medium text-[#FF7A3D] hover:text-[#FF9A66] hover:underline"
+                    data-testid="login-try-demo"
+                  >
+                    Just looking? Try the live demo
+                  </button>
+                </div>
               </form>
             </CardContent>
           </Card>

@@ -64,7 +64,10 @@ export const SUPABASE_SELECT_COLUMNS = {
   document_sends: "id, org_id, document_type, document_id, client_id, channel, sent_at, created_at",
   message_logs: "id, org_id, document_type, document_id, client_id, channel, recipient, sent_at, opened_at, viewed, paid, payment_date, tracking_token, clicked_at, created_at",
   payslips: "id, org_id, user_id, created_by_id, employee_user_id, membership_id, payroll_profile_id, pay_run_id, pay_run_item_id, payslip_number, employee_name, employee_id, employee_email, position, department, pay_period_start, pay_period_end, pay_date, basic_salary, overtime_hours, overtime_rate, allowances, gross_pay, tax_deduction, uif_deduction, pension_deduction, medical_aid_deduction, other_deductions, total_deductions, net_pay, status, public_share_token, sent_to_email, locked, finalized_at, created_at, updated_at",
-  expenses: "id, org_id, expense_number, category, description, amount, date, payment_method, vendor, vat, receipt_url, notes, created_at, updated_at",
+  // receipt_path/supplier_id/… from 20260930120000 — list/get fall back to "*" on an older schema.
+  expenses:
+    "id, org_id, expense_number, category, description, amount, date, payment_method, vendor, vat, receipt_url, notes, " +
+    "subtotal, vat_rate, supplier_id, receipt_number, receipt_path, capture_source, created_at, updated_at",
   tasks: "id, org_id, title, description, client_id, assigned_to, due_date, priority, status, category, created_at, updated_at",
   notes: "id, user_id, title, content, category, is_pinned, created_at, updated_at",
   suppliers: "id, org_id, name, email, phone, address, tax_number, payment_terms, lead_time_days, notes, created_by, created_at, updated_at",

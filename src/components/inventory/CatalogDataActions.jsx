@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,29 +8,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Download, LayoutTemplate, MoreVertical, Upload } from "lucide-react";
 
-export default function CatalogDataActions({
-  isImporting,
-  isExporting,
-  exportDisabled,
-  onImportFile,
-  onExport,
-  onOpenIndustryTemplates,
-}) {
-  const fileInputRef = useRef(null);
-
-  const triggerImport = () => fileInputRef.current?.click();
-
+/** Import (Excel / CSV / PDF → review dialog), CSV export and industry templates. */
+export default function CatalogDataActions({ isExporting, exportDisabled, onImport, onExport, onOpenIndustryTemplates }) {
   return (
     <>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        onChange={onImportFile}
-        aria-hidden
-      />
-
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -45,9 +25,9 @@ export default function CatalogDataActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={triggerImport} disabled={isImporting}>
+          <DropdownMenuItem onClick={onImport}>
             <Upload className="h-4 w-4 mr-2" />
-            {isImporting ? "Importing…" : "Import CSV"}
+            Import products
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onExport} disabled={isExporting || exportDisabled}>
             <Download className="h-4 w-4 mr-2" />
@@ -66,11 +46,10 @@ export default function CatalogDataActions({
           type="button"
           variant="outline"
           className="h-11 px-3 rounded-md uppercase text-xs tracking-wide font-semibold"
-          onClick={triggerImport}
-          disabled={isImporting}
+          onClick={onImport}
         >
-          <Upload className={`h-4 w-4 mr-1.5 ${isImporting ? "animate-pulse" : ""}`} />
-          {isImporting ? "Importing…" : "Import"}
+          <Upload className="h-4 w-4 mr-1.5" />
+          Import products
         </Button>
         <Button
           type="button"

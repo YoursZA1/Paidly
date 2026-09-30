@@ -23,6 +23,8 @@ Hobby production is capped at **exactly 12** serverless functions (the current c
 
 **Public share:** invoice, quote, payslip, leave approval, OG, and email-track stay on `api/public-share.js`. Do not add `api/public-payslip.js` or `api/public-leave.js`. `/api/public-leave` and `/api/public-leave/decide` rewrite onto `public-share?doc=leave`.
 
+**Demo Mode:** `POST /api/auth/demo`, `/api/auth/demo-reset`, `/api/auth/demo-end` are routes on the existing `api/auth/[route].js`; the expiry sweep is `/api/cron/demo-cleanup` → `api/cron.js?job=demo-cleanup`. Do not add `api/demo.js`. See `docs/DEMO_MODE.md`.
+
 **Admin overview / directory:** `GET /api/admin/overview` and `GET /api/admin/directory` stay on `api/admin/[resource].js`. Do not add `api/admin-overview.js`.
 
 **Rule:** When debugging “429 from Paidly” or “100 requests / 15 minutes,” first confirm whether the failing URL is handled by **A** or **B**. Tuning `RATE_LIMIT_MAX` on Express does **nothing** for routes that only exist as Vercel functions.

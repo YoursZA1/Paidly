@@ -7,7 +7,6 @@ import {
   validateBankDetailsUpload,
   validateBrandingUpload,
   validatePrivateUpload,
-  validateReceiptUpload,
 } from "@/utils/fileUploadValidation";
 import { readStoredAuthUser } from "@/utils/authStorage";
 import { apiRequest } from "@/utils/apiRequest";
@@ -19,6 +18,7 @@ import {
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
 import { getSessionWithRetry, isSupabaseAuthUuid } from "@/api/auth/authSessionHelpers.js";
 import { fetchPrimaryMembershipOrgId } from "@/api/auth/orgCache.js";
+import { isDemoNotSentResponse, notifyDemoNotSent } from "@/lib/demo/demoModeState";
 
 export class IntegrationManager {
   constructor() {
@@ -187,6 +187,10 @@ export class IntegrationManager {
           if (json.success === false) {
             throw new Error(json?.error || "Send failed");
           }
+          if (isDemoNotSentResponse(json)) {
+            notifyDemoNotSent(json.preview || { to, subject });
+            return { success: true, demo: true, sent: false, data: null };
+          }
           return { success: true, data: json.data };
         } catch (err) {
           console.error("SendEmail error:", err);
@@ -200,34 +204,7 @@ export class IntegrationManager {
       UploadToActivities: async ({ file }) => {
         return uploadToStorage({ file, folder: "activities", bucket: "activities" });
       },
-      /** Store receipt image in receipts bucket: receipt-{Date.now()}.{ext} under org_id */
-      UploadToReceipts: async ({ file }) => {
-        beginCriticalSessionOperation();
-        try {
-        if (!file) throw new Error("No file provided");
-        validateReceiptUpload(file);
-        const sessionUser = await getSessionUser();
-        const orgId = sessionUser?.id
-          ? await getOrgIdForUser(sessionUser.id)
-          : `local-${getLocalUserId() || "guest"}`;
-        const ext = (file.name?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "jpg");
-        const filePath = `${orgId}/receipt-${Date.now()}.${ext}`;
-        const bucket = "receipts";
-        const { error: uploadError } = await supabase.storage
-          .from(bucket)
-          .upload(filePath, file, { upsert: false, contentType: file.type || undefined });
-        if (uploadError) {
-          throw new Error(getSupabaseErrorMessage(uploadError, "Receipt upload failed"));
-        }
-        const fileUrl = await buildFileUrlWithBucket({ filePath, preferSigned: !!sessionUser?.id }, bucket);
-        if (!fileUrl) {
-          throw new Error("Receipt upload succeeded but could not generate URL.");
-        }
-        return { file_url: fileUrl, file_path: filePath };
-        } finally {
-          endCriticalSessionOperation();
-        }
-      },
+      // Receipts: src/services/ReceiptScanService.js (server-chosen path in the private receipts bucket).
       /** Upload to bank-details bucket (statements, imports); path = org_id/bank-details/... */
       UploadToBankDetails: async ({ file }) => {
         return uploadToStorage({ file, folder: "bank-details", bucket: "bank-details" });

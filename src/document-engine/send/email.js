@@ -8,6 +8,7 @@ import {
   DOCUMENT_ENGINE_ERROR,
   DocumentEngineError,
 } from "@shared/documents/documentEngine.js";
+import { isDemoModeActive, notifyDemoNotSent } from "@/lib/demo/demoModeState";
 
 function redactSendErrorDetails(raw) {
   const text = typeof raw === "string" ? raw : raw == null ? "" : JSON.stringify(raw);
@@ -90,6 +91,11 @@ export async function dispatchDocumentEmail({
   dueDate,
   idempotencyKey,
 } = {}) {
+  // Demo Mode: nothing leaves Paidly (the edge function and /api/send-invoice refuse it as well).
+  if (isDemoModeActive()) {
+    notifyDemoNotSent({ to: email, subject });
+    return { success: true, demo: true, sent: false, channel: "demo" };
+  }
   const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
   const supabaseUrl = String(rawSupabaseUrl).replace(/\.supabase\.com/gi, ".supabase.co").trim();
   if (!supabaseUrl) {
@@ -131,6 +137,10 @@ export async function dispatchDocumentEmail({
     });
     const body = await readFetchBody(sendRes);
     assertProviderAccepted(sendRes, body, "Email service");
+    if (body.json?.demo) {
+      notifyDemoNotSent({ to: email, subject });
+      return { success: true, demo: true, sent: false, channel: "demo" };
+    }
     return { success: true, channel: "edge", provider: body.json || { success: true } };
   } catch (edgeErr) {
     primaryError = edgeErr;

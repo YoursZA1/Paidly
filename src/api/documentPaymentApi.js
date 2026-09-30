@@ -41,7 +41,12 @@ async function parseJson(res, fallback) {
   return json;
 }
 
-export async function startDocumentPayment({ invoiceId, shareToken = null, retry = false }) {
+/**
+ * Pay now. In a Demo Mode workspace the server answers `{ demo: true, simulated: true }` instead of a
+ * provider redirect; call again with `demoOutcome` ("succeeded" | "failed" | "processing") to apply
+ * the simulated result (shared/demo/demoPayments.js).
+ */
+export async function startDocumentPayment({ invoiceId, shareToken = null, retry = false, demoOutcome = null, idempotencyKey = null }) {
   const headers = shareToken ? publicHeaders(shareToken) : await authHeaders();
   const res = await apiRequest(`${apiBase()}/api/payment-intents/document-pay`, {
     method: "POST",
@@ -50,6 +55,8 @@ export async function startDocumentPayment({ invoiceId, shareToken = null, retry
       invoice_id: invoiceId,
       share_token: shareToken || undefined,
       retry: retry || undefined,
+      demo_outcome: demoOutcome || undefined,
+      idempotency_key: idempotencyKey || undefined,
     }),
   });
   return parseJson(res, "Could not start payment");

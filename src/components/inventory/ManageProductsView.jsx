@@ -53,10 +53,9 @@ export default function ManageProductsView({
   totalItems,
   onPageChange,
   onPageSizeChange,
-  isImporting,
   isExporting,
   exportDisabled,
-  onImportFile,
+  onImport,
   onExportCsv,
   onOpenIndustryTemplates,
 }) {
@@ -115,10 +114,9 @@ export default function ManageProductsView({
                 </DropdownMenuContent>
               </DropdownMenu>
               <CatalogDataActions
-                isImporting={isImporting}
                 isExporting={isExporting}
                 exportDisabled={exportDisabled}
-                onImportFile={onImportFile}
+                onImport={onImport}
                 onExport={onExportCsv}
                 onOpenIndustryTemplates={onOpenIndustryTemplates}
               />
@@ -127,10 +125,9 @@ export default function ManageProductsView({
             {/* Desktop action row: all buttons visible */}
             <div className="hidden lg:flex items-center gap-2 shrink-0">
               <CatalogDataActions
-                isImporting={isImporting}
                 isExporting={isExporting}
                 exportDisabled={exportDisabled}
-                onImportFile={onImportFile}
+                onImport={onImport}
                 onExport={onExportCsv}
                 onOpenIndustryTemplates={onOpenIndustryTemplates}
               />

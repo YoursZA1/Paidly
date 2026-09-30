@@ -12,6 +12,7 @@ const PUBLIC_PATH_PATTERNS = [
   /^\/login$/i,
   /^\/auth/i,
   /^\/signup/i,
+  /^\/demo(\/|$)/i, // Try Live Demo landing (public; starts its own demo session)
   /^\/home/i,
   /^\/how-?to\/?$/i,
   /^\/forgotpassword/i,

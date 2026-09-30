@@ -16,6 +16,7 @@ import { requirePosPlan, requirePosPlanForOrg } from "./posEntitlement.js";
 import { resolvePosAccessGate } from "./posInviteActivate.js";
 import { POS_ACCESS_BEARER_PREFIX, membershipCanEnterPos } from "../../../shared/posStaffInvite.js";
 import { deleteYocoWebhook } from "./yocoConnect.js";
+import { sendDemoRestricted } from "../demo/demoMode.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -159,6 +160,7 @@ export async function handlePosConnectionsList(req, res) {
 export async function handlePosConnectionCreate(req, res) {
   const gate = await requireSettingsManager(req, res);
   if (!gate.ok) return gate.response;
+  if (gate.membership?.isDemo) return sendDemoRestricted(res, "POS provider connections");
   return jsonError(res, 410, "Manual webhook connections are no longer available. Connect Yoco or Square instead.", {
     code: "MANUAL_POS_WEBHOOK_DISABLED",
   });
@@ -167,6 +169,7 @@ export async function handlePosConnectionCreate(req, res) {
 export async function handlePosConnectionPatch(req, res) {
   const gate = await requireSettingsManager(req, res);
   if (!gate.ok) return gate.response;
+  if (gate.membership?.isDemo) return sendDemoRestricted(res, "POS provider connections");
 
   const connectionId = String(req.params?.id || req.body?.id || "").trim();
   if (!connectionId) return jsonError(res, 400, "Missing connection id");
@@ -217,6 +220,7 @@ export async function handlePosConnectionDelete(req, res) {
   try {
     const gate = await requireSettingsManager(req, res);
     if (!gate.ok) return gate.response;
+    if (gate.membership?.isDemo) return sendDemoRestricted(res, "POS provider connections");
 
     const connectionId = String(
       req.params?.id || req.query?.id || req.body?.id || ""

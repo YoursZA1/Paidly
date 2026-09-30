@@ -5,10 +5,12 @@ import AuthenticatedShell from "@/components/layout/AuthenticatedShell";
 import AuthLayout from "@/components/layout/AuthLayout";
 
 import FeatureGate from "@/components/subscription/FeatureGate";
+import DemoRestricted from "@/components/demo/DemoRestricted";
 const Dashboard = lazy(() => import("./Dashboard"));
 const Signup = lazy(() => import("./Signup"));
 const AuthVerified = lazy(() => import("./AuthVerified"));
 const Home = lazy(() => import("./Home"));
+const DemoLanding = lazy(() => import("./DemoLanding"));
 const CreateInvoice = lazy(() => import("./CreateInvoice"));
 const CreateDocument = lazy(() => import("./CreateDocument"));
 const Documents = lazy(() => import("./Documents"));
@@ -144,6 +146,9 @@ const AUTH_ROUTES = [
     { path: "/Auth.html", element: <Home navActive="login" /> },
     { path: "/Login", element: <Home navActive="login" /> },
     { path: "/login", element: <Home navActive="login" /> },
+    // Try Live Demo. /demo/<anything> renders the same page: ids in the URL are never used.
+    { path: "/demo", element: <DemoLanding /> },
+    { path: "/demo/*", element: <DemoLanding /> },
     { path: "/Signup", element: <AuthLayout><Signup /></AuthLayout> },
     { path: "/signup", element: <AuthLayout><Signup /></AuthLayout> },
     { path: "/ForgotPassword", element: <AuthLayout><ForgotPassword /></AuthLayout> },
@@ -229,8 +234,8 @@ const MAIN_ROUTES = [
     { path: "/settings", element: <RequireAuth><Settings /></RequireAuth> },
     { path: "/Reminders", element: <RequireAuth><Navigate to="/Settings?tab=reminders" replace /></RequireAuth> },
     { path: "/reminders", element: <RequireAuth><Navigate to="/Settings?tab=reminders" replace /></RequireAuth> },
-    { path: "/BillingAndInvoices", element: ownerRoute(<BillingAndInvoices />) },
-    { path: "/billingandinvoices", element: ownerRoute(<BillingAndInvoices />) },
+    { path: "/BillingAndInvoices", element: ownerRoute(<DemoRestricted feature="Billing"><BillingAndInvoices /></DemoRestricted>) },
+    { path: "/billingandinvoices", element: ownerRoute(<DemoRestricted feature="Billing"><BillingAndInvoices /></DemoRestricted>) },
     { path: "/Notes", element: <RequireAuth><Notes /></RequireAuth> },
     { path: "/notes", element: <RequireAuth><Notes /></RequireAuth> },
     { path: "/Services", element: ownerRoute(<Services />) },
@@ -577,6 +582,7 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/auth/i,
     /^\/login$/i,
     /^\/signup$/i,
+    /^\/demo(\/|$)/i,
     /^\/forgotpassword$/i,
     /^\/resetpassword$/i,
     /^\/acceptinvite$/i,

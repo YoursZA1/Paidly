@@ -22,6 +22,14 @@ const PUBLIC_PAGES = [
     description: "Step-by-step guides for invoices, quotes, payments, POS and payroll in Paidly.",
   },
   {
+    // Only /demo itself is indexable; /demo/<anything> canonicalises to it.
+    match: /^\/demo(\/.*)?$/i,
+    path: "/demo",
+    title: "Live demo — Try Paidly with a real business",
+    description:
+      "Experience Paidly with a live demo business. Explore customers, invoices, quotes, expenses, inventory, employees, POS and payments — all in one place.",
+  },
+  {
     match: /^\/(privacy-policy|privacypolicy)\/?$/i,
     path: "/privacy-policy",
     title: "Privacy Policy · Paidly",

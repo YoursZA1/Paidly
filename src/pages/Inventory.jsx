@@ -13,7 +13,7 @@ import { useAppStore } from "@/stores/useAppStore";
 import { normalizeCatalogRows, normalizeInventoryRows, toQuantity } from "@/utils/inventoryNormalization";
 import { alertSupabaseWriteFailure, checkSupabaseWriteResult } from "@/utils/supabaseErrorUtils";
 import { invalidateServicesCatalog } from "@/hooks/useServicesCatalogQuery";
-import { servicesToCsv, parseServiceCsv, csvRowToServicePayload } from "@/utils/serviceCsvMapping";
+import { servicesToCsv } from "@/utils/serviceCsvMapping";
 import { catalogRowsToCsvSource } from "@/utils/catalogCsvUtils";
 import { formatCurrency } from "@/utils/currencyCalculations";
 import AssetService from "@/services/AssetService";
@@ -31,6 +31,7 @@ import CategoryDialog from "../components/inventory/CategoryDialog";
 import InventoryToolsSheet from "../components/inventory/InventoryToolsSheet";
 import BarcodeScannerDialog from "../components/inventory/BarcodeScannerDialog";
 import IndustryTemplatesDialog from "../components/inventory/IndustryTemplatesDialog";
+import ProductImportDialog from "../components/inventory/import/ProductImportDialog";
 import { activeProductHasBarcode } from "@/lib/pos/posBarcode";
 import { useEntitlementAccess } from "@/hooks/useEntitlementAccess";
 import { useUpgradeModalStore } from "@/stores/useUpgradeModalStore";
@@ -225,7 +226,7 @@ export default function Inventory() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [toolsSheetOpen, setToolsSheetOpen] = useState(false);
   const [toolsView, setToolsView] = useState("actions");
-  const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [industryTemplatesOpen, setIndustryTemplatesOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -1208,51 +1209,6 @@ export default function Inventory() {
     }
   }, [sortedProducts, toast]);
 
-  const handleImportCsvFile = useCallback(
-    async (e) => {
-      const file = e.target?.files?.[0];
-      e.target.value = "";
-      if (!file) return;
-      setIsImportingCsv(true);
-      try {
-        const text = await file.text();
-        const { headers, rows } = parseServiceCsv(text);
-        let created = 0;
-        let skipped = 0;
-        for (const row of rows) {
-          const payload = csvRowToServicePayload(headers, row);
-          if (!payload) {
-            skipped++;
-            continue;
-          }
-          try {
-            await Service.create(payload);
-            created++;
-          } catch (err) {
-            console.warn("Catalog CSV import row failed:", payload.name, err);
-            skipped++;
-          }
-        }
-        await refetchAll();
-        toast({
-          title: "Import complete",
-          description: `${created} item(s) imported${skipped ? `, ${skipped} skipped.` : "."}`,
-          variant: "default",
-        });
-      } catch (error) {
-        console.error("Catalog import failed:", error);
-        toast({
-          title: "Import failed",
-          description: error?.message || "Could not parse CSV.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsImportingCsv(false);
-      }
-    },
-    [refetchAll, toast]
-  );
-
   return (
     <>
       {inventoryProducts.length > 0 && (
@@ -1315,12 +1271,27 @@ export default function Inventory() {
           setPageSize(size);
           setPage(1);
         }}
-        isImporting={isImportingCsv}
         isExporting={isExportingCsv}
         exportDisabled={sortedProducts.length === 0}
-        onImportFile={handleImportCsvFile}
+        onImport={() => setImportDialogOpen(true)}
         onExportCsv={handleExportCsv}
         onOpenIndustryTemplates={() => setIndustryTemplatesOpen(true)}
+      />
+
+      <ProductImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        canImportProducts={canUseInventory}
+        onUpgrade={() =>
+          openUpgradeModal({
+            featureKey: "inventory",
+            title: "Unlock inventory",
+            description: "Importing stock-tracked products is on Business and Growth. You can still import services on your plan.",
+          })
+        }
+        onImported={() => {
+          refetchAll().catch((e) => console.warn("Inventory: refresh after import failed", e));
+        }}
       />
 
       <IndustryTemplatesDialog

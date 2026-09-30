@@ -373,11 +373,19 @@ export async function loadCompanyMembership(supabaseAdmin, userId, opts = {}) {
   const { data: membership, error } = await fetchMembershipForOrg(supabaseAdmin, userId, orgId);
   if (error) throw error;
 
-  const { data: org, error: orgError } = await supabaseAdmin
+  let { data: org, error: orgError } = await supabaseAdmin
     .from("organizations")
-    .select("owner_id")
+    .select("owner_id, is_demo")
     .eq("id", orgId)
     .maybeSingle();
+  // Before the Demo Mode migration (20261001120000) the column does not exist: nothing is a demo.
+  if (orgError && (orgError.code === "42703" || /is_demo/i.test(orgError.message || ""))) {
+    ({ data: org, error: orgError } = await supabaseAdmin
+      .from("organizations")
+      .select("owner_id")
+      .eq("id", orgId)
+      .maybeSingle());
+  }
 
   if (orgError) throw orgError;
 
@@ -404,6 +412,8 @@ export async function loadCompanyMembership(supabaseAdmin, userId, opts = {}) {
     portalRevokedAt: membership?.portal_revoked_at || null,
     posAccessDisabledAt: membership?.pos_access_disabled_at || null,
     portalSlug: portalRequested ? opts.portalSlug : null,
+    // Demo Mode workspace (server-set flag): no real email, payments, invites or integrations.
+    isDemo: Boolean(org?.is_demo),
   };
 }
 

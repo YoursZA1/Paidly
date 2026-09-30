@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { createPageUrl, createSignupUrl } from "@/utils";
 
 /**
  * @param {{ active?: "login" | "signup" | null, onLoginClick: () => void }} props
  */
 export default function Navbar({ active = null, onLoginClick }) {
+  // Section anchors live on the homepage; from other marketing pages (e.g. /demo) link back to them.
+  const { pathname } = useLocation();
+  const sectionHref = (hash) => (pathname === "/" || /^\/home$/i.test(pathname) ? hash : `/${hash}`);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -45,7 +48,7 @@ export default function Navbar({ active = null, onLoginClick }) {
           ].map((item) => (
             <a
               key={item.label}
-              href={item.href}
+              href={sectionHref(item.href)}
               className="relative py-1 transition-colors duration-150 hover:text-white"
             >
               {item.label}
@@ -56,6 +59,9 @@ export default function Navbar({ active = null, onLoginClick }) {
             className="transition-colors duration-150 hover:text-white"
           >
             How to
+          </Link>
+          <Link to="/demo" className="font-medium text-[#FF7A3D] transition-colors duration-150 hover:text-[#FF9A66]">
+            Live demo
           </Link>
         </nav>
 

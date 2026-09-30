@@ -475,6 +475,15 @@ const SupabaseAuthService = {
     return data;
   },
 
+  /**
+   * Demo Mode: the server (POST /api/auth/demo) mints a normal Supabase session for a dedicated demo
+   * account and returns only its tokens. Same activation path as API sign-in.
+   */
+  async signInWithIssuedTokens({ access_token, refresh_token }) {
+    if (!access_token || !refresh_token) throw new Error("The demo session could not be started.");
+    return activateSessionFromApiTokens({ access_token, refresh_token }, "Starting the demo was interrupted. Please try again.");
+  },
+
   async signOut() {
     const { error } = await supabase.auth.signOut();
     if (error) throwIfSupabaseAuthError(error, { abortMessage: "Sign-out was interrupted. Please try again." });

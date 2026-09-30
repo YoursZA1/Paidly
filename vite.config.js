@@ -46,7 +46,8 @@ export default defineConfig(async ({ mode }) => {
           manifest: false,
           workbox: {
             globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2,webmanifest}', 'index.html'],
-            globIgnores: ['**/*.map', '**/paidly_data.xlsx'],
+            // Import-only code (PDF reader, spreadsheet worker) loads on demand, not at install.
+            globIgnores: ['**/*.map', '**/paidly_data.xlsx', 'vendor/tesseract/**', 'assets/pdfjs-*.js', 'assets/productImportSheet.worker-*.js'],
             navigateFallback: 'index.html',
             navigateFallbackDenylist: [/^\/api(?:\/|$)/i, /^\/sw\.js$/i, /^\/workbox-/i],
             cleanupOutdatedCaches: true,
@@ -116,6 +117,8 @@ export default defineConfig(async ({ mode }) => {
             if (id.includes('framer-motion')) return 'framer-motion';
             if (id.includes('lucide-react')) return 'lucide';
             if (id.includes('xlsx')) return 'xlsx';
+            // Product Import PDF reading — loaded only when someone imports a PDF.
+            if (id.includes('pdfjs-dist')) return 'pdfjs';
             // Safe leaf splits (used widely but rarely pull pdf stack); avoids vendor↔react/radix cycles.
             if (id.includes('date-fns')) return 'date-fns';
             if (id.includes('/axios/') || id.includes('node_modules/axios')) return 'axios';

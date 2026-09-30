@@ -38,6 +38,7 @@ import { describeDashboardSubscriptionBanner } from "../../../shared/subscriptio
 import { describePayfastCheckoutSignature } from "../payfastCustomSignature.js";
 import { randomBytes } from "node:crypto";
 import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
+import { DEMO_MODE_RESTRICTED, isDemoUserId } from "../demo/demoMode.js";
 
 const PENDING_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -200,6 +201,14 @@ export async function handleSubscriptionCreate(req, res) {
       success: false,
       code: auth.status === 401 ? "AUTH_REQUIRED" : "FORBIDDEN",
       error: auth.error,
+    });
+  }
+  if (await isDemoUserId(auth.user.id)) {
+    return json(res, 403, {
+      success: false,
+      demo: true,
+      code: DEMO_MODE_RESTRICTED,
+      error: "Demo Mode — subscription management requires a real Paidly account.",
     });
   }
   const user = auth.user;
@@ -849,6 +858,14 @@ export async function handleSubscriptionCancel(req, res) {
   // 1) Authenticate
   const auth = await requireBearerUser(req, supabase);
   if (auth.error) return json(res, auth.status, { error: auth.error });
+  if (await isDemoUserId(auth.user.id)) {
+    return json(res, 403, {
+      success: false,
+      demo: true,
+      code: DEMO_MODE_RESTRICTED,
+      error: "Demo Mode — subscription management requires a real Paidly account.",
+    });
+  }
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
   let subscriptionId = String(body.subscriptionId || body.id || "").trim();
@@ -1105,6 +1122,14 @@ export async function handleSubscriptionChange(req, res) {
 
   const auth = await requireBearerUser(req, supabase);
   if (auth.error) return json(res, auth.status, { error: auth.error });
+  if (await isDemoUserId(auth.user.id)) {
+    return json(res, 403, {
+      success: false,
+      demo: true,
+      code: DEMO_MODE_RESTRICTED,
+      error: "Demo Mode — subscription management requires a real Paidly account.",
+    });
+  }
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const { companyId, isOwner } = await resolveBillingCompany(supabase, auth.user.id);
@@ -1316,6 +1341,14 @@ export async function handleSubscriptionAbandon(req, res) {
   if (!supabase) return json(res, 503, { error: "Server configuration error (Supabase)" });
   const auth = await requireBearerUser(req, supabase);
   if (auth.error) return json(res, auth.status, { error: auth.error });
+  if (await isDemoUserId(auth.user.id)) {
+    return json(res, 403, {
+      success: false,
+      demo: true,
+      code: DEMO_MODE_RESTRICTED,
+      error: "Demo Mode — subscription management requires a real Paidly account.",
+    });
+  }
 
   const nowIso = new Date().toISOString();
   const { data, error } = await supabase

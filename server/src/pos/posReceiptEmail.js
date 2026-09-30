@@ -2,6 +2,7 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 import { isValidEmail, isValidUuid, sanitizeEmailHtmlBody, sanitizeOneLine, validateBase64Pdf } from "../inputValidation.js";
 import { sendHtmlEmail } from "../sendInvoice.js";
 import { buildPosReceiptView, receiptPdfFilename, renderPosReceiptInnerHtml } from "./posReceipt.js";
+import { isDemoMembership, sendDemoNotSent } from "../demo/demoMode.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -64,6 +65,10 @@ export async function handlePosReceiptEmail(req, res, gate) {
         filename: receiptPdfFilename(view),
       },
     ];
+  }
+
+  if (await isDemoMembership(gate.membership)) {
+    return sendDemoNotSent(res, { channel: "email", to, subject, kind: "pos_receipt" });
   }
 
   const result = await sendHtmlEmail(to, subject, html, view.brandName || "Paidly", mailOpts);

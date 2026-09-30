@@ -5,6 +5,7 @@ import {
   paidlyPayOpenUrl,
   resolvePaidlyPayOrigin,
 } from "../../../../shared/payments/paidlyPayContract.js";
+import { demoPaymentNextAction } from "../../../../shared/demo/demoPayments.js";
 
 /**
  * Physical card-present terminal on the native till / Paidly Pay.
@@ -19,6 +20,15 @@ export const cardTerminalProvider = {
     return cardTerminalRailEnabled();
   },
   async createCharge(intent, chargeCtx = {}) {
+    // Demo Mode: the visitor picks a simulated outcome in the app. No terminal, no provider.
+    if (intent?.metadata?.demo_simulated === true) {
+      return {
+        status: "requires_action",
+        code: "DEMO_PAYMENT_SIMULATED",
+        error: "Demo Mode — choose a simulated outcome. No money moves.",
+        next_action: demoPaymentNextAction(intent?.id || null),
+      };
+    }
     const rail = chargeCtx.cardRail || intent.metadata?.card_rail || {};
     const railId = String(rail.id || "paidly_pay").trim().toLowerCase();
     const railLabel = String(rail.label || (railId === "yoco" ? "Yoco" : railId === "square" ? "Square" : "Paidly Pay")).trim();

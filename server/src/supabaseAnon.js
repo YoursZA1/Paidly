@@ -16,6 +16,26 @@ const supabaseAnonKey =
  * Anonymous Supabase client for password sign-in on the server (same as browser anon key).
  * Optional: route returns 503 if missing so the API can still boot without it.
  */
+/**
+ * Supabase client that acts AS the signed-in caller (their access token, anon key): every query and
+ * storage call goes through RLS exactly like the browser would. Use it for writes the database should
+ * authorize itself (plan-feature triggers, company RLS) — never the service role for those.
+ * @param {string} accessToken verified bearer token from the request
+ */
+export function getSupabaseUserClient(accessToken) {
+  if (!supabaseUrl || !supabaseAnonKey || !accessToken) {
+    return null;
+  }
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
 export function getSupabaseAnonClient() {
   if (!supabaseUrl || !supabaseAnonKey) {
     return null;

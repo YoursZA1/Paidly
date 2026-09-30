@@ -43,9 +43,22 @@ serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { error: authError } = await supabase.auth.getUser(accessToken);
+    const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
     if (authError) {
       return new Response("Unauthorized (invalid token)", { status: 401, headers: corsHeaders });
+    }
+
+    // Demo Mode (Try Live Demo): nothing leaves Paidly. demo_sessions is server-written only.
+    const { data: demoRow } = await supabase
+      .from("demo_sessions")
+      .select("user_id")
+      .eq("user_id", authData?.user?.id ?? "")
+      .maybeSingle();
+    if (demoRow?.user_id) {
+      return new Response(
+        JSON.stringify({ success: true, demo: true, sent: false, message: "Demo Mode — message not sent." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     let payload: any;

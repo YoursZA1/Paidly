@@ -85,6 +85,8 @@ import { handleLeaveRoute, resolveLeaveRoute } from "./leave/leaveRoutes.js";
 import { registerPaymentIntentRoutes } from "./payments/registerPaymentIntentRoutes.js";
 import { registerAdminCompanyInviteRoutes } from "./adminCompanyInviteRoutes.js";
 import authSignInHandler from "./auth/authSignInApi.js";
+import { handleDemoEnd, handleDemoReset, handleDemoStart } from "./demo/demoSessionApi.js";
+import { isDemoUserId, sendDemoNotSent, sendDemoRestricted } from "./demo/demoMode.js";
 import authSignUpHandler from "./auth/authSignUpApi.js";
 import authWelcomeEmailHandler from "./auth/authWelcomeEmailApi.js";
 import authForgotPasswordHandler from "./auth/authForgotPasswordApi.js";
@@ -814,6 +816,12 @@ app.post("/api/auth/sign-up", authSignUpHandler);
 /** Paidly welcome email — once per verified business owner (server/src/auth/authWelcomeEmailApi.js). */
 app.post("/api/auth/welcome", authWelcomeEmailHandler);
 
+/** Demo Mode (server/src/demo/demoSessionApi.js; Vercel: api/auth/[route].js). */
+app.options(["/api/auth/demo", "/api/auth/demo-reset", "/api/auth/demo-end"], (req, res) => handleDemoStart(req, res));
+app.post("/api/auth/demo", handleDemoStart);
+app.post("/api/auth/demo-reset", handleDemoReset);
+app.post("/api/auth/demo-end", handleDemoEnd);
+
 /**
  * Track when a client opens an invoice link (tracking_token in message_logs).
  * No auth required; called from public invoice view when URL has ?token=...
@@ -949,6 +957,10 @@ app.post("/api/send-invoice", requireAuthMiddleware, async (req, res) => {
     const invNum = sanitizeOneLine(parsed.invoiceNum, 120);
     if (!invNum) {
       return res.status(400).json({ error: "Invalid invoice number" });
+    }
+
+    if (await isDemoUserId(user.id)) {
+      return sendDemoNotSent(res, { channel: "email", to: toEmail, subject: `Invoice ${invNum}`, kind: "invoice" });
     }
 
     const senderName = sanitizeOneLine(parsed.fromName ?? "Paidly", 200) || "Paidly";
@@ -1439,6 +1451,10 @@ app.post("/api/account/delete", async (req, res) => {
     const { user, error: authErr } = await getUserFromRequest(req);
     if (authErr || !user?.id) {
       return res.status(401).json({ error: authErr || "Unauthorized" });
+    }
+
+    if (await isDemoUserId(user.id)) {
+      return sendDemoRestricted(res, "Deleting an account", { hint: "Use “End demo” to leave Demo Mode." });
     }
 
     const phrase = String(req.body?.confirmPhrase ?? "").trim();

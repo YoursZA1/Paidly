@@ -543,6 +543,17 @@ export default async function handler(req, res) {
         ...out,
       });
     }
+    if (job === "demo-cleanup") {
+      // Demo Mode: expired "Try Live Demo" workspaces + their demo auth users (bounded batch).
+      const { runDemoCleanup } = await import("../server/src/demo/demoSessionApi.js");
+      const out = await runDemoCleanup({ limit: Math.min(200, Math.max(1, Number(req.query?.limit || 100))) });
+      return res.status(200).json({
+        ok: true,
+        at: new Date().toISOString(),
+        path: "demo-cleanup",
+        ...out,
+      });
+    }
     if (job === "subscription-pending-expiry") {
       const supabase = getSupabaseAdmin();
       const pending = await expirePendingSubscriptions(supabase);

@@ -29,6 +29,7 @@ import {
 } from "./companyTeamInviteDelivery.js";
 import { companyInviteShareUrl } from "./companyInviteAppUrl.js";
 import { entitlementsEnforceEnabled, resolveEntitlementForCompany } from "./billing/entitlements.js";
+import { sendDemoRestricted } from "./demo/demoMode.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -378,6 +379,7 @@ export async function handleCompanyTeamInvite(req, res) {
   try {
     const gate = await requireCompanyAdmin(req, res);
     if (!gate.ok) return gate.response;
+    if (gate.membership?.isDemo) return sendDemoRestricted(res, "Inviting team members");
 
     const body = normalizeRequestBody(req);
     const email = String(body.email || "")
@@ -756,6 +758,7 @@ export async function handleCompanyTeamRolePatch(req, res) {
   try {
     const gate = await requireCompanyAdmin(req, res);
     if (!gate.ok) return gate.response;
+    if (gate.membership?.isDemo) return sendDemoRestricted(res, "User and role management");
 
     const body = normalizeRequestBody(req);
     const userId = String(body.user_id || "").trim();
@@ -983,6 +986,7 @@ export async function handleCompanyInviteRevoke(req, res) {
   try {
     const gate = await requireCompanyAdmin(req, res);
     if (!gate.ok) return gate.response;
+    if (gate.membership?.isDemo) return sendDemoRestricted(res, "Managing invitations");
 
     const inviteId = String(req.params?.id || req.query?.id || req.body?.id || "").trim();
     if (!inviteId) return jsonError(res, 400, "invite id is required");
@@ -1030,6 +1034,7 @@ export async function handleCompanyInviteResend(req, res) {
   try {
     const gate = await requireCompanyAdmin(req, res);
     if (!gate.ok) return gate.response;
+    if (gate.membership?.isDemo) return sendDemoRestricted(res, "Sending invitations");
 
     const inviteId = String(req.params?.id || req.query?.id || req.body?.id || "").trim();
     if (!inviteId) return jsonError(res, 400, "invite id is required");
@@ -1158,6 +1163,12 @@ export function registerCompanyTeamRoutes(app) {
     import("./company/emailTemplatesRoute.js").then(({ handleCompanyEmailTemplates }) =>
       handleCompanyEmailTemplates(req, res)
     );
+  });
+  app.all("/api/company/receipts", (req, res) => {
+    import("./expenses/receiptScanRoutes.js").then(({ handleReceiptScanRoute }) => handleReceiptScanRoute(req, res));
+  });
+  app.all("/api/company/product-import", (req, res) => {
+    import("./catalog/productImportRoutes.js").then(({ handleProductImportRoute }) => handleProductImportRoute(req, res));
   });
   app.all("/api/company/employees", (req, res) => {
     import("./workforce/workforceRoutes.js").then(({ handleWorkforceEmployees }) =>

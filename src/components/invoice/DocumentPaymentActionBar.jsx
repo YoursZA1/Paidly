@@ -25,6 +25,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { INVOICE_STATUS, normalizeInvoiceStatus } from "@shared/commercial/documentStatuses.js";
 import { createPageUrl } from "@/utils";
 import { dueFollowUpLabel } from "@shared/ux/doneStates.js";
+import DemoInvoicePaymentDialog from "@/components/demo/DemoInvoicePaymentDialog";
+import { notifyDemoNotSent } from "@/lib/demo/demoModeState";
 
 function isOverdue(invoice) {
   if (!invoice?.delivery_date) return false;
@@ -44,6 +46,7 @@ export default function DocumentPaymentActionBar({
   const { toast } = useToast();
   const [snapshot, setSnapshot] = useState(null);
   const [busy, setBusy] = useState("");
+  const [demoPay, setDemoPay] = useState(null);
 
   const loadHistory = useCallback(async () => {
     if (!invoice?.id) return;
@@ -88,6 +91,15 @@ export default function DocumentPaymentActionBar({
         shareToken,
         retry,
       });
+      if (result?.demo && result?.simulated) {
+        setDemoPay({
+          invoiceId: invoice.id,
+          invoiceNumber: result.invoice_number || invoice.invoice_number,
+          amount: result.amount_due,
+          currency: result.currency || currency,
+        });
+        return;
+      }
       if (result.redirect_url) {
         window.location.assign(result.redirect_url);
         return;
@@ -112,7 +124,11 @@ export default function DocumentPaymentActionBar({
     if (publicMode) return;
     setBusy("remind");
     try {
-      await remindDocumentPayment(invoice.id);
+      const reminded = await remindDocumentPayment(invoice.id);
+      if (reminded?.demo) {
+        notifyDemoNotSent(reminded.preview);
+        return;
+      }
       // Toast tier (Done Screen standard): what happened + what is still pending + the next loop.
       const due = dueFollowUpLabel(invoice?.delivery_date);
       toast({
@@ -142,6 +158,16 @@ export default function DocumentPaymentActionBar({
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 md:pointer-events-auto md:static md:inset-auto">
+      <DemoInvoicePaymentDialog
+        open={Boolean(demoPay)}
+        onOpenChange={(next) => (next ? null : setDemoPay(null))}
+        demo={demoPay}
+        shareToken={shareToken}
+        onSettled={() => {
+          onRefresh?.();
+          void loadHistory();
+        }}
+      />
       <div className="pointer-events-auto border-t border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur-sm md:rounded-xl md:border md:shadow-sm">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-[max(0.25rem,env(safe-area-inset-bottom))] md:pb-0">
           <div className="min-w-0">

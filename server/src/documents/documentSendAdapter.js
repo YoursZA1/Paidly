@@ -12,6 +12,7 @@ import {
   resolveDocumentDeliveryUrl,
   sanitizeDocumentEventMetadata,
 } from "../../../shared/documents/documentEngine.js";
+import { demoRestrictedError, suppressForDemoOrg } from "../demo/demoMode.js";
 
 function escapeHtml(value) {
   return String(value || "")
@@ -69,6 +70,9 @@ export async function sendPayslipEmail({
       DOCUMENT_ENGINE_ERROR.UNAUTHORIZED_DOCUMENT_ACCESS,
       "Refusing to email an unencrypted payslip PDF."
     );
+  }
+  if (await suppressForDemoOrg(orgId, "payslip")) {
+    throw demoRestrictedError("Emailing payslips");
   }
   const email = String(to || "").trim();
   if (!email) {

@@ -4,6 +4,7 @@ import { buildPeopleCalendarEvents, selectDuePeopleReminders } from "../../../sh
 import { normalizeEmployerPayrollSettings } from "../../../shared/payroll/employerSnapshot.js";
 import { isWorkforceEmployeeActive } from "../../../shared/workforce/employeeLifecycle.js";
 import { johannesburgYmd } from "../../../shared/payroll/dates.js";
+import { suppressForDemoOrg } from "../demo/demoMode.js";
 
 /**
  * Daily HR reminders for upcoming birthdays and work anniversaries.
@@ -111,6 +112,8 @@ export async function runPeopleReminders(opts = {}) {
   }
 
   for (const orgId of orgIds) {
+    // Demo Mode workspaces never send reminders (fictional staff, no real inboxes).
+    if (await suppressForDemoOrg(orgId, "people_reminder")) continue;
     const roster = byOrg.get(orgId).filter((m) => !m.disabled_at && isWorkforceEmployeeActive(m));
     const org = orgById.get(orgId);
     const leadDays = normalizeEmployerPayrollSettings(org?.payroll_settings).people_reminder_lead_days;

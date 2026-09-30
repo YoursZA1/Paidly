@@ -1,305 +1,432 @@
-import React, { useState } from "react";
-import { createPortal } from "react-dom";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { X, Camera, Upload, Loader2, FileText, CheckCircle2 } from "lucide-react";
-import { UploadToReceipts, ExtractDataFromUploadedFile } from "@/api/integrations";
-import { getReceiptExtractionSchema, parsedReceiptToExpenseForm } from "@/constants/receiptOcrExtractionSpec";
-import { extractReceiptDataWithTesseract } from "@/utils/receiptTesseractOcr";
+import { useCallback, useRef, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { format, parseISO } from "date-fns";
 import {
-    getReceiptScanThrottleState,
-    recordReceiptScanAttempt,
-} from "@/utils/receiptOcrRateLimit";
-import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
+  AlertTriangle,
+  Camera,
+  Check,
+  Circle,
+  FileWarning,
+  Loader2,
+  PencilLine,
+  ScanLine,
+  Upload,
+  WifiOff,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import DoneState from "@/components/shared/DoneState";
+import { formatCurrency } from "@/components/CurrencySelector";
+import { useUpgradeModalStore } from "@/stores/useUpgradeModalStore";
+import ReceiptCamera from "@/components/cashflow/receipt/ReceiptCamera";
+import ReceiptReviewForm from "@/components/cashflow/receipt/ReceiptReviewForm";
+import { STEPS, useReceiptScan } from "@/components/cashflow/receipt/useReceiptScan";
 
-function formatRetryMinutes(ms) {
-    return Math.max(1, Math.ceil(ms / 60000));
+const ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
+const STEP_LABELS = {
+  uploading: "Uploading",
+  processing: "Processing receipt",
+  reading: "Reading receipt",
+  checking: "Checking details",
+};
+
+function useCoarsePointer() {
+  const [coarse] = useState(() => {
+    try {
+      return window.matchMedia("(pointer: coarse)").matches;
+    } catch {
+      return false;
+    }
+  });
+  return coarse;
 }
 
-const IMAGE_TYPES = [
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-    "image/heic",
-    "image/heif",
-    "image/bmp",
-    "image/tiff",
-];
+function ChooseSource({ onFile, onCamera, error }) {
+  const inputRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const coarse = useCoarsePointer();
+  const cameraSupported = typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 
-/** Steps: 1 Upload Photo → 2 OCR Reads Receipt → 3 Confirm & Save (in form) */
-const STEP_UPLOAD = 1;
-const STEP_OCR_RESULT = 2;
+  const scanButton = (
+    <Button type="button" size="lg" className="min-h-14 w-full gap-2 text-base" onClick={onCamera} variant={coarse ? "default" : "outline"}>
+      <Camera className="h-5 w-5" aria-hidden="true" />
+      Scan receipt
+    </Button>
+  );
+  const uploadButton = (
+    <Button
+      type="button"
+      size="lg"
+      className="min-h-14 w-full gap-2 text-base"
+      variant={coarse ? "outline" : "default"}
+      onClick={() => inputRef.current?.click()}
+    >
+      <Upload className="h-5 w-5" aria-hidden="true" />
+      Upload receipt
+    </Button>
+  );
 
-/** After parsing, populate the expense form: vendor, amount, date + receipt_url, attachments, etc. */
-function buildScanPayload(data, file_url, file) {
-    const normalizeAmount = (value) => {
-        if (value == null || value === "") return "";
-        const n = Number.parseFloat(String(value).replace(/[^\d.,-]/g, "").replace(",", "."));
-        return Number.isFinite(n) ? n : "";
-    };
-    const normalizeDate = (value) => {
-        const s = String(value || "").trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-        return new Date().toISOString().slice(0, 10);
-    };
-    const expense = parsedReceiptToExpenseForm(data, {
-        receipt_url: file_url,
-        attachments: [{ name: file.name, url: file_url }],
-        is_claimable: true,
-        payment_method: "bank_transfer",
-        notes: "",
-    });
-    expense.amount = normalizeAmount(expense.amount);
-    expense.date = normalizeDate(expense.date);
-    expense.description = String(expense.description || "").trim() || "Receipt";
-    return expense;
+  return (
+    <div className="space-y-5">
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) onFile(file, "upload");
+        }}
+        className={`rounded-2xl border-2 border-dashed p-6 text-center transition-colors ${
+          dragging ? "border-primary bg-primary/5" : "border-border bg-muted/30"
+        }`}
+      >
+        <ScanLine className="mx-auto mb-3 h-10 w-10 text-primary" aria-hidden="true" />
+        <p className="font-medium text-foreground">Add a receipt and Paidly fills in the expense</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          You&apos;ll check the details before anything is saved.
+          <span className="hidden sm:inline"> You can also drop a file here.</span>
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {coarse ? (
+          <>
+            {cameraSupported ? scanButton : null}
+            {uploadButton}
+          </>
+        ) : (
+          <>
+            {uploadButton}
+            {cameraSupported ? scanButton : null}
+          </>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT}
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) onFile(file, "upload");
+        }}
+      />
+      <p className="text-center text-xs text-muted-foreground">JPG, PNG, WEBP or PDF · up to 10 MB</p>
+      {error ? (
+        <p className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" role="alert">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
-function StepIndicator({ currentStep }) {
-    const steps = [
-        { num: 1, label: "Upload Photo" },
-        { num: 2, label: "OCR Reads Receipt" },
-    ];
-    return (
-        <div className="flex items-center justify-center gap-2 mb-6">
-            {steps.map(({ num, label }) => (
-                <React.Fragment key={num}>
-                    <div className="flex flex-col items-center">
-                        <div
-                            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
-                                currentStep > num
-                                    ? "bg-primary text-primary-foreground"
-                                    : currentStep === num
-                                        ? "bg-primary text-primary-foreground ring-2 ring-primary/30"
-                                        : "bg-muted text-muted-foreground"
-                            }`}
-                        >
-                            {currentStep > num ? <CheckCircle2 className="w-4 h-4" /> : num}
-                        </div>
-                        <span className="mt-1 hidden text-xs text-muted-foreground sm:inline">{label}</span>
-                    </div>
-                    {num < steps.length && (
-                        <div className={`h-0.5 w-6 sm:w-8 ${currentStep > num ? "bg-primary" : "bg-muted"}`} />
-                    )}
-                </React.Fragment>
-            ))}
-        </div>
-    );
-}
-
-export default function ReceiptScanner({ onScanComplete, onCancel }) {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [useBrowserOcr, setUseBrowserOcr] = useState(false);
-    const [result, setResult] = useState(null);
-
-    const currentStep = result ? STEP_OCR_RESULT : loading ? STEP_OCR_RESULT : STEP_UPLOAD;
-
-    const handleScan = async (file) => {
-        if (!file) return;
-
-        const isImage = IMAGE_TYPES.includes((file.type || "").toLowerCase());
-        if (useBrowserOcr && !isImage) {
-            setError("Browser OCR works with images (JPG, PNG). Use server extraction for PDFs.");
-            return;
-        }
-
-        const throttle = getReceiptScanThrottleState();
-        if (throttle.blocked) {
-            setError(
-                `Too many receipt scans in this tab. Try again in about ${formatRetryMinutes(throttle.retryAfterMs)} minute(s).`
+function Processing({ steps, readProgress, preview }) {
+  const current = STEPS.find((s) => steps[s] === "active") || STEPS.find((s) => !steps[s]) || "checking";
+  return (
+    <div className="flex flex-col items-center gap-6 py-4 sm:flex-row sm:items-start">
+      {preview ? (
+        <img src={preview} alt="" className="h-40 w-32 shrink-0 rounded-lg border border-border object-cover opacity-80 sm:h-48 sm:w-36" />
+      ) : null}
+      <div className="w-full space-y-4">
+        <p className="sr-only" role="status" aria-live="polite">
+          {STEP_LABELS[current]}…
+        </p>
+        <ol className="space-y-3" aria-label="Progress">
+          {STEPS.map((step) => {
+            const status = steps[step] || "pending";
+            return (
+              <li key={step} className="flex items-center gap-3 text-sm">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-background">
+                  {status === "done" ? (
+                    <Check className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                  ) : status === "active" ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
+                  ) : status === "error" ? (
+                    <X className="h-4 w-4 text-destructive" aria-hidden="true" />
+                  ) : (
+                    <Circle className="h-2.5 w-2.5 text-muted-foreground" aria-hidden="true" />
+                  )}
+                </span>
+                <span className={status === "pending" ? "text-muted-foreground" : "font-medium text-foreground"}>
+                  {STEP_LABELS[step]}
+                  {step === "reading" && status === "active" && readProgress > 0 ? ` · ${Math.round(readProgress * 100)}%` : ""}
+                  <span className="sr-only">
+                    {status === "done" ? " (done)" : status === "active" ? " (in progress)" : status === "error" ? " (failed)" : ""}
+                  </span>
+                </span>
+              </li>
             );
-            return;
-        }
+          })}
+        </ol>
+        <p className="text-xs text-muted-foreground">You can keep using Paidly — this takes a few seconds.</p>
+      </div>
+    </div>
+  );
+}
 
-        setLoading(true);
-        setError(null);
-        setResult(null);
+function Failure({ failure, uploaded, onRetry, onManual, onRetake, onUploadAnother, onUpgrade, onClose }) {
+  const presets = {
+    invalid_file: { icon: FileWarning, title: "This file can't be used" },
+    upload: { icon: AlertTriangle, title: "We couldn't upload this receipt." },
+    network: { icon: WifiOff, title: "Connection problem" },
+    unreadable: { icon: FileWarning, title: "We couldn't read this receipt clearly." },
+    not_receipt: { icon: FileWarning, title: "This image doesn't appear to contain a readable receipt." },
+    upgrade: { icon: AlertTriangle, title: "Upgrade to add expenses" },
+    forbidden: { icon: AlertTriangle, title: "You can't add this expense" },
+  };
+  const preset = presets[failure.kind] || presets.unreadable;
+  const Icon = preset.icon;
+  let body = failure.message;
+  if (failure.kind === "unreadable") body = "You can enter the details manually — the receipt stays attached.";
+  if (failure.kind === "not_receipt") body = "Make sure the whole receipt is in the photo, in good light.";
+  if (failure.kind === "upload") body = "Check your connection and try again.";
 
-        let file_url = null;
-        try {
-            recordReceiptScanAttempt();
-            const uploadRes = await retryOnAbort(() => UploadToReceipts({ file }), 2, 450);
-            file_url = uploadRes?.file_url || null;
-            if (!file_url) throw new Error("Receipt upload failed");
+  const actions = [];
+  if (failure.kind === "upload" || failure.kind === "network") actions.push({ label: "Try again", onClick: onRetry, primary: true });
+  if ((failure.kind === "unreadable" || failure.kind === "network") && uploaded) {
+    actions.push({ label: "Enter manually", onClick: onManual, primary: failure.kind === "unreadable", icon: PencilLine });
+  }
+  if (failure.kind === "not_receipt" || failure.kind === "invalid_file" || failure.kind === "unreadable") {
+    actions.push({ label: "Retake", onClick: onRetake, primary: failure.kind !== "unreadable", icon: Camera });
+    actions.push({ label: "Upload another", onClick: onUploadAnother, icon: Upload });
+  }
+  if (failure.kind === "upgrade") actions.push({ label: "See plans", onClick: onUpgrade, primary: true });
+  if (failure.kind === "forbidden") actions.push({ label: "Close", onClick: onClose, primary: true });
 
-            if (useBrowserOcr && isImage) {
-                const data = await retryOnAbort(() => extractReceiptDataWithTesseract(file), 1, 350);
-                const payload = buildScanPayload(data, file_url, file);
-                setResult({
-                    total: data.total != null ? String(data.total) : data.raw?.match(/total\s*R?\s*(\d+[.,]\d+)/i)?.[1] ?? null,
-                    raw: data.raw || "",
-                    payload,
-                });
-            } else {
-                // Server extraction may not be configured in this app build (custom client).
-                // Handle gracefully: if extraction fails or is unavailable, still attach the receipt and let user fill manually.
-                let apiResult = null;
-                try {
-                    apiResult = await retryOnAbort(() => ExtractDataFromUploadedFile({
-                        file_url,
-                        json_schema: getReceiptExtractionSchema(),
-                    }), 1, 350);
-                } catch (e) {
-                    apiResult = { status: "error", error: e?.message || String(e) };
-                }
+  return (
+    <div className="space-y-5 py-2 text-center" role="alert">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10">
+        <Icon className="h-6 w-6 text-amber-600" aria-hidden="true" />
+      </span>
+      <div className="space-y-1.5">
+        <p className="text-base font-semibold text-foreground">{preset.title}</p>
+        <p className="text-sm text-muted-foreground">{body}</p>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+        {actions.map((a) => {
+          const ActionIcon = a.icon;
+          return (
+            <Button key={a.label} type="button" variant={a.primary ? "default" : "outline"} className="min-h-12 gap-2" onClick={a.onClick}>
+              {ActionIcon ? <ActionIcon className="h-4 w-4" aria-hidden="true" /> : null}
+              {a.label}
+            </Button>
+          );
+        })}
+      </div>
+      {failure.kind === "not_receipt" && uploaded ? (
+        <button type="button" onClick={onManual} className="text-sm text-primary underline-offset-2 hover:underline">
+          It is a receipt — enter the details myself
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
-                // If server extraction isn't available, and this is an image, fall back to browser OCR automatically.
-                let extracted = apiResult?.status === "success" && apiResult.output ? apiResult.output : null;
-                let raw = "";
-                if (!extracted && isImage) {
-                    try {
-                        const data = await retryOnAbort(() => extractReceiptDataWithTesseract(file), 1, 350);
-                        extracted = data;
-                        raw = data?.raw || "";
-                    } catch (e) {
-                        // ignore; we'll still return an attached receipt payload
-                        if (import.meta.env.DEV) {
-                            console.warn("[ReceiptScanner] Browser OCR fallback failed:", e?.message || e);
-                        }
-                    }
-                }
+/**
+ * Scan Receipt: photo/upload → Paidly reads it → review → Save expense. The expense is created only on Save.
+ *
+ * @param {{
+ *   onCancel: () => void,
+ *   onExpenseCreated?: (expense: any) => void,
+ *   onViewExpense?: (expenseOrId: any) => void,
+ * }} props
+ */
+export default function ReceiptScanner({ onCancel, onExpenseCreated, onViewExpense }) {
+  const scan = useReceiptScan({ onExpenseCreated });
+  const { state } = scan;
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [chooseError, setChooseError] = useState("");
+  const openUpgradeModal = useUpgradeModalStore((s) => s.openUpgradeModal);
+  const formId = "receipt-review-form";
+  const cameraFallbackRef = useRef(null);
 
-                if (!extracted && apiResult?.error) {
-                    setError(apiResult.error);
-                }
+  const hasUnsavedReceipt = Boolean(state.receiptPath) && state.phase !== "done";
 
-                const payload = buildScanPayload(extracted, file_url, file);
-                const total = payload?.amount != null ? String(payload.amount) : null;
-                setResult({ total, raw, payload });
-            }
-        } catch (err) {
-            console.error("Error scanning receipt:", err);
-            const msg = err?.message || "Failed to scan receipt. Please try again.";
-            if (isAbortError(err)) {
-                // Mobile Safari / flaky networks may abort in-flight requests; preserve progress if upload succeeded.
-                if (file_url) {
-                    const payload = buildScanPayload(null, file_url, file);
-                    setResult({ total: payload?.amount ? String(payload.amount) : null, raw: "", payload });
-                    setError("Scan was interrupted, but the receipt was uploaded. Continue and fill details manually.");
-                } else {
-                    setError("The scan was interrupted on mobile/network. Please retry and keep the app open until upload completes.");
-                }
-            } else {
-                setError(msg);
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
+  const close = useCallback(() => {
+    scan.abandon();
+    onCancel();
+  }, [onCancel, scan]);
 
-    const handleContinueToForm = () => {
-        if (result?.payload) onScanComplete(result.payload);
-    };
+  const requestClose = useCallback(() => {
+    if (state.phase === "review" && hasUnsavedReceipt) {
+      setConfirmDiscard(true);
+      return;
+    }
+    close();
+  }, [close, hasUnsavedReceipt, state.phase]);
 
-    /** Portals to document.body so footer actions stay above MobileBottomNav (z-50). */
-    const modal = (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-1 sm:items-center sm:p-4">
-            <div className="flex max-h-[calc(100dvh-0.25rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:max-h-[90vh]">
-                <div className="flex items-center justify-between border-b border-border p-4 sm:p-6">
-                    <h2 className="text-xl font-semibold text-foreground">Scan Receipt</h2>
-                    <Button variant="ghost" size="icon" onClick={onCancel} aria-label="Close">
-                        <X className="w-4 h-4" />
-                    </Button>
+  const onFile = useCallback(
+    (file, source) => {
+      setChooseError("");
+      void scan.start(file, { source });
+    },
+    [scan]
+  );
+
+  const wide = state.phase === "review";
+  const title =
+    state.phase === "review" ? "Review receipt" : state.phase === "done" ? "Expense added" : state.phase === "camera" ? "Scan receipt" : "Scan Receipt";
+
+  const saved = state.savedExpense;
+  const savedDate = (() => {
+    try {
+      return saved?.date ? format(parseISO(saved.date), "d MMM yyyy") : "";
+    } catch {
+      return saved?.date || "";
+    }
+  })();
+
+  return (
+    <DialogPrimitive.Root open onOpenChange={(open) => (!open ? requestClose() : null)}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[110] bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          onInteractOutside={(e) => e.preventDefault()}
+          className={`fixed inset-0 z-[120] flex flex-col bg-card text-card-foreground shadow-xl outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[92vh] sm:w-[calc(100%-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:border-border ${
+            wide ? "sm:max-w-5xl" : "sm:max-w-lg"
+          }`}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6 sm:py-4">
+            <DialogPrimitive.Title className="text-lg font-semibold text-foreground">{title}</DialogPrimitive.Title>
+            <Button type="button" variant="ghost" size="icon" className="h-11 w-11" onClick={requestClose} aria-label="Close">
+              <X className="h-5 w-5" aria-hidden="true" />
+            </Button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
+            {confirmDiscard ? (
+              <div className="space-y-4 py-6 text-center" role="alertdialog" aria-labelledby="receipt-discard-title">
+                <p id="receipt-discard-title" className="text-base font-semibold text-foreground">
+                  Discard this receipt?
+                </p>
+                <p className="text-sm text-muted-foreground">The expense hasn&apos;t been saved. The uploaded receipt will be removed.</p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                  <Button type="button" className="min-h-12" onClick={() => setConfirmDiscard(false)} autoFocus>
+                    Keep reviewing
+                  </Button>
+                  <Button type="button" variant="outline" className="min-h-12" onClick={close}>
+                    Discard
+                  </Button>
                 </div>
+              </div>
+            ) : state.phase === "choose" ? (
+              <ChooseSource onFile={onFile} onCamera={scan.openCamera} error={chooseError} />
+            ) : state.phase === "camera" ? (
+              <ReceiptCamera onCapture={(file) => onFile(file, "camera")} onCancel={scan.closeCamera} />
+            ) : state.phase === "processing" ? (
+              <Processing steps={state.steps} readProgress={state.readProgress} preview={state.receipt?.kind === "image" ? state.receipt?.previewUrl : null} />
+            ) : state.phase === "failed" && state.failure ? (
+              state.failure.stage === "inspect" ? (
+                <ChooseSource onFile={onFile} onCamera={scan.openCamera} error={chooseError || state.failure.message} />
+              ) : (
+                <Failure
+                  failure={state.failure}
+                  uploaded={Boolean(state.receipt?.uploaded)}
+                  onRetry={scan.retry}
+                  onManual={scan.enterManually}
+                  onRetake={() => {
+                    scan.reset();
+                    scan.openCamera();
+                  }}
+                  onUploadAnother={() => {
+                    scan.reset();
+                    setTimeout(() => cameraFallbackRef.current?.click(), 0);
+                  }}
+                  onUpgrade={() => {
+                    close();
+                    openUpgradeModal({ featureKey: "expenses" });
+                  }}
+                  onClose={close}
+                />
+              )
+            ) : state.phase === "review" ? (
+              <ReceiptReviewForm
+                formId={formId}
+                receipt={state.receipt}
+                extraction={state.extraction}
+                source={state.extractionSource}
+                reviewInfo={state.reviewInfo}
+                saving={state.saving}
+                saveError={state.saveError}
+                onSave={scan.save}
+                onViewExpense={
+                  onViewExpense
+                    ? (id) => {
+                        close();
+                        onViewExpense(id);
+                      }
+                    : undefined
+                }
+              />
+            ) : state.phase === "done" && saved ? (
+              <DoneState
+                variant="dialog"
+                title="Expense added"
+                reference={{
+                  counterparty: saved.vendor || saved.description,
+                  amount: formatCurrency(Number(saved.amount), "ZAR"),
+                  meta: savedDate,
+                }}
+                message="Receipt attached successfully."
+                status={{
+                  label: "Status",
+                  value: saved.is_claimable ? "Awaiting reimbursement approval" : "Recorded in Cash Flow",
+                  tone: saved.is_claimable ? "pending" : "success",
+                }}
+                actions={[
+                  ...(onViewExpense
+                    ? [
+                        {
+                          label: "View expense",
+                          onClick: () => {
+                            onCancel();
+                            onViewExpense(saved);
+                          },
+                        },
+                      ]
+                    : []),
+                  { label: "Scan another receipt", icon: ScanLine, onClick: scan.scanAnother },
+                ]}
+              />
+            ) : null}
+            <input
+              ref={cameraFallbackRef}
+              type="file"
+              accept={ACCEPT}
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) onFile(file, "upload");
+              }}
+            />
+          </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] p-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6">
-                    <StepIndicator currentStep={currentStep} />
-
-                    {loading ? (
-                        <div className="text-center py-10">
-                            <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-                            <p className="font-medium text-foreground">OCR reads receipt</p>
-                            <p className="mt-2 text-sm text-muted-foreground">Extracting vendor, amount, date…</p>
-                        </div>
-                    ) : result ? (
-                        <div className="space-y-4">
-                            <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-4">
-                                <p className="font-medium text-foreground">
-                                    Expense form auto-filled
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                    Total: {result.total ?? "—"}
-                                    {result.payload?.vendor && ` · ${result.payload.vendor}`}
-                                </p>
-                                {result.raw && (
-                                    <details className="text-sm">
-                                        <summary className="cursor-pointer text-muted-foreground">Raw OCR text</summary>
-                                        <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-border bg-background p-2 text-xs text-foreground">{result.raw}</pre>
-                                    </details>
-                                )}
-                            </div>
-                            <p className="text-center text-xs text-muted-foreground">
-                                Next: review the expense form and save
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="rounded-lg border-2 border-dashed border-border bg-muted/30 py-8 text-center">
-                                <Upload className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                                <p className="mb-1 font-medium text-foreground">Upload photo</p>
-                                <p className="mb-4 text-sm text-muted-foreground">
-                                    We&apos;ll read the receipt and fill the expense for you
-                                </p>
-                                <label htmlFor="receipt-upload">
-                                    <Button asChild className="bg-primary hover:bg-primary/90">
-                                        <span className="gap-2">
-                                            <Camera className="w-4 h-4" />
-                                            Choose photo or file
-                                        </span>
-                                    </Button>
-                                    <input
-                                        id="receipt-upload"
-                                        type="file"
-                                        accept="image/*,application/pdf"
-                                        onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) handleScan(file);
-                                            e.target.value = "";
-                                        }}
-                                        className="hidden"
-                                    />
-                                </label>
-                            </div>
-
-                            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                                <Checkbox
-                                    checked={useBrowserOcr}
-                                    onCheckedChange={(checked) => setUseBrowserOcr(!!checked)}
-                                />
-                                <span>Extract with browser OCR (works offline, images only)</span>
-                            </label>
-
-                            {error && (
-                                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-500">
-                                    {error}
-                                </div>
-                            )}
-
-                            <p className="text-center text-xs text-muted-foreground">
-                                JPG, PNG, WebP, or PDF
-                            </p>
-                        </div>
-                    )}
-                </div>
-
-                {result && !loading && (
-                    <div className="sticky bottom-0 z-10 flex shrink-0 gap-2 border-t border-border bg-card/95 p-3 pb-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:static sm:p-4 sm:pb-4">
-                        <Button variant="outline" className="flex-1" onClick={() => setResult(null)}>
-                            Scan another
-                        </Button>
-                        <Button className="flex-1 gap-2" onClick={handleContinueToForm}>
-                            <FileText className="w-4 h-4" />
-                            Confirm & save
-                        </Button>
-                    </div>
-                )}
+          {state.phase === "review" && !confirmDiscard ? (
+            <div className="flex shrink-0 gap-3 border-t border-border bg-card/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
+              <Button type="button" variant="outline" className="min-h-12 flex-1 sm:flex-none" onClick={requestClose} disabled={state.saving}>
+                Cancel
+              </Button>
+              <Button type="submit" form={formId} className="min-h-12 flex-1 gap-2 sm:ml-auto sm:min-w-44 sm:flex-none" disabled={state.saving}>
+                {state.saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                {state.saving ? "Saving…" : "Save expense"}
+              </Button>
             </div>
-        </div>
-    );
-
-    if (typeof document === "undefined") return null;
-    return createPortal(modal, document.body);
+          ) : null}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
 }

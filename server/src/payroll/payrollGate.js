@@ -9,6 +9,7 @@ import {
 } from "../companyRouteAccess.js";
 import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
 import { assertUserHasFeature, UpgradeRequiredError } from "../featureGate.js";
+import { suppressForDemoOrg } from "../demo/demoMode.js";
 
 export { PERMISSIONS, supabaseAdmin };
 
@@ -141,7 +142,7 @@ export async function notifyPayrollAdmins(orgId, message, { emailSubject, emailH
     if (!person.userId || seen.has(person.userId)) continue;
     seen.add(person.userId);
     await notifyUser(person.userId, message);
-    if (emailSubject && emailHtml && person.email) {
+    if (emailSubject && emailHtml && person.email && !(await suppressForDemoOrg(orgId, "payroll_admin_notice"))) {
       try {
         const { sendHtmlEmail } = await import("../sendInvoice.js");
         await sendHtmlEmail(person.email, emailSubject, emailHtml, "Paidly");

@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { memo, useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useTheme } from "next-themes";
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/tooltip";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import MobileTopBar from "@/components/layout/MobileTopBar";
+import PresenceLocationScope from "@/components/layout/PresenceLocationScope";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -72,6 +73,8 @@ import BillingLockBanner from "@/components/subscription/BillingLockBanner";
 import PortalContextBanner from "@/components/workforce/PortalContextBanner";
 import { canonicalFeatureKey, hasFeatureAccess, getRequiredPlan, getUpgradeTarget } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
+import DemoModeBanner from "@/components/demo/DemoModeBanner";
+import { useDemoMode } from "@/hooks/useDemoMode";
 import {
   ChevronsRight,
   ChevronsLeft,
@@ -578,8 +581,27 @@ LockedNavItem.propTypes = {
 
 const PRIMARY_NAV_PREFETCH_IDS = new Set(["nav-dashboard", "nav-invoices", "nav-clients"]);
 
-const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
-  const location = useLocation();
+function isNavLinkActive(item, pathname) {
+  return Boolean(item?.url) && pathname === item.url.split("?")[0];
+}
+
+/** Nested sub-nav of a parent item; the only nav piece that reads the location itself. */
+function NavChildLinks({ items, onClick, collapsed }) {
+  const { pathname } = useLocation();
+  return items.filter(Boolean).map((child) => (
+    <NavLink
+      key={child.id || child.title}
+      item={child}
+      onClick={onClick}
+      collapsed={collapsed}
+      isActive={isNavLinkActive(child, pathname)}
+    />
+  ));
+}
+
+// Memoized with `isActive` from the parent (no useLocation here): a route change re-renders only
+// the previously and newly active items instead of every sidebar row.
+const NavLink = memo(function NavLink({ item, onClick, collapsed = false, mobile = false, isActive = false }) {
   const [open, setOpen] = useState(false);
   const isCollapsedRail = collapsed && !mobile;
   // Stay closed by default after login; only open when the user expands it.
@@ -647,17 +669,13 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
         </motion.div>
         {/* Render children as indented sub-nav, only if open */}
         {!collapsed && open && (
-          <div className="ml-8" id={`nav-children-${item.id}`}> 
-            {item.children.filter(Boolean).map(child => (
-              <NavLink key={child.id || child.title} item={child} onClick={onClick} collapsed={collapsed} />
-            ))}
+          <div className="ml-8" id={`nav-children-${item.id}`}>
+            <NavChildLinks items={item.children} onClick={onClick} collapsed={collapsed} />
           </div>
         )}
       </div>
     );
   }
-
-  const isActive = item.url && location.pathname === item.url.split("?")[0];
 
   if (item.hasAccess === false) {
     // POS is plan-gated: hide rather than showing “Upgrade to Business” in the sidebar.
@@ -724,13 +742,20 @@ const NavLink = ({ item, onClick, collapsed = false, mobile = false }) => {
       )}
     </motion.div>
   );
-};
+});
 
 NavLink.propTypes = {
   item: navItemShape,
   onClick: PropTypes.func,
   collapsed: PropTypes.bool,
-  mobile: PropTypes.bool
+  mobile: PropTypes.bool,
+  isActive: PropTypes.bool,
+};
+
+NavChildLinks.propTypes = {
+  items: PropTypes.arrayOf(navItemShape).isRequired,
+  onClick: PropTypes.func,
+  collapsed: PropTypes.bool,
 };
 
 const MobileNav = ({
@@ -782,7 +807,7 @@ const MobileNav = ({
               onToggle={() => toggleNavSection?.(group.id)}
             >
               {group.items.map((item) => (
-                <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile />
+                <NavLink key={item.id || item.title} item={item} onClick={onClose} mobile isActive={isNavLinkActive(item, pathname)} />
               ))}
             </NavSection>
           );
@@ -891,6 +916,8 @@ const FETCH_ALL_COOLDOWN_MS = 10000;
 
 export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
+  // Demo Mode: the demo entitlement is not a subscription — never show billing prompts.
+  const demoMode = useDemoMode();
   const location = useLocation();
   const isAdminV2Route = location.pathname.startsWith("/admin-v2");
   const isPosTerminal = isPosTerminalPage(currentPageName) || isPosTerminalPath(location.pathname);
@@ -1049,6 +1076,11 @@ export default function Layout({ children, currentPageName }) {
     () => groupNavItemsBySection(navigationItems, { excludeTitles: ["Dashboard"] }),
     [navigationItems]
   );
+  const dashboardNavItem = useMemo(
+    () => navigationItems.find((item) => item.title === "Dashboard"),
+    [navigationItems]
+  );
+  const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
 
   useEffect(() => {
     if (!user?.id || !layoutProfile?.id) return;
@@ -1162,10 +1194,21 @@ export default function Layout({ children, currentPageName }) {
     if (STANDALONE_PAGE_NAMES.includes(currentPageName) || isAdminV2Route) {
       return;
     }
-    if (mainContentRef.current) {
-      mainContentRef.current.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-    }
-    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    // scrollTo forces a synchronous layout of the freshly committed route. Run it after the next
+    // paint so the navigation click's frame (INP) isn't held up by that layout.
+    let timeoutId = null;
+    const rafId = window.requestAnimationFrame(() => {
+      timeoutId = window.setTimeout(() => {
+        if (mainContentRef.current) {
+          mainContentRef.current.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+        }
+        window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      }, 0);
+    });
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+    };
   }, [location.pathname, currentPageName, isAdminV2Route]);
 
   useEffect(() => {
@@ -1281,6 +1324,7 @@ export default function Layout({ children, currentPageName }) {
   // stays reachable, while creating and editing are refused by the entitlement layer (server gates
   // and the client write gate). The banner explains why.
   const showBillingLockBanner =
+    !demoMode.isDemo &&
     expired &&
     !billingBypassRole &&
     !isAdminV2Route &&
@@ -1374,8 +1418,9 @@ export default function Layout({ children, currentPageName }) {
             </div>
             <div className="mt-3" data-tour="dashboard-summary">
               <NavLink
-                item={navigationItems.find(item => item.title === "Dashboard")}
+                item={dashboardNavItem}
                 collapsed={isSidebarCollapsed}
+                isActive={isNavLinkActive(dashboardNavItem, location.pathname)}
               />
             </div>
           </div>
@@ -1406,7 +1451,7 @@ export default function Layout({ children, currentPageName }) {
                       }
                       return (
                         <div key={item.id} {...extraProps}>
-                          <NavLink item={item} collapsed={isSidebarCollapsed} />
+                          <NavLink item={item} collapsed={isSidebarCollapsed} isActive={isNavLinkActive(item, location.pathname)} />
                         </div>
                       );
                     })}
@@ -1475,7 +1520,7 @@ export default function Layout({ children, currentPageName }) {
         >
           <MobileNav
             items={navigationItems}
-            onClose={() => setIsMobileMenuOpen(false)}
+            onClose={closeMobileMenu}
             user={user}
             brand={brand}
             navigate={navigate}
@@ -1636,6 +1681,9 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </motion.header>
 
+        {/* Demo Mode: persistent indicator + Reset / End demo + account CTA (renders nothing otherwise). */}
+        <DemoModeBanner />
+
         {/* Main Content Area — scrollable, no horizontal overflow, safe areas; pt for fixed mobile header */}
         <main
           ref={mainContentRef}
@@ -1658,7 +1706,7 @@ export default function Layout({ children, currentPageName }) {
               }}
               className={lockListChrome ? "flex h-full min-h-0 w-full flex-col overflow-hidden" : "min-h-full w-full min-w-0"}
             >
-              {children}
+              <PresenceLocationScope>{children}</PresenceLocationScope>
             </motion.div>
           </AnimatePresence>
           </div>

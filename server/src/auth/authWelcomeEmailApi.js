@@ -5,6 +5,7 @@ import { resolvePublicAppOrigin } from "../companyInviteAppUrl.js";
 import { logSecurity } from "../securityMiddleware.js";
 import { buildWelcomeEmail } from "./paidlyAuthEmails.js";
 import { applyApiCors } from "./applyApiCors.js";
+import { isDemoUserId } from "../demo/demoMode.js";
 
 /**
  * Send the Paidly welcome email to a verified business owner — at most once, ever.
@@ -32,6 +33,8 @@ export async function sendWelcomeEmailOnce(user, { transport = sendHtmlEmail, ap
     .maybeSingle();
   if (orgErr) throw orgErr;
   if (!org) return { sent: false, reason: "not_business_owner" };
+  // Demo Mode visitors have a placeholder address; never welcome them by email.
+  if (await isDemoUserId(user.id)) return { sent: false, reason: "demo_mode" };
 
   const claimedAt = new Date().toISOString();
   const { data: claimed, error: claimErr } = await supabaseAdmin

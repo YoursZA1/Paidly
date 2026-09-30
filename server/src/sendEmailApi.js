@@ -11,6 +11,7 @@ import { sanitizeEmailHtmlBody, sanitizeOneLine } from "./inputValidation.js";
 import { sendHtmlEmail } from "./sendInvoice.js";
 import { sendUnexpectedError } from "./apiResponse.js";
 import { applyApiCors } from "./auth/applyApiCors.js";
+import { isDemoUserId, sendDemoNotSent } from "./demo/demoMode.js";
 
 export default async function sendEmailHandler(req, res) {
   applyApiCors(req, res);
@@ -37,6 +38,11 @@ export default async function sendEmailHandler(req, res) {
     }
 
     const bodySafe = sanitizeEmailHtmlBody(parsed.body);
+
+    // Demo Mode: never reaches a real inbox; the caller gets a preview instead.
+    if (await isDemoUserId(user.id)) {
+      return sendDemoNotSent(res, { channel: "email", to: parsed.to, subject: subjectSafe, kind: "email" });
+    }
 
     const result = await sendHtmlEmail(
       parsed.to,

@@ -21,6 +21,7 @@ import {
 } from "../../../shared/documents/quoteReminderRules.js";
 import { QUOTE_STATUS, canTransitionQuoteStatus, normalizeQuoteStatus } from "../../../shared/commercial/documentStatuses.js";
 import { appendDocumentEvent, appendDocumentEventBestEffort, listDocumentEvents } from "./documentEventService.js";
+import { demoNotSentResult, suppressForDemoOrg } from "../demo/demoMode.js";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -119,6 +120,10 @@ export async function sendConfiguredReminder({
     throw error;
   }
 
+  if (await suppressForDemoOrg(invoice.org_id, "payment_reminder")) {
+    return { remindedAt: null, payUrl: null, subject: null, ...demoNotSentResult({ kind: "payment_reminder" }) };
+  }
+
   const origin = String(appOrigin || resolvePublicAppOrigin()).replace(/\/$/, "");
   const share = invoice.public_share_token
     ? `${origin}/view/${encodeURIComponent(invoice.public_share_token)}`
@@ -187,6 +192,9 @@ export async function processInvoiceReminderActions({
   now = new Date(),
   supabase = supabaseAdmin,
 }) {
+  if (await suppressForDemoOrg(invoice.org_id, "payment_reminder")) {
+    return { skipped: true, reason: "demo_mode" };
+  }
   const payments = await loadConfirmedPayments(invoice.org_id, invoice.id, supabase);
   if (!invoiceIsRemindable(invoice, payments)) {
     return { skipped: true, reason: "not_remindable" };
@@ -388,6 +396,9 @@ export async function processQuoteFollowUpActions({
   if (quoteShouldExpire(quote, now)) {
     await expireOpenQuote(quote, supabase);
     return { expired: 1, reminded: 0, failed: 0 };
+  }
+  if (await suppressForDemoOrg(quote.org_id, "quote_follow_up")) {
+    return { expired: 0, reminded: 0, failed: 0, demo: true };
   }
 
   const events = await listDocumentEvents({

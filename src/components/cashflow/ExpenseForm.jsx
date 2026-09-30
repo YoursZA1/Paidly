@@ -6,18 +6,29 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { X, ExternalLink, ScanLine, Paperclip, Upload, Loader2, Sparkles, MapPin, Car } from "lucide-react";
+import { X, ExternalLink, Paperclip, Upload, Loader2, Sparkles, MapPin, Car, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { Vendor } from "@/api/entities";
-import { UploadToActivities, UploadToReceipts, ExtractDataFromUploadedFile, InvokeLLM } from "@/api/integrations";
-import { getReceiptExtractionSchema, parsedReceiptToExpenseForm } from "@/constants/receiptOcrExtractionSpec";
-import { extractReceiptDataWithTesseract } from "@/utils/receiptTesseractOcr";
+import { UploadToActivities, InvokeLLM } from "@/api/integrations";
+import { receiptObjectPathFromUrl } from "@shared/expenses/receiptScan.js";
+import { getReceiptViewUrl } from "@/services/ReceiptScanService";
 import { useToast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
-export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan }) {
+/** Receipts live in a private bucket: open them through a short-lived signed link. */
+async function openReceipt(objectPath, fallbackUrl) {
+    const tab = window.open("about:blank", "_blank");
+    const url = objectPath ? await getReceiptViewUrl(objectPath) : null;
+    if (tab) {
+        tab.opener = null;
+        if (url || fallbackUrl) tab.location.href = url || fallbackUrl;
+        else tab.close();
+    }
+}
+
+export default function ExpenseForm({ expense, onSave, onCancel }) {
     const { toast } = useToast();
     const baseFormState = {
         category: "office",
@@ -43,12 +54,8 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
     const [formData, setFormData] = useState({ ...baseFormState, ...(expense || {}) });
 
     const [vendors, setVendors] = useState([]);
-    const [isScanning, setIsScanning] = useState(false);
     const [isSuggesting, setIsSuggesting] = useState(false);
-    const [useBrowserOcr, setUseBrowserOcr] = useState(false);
     const [activeTab, setActiveTab] = useState(expense?.is_mileage ? "mileage" : "general");
-
-    const isImageFile = (file) => /^image\/(jpeg|jpg|png|webp|gif|bmp|heic|heif|tiff?)$/i.test(file?.type);
 
     const parseMoney = (value) => {
         if (value == null || value === "") return null;
@@ -169,79 +176,6 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
         setFormData(prev => ({ ...prev, attachments: newAttachments }));
     };
 
-    const handleScanReceipt = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const useOcr = useBrowserOcr && isImageFile(file);
-        if (useBrowserOcr && !isImageFile(file)) {
-            toast({
-                title: "Browser OCR works with images only",
-                description: "Use JPG or PNG for browser OCR, or turn off to use server extraction for PDFs.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        setIsScanning(true);
-        try {
-            const { file_url } = await UploadToReceipts({ file });
-            const newAttachments = [...(formData.attachments || []), { name: file.name, url: file_url }];
-
-            let data = null;
-            if (useOcr) {
-                data = await extractReceiptDataWithTesseract(file);
-            } else {
-                let result = null;
-                try {
-                    result = await ExtractDataFromUploadedFile({
-                        file_url,
-                        json_schema: getReceiptExtractionSchema()
-                    });
-                } catch (err) {
-                    if (import.meta.env.DEV) console.warn("[ExpenseForm] Server extraction failed:", err?.message || err);
-                }
-                if (result?.status === "success" && result.output) data = result.output;
-                // Professional fallback: if server extraction is unavailable, automatically try browser OCR for images.
-                if (!data && isImageFile(file)) {
-                    data = await extractReceiptDataWithTesseract(file);
-                }
-            }
-
-            if (data) {
-                // Auto-fill expense form after parsing: vendor, amount, date (+ vat, currency, category, description)
-                const filled = parsedReceiptToExpenseForm(data);
-                const normalizedAmount = parseMoney(filled.amount);
-                const normalizedDate = normalizeDateInput(filled.date);
-                setFormData(prev => ({
-                    ...prev,
-                    vendor: filled.vendor || prev.vendor,
-                    amount: normalizedAmount != null ? String(normalizedAmount) : prev.amount,
-                    date: normalizedDate,
-                    vat: filled.vat,
-                    currency: filled.currency || prev.currency || "ZAR",
-                    category: filled.category || prev.category || "office",
-                    description: filled.description || prev.description || "Receipt",
-                    attachments: newAttachments,
-                    vendor_id: vendors.find(v => v.name.toLowerCase() === (data.vendor_name || "").toLowerCase())?.id ?? prev.vendor_id,
-                }));
-                toast({ title: "Receipt scanned", description: useOcr ? "Data extracted with browser OCR." : "Data extracted.", variant: "default" });
-            } else {
-                setFormData(prev => ({ ...prev, attachments: newAttachments }));
-                toast({ title: "Receipt attached", description: "Could not extract data. Please fill in manually.", variant: "default" });
-            }
-        } catch (error) {
-            console.error("Scanning failed", error);
-            toast({
-                title: "Scan failed",
-                description: error?.message || "Failed to scan receipt. Try again or enter manually.",
-                variant: "destructive"
-            });
-        }
-        setIsScanning(false);
-        e.target.value = "";
-    };
-
     const suggestCategory = async () => {
         if (!formData.description && !formData.vendor) return;
         setIsSuggesting(true);
@@ -283,11 +217,8 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                 <div className="flex items-center justify-between border-b border-border p-4 shrink-0 sm:p-6">
                     <div>
                         <h2 className="text-xl font-semibold text-primary">
-                            {fromReceiptScan ? "Confirm & save" : expense?.id ? "Edit Expense" : "Add New Expense"}
+                            {expense?.id ? "Edit Expense" : "Add New Expense"}
                         </h2>
-                        {fromReceiptScan && (
-                            <p className="text-sm text-muted-foreground mt-1">Review the details below and save your expense</p>
-                        )}
                     </div>
                     <Button variant="ghost" size="icon" onClick={onCancel}>
                         <X className="w-4 h-4" />
@@ -303,30 +234,6 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                             </TabsList>
 
                             <TabsContent value="general" className="space-y-4">
-                                {/* Scan Button: default server extraction; optional browser OCR */}
-                                <div className="space-y-2 mb-4">
-                                    <div className="relative flex justify-center">
-                                        <input
-                                            type="file"
-                                            accept="image/*,.pdf"
-                                            onChange={handleScanReceipt}
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                            disabled={isScanning}
-                                        />
-                                        <Button type="button" variant="outline" className="border-dashed border-2 w-full" disabled={isScanning}>
-                                            {isScanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ScanLine className="w-4 h-4 mr-2 text-primary" />}
-                                            {isScanning ? "Scanning Receipt..." : "Scan Receipt with AI"}
-                                        </Button>
-                                    </div>
-                                    <label className="flex items-center justify-center gap-2 cursor-pointer text-sm text-muted-foreground">
-                                        <Checkbox
-                                            checked={useBrowserOcr}
-                                            onCheckedChange={(checked) => setUseBrowserOcr(!!checked)}
-                                        />
-                                        <span>Extract with browser OCR (works offline, images only)</span>
-                                    </label>
-                                </div>
-
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <Label>Vendor</Label>
@@ -567,6 +474,22 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                                 <div>
                                     <Label>Attachments & Receipts</Label>
                                     <div className="mt-2 space-y-3">
+                                        {formData.receipt_path ? (
+                                            <div className="flex items-center justify-between rounded-md border border-border bg-muted/50 p-2">
+                                                <div className="flex items-center gap-2 overflow-hidden">
+                                                    <Receipt className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                                                    <span className="text-sm truncate">Scanned receipt</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openReceipt(formData.receipt_path)}
+                                                    className="flex items-center gap-1 text-sm text-primary"
+                                                >
+                                                    <ExternalLink className="w-4 h-4" aria-hidden="true" />
+                                                    View
+                                                </button>
+                                            </div>
+                                        ) : null}
                                         {formData.attachments?.map((file, index) => (
                                             <div key={index} className="flex items-center justify-between rounded-md border border-border bg-muted/50 p-2">
                                                 <div className="flex items-center gap-2 overflow-hidden">
@@ -574,9 +497,15 @@ export default function ExpenseForm({ expense, onSave, onCancel, fromReceiptScan
                                                     <span className="text-sm truncate">{file.name}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
-                                                    <a href={file.url} target="_blank" rel="noopener noreferrer">
-                                                        <ExternalLink className="w-4 h-4 text-primary" />
-                                                    </a>
+                                                    {receiptObjectPathFromUrl(file.url) ? (
+                                                        <button type="button" onClick={() => openReceipt(receiptObjectPathFromUrl(file.url), null)} aria-label={`Open ${file.name}`}>
+                                                            <ExternalLink className="w-4 h-4 text-primary" />
+                                                        </button>
+                                                    ) : (
+                                                        <a href={file.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${file.name}`}>
+                                                            <ExternalLink className="w-4 h-4 text-primary" />
+                                                        </a>
+                                                    )}
                                                     <button type="button" onClick={() => removeAttachment(index)}>
                                                         <X className="w-4 h-4 text-red-500" />
                                                     </button>

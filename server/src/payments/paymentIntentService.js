@@ -15,6 +15,7 @@ import {
 } from "../../../shared/payments/paymentIntentStates.js";
 import { assertPaymentEngineSource } from "../../../shared/payments/paymentEngine.js";
 import { CARD_RAIL_UNAVAILABLE, cardTerminalRailEnabled } from "../../../shared/payments/paidlyPayContract.js";
+import { isDemoOrgId } from "../demo/demoMode.js";
 
 /** Throws when the card / terminal rail is off (production: no acquirer can prove a card charge). */
 export function assertCardRailAvailable(provider) {
@@ -23,6 +24,17 @@ export function assertCardRailAvailable(provider) {
   error.code = CARD_RAIL_UNAVAILABLE;
   error.status = 422;
   throw error;
+}
+
+/**
+ * Same rule, per organization: a Demo Mode workspace always has the simulated rail (DEMO_PAYMENT,
+ * shared/demo/demoPayments.js) — its intents are only ever resolved by a demo outcome, never by a
+ * provider, so nothing about a real card charge is claimed. Real organizations are unchanged.
+ */
+export async function assertCardRailAvailableForOrg(provider, orgId) {
+  if (!isCardTerminalSettlement(provider) || cardTerminalRailEnabled()) return;
+  if (orgId && (await isDemoOrgId(orgId))) return;
+  assertCardRailAvailable(provider);
 }
 
 export function mapPaymentIntentSchemaError(message) {
@@ -98,7 +110,7 @@ export async function createPaymentIntentRow({
 }) {
   const source = assertPaymentEngineSource(sourceKind);
   const rail = assertCustomerPaymentProvider(provider, source);
-  assertCardRailAvailable(rail);
+  await assertCardRailAvailableForOrg(rail, orgId);
   const existing = await findPaymentIntentByIdempotency(orgId, idempotencyKey);
   if (existing) return existing;
 

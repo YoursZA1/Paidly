@@ -30,6 +30,8 @@ import {
   PAIDLY_PAY_ERROR,
 } from "../../../shared/payments/paidlyPayContract.js";
 import { isConfirmedPaymentIntent, PAYMENT_INTENT_STATUS } from "../../../shared/payments/paymentIntentStates.js";
+import { DEMO_PAYMENT, isDemoPaymentOutcome } from "../../../shared/demo/demoPayments.js";
+import { logDemo } from "../demo/demoMode.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -214,9 +216,20 @@ export async function handlePaymentIntentAction(req, res) {
       });
     }
 
-    if (!isMockPaymentsEnabled()) {
+    // Demo Mode: a demo workspace resolves its own simulated (DEMO_PAYMENT) intents in any
+    // environment. Everything else keeps the mock rule: never in production.
+    const demoSimulation =
+      gate.membership?.isDemo === true &&
+      intent.provider === "card_terminal" &&
+      intent.metadata?.demo_simulated === true;
+    if (!demoSimulation && !isMockPaymentsEnabled()) {
       return jsonError(res, 403, "Mock payments are not enabled on this environment.", {
         code: PAIDLY_PAY_ERROR.MOCK_NOT_ENABLED,
+      });
+    }
+    if (demoSimulation && !isDemoPaymentOutcome(body.outcome)) {
+      return jsonError(res, 422, "outcome must be succeeded, failed, or processing", {
+        code: PAIDLY_PAY_ERROR.INVALID_MOCK_OUTCOME,
       });
     }
 
@@ -238,9 +251,13 @@ export async function handlePaymentIntentAction(req, res) {
         webhook_verified: true,
         terminal_confirmed: nextStatus === PAYMENT_INTENT_STATUS.paid,
         paidly_pay_event: `mock.${body.outcome || nextStatus}`,
-        source: "pos_mock_terminal",
+        source: demoSimulation ? "demo_payment" : "pos_mock_terminal",
+        ...(demoSimulation ? { demo_outcome: String(body.outcome).toLowerCase(), payment_kind: DEMO_PAYMENT } : {}),
       },
     });
+    if (demoSimulation) {
+      logDemo("demo_payment_simulated", { source: "pos", outcome: String(body.outcome).toLowerCase(), status: applied.intent?.status });
+    }
     return res.status(200).json({
       ok: true,
       duplicate: Boolean(applied.duplicate),

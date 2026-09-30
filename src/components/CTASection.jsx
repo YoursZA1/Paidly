@@ -86,6 +86,12 @@ export default function CTASection() {
               Get started free
               <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
             </Link>
+            <Link
+              to="/demo"
+              className="inline-flex min-h-12 w-full max-w-xs items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.04] px-10 text-sm font-semibold text-white transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.08] sm:w-auto"
+            >
+              Try Live Demo
+            </Link>
           </motion.div>
 
           <motion.p

@@ -67,3 +67,6 @@ playwright/.auth/
 # Vercel `vercel env pull` output (secrets)
 .env.vercel
 .claude/
+
+# Self-hosted OCR assets (scripts/copy-ocr-assets.mjs)
+public/vendor/tesseract/

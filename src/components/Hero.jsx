@@ -94,10 +94,17 @@ export default function Hero({ onLoginClick }) {
             Get started free
             <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
           </Link>
+          <Link
+            to="/demo"
+            data-testid="hero-try-demo"
+            className="inline-flex min-h-12 w-full max-w-xs items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.04] px-8 text-sm font-semibold text-white backdrop-blur-sm transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.08] sm:w-auto sm:max-w-none"
+          >
+            Try Live Demo
+          </Link>
           <button
             type="button"
             onClick={() => onLoginClick?.()}
-            className="inline-flex min-h-12 w-full max-w-xs cursor-pointer items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.04] px-8 text-sm font-semibold text-white backdrop-blur-sm transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.08] sm:w-auto sm:max-w-none"
+            className="inline-flex min-h-12 w-full max-w-xs cursor-pointer items-center justify-center rounded-xl px-6 text-sm font-semibold text-zinc-300 transition-colors duration-200 hover:text-white sm:w-auto sm:max-w-none"
           >
             Log In
           </button>

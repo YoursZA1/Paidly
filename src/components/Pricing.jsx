@@ -254,7 +254,10 @@ export default function Pricing() {
           transition={{ duration: 0.5, delay: 0.3 }}
           className="mt-10 text-center text-sm text-zinc-500"
         >
-          {MARKETING_TRIAL_FOOTER}
+          {MARKETING_TRIAL_FOOTER}{" "}
+          <Link to="/demo" className="font-medium text-[#FF7A3D] hover:underline">
+            Not sure yet? Try the live demo.
+          </Link>
         </motion.p>
       </div>
     </section>

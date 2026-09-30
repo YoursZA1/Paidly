@@ -110,6 +110,10 @@ import { WALK_IN_CUSTOMER_LABEL } from "@/lib/pos/posCustomerSearch";
 import { invalidateClientDomain, invalidateRevenueReadModels } from "@/lib/queryInvalidation";
 import PosCustomerDialog from "@/components/pos/PosCustomerDialog";
 import PosFloorView from "@/components/pos/restaurant/PosFloorView";
+import DemoModeBanner from "@/components/demo/DemoModeBanner";
+import DemoPaymentPanel from "@/components/demo/DemoPaymentPanel";
+import { isDemoNextAction } from "@shared/demo/demoPayments.js";
+import { notifyDemoNotSent } from "@/lib/demo/demoModeState";
 import PosTabPanel from "@/components/pos/restaurant/PosTabPanel";
 import PosBillDialog from "@/components/pos/restaurant/PosBillDialog";
 import PosKitchenView from "@/components/pos/restaurant/PosKitchenView";
@@ -1052,6 +1056,26 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
         window.location.assign(result.next_action.redirect_url);
         return;
       }
+      if (result.pending && isDemoNextAction(result.next_action)) {
+        // Demo Mode: simulated payment — the visitor picks the outcome in the payment dialog.
+        cardIdempotencyRef.current = checkoutPayload.idempotency_key;
+        setCardWait({
+          intentId: result.payment_intent?.id || result.next_action?.payment_intent_id || null,
+          payload: checkoutPayload,
+          display: "DEMO PAYMENT",
+          provider: "demo",
+          deviceName: null,
+          openUrl: null,
+          mock: true,
+          demo: true,
+          phase: "waiting",
+          popupBlocked: false,
+        });
+        setDigitalOpen(false);
+        setPayMethodOpen(false);
+        setCardOpen(true);
+        return;
+      }
       if (result.pending) {
         if (paymentMethod === "card") {
           cardIdempotencyRef.current = checkoutPayload.idempotency_key;
@@ -1141,15 +1165,24 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
           cardIdempotencyRef.current = null;
           openedPayRef.current = "";
           setCardWait(null);
+          if (cardWait.demo) setCardOpen(false);
           toast({
-            title: intentStatus === "failed" ? "Card payment failed" : "Card payment cancelled",
-            description: "The sale stays unpaid. You can tap Card Payment again.",
+            title: cardWait.demo
+              ? intentStatus === "failed"
+                ? "Demo Payment Failed"
+                : "Demo payment cancelled"
+              : intentStatus === "failed"
+                ? "Card payment failed"
+                : "Card payment cancelled",
+            description: cardWait.demo
+              ? "Simulated — nothing was charged. The sale stays unpaid; take payment again."
+              : "The sale stays unpaid. You can tap Card Payment again.",
           });
           return;
         }
         if (intentStatus === "paid") {
           await completeCheckoutRef.current?.({
-            paymentMethod: "card",
+            paymentMethod: cardWait.payload?.payment_method || "card",
             idempotencyKey: cardWait.payload?.idempotency_key,
           });
         }
@@ -1279,7 +1312,7 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
       } catch {
         base64PDF = undefined;
       }
-      await emailPosReceipt({
+      const emailed = await emailPosReceipt({
         sale_id: completedSale.id,
         to,
         brand_name: tillBrandName,
@@ -1287,6 +1320,10 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
         customer_name: receiptView?.customerName,
         base64PDF,
       });
+      if (emailed?.demo) {
+        notifyDemoNotSent(emailed.preview || { to });
+        return;
+      }
       toast({ title: "Receipt sent", description: to });
     } catch (err) {
       toast({
@@ -1731,6 +1768,7 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col bg-background">
+      <DemoModeBanner variant="till" />
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:h-16 sm:gap-3 sm:px-5">
         {tillPassSession ? (
           <Button
@@ -2677,6 +2715,43 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
         }}
       >
         <DialogContent className="max-w-md sm:rounded-2xl">
+          {cardWait?.demo ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>EFT / Digital · Demo payment</DialogTitle>
+                <DialogDescription>
+                  Choose how this simulated payment ends. A successful payment records the sale, stock and reports exactly like a real one.
+                </DialogDescription>
+              </DialogHeader>
+              <DemoPaymentPanel
+                amount={cartTotal}
+                currency={currency}
+                onOutcome={async (outcome) => {
+                  const json = await postPosPaymentIntentAction(cardWait.intentId, { action: "mock", outcome });
+                  const status = String(json?.payment_intent?.status || "").toLowerCase();
+                  if (status === "paid") {
+                    await completeCheckoutRef.current?.({
+                      paymentMethod: cardWait.payload?.payment_method || "digital",
+                      idempotencyKey: cardWait.payload?.idempotency_key,
+                    });
+                  } else if (status === "processing") {
+                    setCardWait((prev) => (prev ? { ...prev, phase: "processing" } : prev));
+                  }
+                }}
+              />
+              {cardWait.phase === "processing" ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Demo Payment Pending — the sale stays unpaid until you mark it successful or failed.
+                </p>
+              ) : null}
+              <DialogFooter className="flex-col gap-2 sm:flex-col">
+                <Button type="button" variant="ghost" className="h-12 min-h-11 w-full" onClick={() => void cancelCardPayment()}>
+                  Cancel payment
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
           <DialogHeader>
             <DialogTitle>Card · {cardWait?.provider === "yoco" || cardRail?.id === "yoco" ? "Yoco" : cardWait?.provider === "square" || cardRail?.id === "square" ? "Square" : "Paidly Pay"}</DialogTitle>
             <DialogDescription>
@@ -2758,6 +2833,8 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
               Back
             </Button>
           </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

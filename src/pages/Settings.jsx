@@ -70,6 +70,8 @@ import {
   DEFAULT_DOCUMENT_BRAND_PRIMARY,
   DEFAULT_DOCUMENT_BRAND_SECONDARY,
 } from "@/utils/documentBrandColors";
+import { useDemoMode } from "@/hooks/useDemoMode";
+import { DemoRestrictedPanel } from "@/components/demo/DemoRestricted";
 
 const SettingsCard = ({ title, description, children }) => (
     <section className="bg-card border border-border rounded-2xl p-4 sm:p-7 mb-4 sm:mb-5 shadow-sm min-w-0 overflow-x-hidden">
@@ -2154,7 +2156,20 @@ const SETTINGS_TABS = [
     { value: "subscription", label: "Subscription", icon: Award, permission: PERMISSIONS.MANAGE_COMPANY_SETTINGS },
 ];
 
+/** Demo Mode: sections that manage real people, money or credentials need a real account. */
+const DEMO_RESTRICTED_SETTINGS = {
+    account: { feature: "Account security", description: "Password, email and account deletion are switched off in Demo Mode. Use “End demo” in the banner to leave." },
+    team: { feature: "Team and user management", description: "Inviting people and changing roles would reach real inboxes, so it is switched off in Demo Mode. Mavela Café's staff are listed under Workforce." },
+    integrations: { feature: "Payment and POS integrations", description: "Connecting Yoco, Square or an online payment provider needs a real account. In the demo every non-cash payment is simulated." },
+    subscription: { feature: "Subscriptions and billing", description: "The demo runs on a free demo plan — nothing is billed. Choose a plan when you create your own account." },
+};
+
 function SettingsTabPanels({ activeTab }) {
+    const demo = useDemoMode();
+    if (demo.isDemo && DEMO_RESTRICTED_SETTINGS[activeTab]) {
+        const { feature, description } = DEMO_RESTRICTED_SETTINGS[activeTab];
+        return <DemoRestrictedPanel feature={feature} description={description} />;
+    }
     switch (activeTab) {
         case "account":
             return <PersonalAccountSettings />;

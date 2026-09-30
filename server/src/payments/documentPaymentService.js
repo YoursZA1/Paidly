@@ -4,7 +4,7 @@ import { sendHtmlEmail } from "../sendInvoice.js";
 import { resolvePublicAppOrigin } from "../companyInviteAppUrl.js";
 import { CUSTOMER_PAYMENT_PROVIDERS, OFFLINE_PAYMENT_METHODS } from "./paymentIntentContract.js";
 import {
-  assertCardRailAvailable,
+  assertCardRailAvailableForOrg,
   applyVerifiedIntentStatus,
   confirmPaymentIntent,
   createPaymentIntentRow,
@@ -30,6 +30,7 @@ import {
 } from "../../../shared/commercial/documentStatuses.js";
 import { resolveDocumentPaymentCtas } from "../../../shared/payments/documentPaymentCtas.js";
 import { invoiceAmountDue, isConfirmedInvoicePayment } from "../../../shared/payments/invoiceBalance.js";
+import { demoNotSentResult, suppressForDemoOrg } from "../demo/demoMode.js";
 
 const REMIND_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -486,7 +487,7 @@ export async function applyVerifiedProviderEvent({ intentId, nextStatus, externa
   }
 
   // No acquirer backs the card rail in production: a "paid" card event there proves nothing.
-  if (isConfirmedPaymentIntent(nextStatus)) assertCardRailAvailable(intent.provider);
+  if (isConfirmedPaymentIntent(nextStatus)) await assertCardRailAvailableForOrg(intent.provider, intent.org_id);
 
   const applied = await applyVerifiedIntentStatus(intent, nextStatus, {
     externalId,
@@ -640,6 +641,9 @@ export async function remindDocumentPayment({ orgId, invoiceId, createdBy = null
     <p>If you have already paid, please ignore this message.</p>
   `;
 
+  if (await suppressForDemoOrg(orgId, "payment_reminder")) {
+    return { ...demoNotSentResult({ kind: "payment_reminder" }), success: true, preview: { channel: "email", to: client.email, subject }, amount_due: amountDue };
+  }
   const sent = await sendHtmlEmail(client.email, subject, html, companyName, {
     tags: [{ name: "category", value: "invoice_reminder" }],
   });

@@ -5,6 +5,7 @@ import { isPosStaffInviteRequest, POS_JOB_FUNCTION, membershipIsPosEnabled, posA
 import { buildEmployeeNumber, nextEmployeeSequence } from "../../../shared/payroll/payslipNumber.js";
 import { companyInviteShareUrl, resolvePublicAppOrigin } from "../companyInviteAppUrl.js";
 import { sendCompanyTeamInviteEmail } from "../companyTeamInviteDelivery.js";
+import { demoRestrictedError, isDemoOrgId, logDemo } from "../demo/demoMode.js";
 import {
   emitWorkforceEvent,
   WORKFORCE_EVENT_TYPES,
@@ -269,11 +270,12 @@ export async function createEmployee(orgId, actor, payload = {}) {
     throw err;
   }
 
-  const { data: existingProfile } = await supabaseAdmin
-    .from("profiles")
-    .select("id, email, full_name")
-    .eq("email", email)
-    .maybeSingle();
+  // Demo Mode: staff are fictional — never look up (or link) a real Paidly account by email, and
+  // never send a portal invitation.
+  const demoOrg = await isDemoOrgId(orgId);
+  const { data: existingProfile } = demoOrg
+    ? { data: null }
+    : await supabaseAdmin.from("profiles").select("id, email, full_name").eq("email", email).maybeSingle();
 
   if (existingProfile?.id === actor.userId) {
     const err = new Error("You cannot add yourself");
@@ -367,6 +369,17 @@ export async function createEmployee(orgId, actor, payload = {}) {
   });
 
   let invite = null;
+  if (demoOrg) {
+    logDemo("demo_message_suppressed", { channel: "email", kind: "employee_portal_invite" });
+    return {
+      employee: await getEmployee(orgId, employeeId, { canViewTeam: true }),
+      mode: "demo",
+      invite_link: null,
+      demo: true,
+      sent: false,
+      message: "Demo Mode — invitation not sent.",
+    };
+  }
   if (existingProfile?.id) {
     await emitWorkforceEvent({
       orgId,
@@ -676,6 +689,7 @@ async function revokePendingInvitesForMembership(orgId, membershipId) {
  * Send or resend a portal invite for an existing membership (no recreate).
  */
 export async function inviteEmployeePortal(orgId, actor, employeeId, { resend = false } = {}) {
+  if (await isDemoOrgId(orgId)) throw demoRestrictedError("Employee portal invitations");
   const membership = await loadEmployeeMembershipForPortal(orgId, employeeId);
   if (membership.user_id && !membership.portal_revoked_at) {
     const err = new Error("Portal access is already active for this employee");
