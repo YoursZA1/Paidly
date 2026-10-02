@@ -68,7 +68,10 @@ vi.mock("../../server/src/pos/posConnectionsRoutes.js", () => ({
   requirePosPermission: async () => gate.current,
 }));
 vi.mock("../../server/src/pos/posEntitlement.js", () => ({ requirePosPlan: async () => true }));
-vi.mock("../../server/src/pos/posBusinessType.js", () => ({ requirePosCapability: async () => true }));
+vi.mock("../../server/src/pos/posBusinessType.js", () => ({
+  requirePosCapability: async () => true,
+  loadOrgPosExperience: async () => ({ type: "retail", pos: true, restaurant: false, services: false }),
+}));
 vi.mock("../../server/src/paidlyPay/settlePosIntent.js", () => ({
   settlePosIntent: async () => ({ settled: true, duplicate: false, saleId: "sale-1" }),
 }));

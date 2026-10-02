@@ -7,6 +7,8 @@
  * Money is in rands with cents; every split is exact to the cent (remainders go to the last parts).
  */
 
+import { businessTypeIncludesRestaurant } from "../businessType.js";
+
 export const ORDER_TYPE = Object.freeze({
   DINE_IN: "dine_in",
   TAKEAWAY: "takeaway",
@@ -222,13 +224,16 @@ export function tabLabel(tab, table = null) {
   return tab?.order_number ? `Order #${tab.order_number}` : "Order";
 }
 
-/** Restaurant POS is on for restaurant businesses, and for any POS business that has set up tables. */
-export function restaurantModeEnabled({ businessType, tableCount = 0 }) {
-  return String(businessType || "").toLowerCase() === "restaurant" || Number(tableCount) > 0;
+/**
+ * Restaurant POS (floor, tables, kitchen, dine-in / takeaway / counter) follows the business type
+ * only: Restaurant / café / bar. Retail and mixed tills never show it, even if tables exist.
+ */
+export function restaurantModeEnabled({ businessType } = {}) {
+  return businessTypeIncludesRestaurant(businessType);
 }
 
-export function defaultOrderType({ businessType, tableCount = 0 }) {
-  return restaurantModeEnabled({ businessType, tableCount }) ? ORDER_TYPE.DINE_IN : ORDER_TYPE.COUNTER;
+export function defaultOrderType({ businessType } = {}) {
+  return restaurantModeEnabled({ businessType }) ? ORDER_TYPE.DINE_IN : ORDER_TYPE.COUNTER;
 }
 
 // ── Order lifecycle (operational stage and payment are separate concerns) ────────────────

@@ -28,6 +28,7 @@ import { resolveOpenSession } from "../posRegisterSessions.js";
 import { saleCompanyIdFromRegister } from "../posCatalogScope.js";
 import { ensureNativePosConnection, loadPosCatalogRows, salePublicView } from "../posNativeCheckout.js";
 import { recordPosAuditEvent } from "../posAudit.js";
+import { loadOrgPosExperience } from "../posBusinessType.js";
 import { POS_AUDIT_ACTOR, posAuditCancellation } from "../posAuditMath.js";
 import {
   confirmCustomerPaymentIntent,
@@ -376,7 +377,8 @@ async function loadFloorState(orgId) {
 export async function handleRestaurantFloor(req, res, gate) {
   if (forbidUnlessPermission(res, gate.membership, PERMISSIONS.POS_ACCESS)) return;
   try {
-    return res.status(200).json({ ok: true, ...(await loadFloorState(gate.membership.orgId)) });
+    const [state, experience] = await Promise.all([loadFloorState(gate.membership.orgId), loadOrgPosExperience(gate.membership.orgId)]);
+    return res.status(200).json({ ok: true, restaurant_enabled: experience.restaurant, ...state });
   } catch (err) {
     return sendError(res, err);
   }
@@ -443,6 +445,8 @@ export async function handleRestaurantSetup(req, res, gate) {
   const orgId = gate.membership.orgId;
   const now = new Date().toISOString();
   try {
+    // Building the floor plan is a restaurant feature; tidying up (delete / edit) stays allowed.
+    if (["create_floor", "create_table"].includes(String(body.action || ""))) await assertRestaurantBusiness(orgId);
     switch (String(body.action || "")) {
       case "create_floor": {
         const name = cleanText(body.name, 40);
@@ -521,6 +525,22 @@ export async function handleRestaurantSetup(req, res, gate) {
     }
   } catch (err) {
     return sendError(res, err);
+  }
+}
+
+/**
+ * Hospitality features follow the business type (Restaurant / café / bar). Other POS types can still
+ * read, pay and close orders opened earlier — switching type never strands money — but cannot start
+ * new table orders or build floors.
+ */
+async function assertRestaurantBusiness(orgId) {
+  const experience = await loadOrgPosExperience(orgId);
+  if (!experience.restaurant) {
+    throw httpError(
+      403,
+      "Tables, kitchen tickets and dine-in orders are for Restaurant / café / bar businesses. Change the business type in Settings → Company profile to use them.",
+      "RESTAURANT_NOT_ENABLED"
+    );
   }
 }
 
@@ -727,6 +747,7 @@ export async function handleTabAction(req, res, gate) {
   const can = (permission) => membershipHasPermission(gate.membership, permission);
   try {
     if (action === "open") {
+      await assertRestaurantBusiness(orgId);
       const tab = await openTab(gate, body);
       let bundle = await loadTabBundle(orgId, tab.id);
       if (Array.isArray(body.items) && body.items.length) {

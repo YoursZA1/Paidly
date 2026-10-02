@@ -146,6 +146,8 @@ export async function fetchPosCatalog({ registerId } = {}) {
   const catalog = {
     products: Array.isArray(json.products) ? json.products : [],
     card_rail: json.card_rail && typeof json.card_rail === "object" ? json.card_rail : null,
+    // Business-type features for this till: { restaurant, services, business_type }.
+    experience: json.experience && typeof json.experience === "object" ? json.experience : null,
   };
   // Only forwarded when the server reports it: null means "no digital payment provider connected".
   if ("digital_provider" in json) {

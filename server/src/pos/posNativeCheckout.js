@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { commitNativePosInventory } from "./posInventorySync.js";
+import { loadOrgPosExperience } from "./posBusinessType.js";
 import { resolveCheckoutRegister } from "./posRegisters.js";
 import { resolveOpenSession } from "./posRegisterSessions.js";
 import { PERMISSIONS, forbidUnlessPermission } from "../companyRouteAccess.js";
@@ -145,7 +146,7 @@ export function posProductImageSrc(imageUrl) {
 }
 
 export async function loadPosCatalogRows(orgId, opts = {}) {
-  const { productIds, activeOnly = false, registerCompanyId = null, enforceBrand = false } = opts;
+  const { productIds, activeOnly = false, registerCompanyId = null, enforceBrand = false, includeServices = false } = opts;
   const ids = Array.isArray(productIds) ? [...new Set(productIds.filter(Boolean))] : null;
   if (ids && ids.length === 0) return [];
 
@@ -153,8 +154,8 @@ export async function loadPosCatalogRows(orgId, opts = {}) {
     let query = supabaseAdmin
       .from("services")
       .select(select)
-      .eq("org_id", orgId)
-      .eq("item_type", "product");
+      .eq("org_id", orgId);
+    query = includeServices ? query.in("item_type", ["product", "service"]) : query.eq("item_type", "product");
     if (activeOnly) query = query.eq("is_active", true);
     if (ids) query = query.in("id", ids);
     if (applyBrand) query = applyCatalogBrandFilter(query, registerCompanyId);
@@ -358,8 +359,9 @@ async function settleRecordedSaleInventory(res, {
 }
 
 /**
- * GET /api/pos/catalog — physical products for the till, scoped to the register brand.
- * Shared (company_id null) + matching register.company_id. Header brand is ignored.
+ * GET /api/pos/catalog — physical products for the till (plus services for mixed businesses),
+ * scoped to the register brand. Shared (company_id null) + matching register.company_id.
+ * Header brand is ignored. `experience` tells the till which features the business type uses.
  */
 export async function handleNativePosCatalog(req, res, gate) {
   const registerId = queryRegisterId(req);
@@ -384,16 +386,19 @@ export async function handleNativePosCatalog(req, res, gate) {
 
   const registerCompanyId = saleCompanyIdFromRegister(register);
   try {
+    const experience = await loadOrgPosExperience(gate.membership.orgId);
     const products = await loadPosCatalogRows(gate.membership.orgId, {
       activeOnly: true,
       registerCompanyId,
       enforceBrand: true,
+      includeServices: experience.services,
     });
     const cardRail = await resolveTillCardRail(gate.membership.orgId).catch(() => null);
     return res.status(200).json({
       products: products.map((p) => ({ ...p, image_src: posProductImageSrc(p.image_url) })),
       register_id: register?.id || null,
       company_id: registerCompanyId,
+      experience: { restaurant: experience.restaurant, services: experience.services, business_type: experience.type },
       card_rail: cardRail,
       // Online provider the Payment Engine would use for the digital tender (null = none connected).
       // Demo Mode: the simulated DEMO_PAYMENT rail — no real provider is ever described or used.
@@ -520,10 +525,13 @@ export async function handleNativePosCheckout(req, res, gate) {
 
   const productIds = (Array.isArray(body.items) ? body.items : []).map((row) => row?.product_id);
   let catalogById;
+  let sellsServices = false;
   try {
+    sellsServices = (await loadOrgPosExperience(gate.membership.orgId)).services;
     catalogById = await loadCatalogMap(gate.membership.orgId, productIds, {
       registerCompanyId: companyId,
       enforceBrand: true,
+      includeServices: sellsServices,
     });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Could not load products");
@@ -532,6 +540,7 @@ export async function handleNativePosCheckout(req, res, gate) {
   const built = buildCheckoutLines(body.items, catalogById, {
     requireStock: true,
     allowPriceOverride: false,
+    allowServices: sellsServices,
   });
   if (!built.ok) {
     return jsonError(res, 422, built.error, built.code ? { code: built.code, product_id: built.product_id } : {});
@@ -982,7 +991,8 @@ export async function handleNativePosReturn(req, res, gate) {
   const productIds = allocated.lines.map((row) => row.product_id);
   let catalogById;
   try {
-    catalogById = await loadCatalogMap(gate.membership.orgId, productIds);
+    // Services sold earlier stay refundable (they never restock).
+    catalogById = await loadCatalogMap(gate.membership.orgId, productIds, { includeServices: true });
   } catch (err) {
     return jsonError(res, 500, err?.message || "Could not load products");
   }
@@ -995,6 +1005,7 @@ export async function handleNativePosReturn(req, res, gate) {
   const built = buildCheckoutLines(allocated.lines, catalogById, {
     requireStock: false,
     allowPriceOverride: false,
+    allowServices: true,
   });
   if (!built.ok) return jsonError(res, 422, built.error);
 

@@ -293,6 +293,9 @@ export async function commitNativePosInventory(
     };
   }
 
-  const lines = Array.isArray(items) && items.length > 0 ? items : sale.items;
+  // Services (mixed tills) carry no stock: they never reach inventory, so they can't fail a sale.
+  const source = Array.isArray(items) && items.length > 0 ? items : sale.items;
+  const lines = (Array.isArray(source) ? source : []).filter((line) => String(line?.item_type || "").toLowerCase() !== "service");
+  if (!lines.length) return { applied: true, failed: null, results: [] };
   return applyNativePosInventory(supabase, orgId, saleEventId, lines, direction);
 }

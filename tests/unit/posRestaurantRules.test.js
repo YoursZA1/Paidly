@@ -135,7 +135,10 @@ describe("modes and labels", () => {
     expect(businessTypeIncludesPos("restaurant")).toBe(true);
     expect(defaultOrderType({ businessType: "restaurant" })).toBe(ORDER_TYPE.DINE_IN);
     expect(defaultOrderType({ businessType: "retail" })).toBe(ORDER_TYPE.COUNTER);
-    expect(restaurantModeEnabled({ businessType: "mixed", tableCount: 6 })).toBe(true);
+    // Hospitality follows the business type only — tables set up on a mixed/retail till don't turn it on.
+    expect(restaurantModeEnabled({ businessType: "mixed", tableCount: 6 })).toBe(false);
+    expect(restaurantModeEnabled({ businessType: "retail", tableCount: 6 })).toBe(false);
+    expect(restaurantModeEnabled({ businessType: "bar" })).toBe(true);
   });
   it("labels tabs", () => {
     expect(tabLabel({}, { name: "12" })).toBe("Table 12");

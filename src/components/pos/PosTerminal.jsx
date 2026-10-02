@@ -100,7 +100,7 @@ import {
 import { createPosWedgeBuffer, POS_SCAN_COMMIT_MS, isRapidScanGap } from "@/lib/pos/posWedgeScan";
 import { displayPosBarcode } from "@/lib/pos/posBarcode";
 import { applyPosSaleDiscount, catalogUnitPrice, computeCashChange } from "../../../server/src/pos/posCheckoutMath.js";
-import { addPosCartLine, posCartSubtotal, posProductStock, posStockLabel, setPosCartQty } from "@/lib/pos/posCart";
+import { addPosCartLine, isPosService, posCartSubtotal, posProductStock, posStockLabel, setPosCartQty } from "@/lib/pos/posCart";
 import { refundRailForSale, remainingLinesForTill } from "../../../server/src/pos/posReturnMath.js";
 import { clearHeldCart, hydrateHeldCart, readHeldCart, writeHeldCart } from "@/lib/pos/posHeldCart";
 import { pickActiveRegister, readActiveRegisterId, writeActiveRegisterId } from "@/lib/pos/posRegisterStorage";
@@ -164,7 +164,7 @@ function cashSuggestions(total) {
 
 function PosCatalogProductCard({ product, currency, inCart, onAdd, onQty }) {
   const stock = posProductStock(product);
-  const stockUi = posStockLabel(stock, { compact: true });
+  const stockUi = posStockLabel(stock, { compact: true, service: isPosService(product) });
   const out = stockUi.tone === "out";
   const hasImage = Boolean(product.image_url || product.image_src);
 
@@ -443,9 +443,12 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
   const [shiftPinDraft, setShiftPinDraft] = useState("");
   const [closingDraft, setClosingDraft] = useState("");
   const [shiftBusy, setShiftBusy] = useState(false);
+  // What this business type uses on the till, as the server reports it with the catalog (the same
+  // answer for owners and code-unlocked tills): restaurant features and services at the till.
+  const [tillExperience, setTillExperience] = useState(null);
   // Restaurant mode: floor → table → order → kitchen → pay. The cart is reused as the tab's NEW ITEMS.
   const restaurant = usePosRestaurant({
-    businessType: companyCtx?.businessType,
+    businessType: tillExperience?.business_type ?? companyCtx?.businessType,
     registerId: activeRegister?.id || null,
     cashierName,
     cart,
@@ -483,6 +486,7 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
       const rows = Array.isArray(catalog?.products) ? catalog.products : Array.isArray(catalog) ? catalog : [];
       setProducts(rows);
       if (catalog?.card_rail) setCardRail(catalog.card_rail);
+      if (catalog?.experience) setTillExperience(catalog.experience);
       if (catalog && "digital_provider" in catalog) setDigitalProvider(catalog.digital_provider || null);
       const ids = new Set(rows.map((row) => row.id));
       setCart((prev) => prev.filter((line) => ids.has(line.product_id)));
@@ -2228,7 +2232,9 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
                     ? "No popular items yet. Complete a few sales today and they will show here."
                     : query.trim()
                     ? "Try a different name, SKU, or barcode."
-                    : "Add physical products with stock in the catalog. Private brand products only appear on that brand’s till."}
+                    : tillExperience?.services
+                      ? "Add products or services in the catalog. Private brand items only appear on that brand’s till."
+                      : "Add physical products with stock in the catalog. Private brand products only appear on that brand’s till."}
               </p>
               {category !== "all" || query.trim() ? (
                 <Button

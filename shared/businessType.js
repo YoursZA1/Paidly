@@ -2,9 +2,12 @@
  * How a Paidly tenant sells. POS is an optional capability — not every org is a till.
  *
  * - service: normal Paidly (invoices, quotes, clients). No POS.
- * - retail: Paidly + POS (catalog / walk-in checkout).
- * - mixed: Paidly + POS + invoices (both money flows).
- * - restaurant: Paidly + POS in restaurant mode (floor → table → order → kitchen → pay).
+ * - retail: Paidly + a simple till selling products (catalog / walk-in checkout).
+ * - mixed: Paidly + a simple till selling products AND services, plus invoices for account customers.
+ * - restaurant: Paidly + the hospitality till (floor → table → order → kitchen → pay).
+ *
+ * The till only shows what the business type uses: no floor plan, kitchen or dine-in/takeaway for
+ * retail and mixed; no till at all for service. See {@link posExperienceFor}.
  *
  * Unset / unknown → treat as service (do not force POS).
  */
@@ -99,4 +102,36 @@ export function businessTypeIncludesPos(raw) {
  */
 export function businessTypeIncludesInvoices(_raw) {
   return true;
+}
+
+/**
+ * Hospitality features (floor plan, tables, kitchen tickets, dine-in / takeaway / counter, orders).
+ * Only restaurants / cafés / bars — setting up tables does not turn them on for other types.
+ * @param {unknown} raw
+ */
+export function businessTypeIncludesRestaurant(raw) {
+  return normalizeBusinessType(raw) === BUSINESS_TYPE.RESTAURANT;
+}
+
+/**
+ * Services (hourly, fixed-price work…) can be rung up on the till alongside products. Mixed only:
+ * retail and restaurant tills sell stock items; service businesses have no till.
+ * @param {unknown} raw
+ */
+export function businessTypeSellsServicesAtTill(raw) {
+  return normalizeBusinessType(raw) === BUSINESS_TYPE.MIXED;
+}
+
+/**
+ * What the POS front shows for a business type — one place for the till, settings and server.
+ * @param {unknown} raw
+ * @returns {{ type: string|null, pos: boolean, restaurant: boolean, services: boolean }}
+ */
+export function posExperienceFor(raw) {
+  return {
+    type: normalizeBusinessType(raw),
+    pos: businessTypeIncludesPos(raw),
+    restaurant: businessTypeIncludesRestaurant(raw),
+    services: businessTypeSellsServicesAtTill(raw),
+  };
 }

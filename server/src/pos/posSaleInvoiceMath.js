@@ -63,7 +63,7 @@ export function buildInvoiceFromPosSale(sale, opts = {}) {
         unit_price: unit,
         total_price: total,
         sku,
-        item_type: "product",
+        item_type: String(item.item_type || "").toLowerCase() === "service" ? "service" : "product",
         unit_type: item.unit_type || item.unit || null,
         tax_rate: item.tax_rate ?? item.item_tax_rate ?? null,
       })

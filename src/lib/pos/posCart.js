@@ -1,16 +1,26 @@
 import { catalogUnitPrice, roundMoney } from "../../../server/src/pos/posCheckoutMath.js";
 
+/** Most of one service a single sale can ring up (matches the checkout's quantity limit). */
+export const POS_SERVICE_QTY_CAP = 9999;
+
+/** Services (mixed tills) have no stock: never out of stock, never move inventory. */
+export function isPosService(product) {
+  return String(product?.item_type || "").toLowerCase() === "service";
+}
+
 export function posProductStock(product) {
+  if (isPosService(product)) return POS_SERVICE_QTY_CAP;
   const n = Number(product?.stock_quantity);
   return Number.isFinite(n) ? n : 0;
 }
 
 /**
  * @param {number} stock
- * @param {{ low?: number, compact?: boolean }} [opts]
+ * @param {{ low?: number, compact?: boolean, service?: boolean }} [opts]
  * @returns {{ text: string, tone: "out" | "low" | "ok" }}
  */
-export function posStockLabel(stock, { low = 5, compact = false } = {}) {
+export function posStockLabel(stock, { low = 5, compact = false, service = false } = {}) {
+  if (service) return { text: "Service", tone: "ok" };
   const n = Number(stock);
   if (!Number.isFinite(n) || n <= 0) return { text: "Out of stock", tone: "out" };
   if (n <= low) return { text: compact ? "Low stock" : `LOW STOCK · ${n} in stock`, tone: "low" };

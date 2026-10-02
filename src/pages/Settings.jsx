@@ -2103,7 +2103,7 @@ function PersonalAccountSettings() {
 }
 
 function PosIntegrationsTab() {
-    const { posEnabled } = useCompanyContext();
+    const { posEnabled, restaurantEnabled } = useCompanyContext();
     if (!posEnabled) {
         return (
             <SettingsCard
@@ -2130,9 +2130,12 @@ function PosIntegrationsTab() {
             >
                 <PosRegistersSettings />
             </SettingsCard>
-            <SettingsCard title="Restaurant" description="Floors and tables for dine-in orders.">
-                <RestaurantSummary />
-            </SettingsCard>
+            {/* Floors and tables only for Restaurant / café / bar — other tills never show them. */}
+            {restaurantEnabled ? (
+                <SettingsCard title="Restaurant" description="Floors and tables for dine-in orders.">
+                    <RestaurantSummary />
+                </SettingsCard>
+            ) : null}
             <SettingsCard title="Payment provider" description="Connect the provider your till takes payments with.">
                 <PosIntegrationSettings />
             </SettingsCard>

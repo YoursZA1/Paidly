@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
-import { businessTypeIncludesPos } from "../../../shared/businessType.js";
+import { businessTypeIncludesPos, normalizeBusinessType, posExperienceFor } from "../../../shared/businessType.js";
 
 function columnMissing(message) {
   return /business_type|schema cache|column .* does not exist/i.test(String(message || ""));
@@ -38,4 +38,26 @@ export async function requirePosCapability(res, orgId) {
     code: "POS_NOT_ENABLED",
   });
   return false;
+}
+
+/**
+ * The org's business type (normalized), or null when unset / the column is missing.
+ * @param {string} orgId
+ */
+export async function loadOrgBusinessType(orgId) {
+  if (!orgId) return null;
+  const { data, error } = await supabaseAdmin.from("organizations").select("business_type").eq("id", orgId).maybeSingle();
+  if (error) {
+    if (!columnMissing(error.message)) console.warn("[pos] business_type lookup", error.message);
+    return null;
+  }
+  return normalizeBusinessType(data?.business_type);
+}
+
+/**
+ * What the till offers this org (see shared posExperienceFor): restaurant features and services.
+ * @param {string} orgId
+ */
+export async function loadOrgPosExperience(orgId) {
+  return posExperienceFor(await loadOrgBusinessType(orgId));
 }

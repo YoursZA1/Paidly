@@ -624,3 +624,88 @@ describe("order lifecycle through the orders screen", () => {
     expect((await kitchenMove(ticket.id, "preparing", OUTSIDER)).statusCode).toBe(404);
   });
 });
+
+// ── Business type decides what the till offers ─────────────────────────────────────────────
+
+const { handleNativePosCatalog, handleNativePosCheckout } = await import("../../server/src/pos/posNativeCheckout.js");
+const SERVICE_ID = "dddddddd-0000-4000-8000-000000000001";
+const setBusinessType = (type) => {
+  tables.organizations = [{ id: ORG, business_type: type }];
+};
+async function handler(fn, { body = {}, query = {}, as = OWNER } = {}) {
+  const r = res();
+  await fn({ method: body && Object.keys(body).length ? "POST" : "GET", body, query, headers: {} }, r, as);
+  return r;
+}
+
+describe("business type → till features", () => {
+  it("retail and mixed tills can't start table orders or build floors; restaurant can", async () => {
+    const { t12 } = await setupFloor(); // set up while still a restaurant
+    for (const type of ["retail", "mixed"]) {
+      setBusinessType(type);
+      const opened = await tab({ action: "open", table_id: t12.id, guests: 2 }, WAITER);
+      expect(opened.statusCode).toBe(403);
+      expect(opened.body.code).toBe("RESTAURANT_NOT_ENABLED");
+      expect((await tab({ action: "open", order_type: "takeaway" }, WAITER)).body.code).toBe("RESTAURANT_NOT_ENABLED");
+      expect((await call("restaurant-floor-setup", "POST", { body: { action: "create_floor", name: "Patio" } })).body.code).toBe("RESTAURANT_NOT_ENABLED");
+      expect((await call("restaurant-floor", "GET")).body.restaurant_enabled).toBe(false);
+    }
+    setBusinessType("restaurant");
+    expect((await call("restaurant-floor", "GET")).body.restaurant_enabled).toBe(true);
+    expect((await tab({ action: "open", table_id: t12.id, guests: 2 }, WAITER)).statusCode).toBe(201);
+  });
+
+  it("switching away from restaurant never strands an open bill: it can still be paid and closed", async () => {
+    const { id } = await seatTable12WithFirstRound();
+    await tab({ action: "send", tab_id: id }, WAITER);
+    setBusinessType("mixed");
+    const paid = await pay({ tab_id: id, payment_method: "cash", amount_tendered: 400 }, WAITER);
+    expect(paid.body.paid).toBe(true);
+    expect((await tab({ action: "close", tab_id: id }, WAITER)).body.tab.status).toBe("closed");
+  });
+
+  it("mixed tills list and sell services alongside products; services never touch stock", async () => {
+    tables.services.push({ id: SERVICE_ID, org_id: ORG, name: "Gift wrapping", item_type: "service", is_active: true, price: 20, stock_quantity: null });
+    setBusinessType("retail");
+    let catalog = await handler(handleNativePosCatalog);
+    expect(catalog.body.experience).toMatchObject({ restaurant: false, services: false, business_type: "retail" });
+    expect(catalog.body.products.some((p) => p.id === SERVICE_ID)).toBe(false);
+    const refused = await handler(handleNativePosCheckout, {
+      body: { payment_method: "cash", amount_tendered: 20, items: [{ product_id: SERVICE_ID, quantity: 1 }] },
+      as: WAITER,
+    });
+    expect(refused.statusCode).toBe(422);
+
+    setBusinessType("mixed");
+    catalog = await handler(handleNativePosCatalog);
+    expect(catalog.body.experience).toMatchObject({ restaurant: false, services: true, business_type: "mixed" });
+    expect(catalog.body.products.find((p) => p.id === SERVICE_ID)).toMatchObject({ item_type: "service" });
+
+    const sale = await handler(handleNativePosCheckout, {
+      body: {
+        payment_method: "cash",
+        amount_tendered: 200,
+        idempotency_key: "mixed-sale-1",
+        items: [
+          { product_id: SERVICE_ID, quantity: 2 },
+          { product_id: P.coke, quantity: 1 },
+        ],
+      },
+      as: WAITER,
+    });
+    expect(sale.statusCode).toBeLessThan(300);
+    const event = tables.pos_sales_events.at(-1);
+    expect(Number(event.total_amount)).toBe(65);
+    expect(event.status).not.toBe("failed");
+    // The sale tags each line, so inventory (posInventorySync — tested on its own) skips the service.
+    const lines = event.items || event.raw_payload?.items || [];
+    expect(lines.map((l) => [l.name, l.item_type])).toEqual([
+      ["Gift wrapping", "service"],
+      ["Coke", "product"],
+    ]);
+
+    setBusinessType("restaurant");
+    catalog = await handler(handleNativePosCatalog);
+    expect(catalog.body.experience).toMatchObject({ restaurant: true, services: false });
+  });
+});

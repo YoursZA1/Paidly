@@ -25,11 +25,17 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
   const bundleIdRef = useRef(null);
   bundleIdRef.current = bundle?.tab?.id || null;
 
-  const tableCount = floorState?.tables?.length || 0;
-  const enabled = !schemaMissing && restaurantModeEnabled({ businessType, tableCount });
-  const effectiveOrderType = enabled ? orderType || defaultOrderType({ businessType, tableCount }) : ORDER_TYPE.COUNTER;
+  // Hospitality features follow the business type only (Restaurant / café / bar). Retail and mixed
+  // tills never load the floor, kitchen or orders — even if tables were set up earlier.
+  const allowed = restaurantModeEnabled({ businessType });
+  const enabled = allowed && !schemaMissing;
+  const effectiveOrderType = enabled ? orderType || defaultOrderType({ businessType }) : ORDER_TYPE.COUNTER;
 
   const refreshFloor = useCallback(async () => {
+    if (!allowed) {
+      setFloorLoading(false);
+      return null;
+    }
     try {
       const next = await fetchRestaurantFloor();
       setFloorState(next);
@@ -41,7 +47,7 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
     } finally {
       setFloorLoading(false);
     }
-  }, []);
+  }, [allowed]);
 
   useEffect(() => {
     void refreshFloor();

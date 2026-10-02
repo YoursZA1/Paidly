@@ -25,11 +25,13 @@ export function catalogUnitPrice(row) {
 /**
  * @param {Array<{ product_id?: string, quantity?: number, unit_price?: number }>} requested
  * @param {Map<string, Record<string, unknown>>} catalogById
- * @param {{ allowPriceOverride?: boolean, requireStock?: boolean }} [opts]
+ * @param {{ allowPriceOverride?: boolean, requireStock?: boolean, allowServices?: boolean }} [opts]
  *   allowPriceOverride defaults false — native checkout always uses catalog prices.
+ *   allowServices (mixed businesses, refunds): services sell without stock and never move inventory.
  */
 export function buildCheckoutLines(requested, catalogById, opts = {}) {
   const allowPriceOverride = opts.allowPriceOverride === true;
+  const allowServices = opts.allowServices === true;
   const requireStock = opts.requireStock !== false;
   const list = Array.isArray(requested) ? requested : [];
 
@@ -66,7 +68,9 @@ export function buildCheckoutLines(requested, catalogById, opts = {}) {
     if (!product) {
       return { ok: false, error: "One or more products are not in this catalog" };
     }
-    if (String(product.item_type || "").toLowerCase() !== "product") {
+    const itemType = String(product.item_type || "").toLowerCase();
+    const isService = itemType === "service";
+    if (itemType !== "product" && !(isService && allowServices)) {
       return { ok: false, error: `${product.name || "Item"} is not a physical product` };
     }
     if (product.is_active === false) {
@@ -84,9 +88,9 @@ export function buildCheckoutLines(requested, catalogById, opts = {}) {
 
     const lineTotal = roundMoney(unitPrice * entry.quantity);
     const stock = Number(product.stock_quantity);
-    const stockOnHand = Number.isFinite(stock) ? stock : 0;
+    const stockOnHand = isService ? null : Number.isFinite(stock) ? stock : 0;
 
-    if (requireStock && stockOnHand < entry.quantity) {
+    if (requireStock && !isService && stockOnHand < entry.quantity) {
       return {
         ok: false,
         error: `Not enough stock for ${product.name || "item"} (have ${stockOnHand}, need ${entry.quantity})`,
@@ -105,6 +109,7 @@ export function buildCheckoutLines(requested, catalogById, opts = {}) {
       unit_price: unitPrice,
       line_total: lineTotal,
       stock_on_hand: stockOnHand,
+      item_type: isService ? "service" : "product",
     });
     subtotal = roundMoney(subtotal + lineTotal);
   }

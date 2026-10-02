@@ -15,7 +15,7 @@ import {
   canCreateDocumentType,
   canApproveDocument,
 } from "@/lib/companyPermissions";
-import { businessTypeIncludesPos } from "@shared/businessType.js";
+import { businessTypeIncludesPos, businessTypeIncludesRestaurant, businessTypeSellsServicesAtTill } from "@shared/businessType.js";
 import { formatCompanyMemberRoleLabel } from "@/lib/companyJobFunctions";
 import {
   loadCompanyAccessContext,
@@ -46,6 +46,10 @@ function companyContextValue({ loading, error, ctx, hasPermission, refresh, port
     isOrgOwner: Boolean(ctx?.isOrgOwner),
     businessType: ctx?.businessType ?? null,
     posEnabled: businessTypeIncludesPos(ctx?.businessType),
+    // Floor plan, tables and kitchen — Restaurant / café / bar only.
+    restaurantEnabled: businessTypeIncludesRestaurant(ctx?.businessType),
+    // Services on the till alongside products — Mixed only.
+    sellsServicesAtTill: businessTypeSellsServicesAtTill(ctx?.businessType),
     // Inside /employee/<slug>: business-owner screens only if they own THAT business; unresolved → closed.
     showBusinessDashboard: portalSlug ? Boolean(ctx?.isOrgOwner) : showBusinessOwnerDashboard(ctx),
     /** Employee portal this tab is in ("" = the user's default business context). */
