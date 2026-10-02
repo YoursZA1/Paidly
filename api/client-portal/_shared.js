@@ -47,8 +47,9 @@ export function verifyPortalToken(token) {
   if (!secret || !token) return null;
   const [p, h] = String(token).split(".");
   if (!p || !h) return null;
-  const expected = crypto.createHmac("sha256", secret).update(p).digest("base64url");
-  if (expected !== h) return null;
+  const expected = Buffer.from(crypto.createHmac("sha256", secret).update(p).digest("base64url"));
+  const given = Buffer.from(h);
+  if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) return null;
   try {
     const payload = JSON.parse(Buffer.from(p, "base64url").toString("utf8"));
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
@@ -96,19 +97,28 @@ function mapPaymentRow(row) {
   };
 }
 
+/** ILIKE is only used for case-insensitivity: `%`, `_` and `\` in the input must match literally. */
+export function escapeLikePattern(value) {
+  return String(value).replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 export async function findClientsByEmail(supabase, email) {
-  const normalized = normalizePortalEmail(email);
+  const normalized = typeof email === "string" ? normalizePortalEmail(email) : "";
   if (!normalized) return { clients: [], error: "Email required" };
+  if (normalized.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    return { clients: [], error: "Enter a valid email address" };
+  }
   const { data, error } = await supabase
     .from("clients")
     .select(
       "id, org_id, name, email, phone, address, contact_person, website, tax_id, notes, payment_terms, payment_terms_days, created_at, updated_at"
     )
-    .ilike("email", normalized);
+    .ilike("email", escapeLikePattern(normalized));
   if (error) {
-    return { clients: [], error: error.message || "Lookup failed" };
+    return { clients: [], error: "Lookup failed" };
   }
-  return { clients: data || [], error: null };
+  const exact = (data || []).filter((row) => normalizePortalEmail(row.email) === normalized);
+  return { clients: exact, error: null };
 }
 
 export function clientRowForResponse(row) {

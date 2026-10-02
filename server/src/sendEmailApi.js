@@ -12,6 +12,10 @@ import { sendHtmlEmail } from "./sendInvoice.js";
 import { sendUnexpectedError } from "./apiResponse.js";
 import { applyApiCors } from "./auth/applyApiCors.js";
 import { isDemoUserId, sendDemoNotSent } from "./demo/demoMode.js";
+import { consumePersistedRateLimit } from "./rateLimit/consumeRateLimit.js";
+
+/** Per-user send budget: the Express limiter (apiAbuseLimiter) does not run on Vercel functions. */
+export const SEND_EMAIL_LIMIT = Object.freeze({ hits: 60, windowMs: 60 * 60 * 1000 });
 
 export default async function sendEmailHandler(req, res) {
   applyApiCors(req, res);
@@ -42,6 +46,20 @@ export default async function sendEmailHandler(req, res) {
     // Demo Mode: never reaches a real inbox; the caller gets a preview instead.
     if (await isDemoUserId(user.id)) {
       return sendDemoNotSent(res, { channel: "email", to: parsed.to, subject: subjectSafe, kind: "email" });
+    }
+
+    const budget = await consumePersistedRateLimit(
+      `send-email:${user.id}`,
+      SEND_EMAIL_LIMIT.hits,
+      SEND_EMAIL_LIMIT.windowMs
+    );
+    if (!budget.ok) {
+      res.setHeader("Retry-After", String(budget.retryAfterSeconds || 60));
+      return res.status(429).json({
+        success: false,
+        code: "RATE_LIMITED",
+        error: "Too many emails sent in a short time. Please try again later.",
+      });
     }
 
     const result = await sendHtmlEmail(
