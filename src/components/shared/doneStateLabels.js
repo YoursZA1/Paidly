@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { CELEBRATION } from "@shared/ux/doneStates.js";
+import { invoicePaymentMethodLabel } from "@shared/payments/invoicePaymentMethods.js";
 import { formatCurrency } from "@/utils/currencyCalculations";
 
 /** "12 October 2026", or "" for missing/invalid dates. */
@@ -21,16 +22,6 @@ export function paymentMilestoneCelebration(milestone, currency = "ZAR") {
   return { celebration: CELEBRATION.STRONG, celebrationLabel: "Your first invoice payment" };
 }
 
-const METHOD_LABEL = {
-  cash: "Cash",
-  bank_transfer: "Bank transfer",
-  credit_card: "Credit card",
-  debit_card: "Debit card",
-  mobile_payment: "Mobile payment",
-  check: "Cheque",
-  other: "Other",
-};
-
 export function paymentMethodLabel(method) {
-  return METHOD_LABEL[String(method || "").toLowerCase()] || "";
+  return invoicePaymentMethodLabel(method);
 }

@@ -12,10 +12,14 @@ import Button from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DollarSign, Calendar, CreditCard, Save, AlertCircle, Building2, Banknote, Smartphone, Download, Eye, Plus } from 'lucide-react';
+import { DollarSign, Calendar, Save, AlertCircle, Download, Eye, Plus } from 'lucide-react';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { Payment } from '@/api/entities';
+import { fetchDocumentOnlineProviders, startDocumentPayment } from '@/api/documentPaymentApi';
+import {
+  INVOICE_PAYMENT_CHOICES,
+  isOnlineInvoicePaymentMethod,
+} from '@shared/payments/invoicePaymentMethods.js';
 import DoneState from '@/components/shared/DoneState';
 import { longDate, paymentMethodLabel, paymentMilestoneCelebration } from '@/components/shared/doneStateLabels';
 import { invoiceOutcome } from '@shared/ux/doneStates.js';
@@ -25,11 +29,13 @@ import { createPageUrl, createViewDocumentUrl } from '@/utils';
  * Record money received offline. Completion is a persistent Done State (Paidly Done Screen standard):
  * what was received, what is still outstanding, and the next useful actions — it does not auto-close.
  */
-export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, defaultValues = null, showViewInvoice = true }) {
+export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, defaultValues = null, showViewInvoice = true, onDemoPayment = null }) {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState('');
+  const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
+  const [onlineReady, setOnlineReady] = useState(false);
   const [error, setError] = useState('');
   const [existingPayments, setExistingPayments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -83,9 +89,25 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
     setAmount(presetAmount ? Number(presetAmount).toFixed(2) : '');
     setDate(toDateInputValue(defaultValues?.payment_date));
     setMethod(defaultValues?.payment_method || '');
+    setReference(defaultValues?.reference_number || '');
     setNotes(defaultValues?.notes || '');
     setError('');
-  }, [isOpen, defaultValues?.amount, defaultValues?.payment_date, defaultValues?.payment_method, defaultValues?.notes]);
+  }, [isOpen, defaultValues?.amount, defaultValues?.payment_date, defaultValues?.payment_method, defaultValues?.reference_number, defaultValues?.notes]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    let cancelled = false;
+    fetchDocumentOnlineProviders()
+      .then((providers) => {
+        if (!cancelled) setOnlineReady(providers.some((provider) => provider.configured));
+      })
+      .catch(() => {
+        if (!cancelled) setOnlineReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   // Default amount to full balance once payments are loaded
   useEffect(() => {
@@ -101,7 +123,43 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
     { label: '10% of Balance', value: remainingBalance / 10 }
   ].filter(suggestion => suggestion.value >= 1 && remainingBalance > 0);
 
+  const payOnline = async () => {
+    setPhase('recording');
+    setError('');
+    try {
+      const result = await startDocumentPayment({ invoiceId: invoice.id });
+      if (result?.demo && result?.simulated) {
+        onDemoPayment?.({
+          invoiceId: invoice.id,
+          invoiceNumber: result.invoice_number || invoice.invoice_number,
+          amount: result.amount_due,
+          currency: result.currency || invoice.currency || 'ZAR',
+        });
+        setPhase('form');
+        onClose?.();
+        return;
+      }
+      if (result.redirect_url) {
+        window.location.assign(result.redirect_url);
+        return;
+      }
+      setError('The payment provider did not return a payment link.');
+      setPhase('form');
+    } catch (err) {
+      setError(err?.message || 'Online payment could not start.');
+      setPhase('form');
+    }
+  };
+
   const handleSave = async () => {
+    if (isOnlineInvoicePaymentMethod(method)) {
+      if (!onlineReady) {
+        setError('No digital payment provider is connected. Connect a payment provider to accept online payments.');
+        return;
+      }
+      await payOnline();
+      return;
+    }
     if (!amount || !date || !method) {
       setError('Amount, date, and payment method are required');
       return;
@@ -125,7 +183,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
         amount: parsedAmount,
         payment_date: new Date(date).toISOString(),
         payment_method: method,
-        reference_number: notes.split('\n')[0] || '',
+        reference_number: reference.trim(),
         notes,
         idempotency_key: idempotencyKey,
       });
@@ -145,6 +203,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
     }
   };
 
+  const onlineSelected = isOnlineInvoicePaymentMethod(method);
   const showForm = phase === 'form';
   const showRecording = phase === 'recording';
   const showSuccess = phase === 'success' && outcome;
@@ -316,69 +375,65 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
             </div>
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="method">Payment Method *</Label>
-            <Select value={method} onValueChange={(value) => {
-              setMethod(value);
-              setError('');
-            }}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select payment method" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bank_transfer">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-4 h-4" />
-                    <span>Bank Transfer</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="cash">
-                  <div className="flex items-center gap-2">
-                    <Banknote className="w-4 h-4" />
-                    <span>Cash</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="credit_card">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="w-4 h-4" />
-                    <span>Credit Card</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="debit_card">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="w-4 h-4" />
-                    <span>Debit Card</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="mobile_payment">
-                  <div className="flex items-center gap-2">
-                    <Smartphone className="w-4 h-4" />
-                    <span>Mobile Payment</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="check">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4" />
-                    <span>Check</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="other">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4" />
-                    <span>Other</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Payment method</legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {INVOICE_PAYMENT_CHOICES.map((choice) => (
+                <label
+                  key={choice.value}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                    method === choice.value ? 'border-primary bg-primary/10' : 'border-border'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="invoice-payment-method"
+                    value={choice.value}
+                    checked={method === choice.value}
+                    onChange={() => {
+                      setMethod(choice.value);
+                      setError('');
+                    }}
+                  />
+                  {choice.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {onlineSelected && !onlineReady && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+              <p>No digital payment provider is connected. Connect a payment provider to accept online payments.</p>
+              <a className="mt-2 inline-block font-medium underline" href={`${createPageUrl('Settings')}?tab=integrations`}>
+                Connect Payment Provider
+              </a>
+            </div>
+          )}
+          {onlineSelected && onlineReady && (
+            <p className="text-sm text-muted-foreground">
+              Pay online sends the outstanding balance to the connected payment provider. Cash, EFT, card and POS are recorded here instead.
+            </p>
+          )}
           
           <div className="space-y-2">
-            <Label htmlFor="notes">Reference/Notes (Optional)</Label>
+            <Label htmlFor="reference">Reference / transaction ID (optional)</Label>
+            <Input
+              id="reference"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="e.g. ABC12345"
+              disabled={onlineSelected}
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes (optional)</Label>
             <Textarea
               id="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g., Transaction ID, check number, reference code"
+              placeholder="Optional note about this payment"
               className="min-h-20"
             />
           </div>
@@ -387,9 +442,16 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button onClick={handleSave} disabled={!amount || !date || !method || !isAmountValid || remainingBalance <= 0}>
+          <Button
+            onClick={handleSave}
+            disabled={
+              !method ||
+              remainingBalance <= 0 ||
+              (onlineSelected ? !onlineReady : !amount || !date || !isAmountValid)
+            }
+          >
             <Save className="w-4 h-4 mr-2" />
-            Record Payment
+            {onlineSelected ? 'Pay online' : 'Record Payment'}
           </Button>
         </DialogFooter>
             </motion.div>

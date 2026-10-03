@@ -50,15 +50,7 @@ const POS_PROVIDERS = new Set([
 const DOCUMENT_PROVIDERS = new Set([...ONLINE_PAYMENT_PROVIDERS, CUSTOMER_PAYMENT_PROVIDERS.CASH]);
 
 /** How offline invoice money was received (payments.method for document cash settlements). */
-export const OFFLINE_PAYMENT_METHODS = Object.freeze([
-  "cash",
-  "bank_transfer",
-  "credit_card",
-  "debit_card",
-  "mobile_payment",
-  "check",
-  "other",
-]);
+export { INVOICE_OFFLINE_METHODS as OFFLINE_PAYMENT_METHODS } from "../../../shared/payments/invoicePaymentMethods.js";
 
 export function normalizeCustomerPaymentProvider(raw) {
   const key = String(raw || "").trim().toLowerCase();

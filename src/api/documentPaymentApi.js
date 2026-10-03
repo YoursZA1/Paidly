@@ -103,6 +103,17 @@ export async function recordDocumentPayment({
   return parseJson(res, "Could not record payment");
 }
 
+/** Online providers that can take an invoice payment. `configured` is false when none is connected. */
+export async function fetchDocumentOnlineProviders() {
+  const headers = await authHeaders();
+  const res = await apiRequest(`${apiBase()}/api/payment-intents/providers?source_kind=document`, {
+    method: "GET",
+    headers,
+  });
+  const json = await parseJson(res, "Could not load payment providers");
+  return (Array.isArray(json.providers) ? json.providers : []).filter((provider) => provider.kind === "online");
+}
+
 export async function fetchDocumentPaymentHistory({ invoiceId, shareToken = null }) {
   const headers = shareToken ? publicHeaders(shareToken) : await authHeaders();
   const qs = new URLSearchParams({ invoice_id: invoiceId });

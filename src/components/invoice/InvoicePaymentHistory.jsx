@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { paymentProviderLabel } from "@shared/payments/paymentProviderCatalog.js";
+import { invoicePaymentMethodLabel } from "@shared/payments/invoicePaymentMethods.js";
 
 const STATUS_LABEL = {
   pending: "Pending",
@@ -23,11 +24,15 @@ export default function InvoicePaymentHistory({ history = [], currency = "ZAR" }
       <ul className="mt-3 divide-y divide-border">
         {history.map((row) => {
           const when = row.created_at ? format(new Date(row.created_at), "d MMM yyyy") : "—";
+          const recordedLabel = row.recorded ? invoicePaymentMethodLabel(row.method) || "Recorded payment" : paymentProviderLabel(row.provider);
           return (
             <li key={row.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
               <div className="min-w-0">
                 <p className="text-sm text-foreground">{when}</p>
-                <p className="text-xs text-muted-foreground">{paymentProviderLabel(row.provider)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {row.recorded ? `${recordedLabel} · Recorded` : recordedLabel}
+                  {row.reference ? ` · ${row.reference}` : ""}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium tabular-nums text-foreground">

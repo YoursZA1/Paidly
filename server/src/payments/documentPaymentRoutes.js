@@ -249,6 +249,10 @@ export async function handleDocumentRecord(req, res) {
 
   try {
     const orgId = gate.membership.orgId;
+    const claimedOrg = String(body.company_id || body.org_id || "").trim();
+    if (claimedOrg && claimedOrg !== orgId) {
+      return jsonError(res, 403, "You cannot record a payment for another business", { code: "PAYMENT_FORBIDDEN" });
+    }
     const invoice = await loadOrgInvoice(orgId, invoiceId);
     if (!invoice) return jsonError(res, 404, "Invoice not found");
     const role = gate.membership.companyRole;

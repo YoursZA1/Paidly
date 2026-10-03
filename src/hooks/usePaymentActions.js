@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import { Invoice, Payment } from '@/api/entities';
 import { recordDocumentPayment } from '@/api/documentPaymentApi';
+import { invalidateInvoiceDomain } from '@/lib/queryInvalidation';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { detectPaymentMilestone } from '@/services/milestoneService';
@@ -23,6 +25,7 @@ import { detectPaymentMilestone } from '@/services/milestoneService';
 export function usePaymentActions(invoice, options = {}) {
   const { onSuccess } = options;
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const recordPayment = async (paymentData, { showToast = true } = {}) => {
@@ -100,6 +103,7 @@ export function usePaymentActions(invoice, options = {}) {
       }
 
       const updatedInvoice = { ...invoice, status: nextStatus, version_history };
+      invalidateInvoiceDomain(queryClient, { invoiceId: invoice.id });
       onSuccess?.({ invoice: updatedInvoice, payments: invoicePayments, isFullyPaid, milestone });
       return {
         amount: paymentData.amount,

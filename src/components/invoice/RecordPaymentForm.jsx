@@ -5,17 +5,12 @@ import { ArrowLeft } from 'lucide-react';
 import { Payment } from '@/api/entities';
 import { getCurrencySymbol } from '@/utils/currencyCalculations';
 import { cn } from '@/lib/utils';
-
-const METHOD_MAP = {
-  Bank: 'bank_transfer',
-  Cash: 'cash',
-  Card: 'credit_card',
-};
+import { INVOICE_PAYMENT_CHOICES } from '@shared/payments/invoicePaymentMethods.js';
 
 export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) {
   const [balance, setBalance] = useState(invoice?.total_amount || 0);
   const [amount, setAmount] = useState(String(invoice?.total_amount || 0));
-  const [method, setMethod] = useState('Bank');
+  const [method, setMethod] = useState('cash');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -57,17 +52,21 @@ export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) 
       setError(`Amount cannot exceed ${symbol} ${balance.toLocaleString()}`);
       return;
     }
-    const apiMethod = METHOD_MAP[method] || 'bank_transfer';
+    const choice = INVOICE_PAYMENT_CHOICES.find((item) => item.value === method);
+    if (!choice || choice.online) {
+      setError('Choose Cash, EFT, card, POS or Other to record this payment.');
+      return;
+    }
     onConfirm({
       amount: num,
-      payment_method: apiMethod,
+      payment_method: choice.value,
       payment_date: new Date().toISOString(),
       reference_number: '',
       notes: '',
     });
   };
 
-  const methods = ['Bank', 'Cash', 'Card'];
+  const methods = INVOICE_PAYMENT_CHOICES.filter((item) => !item.online);
 
   if (loading) {
     return (
@@ -136,20 +135,20 @@ export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) 
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {methods.map((m) => (
+      <div className="grid grid-cols-2 gap-2">
+        {methods.map((choice) => (
           <button
-            key={m}
+            key={choice.value}
             type="button"
-            onClick={() => setMethod(m)}
+            onClick={() => setMethod(choice.value)}
             className={cn(
               'py-2.5 px-1 rounded-xl text-xs font-semibold border-2 transition-all touch-manipulation',
-              method === m
+              method === choice.value
                 ? 'border-primary bg-primary/10 text-primary'
                 : 'border-border/80 text-muted-foreground hover:border-primary/50'
             )}
           >
-            {m}
+            {choice.label}
           </button>
         ))}
       </div>

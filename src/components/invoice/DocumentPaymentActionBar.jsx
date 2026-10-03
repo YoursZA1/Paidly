@@ -22,6 +22,8 @@ import {
   startDocumentPayment,
 } from "@/api/documentPaymentApi";
 import { useToast } from "@/components/ui/use-toast";
+import { usePaymentActions } from "@/hooks/usePaymentActions";
+import RecordPaymentModal from "@/components/invoice/RecordPaymentModal";
 import { INVOICE_STATUS, normalizeInvoiceStatus } from "@shared/commercial/documentStatuses.js";
 import { createPageUrl } from "@/utils";
 import { dueFollowUpLabel } from "@shared/ux/doneStates.js";
@@ -47,6 +49,7 @@ export default function DocumentPaymentActionBar({
   const [snapshot, setSnapshot] = useState(null);
   const [busy, setBusy] = useState("");
   const [demoPay, setDemoPay] = useState(null);
+  const [recordOpen, setRecordOpen] = useState(false);
 
   const loadHistory = useCallback(async () => {
     if (!invoice?.id) return;
@@ -60,6 +63,13 @@ export default function DocumentPaymentActionBar({
       setSnapshot(null);
     }
   }, [invoice?.id, shareToken]);
+
+  const { recordPayment } = usePaymentActions(invoice, {
+    onSuccess: () => {
+      onRefresh?.();
+      void loadHistory();
+    },
+  });
 
   useEffect(() => {
     void loadHistory();
@@ -111,7 +121,7 @@ export default function DocumentPaymentActionBar({
       });
     } catch (err) {
       toast({
-        title: retry ? "Retry failed" : "Pay now failed",
+        title: retry ? "Retry failed" : "Pay online failed",
         description: err?.message || "Try again in a moment.",
         variant: "destructive",
       });
@@ -158,6 +168,19 @@ export default function DocumentPaymentActionBar({
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 md:pointer-events-auto md:static md:inset-auto">
+      {!publicMode && (
+        <RecordPaymentModal
+          invoice={invoice}
+          isOpen={recordOpen}
+          onClose={() => setRecordOpen(false)}
+          showViewInvoice={false}
+          onSave={(paymentData) => recordPayment(paymentData, { showToast: false })}
+          onDemoPayment={(demo) => {
+            setRecordOpen(false);
+            setDemoPay(demo);
+          }}
+        />
+      )}
       <DemoInvoicePaymentDialog
         open={Boolean(demoPay)}
         onOpenChange={(next) => (next ? null : setDemoPay(null))}
@@ -191,10 +214,16 @@ export default function DocumentPaymentActionBar({
                 Send
               </Button>
             )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && (
+            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && !publicMode && (
+              <Button type="button" onClick={() => setRecordOpen(true)} disabled={Boolean(busy)} className="gap-2">
+                <CreditCard className="h-4 w-4" />
+                Record Payment
+              </Button>
+            )}
+            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && publicMode && (
               <Button type="button" onClick={() => void startPay(false)} disabled={Boolean(busy)} className="gap-2">
                 {busy === "pay" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                Pay now
+                Pay online
               </Button>
             )}
             {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.retry) && (

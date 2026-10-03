@@ -154,8 +154,21 @@ export async function createOrReuseDocumentPaymentIntent({
   }
 
   const currency = String(invoice.currency || invoice.owner_currency || "ZAR").trim().toUpperCase();
-  // The Payment Engine picks the online provider (configured + accepts this currency). Throws 422 when none.
-  const onlineProvider = resolveOnlineProvider({ sourceKind: "document", currency });
+  // Pay online only. Recording cash, EFT, card or POS does not come through here.
+  let onlineProvider;
+  try {
+    onlineProvider = resolveOnlineProvider({ sourceKind: "document", currency });
+  } catch (err) {
+    if (err?.code === "PROVIDER_NOT_CONFIGURED") {
+      const error = new Error(
+        "No digital payment provider is connected. Connect a payment provider to accept online payments."
+      );
+      error.code = "PROVIDER_NOT_CONFIGURED";
+      error.status = err.status || 422;
+      throw error;
+    }
+    throw err;
+  }
 
   const payments = await listConfirmedInvoicePayments(orgId, invoice.id);
   const amountDue = invoiceAmountDue(invoice, payments);
@@ -532,16 +545,23 @@ export async function documentPaymentSnapshot(orgId, invoiceId) {
     currency: invoice.currency || invoice.owner_currency || "ZAR",
     due_date: invoice.delivery_date || null,
     latest_intent: publicPaymentIntentView(latest),
-    history: intents.map((row) => ({
-      id: row.id,
-      provider: row.provider,
-      amount: money(row.amount),
-      currency: row.currency,
-      status: row.status,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      external_id: row.external_id,
-    })),
+    history: intents.map((row) => {
+      const meta = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+      const recorded = meta.origin === "offline_receipt";
+      return {
+        id: row.id,
+        provider: row.provider,
+        amount: money(row.amount),
+        currency: row.currency,
+        status: row.status,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        external_id: row.external_id,
+        method: recorded ? meta.offline_method || "cash" : null,
+        reference: recorded ? meta.payer_reference || null : row.external_id || null,
+        recorded,
+      };
+    }),
     payments: payments.map((row) => ({
       id: row.id,
       amount: money(row.amount),

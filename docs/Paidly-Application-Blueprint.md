@@ -344,6 +344,7 @@ Without a first-class **Payment Engine**, each payable surface grows its own Ozo
 - `amount_snapshot` + `currency_snapshot`
 - `payer_context` (public share, portal user, signed-in cashier, or walk-in)
 - `provider` / rail: **customer payments** use `cash` (till-verified), the configured online provider — currently `ozow` (Digital Payment), or `card_terminal` (physical reader — not click-to-paid). **PayFast is only for Paidly platform subscriptions** — never POS or invoice customer capture.
+- **Invoice Record Payment vs Pay online:** Cash, EFT, card, POS and other are an approved offline receipt (`POST /api/payment-intents/document-record`). They settle a cash `payment_intent` and do not need a connected provider. Pay online (`document-pay`) is the only path that requires a configured online provider. The browser never writes `payments` or a paid status.
 - `expires_at`
 - `status` (`pending`, `requires_action`, `processing`, `paid`, `failed`, `cancelled`, `expired`, `refunded`)
 

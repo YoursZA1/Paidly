@@ -463,6 +463,37 @@ describe("offline invoice money = Payment Engine cash with approved settlement",
     expect((await record({ amount: 100 }, { ...employee, user: { id: "owner-1" } })).statusCode).toBe(201);
   });
 
+  it("cash, EFT, card and POS record without a digital provider", async () => {
+    const fullCash = await record({ amount: 1000, payment_method: "cash" });
+    expect(fullCash.body).toMatchObject({ invoice_status: "paid", amount_due: 0 });
+    expect(tables.payments[0].method).toBe("cash");
+  });
+
+  it("a partial EFT stays partially paid and keeps the bank reference", async () => {
+    const res = await record({ amount: 250, payment_method: "eft", reference: "ABC12345" });
+    expect(res.statusCode).toBe(201);
+    expect(res.body).toMatchObject({ invoice_status: "partially_paid", amount_due: 750 });
+    expect(tables.payments[0]).toMatchObject({ method: "eft", notes: "Ref ABC12345" });
+  });
+
+  it("card and POS receipts settle on the cash rail", async () => {
+    expect((await record({ amount: 40, payment_method: "card" })).body.invoice_status).toBe("partially_paid");
+    expect(tables.payments[0].method).toBe("card");
+    expect((await record({ amount: 60, payment_method: "pos" })).statusCode).toBe(201);
+    expect(tables.payments.map((row) => row.method)).toEqual(["card", "pos"]);
+    expect(tables.payment_intents.every((row) => row.provider === "cash")).toBe(true);
+  });
+
+  it("digital is not an offline receipt, and another business cannot be targeted", async () => {
+    expect((await record({ amount: 10, payment_method: "digital" })).body.code).toBe("METHOD_INVALID");
+    expect((await record({ amount: -5, payment_method: "cash" })).body.code).toBe("AMOUNT_INVALID");
+    const other = { ok: true, user: { id: "owner-1" }, membership: { orgId: "org-other", companyRole: "admin" } };
+    const admin = { ok: true, user: { id: "staff-1" }, membership: { orgId: ORG, companyRole: "admin" } };
+    expect((await record({ amount: 10, payment_method: "cash" }, other)).statusCode).toBe(404);
+    expect((await record({ amount: 10, payment_method: "eft", company_id: "org-other" }, admin)).statusCode).toBe(403);
+    expect(tables.payments).toHaveLength(0);
+  });
+
   it("Pay now (Ozow) never reuses an offline cash intent", async () => {
     await record({ amount: 100 });
     const { intent } = await startInvoicePayment();

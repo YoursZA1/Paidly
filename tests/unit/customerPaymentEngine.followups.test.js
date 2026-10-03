@@ -304,6 +304,16 @@ describe("frontend hand-offs", () => {
     expect(modal).not.toMatch(/recordPayment|Payment\.create|card number|cvv/i);
   });
 
+  it("invoice Pay opens Record Payment; only the public page starts Pay online", () => {
+    const bar = code("components/invoice/DocumentPaymentActionBar.jsx");
+    const list = code("components/invoice/InvoiceListPaymentActions.jsx");
+    expect(bar).toMatch(/Record Payment/);
+    expect(bar).toMatch(/RecordPaymentModal/);
+    expect(bar).toMatch(/publicMode && \(/);
+    expect(list).toMatch(/RecordPaymentModal/);
+    expect(list).not.toMatch(/onClick=\{\(\) => void pay\(false\)\}/);
+  });
+
   it("Record Payment sends one idempotency key per opening", () => {
     const modal = code("components/invoice/RecordPaymentModal.jsx");
     expect(modal).toMatch(/idempotency_key: idempotencyKey/);

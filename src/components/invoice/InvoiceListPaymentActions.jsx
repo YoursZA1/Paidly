@@ -6,6 +6,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { resolveDocumentPaymentCtas, DOCUMENT_PAYMENT_ACTION } from "@shared/payments/documentPaymentCtas.js";
 import { INVOICE_STATUS, normalizeInvoiceStatus } from "@shared/commercial/documentStatuses.js";
 import DemoInvoicePaymentDialog from "@/components/demo/DemoInvoicePaymentDialog";
+import RecordPaymentModal from "@/components/invoice/RecordPaymentModal";
+import { usePaymentActions } from "@/hooks/usePaymentActions";
 import { notifyDemoNotSent } from "@/lib/demo/demoModeState";
 
 function isOverdue(invoice) {
@@ -17,6 +19,10 @@ export default function InvoiceListPaymentActions({ invoice, onActionSuccess }) 
   const { toast } = useToast();
   const [busy, setBusy] = useState("");
   const [demoPay, setDemoPay] = useState(null);
+  const [recordOpen, setRecordOpen] = useState(false);
+  const { recordPayment } = usePaymentActions(invoice, {
+    onSuccess: () => onActionSuccess?.(),
+  });
   const status = normalizeInvoiceStatus(invoice?.status);
   const ctas = resolveDocumentPaymentCtas({
     invoiceStatus: status,
@@ -80,10 +86,20 @@ export default function InvoiceListPaymentActions({ invoice, onActionSuccess }) 
         demo={demoPay}
         onSettled={() => onActionSuccess?.()}
       />
+      <RecordPaymentModal
+        invoice={invoice}
+        isOpen={recordOpen}
+        onClose={() => setRecordOpen(false)}
+        onSave={(paymentData) => recordPayment(paymentData, { showToast: false })}
+        onDemoPayment={(demo) => {
+          setRecordOpen(false);
+          setDemoPay(demo);
+        }}
+      />
       {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && (
-        <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={() => void pay(false)} disabled={Boolean(busy)}>
-          {busy === "pay" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
-          <span className="ml-1 hidden lg:inline">Pay</span>
+        <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={() => setRecordOpen(true)} disabled={Boolean(busy)}>
+          <CreditCard className="h-3.5 w-3.5" />
+          <span className="ml-1 hidden lg:inline">Record</span>
         </Button>
       )}
       {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.retry) && (
