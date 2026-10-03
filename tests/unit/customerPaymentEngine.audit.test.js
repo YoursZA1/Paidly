@@ -467,6 +467,8 @@ describe("offline invoice money = Payment Engine cash with approved settlement",
     const fullCash = await record({ amount: 1000, payment_method: "cash" });
     expect(fullCash.body).toMatchObject({ invoice_status: "paid", amount_due: 0 });
     expect(tables.payments[0].method).toBe("cash");
+    expect(tables.payments[0].invoice_id).toBe(INVOICE);
+    expect(tables.payments[0].document_id ?? null).toBeNull();
   });
 
   it("a partial EFT stays partially paid and keeps the bank reference", async () => {

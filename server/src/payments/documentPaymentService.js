@@ -267,7 +267,8 @@ async function insertSettledInvoicePayment(intent, invoice, amount) {
   const row = {
     org_id: intent.org_id,
     invoice_id: invoice.id,
-    document_id: invoice.id,
+    // payments.document_id references documents(id), the hub table. An invoice id
+    // is not a hub document, so writing it fails payments_document_id_fkey.
     client_id: invoice.client_id || intent.client_id || null,
     amount,
     status: "paid",
