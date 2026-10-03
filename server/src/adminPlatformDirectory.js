@@ -16,13 +16,17 @@ import {
 } from "../../shared/admin/adminPlatformMetrics.js";
 import { listCustomerPaymentProviders } from "./payments/paymentProviders.js";
 import {
-  PAYMENT_INTENT_FINANCE_COLUMNS,
   buildPaymentIntentFinance,
   parseFinanceCustomRange,
   paymentIntentBucketFromRpc,
-  paymentIntentFactFromRow,
 } from "../../shared/admin/paymentIntentFinance.js";
 import { investigatePaymentIntent } from "./adminPaymentIntentAudit.js";
+import {
+  invoiceStatusRows,
+  posUsageRows,
+  saasLedgerRows,
+  saasLedgerUsage,
+} from "../../shared/admin/platformUsageAggregates.js";
 
 function unavailable(kind, reason) {
   return {
@@ -115,9 +119,6 @@ function orgName(org) {
   return String(org?.name || org?.company_name || "Untitled business").trim();
 }
 
-const PAYMENT_INTENT_PAGE = 1000;
-const PAYMENT_INTENT_CAP = 20000;
-
 async function loadPaymentIntentBuckets(supabase) {
   try {
     const result = await supabase.rpc("admin_payment_intent_finance_buckets");
@@ -138,39 +139,33 @@ async function loadPaymentIntentBuckets(supabase) {
 
 async function loadPaymentIntentFacts(supabase) {
   const grouped = await loadPaymentIntentBuckets(supabase);
+  if (grouped?.unavailable) return grouped;
   if (grouped) return grouped;
-  const facts = [];
-  for (let from = 0; from < PAYMENT_INTENT_CAP; from += PAYMENT_INTENT_PAGE) {
-    let result;
-    try {
-      result = await supabase
-        .from("payment_intents")
-        .select(PAYMENT_INTENT_FINANCE_COLUMNS)
-        .order("created_at", { ascending: false })
-        .range(from, from + PAYMENT_INTENT_PAGE - 1);
-    } catch (error) {
-      if (isMissingRelationError(error)) {
-        return { rows: [], unavailable: true, reason: "payment_intents is not available in this environment.", complete: false };
-      }
-      return { rows: [], unavailable: true, reason: error?.message || "Failed to read payment_intents", complete: false };
-    }
+  return {
+    rows: [],
+    unavailable: true,
+    reason: "Payment totals need admin_payment_intent_finance_buckets on the database. Individual payments are not loaded.",
+    complete: false,
+    aggregatedInDatabase: false,
+  };
+}
+
+async function callAggregateRpc(supabase, fn) {
+  try {
+    const result = await supabase.rpc(fn);
     if (result?.error) {
-      if (isMissingRelationError(result.error)) {
-        return { rows: [], unavailable: true, reason: "payment_intents is not available in this environment.", complete: false };
-      }
-      return { rows: [], unavailable: true, reason: result.error.message || "Failed to read payment_intents", complete: false };
+      if (isMissingRelationError(result.error)) return { missing: true };
+      return { unavailable: true, reason: result.error.message || `Failed to read ${fn}` };
     }
-    const batch = result.data || [];
-    for (const row of batch) facts.push(paymentIntentFactFromRow(row));
-    if (batch.length < PAYMENT_INTENT_PAGE) {
-      return { rows: facts, unavailable: false, reason: null, complete: true, aggregatedInDatabase: false };
-    }
+    return { rows: result.data || [] };
+  } catch (error) {
+    if (isMissingRelationError(error)) return { missing: true };
+    return { unavailable: true, reason: error?.message || `Failed to read ${fn}` };
   }
-  return { rows: facts, unavailable: false, reason: null, complete: false, aggregatedInDatabase: false };
 }
 
 const INVOICE_PAID = ["paid", "partially_paid"];
-const INVOICE_OPEN = ["sent", "overdue", "viewed", "partially_paid", "unpaid", "issued"];
+const INVOICE_STATUS_COUNTS = ["draft", "sent", "viewed", "partially_paid", "paid", "overdue", "void"];
 
 async function loadInvoicePlatform(supabase, includeAmounts) {
   const [generated, paid] = await Promise.all([
@@ -186,36 +181,44 @@ async function loadInvoicePlatform(supabase, includeAmounts) {
     paymentRate: successRate(paidCount || 0, generatedCount || 0),
   };
   if (!includeAmounts) return body;
-  const moneyTotals = await sumInvoiceStatusTotals(supabase);
-  if (moneyTotals) {
-    body.paidVolume = moneyTotals.paid;
-    body.outstandingVolume = moneyTotals.outstanding;
-  }
+  const totals = await callAggregateRpc(supabase, "admin_invoice_platform_totals");
+  const row = totals.rows?.[0];
+  if (!row) return body;
+  body.paidVolume = money(row.paid_volume);
+  body.outstandingVolume = money(row.outstanding_volume);
   return body;
-}
-
-async function sumInvoiceStatusTotals(supabase) {
-  let paid = 0;
-  let outstanding = 0;
-  const page = 1000;
-  for (let from = 0; from < 20000; from += page) {
-    const result = await supabase.from("invoices").select("status, total_amount").range(from, from + page - 1);
-    if (result.error) return null;
-    const batch = result.data || [];
-    for (const row of batch) {
-      const status = String(row.status || "").toLowerCase();
-      const total = money(row.total_amount ?? row.total);
-      if (status === "paid") paid = money(paid + total);
-      if (INVOICE_OPEN.includes(status)) outstanding = money(outstanding + total);
-    }
-    if (batch.length < page) return { paid, outstanding };
-  }
-  return { paid, outstanding };
 }
 
 async function countOptional(supabase, table) {
   const result = await countTable(supabase, table);
   return result.unavailable ? null : countExact(result);
+}
+
+const SAAS_STATUSES = ["completed", "failed", "refunded", "pending"];
+
+async function loadSaasDirectory(supabase, { status = null, includeAmounts = false } = {}) {
+  const grouped = await callAggregateRpc(supabase, "admin_saas_payment_buckets");
+  if (grouped.unavailable) return { unavailable: true, reason: grouped.reason };
+  let buckets = grouped.rows;
+  if (!buckets) {
+    const statuses = status ? [status] : SAAS_STATUSES;
+    const counted = await Promise.all(
+      statuses.map((paymentStatus) =>
+        countTable(supabase, "payment_history", (q) => q.eq("payment_status", paymentStatus))
+      )
+    );
+    if (counted[0]?.unavailable) return { unavailable: true, reason: counted[0].reason };
+    buckets = statuses.map((paymentStatus, index) => ({
+      payment_status: paymentStatus,
+      payment_method: "payfast",
+      currency: "ZAR",
+      payment_count: countExact(counted[index]),
+      amount_sum: 0,
+    }));
+    includeAmounts = false;
+  }
+  const rows = saasLedgerRows(buckets, { includeAmounts, status });
+  return { unavailable: false, rows, usage: saasLedgerUsage(rows) };
 }
 
 async function loadOrgNames(supabase, ids) {
@@ -426,7 +429,32 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     return { kind: "affiliates", unavailable: false, count: rows.length, rows: rows.slice(0, limit) };
   }
 
-  if (normalized === "invoices" || normalized === "quotes" || normalized === "payslips" || normalized === "recurring") {
+  if (normalized === "invoices") {
+    const grouped = await callAggregateRpc(supabase, "admin_invoice_status_counts");
+    let counts = grouped.rows;
+    if (!counts) {
+      const counted = await Promise.all(
+        INVOICE_STATUS_COUNTS.map((status) => countTable(supabase, "invoices", (q) => q.eq("status", status)))
+      );
+      if (counted[0]?.unavailable) return unavailable("invoices", counted[0].reason);
+      counts = INVOICE_STATUS_COUNTS.map((status, index) => ({
+        status,
+        status_count: countExact(counted[index]),
+      }));
+    }
+    const usage = await usageSnapshot(supabase, "invoices", "created_at");
+    const rows = invoiceStatusRows(counts);
+    return {
+      kind: "invoices",
+      view: "usage",
+      usage,
+      unavailable: false,
+      count: usage.total,
+      rows,
+    };
+  }
+
+  if (normalized === "quotes" || normalized === "payslips" || normalized === "recurring") {
     const table =
       normalized === "invoices"
         ? "invoices"
@@ -477,16 +505,26 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
   }
 
   if (normalized === "pos") {
-    const sales = await queryTable(supabase, "pos_sales_events", (q) =>
-      q.select("id, org_id, provider, status, payment_method, occurred_at, created_at").order("occurred_at", { ascending: false }).limit(limit)
-    );
-    if (sales.unavailable) return unavailable("pos", sales.reason);
-    const names = await loadOrgNames(supabase, sales.data.map((r) => r.org_id));
-    const [usage, enabled, connections] = await Promise.all([
+    const [usage, enabled, connections, grouped] = await Promise.all([
       usageSnapshot(supabase, "pos_sales_events", "occurred_at"),
       countTable(supabase, "organizations", (q) => q.in("business_type", ["retail", "mixed", "restaurant"])),
       countTable(supabase, "pos_connections"),
+      callAggregateRpc(supabase, "admin_pos_usage_buckets"),
     ]);
+    if (usage.unavailable) return unavailable("pos", usage.unavailableReason);
+    if (grouped.unavailable) return unavailable("pos", grouped.reason);
+    let buckets = grouped.rows;
+    if (!buckets) {
+      const statuses = ["completed", "paid", "failed", "pending", "refunded"];
+      const counted = await Promise.all(
+        statuses.map((status) => countTable(supabase, "pos_sales_events", (q) => q.eq("status", status)))
+      );
+      buckets = statuses.map((status, index) => ({
+        status,
+        payment_method: "all",
+        sale_count: countExact(counted[index]),
+      }));
+    }
     return {
       kind: "pos",
       view: "usage",
@@ -496,54 +534,24 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
         connections: countExact(connections),
       },
       unavailable: false,
-      count: sales.count,
-      rows: sales.data.map((r) => ({
-        id: r.id,
-        title: r.provider || "POS",
-        business: names.get(String(r.org_id)) || "—",
-        status: r.status || "completed",
-        extra: r.payment_method || "—",
-        date: r.occurred_at || r.created_at,
-      })),
+      count: usage.total,
+      rows: posUsageRows(buckets),
     };
   }
 
-  if (normalized === "payments") {
-    const payments = await queryTable(supabase, "payment_history", (q) =>
-      q.select("id, company_id, amount, currency, payment_status, payment_method, created_at").order("created_at", { ascending: false }).limit(limit)
-    );
-    if (payments.unavailable) return unavailable("payments", payments.reason);
-    const names = await loadOrgNames(supabase, payments.data.map((r) => r.company_id));
-    const [completed, failed, total] = await Promise.all([
-      countTable(supabase, "payment_history", (q) => q.eq("payment_status", "completed")),
-      countTable(supabase, "payment_history", (q) => q.eq("payment_status", "failed")),
-      countTable(supabase, "payment_history"),
-    ]);
-    const ok = countExact(completed);
-    const bad = countExact(failed);
-    const all = countExact(total);
+  if (normalized === "payments" || normalized === "transactions" || normalized === "refunds") {
+    const ledger = await loadSaasDirectory(supabase, {
+      status: normalized === "refunds" ? "refunded" : null,
+      includeAmounts: opts.includePaymentVolume === true,
+    });
+    if (ledger.unavailable) return unavailable(normalized, ledger.reason);
     return {
-      kind: "payments",
+      kind: normalized,
       view: "platform",
-      usage: {
-        total: all,
-        successful: ok,
-        failed: bad,
-        successRate: successRate(ok, (ok || 0) + (bad || 0)),
-        unavailable: Boolean(total.unavailable),
-        unavailableReason: total.reason,
-      },
+      usage: ledger.usage,
       unavailable: false,
-      count: payments.count,
-      rows: payments.data.map((r) => ({
-        id: r.id,
-        title: "Subscription payment",
-        business: names.get(String(r.company_id)) || "—",
-        amount: money(r.amount),
-        status: r.payment_status || "unknown",
-        extra: r.payment_method || "PayFast",
-        date: r.created_at,
-      })),
+      count: ledger.usage.total,
+      rows: ledger.rows,
     };
   }
 
@@ -701,47 +709,6 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
       count: month.total,
       rows: [],
     };
-  }
-
-  if (normalized === "refunds") {
-    const history = await queryTable(supabase, "payment_history", (q) =>
-      q.select("id, company_id, amount, currency, payment_status, payment_method, created_at").eq("payment_status", "refunded").order("created_at", { ascending: false }).limit(limit)
-    );
-    if (history.unavailable) return unavailable("refunds", history.reason);
-    const names = await loadOrgNames(supabase, history.data.map((r) => r.company_id));
-    return {
-      kind: "refunds",
-      unavailable: false,
-      count: history.count,
-      rows: history.data.map((r) => ({
-        id: r.id,
-        title: "Subscription refund",
-        business: names.get(String(r.company_id)) || "—",
-        amount: money(r.amount),
-        status: r.payment_status,
-        extra: r.payment_method || "PayFast",
-        date: r.created_at,
-      })),
-    };
-  }
-
-  if (normalized === "transactions") {
-    const history = await queryTable(supabase, "payment_history", (q) =>
-      q.select("id, company_id, amount, currency, payment_status, payment_method, created_at").order("created_at", { ascending: false }).limit(limit)
-    );
-    if (history.unavailable) return unavailable("transactions", history.reason);
-    const names = await loadOrgNames(supabase, history.data.map((r) => r.company_id));
-    const rows = history.data.map((r) => ({
-      id: r.id,
-      title: r.payment_status === "refunded" ? "Refund" : "Subscription payment",
-      type: r.payment_status === "refunded" ? "refund" : "subscription",
-      business: names.get(String(r.company_id)) || "—",
-      amount: money(r.amount),
-      status: r.payment_status,
-      extra: r.payment_method || "PayFast",
-      date: r.created_at,
-    }));
-    return { kind: "transactions", view: "platform", unavailable: false, count: history.count, rows };
   }
 
   if (normalized === "templates") {

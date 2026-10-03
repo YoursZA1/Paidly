@@ -48,12 +48,10 @@ const KIND_META = {
   },
   invoices: {
     title: "Invoice usage",
-    description: "How many invoices Paidly businesses create. Support rows omit customer amounts.",
+    description: "How many invoices exist on Paidly, by status. No business and no invoice number.",
     columns: [
-      { key: "title", label: "Invoice" },
-      { key: "business", label: "Business" },
-      { key: "status", label: "Status", type: "status" },
-      { key: "date", label: "Date", type: "date" },
+      { key: "title", label: "Status" },
+      { key: "extra", label: "Invoices" },
     ],
   },
   quotes: {
@@ -68,25 +66,21 @@ const KIND_META = {
   },
   pos: {
     title: "POS usage",
-    description: "How much Paidly POS is used. Customer till totals are not Paidly revenue.",
+    description: "How much Paidly POS is used, by status and method. No business and no sale.",
     columns: [
-      { key: "title", label: "Sale" },
-      { key: "business", label: "Business" },
-      { key: "status", label: "Status", type: "status" },
-      { key: "extra", label: "Method" },
-      { key: "date", label: "Date", type: "date" },
+      { key: "title", label: "Group" },
+      { key: "extra", label: "Kind" },
+      { key: "count", label: "Sales" },
     ],
   },
   payments: {
     title: "Paidly payments",
-    description: "Subscription payments from payment_history. Customer invoice settlements are tenant books.",
+    description: "Paidly subscription totals from payment_history. No subscriber and no single charge.",
     columns: [
-      { key: "title", label: "Payment" },
-      { key: "business", label: "Business" },
-      { key: "amount", label: "Amount", type: "money" },
-      { key: "status", label: "Status", type: "status" },
+      { key: "title", label: "Status" },
       { key: "extra", label: "Method" },
-      { key: "date", label: "Date", type: "date" },
+      { key: "count", label: "Payments" },
+      { key: "amount", label: "Volume", type: "money" },
     ],
   },
   recurring: {
@@ -153,15 +147,12 @@ const KIND_META = {
   },
   transactions: {
     title: "Paidly transactions",
-    description: "Paidly’s own ledger: subscription payments and refunds from payment_history.",
+    description: "Paidly subscription totals by status and method. No subscriber.",
     columns: [
-      { key: "title", label: "Transaction" },
-      { key: "business", label: "Business" },
-      { key: "type", label: "Type" },
-      { key: "amount", label: "Amount", type: "money" },
-      { key: "status", label: "Status", type: "status" },
+      { key: "title", label: "Status" },
       { key: "extra", label: "Method" },
-      { key: "date", label: "Date", type: "date" },
+      { key: "count", label: "Payments" },
+      { key: "amount", label: "Volume", type: "money" },
     ],
   },
   "payment-intents": {
@@ -171,14 +162,12 @@ const KIND_META = {
   },
   refunds: {
     title: "Refunds",
-    description: "Refunded SaaS payment_history rows.",
+    description: "Refunded Paidly subscription totals. No subscriber.",
     columns: [
-      { key: "title", label: "Refund" },
-      { key: "business", label: "Business" },
-      { key: "amount", label: "Amount", type: "money" },
-      { key: "status", label: "Status", type: "status" },
+      { key: "title", label: "Status" },
       { key: "extra", label: "Method" },
-      { key: "date", label: "Date", type: "date" },
+      { key: "count", label: "Refunds" },
+      { key: "amount", label: "Volume", type: "money" },
     ],
   },
   templates: {
