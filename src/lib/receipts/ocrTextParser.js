@@ -109,6 +109,76 @@ function labelledAmount(lines, index) {
   return there.length === 1 ? there[0] : undefined;
 }
 
+const PRODUCTISH = /\d+\s*(?:ml|l|g|kg|pk)\b|\d+(?:ml|l|g|kg)\b/i;
+
+/**
+ * Till slips print descriptions on the left and prices on the right. OCR often returns the
+ * words without the prices. A second pass of the amount column supplies those prices, in order.
+ * @param {string} fullText
+ * @param {string} columnText
+ */
+export function mergeOcrPasses(fullText, columnText) {
+  const fullLines = String(fullText || "")
+    .split(/\r?\n/)
+    .map((l) => fixOcrAmountConfusions(l.replace(/\s+/g, " ").trim()))
+    .filter(Boolean);
+  const tokens = [];
+  for (const raw of String(columnText || "").split(/\r?\n/)) {
+    const line = fixOcrAmountConfusions(raw.replace(/\s+/g, " ").trim());
+    if (!line) continue;
+    const nums = amountsIn(line);
+    const percent = /(\d{1,2}(?:[.,]\d{1,2})?)\s*%/.test(line);
+    if (!nums.length && !percent) continue;
+    const words = line.replace(AMOUNT_RE, " ").replace(/\d{1,2}(?:[.,]\d{1,2})?\s*%/g, " ").replace(/[^\p{L}]+/gu, " ").trim();
+    if (words.length > 2) continue;
+    tokens.push(line);
+  }
+  if (!tokens.length) return fullLines.join("\n");
+
+  let index = 0;
+  const takeOne = () => {
+    while (index < tokens.length && amountsIn(tokens[index]).length !== 1) index += 1;
+    if (index >= tokens.length) return "";
+    const token = tokens[index];
+    index += 1;
+    return token;
+  };
+  const out = [];
+  for (let i = 0; i < fullLines.length; i += 1) {
+    const line = fullLines[i];
+    const taxHeader = /\bRATE\b/i.test(line) && /\bTAX\b/i.test(line) && /\bGROSS\b/i.test(line);
+    if (taxHeader && amountsIn(line).length < 2 && amountsIn(fullLines[i + 1] || "").length < 2) {
+      out.push(line);
+      const rest = tokens.slice(index);
+      const rate = rest.map((t) => /(\d{1,2}(?:[.,]\d{1,2})?)\s*%/.exec(t)).find(Boolean);
+      const rateValue = rate ? parseMoney(rate[1]) : null;
+      const figures = rest.flatMap((t) => amountsIn(t).filter((n) => n > 0));
+      const money = figures.filter((n) => rateValue == null || Math.abs(n - rateValue) > 0.001);
+      if (money.length >= 3) {
+        const tail = money.slice(0, 3);
+        out.push(`${rate ? `${rate[1]}% ` : ""}${tail.map((n) => `R${n.toFixed(2)}`).join(" ")}`);
+      }
+      continue;
+    }
+    if (amountsIn(line).length > 0) {
+      out.push(line);
+      continue;
+    }
+    const wantsAmount =
+      ITEM_COUNT_TOTAL.test(line) ||
+      (TOTAL.test(line) && !NOT_TOTAL.test(line)) ||
+      TENDER.test(line) ||
+      PRODUCTISH.test(line);
+    if (!wantsAmount || taxHeader) {
+      out.push(line);
+      continue;
+    }
+    const amount = takeOne();
+    out.push(amount ? `${line} ${amount}` : line);
+  }
+  return out.join("\n");
+}
+
 /** @param {string[]} lines */
 function findDate(lines) {
   const patterns = [

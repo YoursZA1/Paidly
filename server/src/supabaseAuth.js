@@ -1,6 +1,9 @@
 import { supabaseAdmin } from "./supabaseAdmin.js";
 import { EMAIL_NOT_VERIFIED, isEmailVerifiedUser } from "../../shared/auth/emailVerification.js";
 
+/** Parallel POS/dashboard calls with the same bearer share one Auth lookup. */
+const userLookupInflight = new Map();
+
 /**
  * Resolve the caller from `Authorization: Bearer <jwt>`.
  * On the **Node API** this uses `supabaseAdmin.auth.getUser(token)` — not `supabase.auth.getUser()`
@@ -15,6 +18,17 @@ export const getUserFromRequest = async (req) => {
     return { user: null, error: "Missing bearer token" };
   }
 
+  const pending = userLookupInflight.get(token);
+  if (pending) return pending;
+
+  const run = resolveUserFromToken(token).finally(() => {
+    if (userLookupInflight.get(token) === run) userLookupInflight.delete(token);
+  });
+  userLookupInflight.set(token, run);
+  return run;
+};
+
+async function resolveUserFromToken(token) {
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error) {
     return { user: null, error: error.message };

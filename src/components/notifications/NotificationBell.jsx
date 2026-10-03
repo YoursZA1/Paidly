@@ -4,6 +4,7 @@ import { subscribePaidlyNotificationsRealtime } from "@/lib/realtime/paidlyRealt
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { markNotificationRead, markAllNotificationsReadForCurrentUser } from "@/services/ActivityNotificationService";
+import { runDedupedAsync } from "@/lib/inflightRequestDedupe";
 import { Bell, CheckCheck } from "lucide-react";
 
 const REALTIME_REFRESH_DEBOUNCE_MS = 350;
@@ -28,19 +29,21 @@ export default function NotificationBell() {
     }
     try {
       const [{ count: activityUnreadCount, error: activityUnreadError }, { count: inAppUnreadCount, error: inAppUnreadError }] =
-        await Promise.all([
-          supabase
-            .from("notifications")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", authUserId)
-            .eq("read", false),
-          supabase
-            .from("message_deliveries")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", authUserId)
-            .eq("channel", "in_app")
-            .is("read_at", null),
-        ]);
+        await runDedupedAsync(`notif-unread:${authUserId}`, () =>
+          Promise.all([
+            supabase
+              .from("notifications")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", authUserId)
+              .eq("read", false),
+            supabase
+              .from("message_deliveries")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", authUserId)
+              .eq("channel", "in_app")
+              .is("read_at", null),
+          ])
+        );
       if (activityUnreadError) {
         console.warn(
           "NotificationBell: fetch activity unread count failed",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import {
@@ -162,7 +162,7 @@ function cashSuggestions(total) {
     .slice(0, 6);
 }
 
-function PosCatalogProductCard({ product, currency, inCart, onAdd, onQty }) {
+const PosCatalogProductCard = memo(function PosCatalogProductCard({ product, currency, inCart, onAdd, onQty }) {
   const stock = posProductStock(product);
   const stockUi = posStockLabel(stock, { compact: true, service: isPosService(product) });
   const out = stockUi.tone === "out";
@@ -250,7 +250,7 @@ function PosCatalogProductCard({ product, currency, inCart, onAdd, onQty }) {
       ) : null}
     </div>
   );
-}
+});
 
 function CartLineList({ cart, currency, onQty }) {
   const [editingId, setEditingId] = useState(null);
@@ -356,6 +356,11 @@ function CartLineList({ cart, currency, onQty }) {
   );
 }
 
+/** Session cache so a return to the till paints the menu immediately, then refreshes. */
+const posCatalogCache = new Map();
+const posTodayCache = { sales: null, total: 0, at: 0 };
+const POS_TODAY_TTL_MS = 30_000;
+
 export default function PosTerminal({ requestedTillId = null, initialView = null, operatorMembershipId = null } = {}) {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -384,6 +389,8 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
   const cardIdempotencyRef = useRef(null);
   const openedPayRef = useRef("");
   const [products, setProducts] = useState([]);
+  const productsRef = useRef(products);
+  productsRef.current = products;
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(null);
   const [query, setQuery] = useState("");
@@ -478,39 +485,77 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
     registerBrand?.name || activeRegister?.company_name || profile?.company_name || "Paidly";
   const businessLogoUrl = resolveBusinessLogoUrl(profile || user);
 
-  const loadCatalog = useCallback(async () => {
-    setCatalogLoading(true);
+  const catalogAppliedRegisterRef = useRef(null);
+  const catalogUnscopedRef = useRef(false);
+  const requestedRegisterRef = useRef(null);
+  requestedRegisterRef.current = activeRegister?.id || null;
+
+  const applyCatalogPayload = useCallback((catalog) => {
+    const rows = Array.isArray(catalog?.products) ? catalog.products : [];
+    setProducts(rows);
+    if (catalog?.card_rail) setCardRail(catalog.card_rail);
+    if (catalog?.experience) setTillExperience(catalog.experience);
+    if (catalog && "digital_provider" in catalog) setDigitalProvider(catalog.digital_provider || null);
+    const ids = new Set(rows.map((row) => row.id));
+    setCart((prev) => prev.filter((line) => ids.has(line.product_id)));
+    catalogAppliedRegisterRef.current = catalog?.register_id || null;
+  }, []);
+
+  const loadCatalog = useCallback(async (registerId) => {
+    const cacheKey = registerId || "";
+    const cached = posCatalogCache.get(cacheKey);
+    if (cached) {
+      applyCatalogPayload(cached);
+      setCatalogLoading(false);
+    } else if (productsRef.current.length === 0) {
+      setCatalogLoading(true);
+    }
     setCatalogError(null);
     try {
-      const catalog = await fetchPosCatalog({ registerId: activeRegister?.id || undefined });
-      const rows = Array.isArray(catalog?.products) ? catalog.products : Array.isArray(catalog) ? catalog : [];
-      setProducts(rows);
-      if (catalog?.card_rail) setCardRail(catalog.card_rail);
-      if (catalog?.experience) setTillExperience(catalog.experience);
-      if (catalog && "digital_provider" in catalog) setDigitalProvider(catalog.digital_provider || null);
-      const ids = new Set(rows.map((row) => row.id));
-      setCart((prev) => prev.filter((line) => ids.has(line.product_id)));
+      const catalog = await fetchPosCatalog({ registerId: registerId || undefined });
+      posCatalogCache.set(cacheKey, catalog);
+      if (catalog?.register_id) posCatalogCache.set(catalog.register_id, catalog);
+      applyCatalogPayload(catalog);
+      const wanted = requestedRegisterRef.current;
+      const resolved = catalog?.register_id || registerId || null;
+      if (!registerId && wanted && resolved && wanted !== resolved) {
+        void loadCatalog(wanted);
+      }
     } catch (err) {
-      setCatalogError(err?.message || "Product catalogue unavailable.");
-      toast({
-        title: "Product catalogue unavailable.",
-        description: err?.message || "Check inventory in the back office.",
-        variant: "destructive",
-      });
+      if (!cached) {
+        setCatalogError(err?.message || "Product catalogue unavailable.");
+        toast({
+          title: "Product catalogue unavailable.",
+          description: err?.message || "Check inventory in the back office.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setCatalogLoading(false);
     }
-  }, [activeRegister?.id, toast]);
+  }, [applyCatalogPayload, toast]);
 
   const loadToday = useCallback(async () => {
-    setTodayLoading(true);
+    const cachedFresh = posTodayCache.sales && Date.now() - posTodayCache.at < POS_TODAY_TTL_MS;
+    if (cachedFresh) {
+      setTodaySales(posTodayCache.sales);
+      setTodayTotal(posTodayCache.total);
+      setTodayLoading(false);
+    } else {
+      setTodayLoading(true);
+    }
     try {
       const result = await listPosSales({ limit: 100, today: true });
+      posTodayCache.sales = result.sales;
+      posTodayCache.total = result.totalToday;
+      posTodayCache.at = Date.now();
       setTodaySales(result.sales);
       setTodayTotal(result.totalToday);
     } catch {
-      setTodaySales([]);
-      setTodayTotal(0);
+      if (!cachedFresh) {
+        setTodaySales([]);
+        setTodayTotal(0);
+      }
     } finally {
       setTodayLoading(false);
     }
@@ -584,9 +629,24 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
   }, []);
 
   useEffect(() => {
-    void loadCatalog();
+    const requested = activeRegister?.id || null;
+    if (!requested) {
+      if (catalogUnscopedRef.current) return undefined;
+      catalogUnscopedRef.current = true;
+      void loadCatalog(undefined).finally(() => {
+        catalogUnscopedRef.current = false;
+      });
+      return undefined;
+    }
+    if (catalogUnscopedRef.current) return undefined;
+    if (catalogAppliedRegisterRef.current === requested) return undefined;
+    void loadCatalog(requested);
+    return undefined;
+  }, [activeRegister?.id, loadCatalog]);
+
+  useEffect(() => {
     void loadToday();
-  }, [loadCatalog, loadToday]);
+  }, [loadToday]);
 
   useEffect(() => {
     if (!completedSale?.id) {
@@ -816,9 +876,9 @@ export default function PosTerminal({ requestedTillId = null, initialView = null
     [addProduct, catalogError, catalogLoading, codeIndex, focusScanner, navigate, posOnlyStaff, products.length, toast]
   );
 
-  const setQty = (productId, quantity) => {
+  const setQty = useCallback((productId, quantity) => {
     setCart((prev) => setPosCartQty(prev, productId, quantity));
-  };
+  }, []);
 
   const clearCart = () => {
     setCart([]);

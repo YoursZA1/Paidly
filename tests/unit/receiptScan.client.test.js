@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseReceiptOcrText } from "@/lib/receipts/ocrTextParser.js";
+import { mergeOcrPasses, parseReceiptOcrText } from "@/lib/receipts/ocrTextParser.js";
 import { enhanceForReading, findReceiptBounds, fitWithin } from "@/lib/receipts/receiptImageProcessing.js";
 import { assertReceiptDimensions, inspectReceiptFile, ReceiptFileError, sniffReceiptMime } from "@/lib/receipts/receiptFile.js";
 
@@ -112,6 +112,41 @@ RATE TAX GROSS NET
     expect(x.vatAmount).toBe(8.87);
     expect(x.subtotal).toBe(59.11);
     expect(x.confidence.merchantName).toBeLessThan(0.6);
+  });
+
+  it("attaches a right-column price pass onto descriptions that OCR read without amounts", () => {
+    const words = `SHOPRITE CHE I 10
+SHOPRITE CHECKERS (PTY) LTD
+VAT No: 4420106777
+4TH STREET 1L
+XTRASAVE 4THSTR 1L
+CIDER 500ML CAN
+TOTAL (2)
+Cash
+Change
+Cash Rounding
+RATE TAX GROSS NET`;
+    const column = `R44.99
+-R5.00
+R27.99
+R67.98
+R100.00
+-R32.10
+R0.08
+15%
+R8.87
+R67.98
+R59.11`;
+    const x = parseReceiptOcrText(mergeOcrPasses(words, column), { confidence: 70 });
+    expect(x.merchantName).toBe("SHOPRITE CHE I 10");
+    expect(x.total).toBe(67.98);
+    expect(x.vatAmount).toBe(8.87);
+    expect(x.subtotal).toBe(59.11);
+    expect(x.vatRate).toBe(15);
+    expect(x.paymentMethod).toBe("cash");
+    expect(x.total).not.toBe(100);
+    expect(x.transactionDate).toBeUndefined();
+    expect(x.lineItems.map((item) => item.amount)).toEqual([44.99, -5, 27.99]);
   });
 
   it("nothing legible → empty result (\"couldn't read clearly\"), never a claim that it isn't a receipt", () => {

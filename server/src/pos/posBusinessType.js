@@ -5,6 +5,9 @@ function columnMissing(message) {
   return /business_type|schema cache|column .* does not exist/i.test(String(message || ""));
 }
 
+const businessTypeCache = new Map();
+const BUSINESS_TYPE_TTL_MS = 20_000;
+
 /**
  * Whether this org opted into POS (retail or mixed).
  * Missing column (migration not applied) does not block an existing till.
@@ -12,6 +15,8 @@ function columnMissing(message) {
  */
 export async function orgHasPosCapability(orgId) {
   if (!orgId) return false;
+  const hit = businessTypeCache.get(orgId);
+  if (hit && Date.now() - hit.at < BUSINESS_TYPE_TTL_MS) return businessTypeIncludesPos(hit.value);
   const { data, error } = await supabaseAdmin
     .from("organizations")
     .select("business_type")
@@ -22,7 +27,9 @@ export async function orgHasPosCapability(orgId) {
     console.warn("[pos] business_type lookup", error.message);
     return false;
   }
-  return businessTypeIncludesPos(data?.business_type);
+  const normalized = normalizeBusinessType(data?.business_type);
+  businessTypeCache.set(orgId, { at: Date.now(), value: normalized });
+  return businessTypeIncludesPos(normalized);
 }
 
 /**
@@ -46,12 +53,16 @@ export async function requirePosCapability(res, orgId) {
  */
 export async function loadOrgBusinessType(orgId) {
   if (!orgId) return null;
+  const hit = businessTypeCache.get(orgId);
+  if (hit && Date.now() - hit.at < BUSINESS_TYPE_TTL_MS) return hit.value;
   const { data, error } = await supabaseAdmin.from("organizations").select("business_type").eq("id", orgId).maybeSingle();
   if (error) {
     if (!columnMissing(error.message)) console.warn("[pos] business_type lookup", error.message);
     return null;
   }
-  return normalizeBusinessType(data?.business_type);
+  const normalized = normalizeBusinessType(data?.business_type);
+  businessTypeCache.set(orgId, { at: Date.now(), value: normalized });
+  return normalized;
 }
 
 /**

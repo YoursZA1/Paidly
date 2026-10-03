@@ -8,7 +8,7 @@
  * validates again and creates the expense.
  */
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { isEmptyExtraction } from "@shared/expenses/receiptScan.js";
+import { isEmptyExtraction, normalizeReceiptExtraction } from "@shared/expenses/receiptScan.js";
 import {
   blobToBase64,
   inspectReceiptFile,
@@ -27,6 +27,40 @@ import {
 } from "@/services/ReceiptScanService.js";
 
 export const STEPS = ["uploading", "processing", "reading", "checking"];
+
+function lacksMoney(extraction) {
+  return extraction?.total == null && extraction?.subtotal == null;
+}
+
+/** Keep a server read, and fill only the fields it left blank from the on-device read. */
+function fillReceiptGaps(primary, extra) {
+  if (!extra || extra.isReceipt === false) return primary || null;
+  if (!primary) return extra;
+  const out = { ...primary, confidence: { ...(primary.confidence || {}) } };
+  for (const key of [
+    "total",
+    "subtotal",
+    "vatAmount",
+    "vatRate",
+    "transactionDate",
+    "receiptNumber",
+    "invoiceNumber",
+    "supplierVatNumber",
+    "paymentMethod",
+    "currency",
+    "merchantName",
+    "supplierName",
+  ]) {
+    const blank = out[key] == null || out[key] === "";
+    if (blank && extra[key] != null && extra[key] !== "") {
+      out[key] = extra[key];
+      if (extra.confidence?.[key] != null) out.confidence[key] = extra.confidence[key];
+    }
+  }
+  if (!out.lineItems?.length && extra.lineItems?.length) out.lineItems = extra.lineItems;
+  const normalized = normalizeReceiptExtraction(out);
+  return normalized.ok ? normalized.extraction : out;
+}
 
 const initialState = {
   phase: "choose",
@@ -172,17 +206,24 @@ export function useReceiptScan({ onExpenseCreated } = {}) {
       }
     }
 
-    if (!extraction && !serverSaidNotReceipt && r.kind === "image" && r.processing) {
+    if (!serverSaidNotReceipt && r.kind === "image" && r.processing && lacksMoney(extraction)) {
+      const serverRead = extraction;
       try {
         const { readReceiptOnDevice } = await import("@/lib/receipts/onDeviceOcr.js");
-        extraction = await readReceiptOnDevice(r.processing, {
+        const device = await readReceiptOnDevice(r.processing, {
           signal: abortRef.current?.signal,
           onProgress: (p) => safeDispatch({ type: "readProgress", value: p }),
         });
-        source = "on_device";
+        if (!serverRead) {
+          extraction = device;
+          source = "on_device";
+        } else {
+          extraction = fillReceiptGaps(serverRead, device);
+          source = "server";
+        }
       } catch (err) {
         if (err?.name === "AbortError") throw err;
-        extraction = null;
+        extraction = serverRead;
       }
     }
 

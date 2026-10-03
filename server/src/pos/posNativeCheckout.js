@@ -386,14 +386,16 @@ export async function handleNativePosCatalog(req, res, gate) {
 
   const registerCompanyId = saleCompanyIdFromRegister(register);
   try {
-    const experience = await loadOrgPosExperience(gate.membership.orgId);
+    const [experience, cardRail] = await Promise.all([
+      loadOrgPosExperience(gate.membership.orgId),
+      resolveTillCardRail(gate.membership.orgId).catch(() => null),
+    ]);
     const products = await loadPosCatalogRows(gate.membership.orgId, {
       activeOnly: true,
       registerCompanyId,
       enforceBrand: true,
       includeServices: experience.services,
     });
-    const cardRail = await resolveTillCardRail(gate.membership.orgId).catch(() => null);
     return res.status(200).json({
       products: products.map((p) => ({ ...p, image_src: posProductImageSrc(p.image_url) })),
       register_id: register?.id || null,

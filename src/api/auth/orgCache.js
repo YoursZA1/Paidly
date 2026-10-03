@@ -9,6 +9,9 @@ import { getActivePortalSlug, portalContextKey } from "@/lib/workforcePortal/por
  */
 export const orgIdCache = {};
 
+/** Concurrent callers for the same user share one organizations lookup. */
+const orgResolveInflight = new Map();
+
 /** @param {string} userId */
 export function orgCacheKey(userId) {
   return `${String(userId || "")}|${portalContextKey()}`;
@@ -30,6 +33,7 @@ export async function resolvePortalOrgId(slug) {
 
 export function clearOrgIdCache() {
   Object.keys(orgIdCache).forEach((k) => delete orgIdCache[k]);
+  orgResolveInflight.clear();
   clearOrgBootstrapInflight();
 }
 
@@ -46,35 +50,52 @@ export async function resolveActiveOrgIdForUser(userId) {
   const effectiveUserId = String(userId || "");
   if (!effectiveUserId) return null;
 
+  const key = orgCacheKey(effectiveUserId);
+  if (orgIdCache[key]) return orgIdCache[key];
+  const pending = orgResolveInflight.get(key);
+  if (pending) return pending;
+
   const portalSlug = getActivePortalSlug();
-  if (portalSlug) return resolvePortalOrgId(portalSlug);
+  const run = (async () => {
+    if (portalSlug) return resolvePortalOrgId(portalSlug);
 
-  const { data: ownedOrg, error: ownedErr } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("owner_id", effectiveUserId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    const { data: ownedOrg, error: ownedErr } = await supabase
+      .from("organizations")
+      .select("id")
+      .eq("owner_id", effectiveUserId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-  if (ownedErr && !ownedErr.message?.includes("0 rows")) {
-    console.warn("Error resolving owned organization:", ownedErr);
+    if (ownedErr && !ownedErr.message?.includes("0 rows")) {
+      console.warn("Error resolving owned organization:", ownedErr);
+    }
+    if (isPostgrestForbiddenError(ownedErr)) return null;
+    if (ownedOrg?.id) return ownedOrg.id;
+
+    const { data: invitedMembership, error: membershipCheckError } = await supabase
+      .from("memberships")
+      .select("org_id")
+      .eq("user_id", effectiveUserId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (membershipCheckError && !membershipCheckError.message?.includes("0 rows")) {
+      console.warn("Error checking membership:", membershipCheckError);
+    }
+    return invitedMembership?.org_id ?? null;
+  })().then((orgId) => {
+    if (orgId) orgIdCache[key] = orgId;
+    return orgId;
+  });
+
+  orgResolveInflight.set(key, run);
+  try {
+    return await run;
+  } finally {
+    if (orgResolveInflight.get(key) === run) orgResolveInflight.delete(key);
   }
-  if (isPostgrestForbiddenError(ownedErr)) return null;
-  if (ownedOrg?.id) return ownedOrg.id;
-
-  const { data: invitedMembership, error: membershipCheckError } = await supabase
-    .from("memberships")
-    .select("org_id")
-    .eq("user_id", effectiveUserId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipCheckError && !membershipCheckError.message?.includes("0 rows")) {
-    console.warn("Error checking membership:", membershipCheckError);
-  }
-  return invitedMembership?.org_id ?? null;
 }
 
 /** @deprecated Prefer resolveActiveOrgIdForUser */

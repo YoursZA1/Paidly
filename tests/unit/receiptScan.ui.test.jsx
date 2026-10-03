@@ -165,6 +165,32 @@ describe("Scan Receipt dialog", () => {
     expect(onExpenseCreated).toHaveBeenCalledWith(expect.objectContaining({ id: "exp-1" }));
   });
 
+  it("fills blank amounts from the on-device read when the server only saw the merchant", async () => {
+    service.extractReceiptOnServer.mockResolvedValueOnce({
+      ok: true,
+      available: true,
+      extraction: { isReceipt: true, merchantName: "SHOPRITE CHE I 10", paymentMethod: "cash" },
+    });
+    readReceiptOnDevice.mockResolvedValueOnce({
+      isReceipt: true,
+      merchantName: "SHOPRITE CHE I 10",
+      subtotal: 59.11,
+      vatAmount: 8.87,
+      vatRate: 15,
+      total: 67.98,
+      paymentMethod: "cash",
+      confidence: { merchantName: 0.4, subtotal: 0.95, vatAmount: 0.95, total: 0.95 },
+    });
+    await renderScanner();
+    await pickFile(jpeg());
+    expect(readReceiptOnDevice).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('input[value="SHOPRITE CHE I 10"]')).not.toBeNull();
+    expect(document.querySelector('input[value="59.11"]')).not.toBeNull();
+    expect(document.querySelector('input[value="8.87"]')).not.toBeNull();
+    expect(document.querySelector('input[value="67.98"]')).not.toBeNull();
+    expect(document.querySelector('input[value="100.00"]')).toBeNull();
+  });
+
   it("upload failed → Try again resumes without re-picking the file", async () => {
     service.uploadReceiptOriginal.mockRejectedValueOnce(new ReceiptApiError("We couldn't upload this receipt.", { code: "UPLOAD_FAILED", network: true }));
     await renderScanner();

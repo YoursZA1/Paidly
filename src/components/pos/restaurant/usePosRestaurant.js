@@ -6,6 +6,8 @@ import { fetchPosPaymentIntent } from "@/services/PosIntegrationService";
 export const RESTAURANT_VIEW = Object.freeze({ FLOOR: "floor", MENU: "menu", KITCHEN: "kitchen", ORDERS: "orders" });
 const TAB_PAYMENT_KEY = "paidly_pos_tab_payment";
 const FLOOR_POLL_MS = 15000;
+/** Last floor plan for this browser session. A return to the till paints tables immediately. */
+let floorSessionCache = null;
 
 /**
  * Restaurant-mode state for the till: floor plan, the table order being edited (a "tab"), order
@@ -36,14 +38,19 @@ export function usePosRestaurant({ businessType, registerId, cashierName, cart, 
       setFloorLoading(false);
       return null;
     }
+    if (floorSessionCache) {
+      setFloorState(floorSessionCache);
+      setFloorLoading(false);
+    }
     try {
       const next = await fetchRestaurantFloor();
+      floorSessionCache = next;
       setFloorState(next);
       setSchemaMissing(false);
       return next;
     } catch (err) {
       if (err?.code === "RESTAURANT_SCHEMA_MISSING") setSchemaMissing(true);
-      return null;
+      return floorSessionCache;
     } finally {
       setFloorLoading(false);
     }

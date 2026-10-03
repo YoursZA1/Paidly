@@ -359,7 +359,21 @@ async function fetchMembershipForOrgLegacy(supabaseAdmin, userId, orgId) {
  * @param {string} userId
  * @param {{ portalSlug?: string }} [opts]
  */
+const membershipInflight = new Map();
+
 export async function loadCompanyMembership(supabaseAdmin, userId, opts = {}) {
+  const portalKey = typeof opts?.portalSlug === "string" ? opts.portalSlug : "";
+  const key = `${userId}|${portalKey}`;
+  const pending = membershipInflight.get(key);
+  if (pending) return pending;
+  const run = loadCompanyMembershipInner(supabaseAdmin, userId, opts).finally(() => {
+    if (membershipInflight.get(key) === run) membershipInflight.delete(key);
+  });
+  membershipInflight.set(key, run);
+  return run;
+}
+
+async function loadCompanyMembershipInner(supabaseAdmin, userId, opts = {}) {
   const portalRequested = typeof opts?.portalSlug === "string";
   let orgId;
   if (portalRequested) {
