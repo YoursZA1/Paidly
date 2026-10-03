@@ -6,12 +6,13 @@ import useCompanyContext from "@/hooks/useCompanyContext";
 import { staffDashboardHomePath } from "@/lib/staffDashboard";
 import { createPageUrl } from "@/utils";
 import { isPosTerminalPage } from "@/lib/posNavAccess";
+import { TENANT_HOME_REDIRECT_FLAG } from "@/lib/auth/accountSwitch";
 import {
   isWorkforceGenericHomePath,
   resolveWorkforceHomePath,
 } from "@/lib/workforceExperience.js";
 
-const REDIRECT_FLAG = "paidly_tenant_home_redirected";
+const REDIRECT_FLAG = TENANT_HOME_REDIRECT_FLAG;
 
 /**
  * After authentication, redirect once per browser session from generic homes.
@@ -25,6 +26,18 @@ export default function usePostAuthHomeRedirect({ enabled = true, posOnlyStaff =
   const { loading: tenantLoading, saasRole } = useTenantRole();
   const { loading: companyLoading, ctx } = useCompanyContext();
   const ranRef = useRef(false);
+  const seenUserIdRef = useRef(authUserId);
+
+  useEffect(() => {
+    if (seenUserIdRef.current === authUserId) return;
+    seenUserIdRef.current = authUserId;
+    ranRef.current = false;
+    try {
+      window.sessionStorage.removeItem(REDIRECT_FLAG);
+    } catch {
+      /* ignore */
+    }
+  }, [authUserId]);
 
   useEffect(() => {
     if (!enabled || ranRef.current || authLoading || tenantLoading || !authUserId) return;

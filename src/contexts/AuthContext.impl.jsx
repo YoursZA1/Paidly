@@ -18,6 +18,7 @@ import {
   reportSupabaseGetSessionRecovered,
 } from "@/lib/authSessionReconnectToast";
 import { authFlowLog, sessionReadErrorType } from "@/lib/auth/authFlowLog";
+import { releasePreviousAccountContext, shouldExpireSessionAfterSignedOut } from "@/lib/auth/accountSwitch";
 import {
   deferAfterAuthLock,
   isTransientSessionReadFailure,
@@ -215,6 +216,12 @@ export function AuthProvider({ children }) {
   const loadingRef = useRef(loading);
   const routeInvariantTimerRef = useRef(null);
   const manualLogoutRef = useRef(false);
+  /** True while password sign-in is replacing another session (SIGNED_OUT then SIGNED_IN). */
+  const signingInRef = useRef(false);
+  /** Resolves when the in-flight password sign-in settles, so SIGNED_OUT can wait for the new session. */
+  const signInGateRef = useRef(null);
+  /** Bumped on account switch so an in-flight profile restore cannot overwrite the new user. */
+  const refreshGenerationRef = useRef(0);
   const reconnectEscalationCtlRef = useRef(null);
   const reconnectEscalationDepsRef = useRef({});
   const authTabSyncRef = useRef(null);
@@ -377,8 +384,11 @@ export function AuthProvider({ children }) {
     if (refreshUserInflightRef.current) return refreshUserInflightRef.current;
 
     const run = (async () => {
+    const generation = refreshGenerationRef.current;
+    const stillCurrent = () => generation === refreshGenerationRef.current;
     const startedAt = Date.now();
     const keepHydratedUserFromStore = (error) => {
+      if (!stillCurrent()) return true;
       const { session: stored, user: storedUser } = useAuthSessionStore.getState();
       if (
         !shouldKeepHydratedUserOnSessionReadFailure({
@@ -420,6 +430,7 @@ export function AuthProvider({ children }) {
           setTimeout(() => resolve(null), PROFILE_RESTORE_MS);
         }),
       ]);
+      if (!stillCurrent()) return false;
       if (currentUser?.profileReady) {
         patchAuthSession({ user: currentUser, profileReady: true });
         authFlowLog("PROFILE", "restoration successful", {
@@ -504,14 +515,14 @@ export function AuthProvider({ children }) {
           const fallback = resolveSessionForProfileRestore(null, stored);
           if (fallback?.user) {
             await applyRestoredUser(fallback, 1);
-          } else {
+          } else if (stillCurrent()) {
             patchAuthSession({ user: null });
           }
           setError("");
         } else {
           const s = normalizeSessionFromClient(data.session);
           if (!isSessionValid(s)) {
-            if (!keepHydratedUserFromStore(null)) {
+            if (!keepHydratedUserFromStore(null) && stillCurrent()) {
               patchAuthSession({ user: null });
             }
             setError("");
@@ -549,28 +560,31 @@ export function AuthProvider({ children }) {
           return;
         }
         const su = !error && data?.session?.user ? data.session.user : null;
-        if (su) {
+        if (su && stillCurrent()) {
           const min = minimalUserFromJwtUser(su);
           if (min) patchAuthSession({ user: min, profileReady: false });
-        } else if (!keepHydratedUserFromStore(error)) {
+        } else if (!keepHydratedUserFromStore(error) && stillCurrent()) {
           patchAuthSession({ user: null });
         }
       } catch (inner) {
         reportSupabaseGetSessionFailure();
-        if (!keepHydratedUserFromStore(inner)) {
+        if (!keepHydratedUserFromStore(inner) && stillCurrent()) {
           patchAuthSession({ user: null });
         }
       }
       setError("");
     } finally {
-      patchAuthSession({ loading: false });
+      if (stillCurrent()) patchAuthSession({ loading: false });
     }
     })();
 
-    refreshUserInflightRef.current = run.finally(() => {
-      refreshUserInflightRef.current = null;
+    const tracked = run.finally(() => {
+      if (refreshUserInflightRef.current === tracked) {
+        refreshUserInflightRef.current = null;
+      }
     });
-    return refreshUserInflightRef.current;
+    refreshUserInflightRef.current = tracked;
+    return tracked;
   }, [connectionLifecycle, isTerminalRefreshFailure]);
 
   /** Coalesce TOKEN_REFRESHED + Realtime profile bursts so we don't stack profile restores after writes. */
@@ -1150,7 +1164,11 @@ export function AuthProvider({ children }) {
           authTabSyncRef.current?.publish("AUTH_SIGNED_OUT");
           return;
         }
+        const signInGate = signingInRef.current ? signInGateRef.current : null;
         deferAfterAuthLock(async () => {
+          if (signInGate) await signInGate;
+          const liveUserId = useAuthSessionStore.getState().session?.user?.id || null;
+          if (!shouldExpireSessionAfterSignedOut(liveUserId)) return;
           await connectionLifecycle.transitionToExpired("signed_out", {
             signOutLocal: false,
             clearAuthState: true,
@@ -1280,6 +1298,21 @@ export function AuthProvider({ children }) {
   const login = useCallback(async ({ email, password, role }) => {
     setError("");
     setVerifyGateEmail("");
+    refreshGenerationRef.current += 1;
+    refreshUserInflightRef.current = null;
+    signingInRef.current = true;
+    let releaseSignInGate = () => {};
+    signInGateRef.current = new Promise((resolve) => {
+      releaseSignInGate = resolve;
+    });
+    try {
+    try {
+      await releasePreviousAccountContext();
+    } catch (e) {
+      if (import.meta.env?.DEV) {
+        console.warn("[Auth] releasePreviousAccountContext:", e?.message || e);
+      }
+    }
     const normalizedEmail = (email || "").trim().toLowerCase();
     const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password);
     invalidateSessionSnapshot();
@@ -1339,6 +1372,11 @@ export function AuthProvider({ children }) {
         console.warn("[Auth] updateMyUserData after login (non-blocking):", e?.message || e);
       });
     }
+    } finally {
+      signingInRef.current = false;
+      releaseSignInGate();
+      signInGateRef.current = null;
+    }
   }, [bootstrapOrganizationAfterLogin]);
 
   const purgeSupabaseAuthStorage = useCallback(() => {
@@ -1376,6 +1414,13 @@ export function AuthProvider({ children }) {
     async (opts = {}) => {
       manualLogoutRef.current = true;
       const keepExpiredState = Boolean(opts?.keepExpiredState);
+      refreshGenerationRef.current += 1;
+      refreshUserInflightRef.current = null;
+      try {
+        await releasePreviousAccountContext();
+      } catch {
+        /* logout must still finish */
+      }
       // 1. Clear app state immediately so the UI shows logged out and redirect is never blocked.
       clearNodeAuthUnreachable();
       try {
