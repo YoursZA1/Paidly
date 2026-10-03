@@ -213,6 +213,7 @@ export default function RecordPaymentModal({ invoice, isOpen, onClose, onSave, d
     setIdempotencyKey(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
     setExistingPayments((prev) => [...prev, { amount: outcome?.amount || 0 }]);
     setAmount('');
+    setReference('');
     setNotes('');
     setOutcome(null);
     setPhase('form');

@@ -5,7 +5,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Payment } from '@/api/entities';
 import { getCurrencySymbol } from '@/utils/currencyCalculations';
 import { cn } from '@/lib/utils';
-import { INVOICE_PAYMENT_CHOICES } from '@shared/payments/invoicePaymentMethods.js';
+import { INVOICE_PAYMENT_CHOICES, normalizeOfflineInvoiceMethod } from '@shared/payments/invoicePaymentMethods.js';
 
 export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) {
   const [balance, setBalance] = useState(invoice?.total_amount || 0);
@@ -52,14 +52,14 @@ export function RecordPaymentForm({ invoice, onConfirm, onBack, isProcessing }) 
       setError(`Amount cannot exceed ${symbol} ${balance.toLocaleString()}`);
       return;
     }
-    const choice = INVOICE_PAYMENT_CHOICES.find((item) => item.value === method);
-    if (!choice || choice.online) {
+    const offlineMethod = normalizeOfflineInvoiceMethod(method);
+    if (!offlineMethod) {
       setError('Choose Cash, EFT, card, POS or Other to record this payment.');
       return;
     }
     onConfirm({
       amount: num,
-      payment_method: choice.value,
+      payment_method: offlineMethod,
       payment_date: new Date().toISOString(),
       reference_number: '',
       notes: '',

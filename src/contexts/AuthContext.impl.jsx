@@ -1306,13 +1306,13 @@ export function AuthProvider({ children }) {
       releaseSignInGate = resolve;
     });
     try {
-    try {
       await releasePreviousAccountContext();
     } catch (e) {
       if (import.meta.env?.DEV) {
         console.warn("[Auth] releasePreviousAccountContext:", e?.message || e);
       }
     }
+    try {
     const normalizedEmail = (email || "").trim().toLowerCase();
     const session = await SupabaseAuthService.signInWithEmail(normalizedEmail, password);
     invalidateSessionSnapshot();
