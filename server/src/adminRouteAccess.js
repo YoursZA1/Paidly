@@ -39,6 +39,25 @@ export function jwtKnownStaffRole(user) {
   return "";
 }
 
+/**
+ * Trusted staff role for the signed-in user. JWT app_metadata wins; otherwise
+ * profiles.role. Never user_metadata.
+ * @returns {Promise<string>}
+ */
+export async function resolveTrustedStaffRole(supabaseAdmin, user) {
+  const jwt = jwtKnownStaffRole(user);
+  if (jwt) return jwt;
+  if (adminBypassAllowed(user?.email)) return "admin";
+  if (!user?.id || !supabaseAdmin) return "";
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("role, user_role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const role = dashboardRoleFromProfileRow(data);
+  return INTERNAL_ADMIN_READ_ROLES.includes(role) ? role : "";
+}
+
 function adminBypassAllowed(email) {
   const adminBypassEnv = String(process.env.ADMIN_BYPASS_AUTH || "").toLowerCase().trim();
   const adminBypassEnabled = ["true", "1", "yes", "on"].includes(adminBypassEnv);

@@ -891,10 +891,13 @@ export default async function handler(req, res) {
     // Money surfaces stay admin / management / sales. Support keeps operational reads.
     const BILLING_RESOURCES = new Set(["revenue", "payments", "failed-payments", "subscriptions"]);
     const BILLING_DIRECTORY_KINDS = new Set(["payments", "transactions", "refunds", "payment-intents", "plans"]);
+    const directoryKind = String(req.query?.kind || "").trim().toLowerCase();
     const isBillingRead =
       BILLING_RESOURCES.has(resource) ||
-      (resource === "directory" && BILLING_DIRECTORY_KINDS.has(String(req.query?.kind || "").trim().toLowerCase()));
-    const authOpts = resource === "settings"
+      (resource === "directory" && BILLING_DIRECTORY_KINDS.has(directoryKind));
+    const authOpts = resource === "directory" && directoryKind === "payment-intent-audit"
+      ? {}
+      : resource === "settings"
       ? { allowTeamManagement: true }
       : isBillingRead
         ? { allowBillingTeam: true }
@@ -997,11 +1000,20 @@ export default async function handler(req, res) {
     if (resource === "directory") {
       const { listAdminDirectory } = await import("../../server/src/adminPlatformDirectory.js");
       try {
+        const { resolveTrustedStaffRole } = await import("../../server/src/adminRouteAccess.js");
+        const staffRole = await resolveTrustedStaffRole(supabase, authData.user);
         const result = await listAdminDirectory(supabase, req.query?.kind, {
           limit: req.query?.limit,
+          includePaymentVolume: staffRole === "admin",
+          staffRole,
+          actor: authData.user,
+          intentId: req.query?.intent_id,
+          reason: req.query?.reason,
+          from: req.query?.from,
+          to: req.query?.to,
         });
-        if (result?.status === 400) {
-          return res.status(400).json({ error: result.error || "Unknown directory kind" });
+        if (result?.status) {
+          return res.status(result.status).json({ error: result.error || "Request failed" });
         }
         return res.status(200).json({ ok: true, ...result });
       } catch (e) {

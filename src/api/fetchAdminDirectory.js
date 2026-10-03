@@ -3,11 +3,19 @@ import { apiRequest } from "@/utils/apiRequest";
 import { getSessionAccessTokenOrHandleUnauthorized } from "@/lib/rpcSessionPolicy";
 import { buildAdminApiUrls } from "@/api/adminApiUrls";
 
-export async function fetchAdminDirectory(kind, limit = 50) {
+export async function fetchAdminDirectory(kind, limit = 50, range = {}) {
   const token = await getSessionAccessTokenOrHandleUnauthorized();
   if (!token) throw new Error("Sign in required");
 
-  const q = `kind=${encodeURIComponent(String(kind || ""))}&limit=${encodeURIComponent(String(limit))}`;
+  const params = new URLSearchParams({
+    kind: String(kind || ""),
+    limit: String(limit),
+  });
+  if (range?.from) params.set("from", String(range.from));
+  if (range?.to) params.set("to", String(range.to));
+  if (range?.intentId) params.set("intent_id", String(range.intentId));
+  if (range?.reason) params.set("reason", String(range.reason));
+  const q = params.toString();
   let lastError = null;
   for (const url of buildAdminApiUrls("directory", q)) {
     let res;

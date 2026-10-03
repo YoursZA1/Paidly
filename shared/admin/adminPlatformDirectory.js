@@ -19,6 +19,7 @@ export const ADMIN_DIRECTORY_KINDS = [
   "payslips",
   "transactions",
   "payment-intents",
+  "payment-intent-audit",
   "refunds",
   "templates",
   "integrations",

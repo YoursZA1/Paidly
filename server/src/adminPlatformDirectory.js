@@ -15,7 +15,14 @@ import {
   successRate,
 } from "../../shared/admin/adminPlatformMetrics.js";
 import { listCustomerPaymentProviders } from "./payments/paymentProviders.js";
-import { paymentProviderLabel } from "../../shared/payments/paymentProviderCatalog.js";
+import {
+  PAYMENT_INTENT_FINANCE_COLUMNS,
+  buildPaymentIntentFinance,
+  parseFinanceCustomRange,
+  paymentIntentBucketFromRpc,
+  paymentIntentFactFromRow,
+} from "../../shared/admin/paymentIntentFinance.js";
+import { investigatePaymentIntent } from "./adminPaymentIntentAudit.js";
 
 function unavailable(kind, reason) {
   return {
@@ -106,6 +113,109 @@ async function usageSnapshot(supabase, table, column = "created_at") {
 
 function orgName(org) {
   return String(org?.name || org?.company_name || "Untitled business").trim();
+}
+
+const PAYMENT_INTENT_PAGE = 1000;
+const PAYMENT_INTENT_CAP = 20000;
+
+async function loadPaymentIntentBuckets(supabase) {
+  try {
+    const result = await supabase.rpc("admin_payment_intent_finance_buckets");
+    if (result?.error) {
+      if (isMissingRelationError(result.error)) return null;
+      return { unavailable: true, reason: result.error.message || "Failed to aggregate payment intents" };
+    }
+    return {
+      rows: (result.data || []).map(paymentIntentBucketFromRpc),
+      aggregatedInDatabase: true,
+      complete: true,
+    };
+  } catch (error) {
+    if (isMissingRelationError(error)) return null;
+    return { unavailable: true, reason: error?.message || "Failed to aggregate payment intents" };
+  }
+}
+
+async function loadPaymentIntentFacts(supabase) {
+  const grouped = await loadPaymentIntentBuckets(supabase);
+  if (grouped) return grouped;
+  const facts = [];
+  for (let from = 0; from < PAYMENT_INTENT_CAP; from += PAYMENT_INTENT_PAGE) {
+    let result;
+    try {
+      result = await supabase
+        .from("payment_intents")
+        .select(PAYMENT_INTENT_FINANCE_COLUMNS)
+        .order("created_at", { ascending: false })
+        .range(from, from + PAYMENT_INTENT_PAGE - 1);
+    } catch (error) {
+      if (isMissingRelationError(error)) {
+        return { rows: [], unavailable: true, reason: "payment_intents is not available in this environment.", complete: false };
+      }
+      return { rows: [], unavailable: true, reason: error?.message || "Failed to read payment_intents", complete: false };
+    }
+    if (result?.error) {
+      if (isMissingRelationError(result.error)) {
+        return { rows: [], unavailable: true, reason: "payment_intents is not available in this environment.", complete: false };
+      }
+      return { rows: [], unavailable: true, reason: result.error.message || "Failed to read payment_intents", complete: false };
+    }
+    const batch = result.data || [];
+    for (const row of batch) facts.push(paymentIntentFactFromRow(row));
+    if (batch.length < PAYMENT_INTENT_PAGE) {
+      return { rows: facts, unavailable: false, reason: null, complete: true, aggregatedInDatabase: false };
+    }
+  }
+  return { rows: facts, unavailable: false, reason: null, complete: false, aggregatedInDatabase: false };
+}
+
+const INVOICE_PAID = ["paid", "partially_paid"];
+const INVOICE_OPEN = ["sent", "overdue", "viewed", "partially_paid", "unpaid", "issued"];
+
+async function loadInvoicePlatform(supabase, includeAmounts) {
+  const [generated, paid] = await Promise.all([
+    countTable(supabase, "invoices"),
+    countTable(supabase, "invoices", (q) => q.in("status", INVOICE_PAID)),
+  ]);
+  if (generated.unavailable) return null;
+  const generatedCount = countExact(generated);
+  const paidCount = countExact(paid);
+  const body = {
+    generated: generatedCount,
+    paid: paidCount,
+    paymentRate: successRate(paidCount || 0, generatedCount || 0),
+  };
+  if (!includeAmounts) return body;
+  const moneyTotals = await sumInvoiceStatusTotals(supabase);
+  if (moneyTotals) {
+    body.paidVolume = moneyTotals.paid;
+    body.outstandingVolume = moneyTotals.outstanding;
+  }
+  return body;
+}
+
+async function sumInvoiceStatusTotals(supabase) {
+  let paid = 0;
+  let outstanding = 0;
+  const page = 1000;
+  for (let from = 0; from < 20000; from += page) {
+    const result = await supabase.from("invoices").select("status, total_amount").range(from, from + page - 1);
+    if (result.error) return null;
+    const batch = result.data || [];
+    for (const row of batch) {
+      const status = String(row.status || "").toLowerCase();
+      const total = money(row.total_amount ?? row.total);
+      if (status === "paid") paid = money(paid + total);
+      if (INVOICE_OPEN.includes(status)) outstanding = money(outstanding + total);
+    }
+    if (batch.length < page) return { paid, outstanding };
+  }
+  return { paid, outstanding };
+}
+
+async function countOptional(supabase, table) {
+  const result = await countTable(supabase, table);
+  return result.unavailable ? null : countExact(result);
 }
 
 async function loadOrgNames(supabase, ids) {
@@ -326,11 +436,11 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
             ? "recurring_invoices"
             : "payslips";
     const docs = await queryTable(supabase, table, (q) =>
-      q.select("id, org_id, invoice_number, quote_number, number, total, amount, status, created_at, client_name, project_title").order("created_at", { ascending: false }).limit(limit)
+      q.select("id, org_id, invoice_number, quote_number, number, status, created_at, project_title").order("created_at", { ascending: false }).limit(limit)
     );
     if (docs.unavailable) {
       const fallback = await queryTable(supabase, table, (q) =>
-        q.select("id, org_id, total, amount, status, created_at").order("created_at", { ascending: false }).limit(limit)
+        q.select("id, org_id, status, created_at").order("created_at", { ascending: false }).limit(limit)
       );
       if (fallback.unavailable) return unavailable(normalized, fallback.reason);
       const names = await loadOrgNames(supabase, fallback.data.map((r) => r.org_id));
@@ -342,7 +452,6 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
           id: r.id,
           title: r.id,
           business: names.get(String(r.org_id)) || "—",
-          amount: money(r.total ?? r.amount),
           status: r.status || "unknown",
           date: r.created_at,
         })),
@@ -359,7 +468,7 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
       rows: docs.data.map((r) => ({
         id: r.id,
         title: r.invoice_number || r.quote_number || r.number || r.project_title || r.id,
-        subtitle: r.client_name || null,
+        subtitle: null,
         business: names.get(String(r.org_id)) || "—",
         status: r.status || "unknown",
         date: r.created_at,
@@ -369,7 +478,7 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
 
   if (normalized === "pos") {
     const sales = await queryTable(supabase, "pos_sales_events", (q) =>
-      q.select("id, org_id, provider, status, total_amount, currency, payment_method, occurred_at, created_at").order("occurred_at", { ascending: false }).limit(limit)
+      q.select("id, org_id, provider, status, payment_method, occurred_at, created_at").order("occurred_at", { ascending: false }).limit(limit)
     );
     if (sales.unavailable) return unavailable("pos", sales.reason);
     const names = await loadOrgNames(supabase, sales.data.map((r) => r.org_id));
@@ -528,24 +637,43 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
     };
   }
 
+  if (normalized === "payment-intent-audit") {
+    if (opts.staffRole !== "admin") {
+      return { error: "Admin access required", status: 403 };
+    }
+    const result = await investigatePaymentIntent(supabase, {
+      intentId: opts.intentId,
+      reason: opts.reason,
+      actor: opts.actor,
+    });
+    if (result.status !== 200) return { error: result.error, status: result.status };
+    return {
+      kind: "payment-intent-audit",
+      view: "audit",
+      unavailable: false,
+      count: 1,
+      rows: [],
+      audit: result.audit,
+    };
+  }
+
   if (normalized === "payment-intents") {
-    const intents = await queryTable(supabase, "payment_intents", (q) =>
-      q.select("id, org_id, source_kind, provider, amount, currency, status, created_at").order("created_at", { ascending: false }).limit(limit)
-    );
-    if (intents.unavailable) return unavailable("payment-intents", intents.reason);
-    const names = await loadOrgNames(supabase, intents.data.map((r) => r.org_id));
-    const [total, successful, pending, failed] = await Promise.all([
-      countTable(supabase, "payment_intents"),
-      countTable(supabase, "payment_intents", (q) => q.in("status", ["succeeded", "completed", "paid"])),
-      countTable(supabase, "payment_intents", (q) => q.in("status", ["pending", "requires_action", "processing"])),
-      countTable(supabase, "payment_intents", (q) => q.eq("status", "failed")),
+    const loaded = await loadPaymentIntentFacts(supabase);
+    if (loaded.unavailable) return unavailable("payment-intents", loaded.reason);
+    const includeAmounts = opts.includePaymentVolume === true;
+    const finance = buildPaymentIntentFinance(loaded.rows, {
+      includeAmounts,
+      customRange: parseFinanceCustomRange(opts.from, opts.to),
+    });
+    const [invoiceDocuments, quoteCount, recurringCount] = await Promise.all([
+      loadInvoicePlatform(supabase, includeAmounts),
+      countOptional(supabase, "quotes"),
+      countOptional(supabase, "recurring_invoices"),
     ]);
-    const ok = countExact(successful);
-    const bad = countExact(failed);
+    const month = finance.periods["30d"];
     return {
       kind: "payment-intents",
-      view: "operations",
-      // Registered provider adapters and whether this deployment has their server-side credentials.
+      view: "platform",
       providers: listCustomerPaymentProviders().map(({ id, label, kind, sourceKinds, configured }) => ({
         id,
         label,
@@ -553,24 +681,25 @@ export async function listAdminDirectory(supabase, kind, opts = {}) {
         sourceKinds,
         configured,
       })),
+      finance: {
+        ...finance,
+        truncated: loaded.complete === false,
+        aggregatedInDatabase: loaded.aggregatedInDatabase === true,
+        canAudit: opts.staffRole === "admin",
+        invoiceDocuments,
+        quoteCount,
+        recurringCount,
+      },
       usage: {
-        total: countExact(total),
-        successful: ok,
-        pending: countExact(pending),
-        failed: bad,
-        successRate: successRate(ok, (ok || 0) + (bad || 0)),
+        total: month.total,
+        successful: month.successful,
+        pending: month.pending,
+        failed: month.failed,
+        successRate: month.successRate,
       },
       unavailable: false,
-      count: intents.count,
-      rows: intents.data.map((r) => ({
-        id: r.id,
-        title: r.source_kind || "intent",
-        business: names.get(String(r.org_id)) || "—",
-        amount: money(r.amount),
-        status: r.status || "pending",
-        extra: r.provider ? paymentProviderLabel(r.provider, r.provider) : "—",
-        date: r.created_at,
-      })),
+      count: month.total,
+      rows: [],
     };
   }
 

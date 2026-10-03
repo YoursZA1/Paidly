@@ -5,6 +5,7 @@ import PageContainer from "@/components/admin/shell/PageContainer";
 import AdminDataTable from "@/components/admin/ui/AdminDataTable";
 import FilterBar from "@/components/admin/ui/FilterBar";
 import MetricCard from "@/components/admin/ui/MetricCard";
+import AdminPaymentFinance from "@/pages/admin/AdminPaymentFinance";
 
 const KIND_META = {
   businesses: {
@@ -165,15 +166,8 @@ const KIND_META = {
   },
   "payment-intents": {
     title: "Payment intents",
-    description: "Customer Payment Engine monitoring across payment providers, till cash and card terminals. Not PayFast SaaS billing.",
-    columns: [
-      { key: "title", label: "Source" },
-      { key: "business", label: "Business" },
-      { key: "amount", label: "Amount", type: "money" },
-      { key: "status", label: "Status", type: "status" },
-      { key: "extra", label: "Provider" },
-      { key: "date", label: "Date", type: "date" },
-    ],
+    description: "Whether the Payment Engine is working: counts, success rate, and method mix. Not a list of what each business earned.",
+    columns: [],
   },
   refunds: {
     title: "Refunds",
@@ -212,9 +206,10 @@ const KIND_META = {
 export default function AdminDirectoryPage({ kind }) {
   const meta = KIND_META[kind] || { title: kind, description: "", columns: [{ key: "title", label: "Item" }] };
   const [search, setSearch] = useState("");
+  const [range, setRange] = useState({ from: "", to: "" });
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["admin-directory", kind],
-    queryFn: () => fetchAdminDirectory(kind, 80),
+    queryKey: kind === "payment-intents" ? ["admin-directory", kind, range.from, range.to] : ["admin-directory", kind],
+    queryFn: () => fetchAdminDirectory(kind, 80, kind === "payment-intents" ? range : {}),
     staleTime: 30000,
   });
 
@@ -236,7 +231,17 @@ export default function AdminDirectoryPage({ kind }) {
       onRefresh={() => refetch()}
       isRefreshing={isFetching}
     >
-      {data?.usage ? (
+      {kind === "payment-intents" ? (
+        <AdminPaymentFinance
+          data={data}
+          isLoading={isLoading}
+          isError={isError}
+          error={error}
+          range={range}
+          onRangeChange={setRange}
+        />
+      ) : null}
+      {kind !== "payment-intents" && data?.usage ? (
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {data.usage.total != null ? <MetricCard title="Total" value={data.usage.total} /> : null}
           {data.usage.today != null ? <MetricCard title="Today" value={data.usage.today} /> : null}
@@ -273,6 +278,7 @@ export default function AdminDirectoryPage({ kind }) {
           </ul>
         </section>
       ) : null}
+      {kind === "payment-intents" ? null : (
       <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
         <div className="px-4 pt-4">
           <FilterBar search={search} onSearch={setSearch} placeholder={`Search ${meta.title.toLowerCase()}…`} />
@@ -288,6 +294,7 @@ export default function AdminDirectoryPage({ kind }) {
           onRetry={() => refetch()}
         />
       </div>
+      )}
     </PageContainer>
   );
 }

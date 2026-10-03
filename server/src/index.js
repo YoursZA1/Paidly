@@ -1057,12 +1057,25 @@ app.get("/api/admin/overview", async (req, res) => {
 });
 app.get("/api/admin/directory", async (req, res) => {
   try {
-    const adminUser = await getAdminFromRequest(req, res, { allowInternalTeam: true });
+    const kind = String(req.query?.kind || "").trim().toLowerCase();
+    const billingDirectory = ["payments", "transactions", "refunds", "payment-intents", "plans"].includes(kind);
+    const adminUser = await getAdminFromRequest(req, res, kind === "payment-intent-audit" ? {} : billingDirectory ? { allowBillingTeam: true } : { allowInternalTeam: true });
     if (!adminUser) return;
+    const { resolveTrustedStaffRole } = await import("./adminRouteAccess.js");
     const { listAdminDirectory } = await import("./adminPlatformDirectory.js");
-    const result = await listAdminDirectory(supabaseAdmin, req.query?.kind, { limit: req.query?.limit });
-    if (result?.status === 400) {
-      return res.status(400).json({ error: result.error || "Unknown directory kind" });
+    const staffRole = await resolveTrustedStaffRole(supabaseAdmin, adminUser);
+    const result = await listAdminDirectory(supabaseAdmin, req.query?.kind, {
+      limit: req.query?.limit,
+      includePaymentVolume: staffRole === "admin",
+      staffRole,
+      actor: adminUser,
+      intentId: req.query?.intent_id,
+      reason: req.query?.reason,
+      from: req.query?.from,
+      to: req.query?.to,
+    });
+    if (result?.status) {
+      return res.status(result.status).json({ error: result.error || "Request failed" });
     }
     return res.json({ ok: true, ...result });
   } catch (err) {
