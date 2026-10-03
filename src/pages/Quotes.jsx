@@ -25,6 +25,7 @@ import { useDocumentListController, buildLookupMap } from "@/hooks/useDocumentLi
 import { quoteListAdapter } from "@/services/documentListAdapters";
 import DocumentListPagination from "@/components/shared/DocumentListPagination";
 import { exportQuotesCsvWithItems } from "@/services/DocumentExportService";
+import { resolveListViewState } from "@/lib/listViewState";
 
 export default function QuotesPage() {
     const { toast } = useToast();
@@ -52,10 +53,15 @@ export default function QuotesPage() {
             : (quotesFromStore ?? []);
 
     const isRefreshing = quotesFetching && quotesFromQuery.length > 0;
-    const initialError =
-        quotesQueryError && quotes.length === 0 ? quotesErrorObj : null;
+    const listFailed = quotesQueryError && quotes.length === 0 ? quotesErrorObj : null;
+    const refreshFailed = quotesQueryError && quotes.length > 0;
 
     const isLoading = quotesLoading && quotes.length === 0;
+    const quoteView = resolveListViewState({
+        loading: isLoading,
+        error: listFailed,
+        count: quotes.length,
+    });
 
     const [searchTerm, setSearchTerm] = useState("");
     const [sortBy, setSortBy] = useState('date_newest');
@@ -67,14 +73,14 @@ export default function QuotesPage() {
     const quotesLoadMoreRef = useRef(null);
 
     useEffect(() => {
-        if (initialError) {
+        if (listFailed) {
             toast({
                 title: "Could not load quotes",
-                description: initialError?.message ?? String(initialError),
+                description: listFailed?.message ?? String(listFailed),
                 variant: "destructive",
             });
         }
-    }, [initialError, toast]);
+    }, [listFailed, toast]);
 
     const handleRefresh = useCallback(() => {
         void refetchQuotes();
@@ -380,12 +386,10 @@ export default function QuotesPage() {
                 </div>
             ) : null}
         >
-            {initialError && (
+            {refreshFailed && (
                 <div className="m-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
                     <p className="min-w-0 flex-1 text-sm text-amber-800 dark:text-amber-200">
-                        {quotes.length > 0
-                            ? "Could not refresh quotes. Showing cached data."
-                            : "Could not load quotes. Try again or refresh the page."}
+                        Could not refresh quotes. Showing cached data.
                     </p>
                     <Button
                         variant="outline"
@@ -398,12 +402,27 @@ export default function QuotesPage() {
                     </Button>
                 </div>
             )}
-            {isLoading ? (
+            {quoteView === "loading" ? (
                 viewMode === "list" ? (
                     <QuoteList isLoading={true} />
                 ) : (
                     <QuoteGrid isLoading={true} />
                 )
+            ) : quoteView === "error" ? (
+                <div className="m-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
+                    <p className="min-w-0 flex-1 text-sm text-amber-800 dark:text-amber-200">
+                        Could not load quotes. Try again or refresh the page.
+                    </p>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void refetchQuotes()}
+                        disabled={quotesFetching}
+                        className="shrink-0 gap-1"
+                    >
+                        {quotesFetching ? "Loading…" : "Try again"}
+                    </Button>
+                </div>
             ) : sortedQuotes.length === 0 ? (
                 <div className="p-6 md:p-10">
                     <EmptyState

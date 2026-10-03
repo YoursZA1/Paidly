@@ -25,6 +25,31 @@ export const RECEIPT_MIME_TYPES = Object.freeze({
 
 export const RECEIPT_EXTENSIONS = Object.freeze(["jpg", "jpeg", "png", "webp", "pdf"]);
 
+/**
+ * Version of the receipt reading rules (prompt + normalisation + on-device parser). Stored on every
+ * scanned expense (receipt_review.extraction_version) so older records stay explainable when the rules
+ * improve. Bump when extraction behaviour changes.
+ */
+export const RECEIPT_EXTRACTION_VERSION = "v2";
+
+/**
+ * Real file type from its first bytes — the browser's MIME label and the extension are not trusted.
+ * @param {Uint8Array | ArrayLike<number> | null | undefined} head at least the first 12 bytes
+ * @returns {"image/jpeg" | "image/png" | "image/webp" | "application/pdf" | null}
+ */
+export function sniffReceiptMediaType(head) {
+  if (!head || head.length < 4) return null;
+  const b = (i) => Number(head[i]);
+  if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return "image/jpeg";
+  if (b(0) === 0x89 && b(1) === 0x50 && b(2) === 0x4e && b(3) === 0x47) return "image/png";
+  if (head.length >= 12 && b(0) === 0x52 && b(1) === 0x49 && b(2) === 0x46 && b(3) === 0x46
+    && b(8) === 0x57 && b(9) === 0x45 && b(10) === 0x42 && b(11) === 0x50) return "image/webp";
+  if (head.length >= 5 && b(0) === 0x25 && b(1) === 0x50 && b(2) === 0x44 && b(3) === 0x46 && b(4) === 0x2d) {
+    return "application/pdf";
+  }
+  return null;
+}
+
 /** Cash rounding (10c) plus per-line rounding on till slips. */
 export const RECEIPT_ROUNDING_TOLERANCE = 0.1;
 
@@ -82,9 +107,18 @@ export function roundMoney(n) {
 export function parseMoney(value) {
   if (typeof value === "number") return Number.isFinite(value) ? roundMoney(value) : null;
   if (typeof value !== "string") return null;
-  let s = value.trim().replace(/[\s\u00a0']/g, "").replace(/^(?:ZAR|R|USD|\$|EUR|€|GBP|£)/i, "");
+  let s = value.trim().replace(/[\s\u00a0']/g, "");
   if (!s) return null;
   let negative = false;
+  if (s.startsWith("(") && s.endsWith(")") && s.length > 2) {
+    negative = true;
+    s = s.slice(1, -1);
+  }
+  if (s.startsWith("-")) {
+    negative = true;
+    s = s.slice(1);
+  }
+  s = s.replace(/^(?:ZAR|R|USD|\$|EUR|€|GBP|£)/i, "");
   if (s.startsWith("-")) {
     negative = true;
     s = s.slice(1);
@@ -354,8 +388,8 @@ export function normalizeReceiptExtraction(raw) {
       if (qty != null && qty > 0 && qty < 100_000) line.quantity = qty;
       const unit = cleanAmount(it.unitPrice ?? it.unit_price);
       if (unit !== undefined) line.unitPrice = unit;
-      const amount = cleanAmount(it.amount);
-      if (amount !== undefined) line.amount = amount;
+      const signed = parseMoney(/** @type {any} */ (it.amount));
+      if (signed != null && signed !== 0 && signed >= -MAX_AMOUNT && signed <= MAX_AMOUNT) line.amount = signed;
       cleanedItems.push(line);
     }
     if (cleanedItems.length) out.lineItems = cleanedItems;
@@ -381,6 +415,26 @@ export function normalizeReceiptExtraction(raw) {
 export function isEmptyExtraction(x) {
   if (!x) return true;
   return x.total === undefined && x.subtotal === undefined && !x.merchantName && !x.supplierName && !x.transactionDate;
+}
+
+/**
+ * How much of the receipt was actually read — drives the honest headline on the review screen.
+ *   complete → total and date found;  partial → some key fields (total, date, merchant) found;
+ *   none     → nothing usable (receipt attached, details typed by hand).
+ * @param {ReceiptExtraction | null | undefined} x
+ * @returns {{ level: "complete" | "partial" | "none", missing: Array<"total" | "date" | "merchant"> }}
+ */
+export function assessExtractionCompleteness(x) {
+  if (!x || isEmptyExtraction(x)) return { level: "none", missing: ["total", "date", "merchant"] };
+  /** @type {Array<"total" | "date" | "merchant">} */
+  const missing = [];
+  if (x.total === undefined) missing.push("total");
+  if (!x.transactionDate) missing.push("date");
+  if (!x.merchantName && !x.supplierName) missing.push("merchant");
+  if (!missing.length) return { level: "complete", missing };
+  // A merchant name alone is not a read receipt: the amounts are what matter.
+  if (x.total === undefined && x.subtotal === undefined && !x.transactionDate) return { level: "none", missing };
+  return { level: "partial", missing };
 }
 
 /**

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Plus, FileText, LayoutGrid, List, Download, Upload, MoreHorizontal, RefreshCw } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { resolveListViewState } from "@/lib/listViewState";
 import { parseInvoiceCsv, csvRowToInvoicePayload } from "@/utils/invoiceCsvMapping";
 import { invoiceViewsToCsv, parseInvoiceViewCsv, csvRowToInvoiceViewPayload } from "@/utils/invoiceViewCsvMapping";
 import { Link } from "react-router-dom";
@@ -45,6 +46,8 @@ export default function InvoicesPage() {
     const {
         loading: invoicesLoading,
         invoices,
+        isError: invoicesQueryError,
+        error: invoicesErrorObj,
         refetch: refetchInvoices,
         fetchNextPage,
         hasNextPage,
@@ -64,6 +67,13 @@ export default function InvoicesPage() {
 
     const clients = clientsFromStore ?? [];
     const isLoading = invoicesLoading && invoices.length === 0;
+    const invoiceListFailed = invoicesQueryError && invoices.length === 0 ? invoicesErrorObj : null;
+    const invoiceRefreshFailed = invoicesQueryError && invoices.length > 0;
+    const invoiceView = resolveListViewState({
+        loading: isLoading,
+        error: invoiceListFailed,
+        count: invoices.length,
+    });
 
     const handleActionSuccess = useCallback(() => {
         void refetchInvoices();
@@ -468,7 +478,17 @@ export default function InvoicesPage() {
                 </div>
             ) : null}
         >
-            {isLoading ? (
+            {invoiceRefreshFailed && (
+                <div className="m-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
+                    <p className="min-w-0 flex-1 text-sm text-amber-800 dark:text-amber-200">
+                        Could not refresh invoices. Showing cached data.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => void refetchInvoices()} className="shrink-0">
+                        Try again
+                    </Button>
+                </div>
+            )}
+            {invoiceView === "loading" ? (
                 viewMode === "list" ? (
                     <InvoiceList isLoading={true} density={density} />
                 ) : (
@@ -476,6 +496,15 @@ export default function InvoicesPage() {
                         <InvoiceGrid isLoading={true} />
                     </div>
                 )
+            ) : invoiceView === "error" ? (
+                <div className="m-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
+                    <p className="min-w-0 flex-1 text-sm text-amber-800 dark:text-amber-200">
+                        Could not load invoices. Try again or refresh the page.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => void refetchInvoices()} className="shrink-0">
+                        Try again
+                    </Button>
+                </div>
             ) : filteredInvoices.length === 0 ? (
                 <div className="p-6 md:p-10">
                     <EmptyState

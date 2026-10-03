@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { X, ExternalLink, Paperclip, Upload, Loader2, Sparkles, MapPin, Car, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { Vendor } from "@/api/entities";
-import { UploadToActivities, InvokeLLM } from "@/api/integrations";
+import { InvokeLLM } from "@/api/integrations";
 import { receiptObjectPathFromUrl } from "@shared/expenses/receiptScan.js";
-import { getReceiptViewUrl } from "@/services/ReceiptScanService";
+import { attachReceiptFile, discardReceiptUpload, getReceiptViewUrl } from "@/services/ReceiptScanService";
 import { useToast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -150,30 +150,47 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
             dataToSave.expense_number = `EXP-${Date.now()}`;
         }
         
+        pendingUploads.current.clear(); // saved: these uploads now belong to the expense
         onSave(dataToSave);
     };
 
+    /** Receipts uploaded while this form is open — removed again if the person cancels or removes them. */
+    const pendingUploads = useRef(new Set());
+    const [isUploading, setIsUploading] = useState(false);
+
     const handleFileUpload = async (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
-
-        const newAttachments = [...(formData.attachments || [])];
-
+        const input = e.target;
+        const files = Array.from(input.files || []);
+        if (files.length === 0 || isUploading) return;
+        setIsUploading(true);
+        const added = [];
         for (const file of files) {
             try {
-                const { file_url } = await UploadToActivities({ file });
-                newAttachments.push({ name: file.name, url: file_url });
+                // Private receipts bucket, company folder chosen by the server (same path as Scan Receipt).
+                const attachment = await attachReceiptFile(file);
+                pendingUploads.current.add(attachment.receipt_path);
+                added.push(attachment);
             } catch (error) {
-                console.error("File upload failed", error);
                 toast({
-                    title: "Upload failed",
-                    description: error?.message || "Could not upload file. Try again.",
+                    title: `Couldn't attach ${file.name || "this file"}`,
+                    description: error?.message || "Try again.",
                     variant: "destructive",
                 });
             }
         }
+        input.value = "";
+        setIsUploading(false);
+        if (added.length) setFormData(prev => ({ ...prev, attachments: [...(prev.attachments || []), ...added] }));
+    };
 
-        setFormData(prev => ({ ...prev, attachments: newAttachments }));
+    const discardPendingUploads = () => {
+        for (const path of pendingUploads.current) void discardReceiptUpload(path);
+        pendingUploads.current.clear();
+    };
+
+    const handleCancel = () => {
+        discardPendingUploads();
+        onCancel?.();
     };
 
     const suggestCategory = async () => {
@@ -206,7 +223,12 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
 
     const removeAttachment = (index) => {
         const newAttachments = [...formData.attachments];
-        newAttachments.splice(index, 1);
+        const [removed] = newAttachments.splice(index, 1);
+        // Only a receipt uploaded in this session is deleted; saved attachments are just unlinked.
+        if (removed?.receipt_path && pendingUploads.current.has(removed.receipt_path)) {
+            pendingUploads.current.delete(removed.receipt_path);
+            void discardReceiptUpload(removed.receipt_path);
+        }
         setFormData(prev => ({ ...prev, attachments: newAttachments }));
     };
 
@@ -220,7 +242,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                             {expense?.id ? "Edit Expense" : "Add New Expense"}
                         </h2>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={onCancel}>
+                    <Button variant="ghost" size="icon" onClick={handleCancel} aria-label="Close">
                         <X className="w-4 h-4" />
                     </Button>
                 </div>
@@ -519,12 +541,19 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                                                     type="file"
                                                     name="expense_attachments"
                                                     multiple
+                                                    accept="image/jpeg,image/png,image/webp,application/pdf"
                                                     onChange={handleFileUpload}
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                    disabled={isUploading}
+                                                    aria-label="Attach receipts (JPG, PNG, WEBP or PDF)"
+                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
                                                 />
-                                                <Button type="button" variant="outline" className="w-full">
-                                                    <Upload className="w-4 h-4 mr-2" />
-                                                    Upload Files
+                                                <Button type="button" variant="outline" className="w-full" disabled={isUploading}>
+                                                    {isUploading ? (
+                                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                                                    ) : (
+                                                        <Upload className="w-4 h-4 mr-2" aria-hidden="true" />
+                                                    )}
+                                                    {isUploading ? "Attaching…" : "Attach receipts"}
                                                 </Button>
                                             </div>
                                         </div>
@@ -559,7 +588,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                 </div>
 
                 <div className="sticky bottom-0 z-10 flex shrink-0 gap-3 rounded-b-xl border-t border-border bg-card/95 p-4 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:static sm:bg-muted/40 sm:p-6 sm:pb-6">
-                    <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
+                    <Button type="button" variant="outline" onClick={handleCancel} className="flex-1">
                         Cancel
                     </Button>
                     <Button type="submit" onClick={handleSubmit} className="flex-1 bg-primary hover:bg-primary/90">

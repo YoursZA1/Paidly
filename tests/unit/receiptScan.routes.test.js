@@ -10,6 +10,7 @@ vi.mock("../../server/src/supabaseAdmin.js", () => ({ supabaseAdmin: { from: () 
 const { createReceiptScanHandler, RECEIPT_MESSAGES } = await import("../../server/src/expenses/receiptScanRoutes.js");
 const { ReceiptExtractionError } = await import("../../server/src/expenses/receiptExtractionProviders.js");
 const { UpgradeRequiredError } = await import("../../server/src/featureGate.js");
+const { RECEIPT_EXTRACTION_VERSION } = await import("../../shared/expenses/receiptScan.js");
 
 const ORG_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ORG_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -198,12 +199,15 @@ describe("prepare", () => {
 });
 
 describe("extract", () => {
-  const extractBody = { receipt_path: ownPath, image: { media_type: "image/jpeg", data: Buffer.from("fake").toString("base64") } };
+  // Real JPEG signature (FF D8 FF E0 …JFIF) followed by placeholder bytes.
+  const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00]), Buffer.from("fake")]);
+  const extractBody = { receipt_path: ownPath, image: { media_type: "image/jpeg", data: JPEG.toString("base64") } };
 
-  it("successful OCR returns a validated extraction", async () => {
+  it("successful OCR returns a validated extraction, stamped with the extraction version", async () => {
     const res = await call("extract", extractBody);
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({ ok: true, available: true, extraction: { merchantName: "Woolworths", total: 483 } });
+    expect(res.body.extraction_version).toBe(RECEIPT_EXTRACTION_VERSION);
     expect(repo.writeAudit).toHaveBeenCalledWith(expect.objectContaining({ action: "receipt.processed" }));
   });
 
@@ -251,6 +255,18 @@ describe("extract", () => {
     rateLimit = vi.fn(async () => ({ ok: false, retryAfterSeconds: 60 }));
     const res = await call("extract", extractBody);
     expect(res.statusCode).toBe(429);
+    expect(provider.extract).not.toHaveBeenCalled();
+  });
+
+  it("refuses bytes that are not the image type they claim (renamed / disguised files)", async () => {
+    for (const bytes of [Buffer.from("<html><script>alert(1)</script>"), Buffer.from("%PDF-1.7\n"), Buffer.from("MZ\x90\x00binary")]) {
+      const res = await call("extract", { ...extractBody, image: { media_type: "image/jpeg", data: bytes.toString("base64") } });
+      expect(res.statusCode).toBe(422);
+      expect(res.body.code).toBe("INVALID_IMAGE");
+    }
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const mislabelled = await call("extract", { ...extractBody, image: { media_type: "image/jpeg", data: png.toString("base64") } });
+    expect(mislabelled.statusCode).toBe(422);
     expect(provider.extract).not.toHaveBeenCalled();
   });
 
@@ -308,6 +324,15 @@ describe("review (supplier + duplicates)", () => {
 });
 
 describe("confirm", () => {
+  it("manual entry records no extraction version — values were typed, not read", async () => {
+    const res = await call("confirm", confirmBody({ extraction_source: "manual" }));
+    expect(res.statusCode).toBe(201);
+    expect(repo.insertExpense.mock.calls[0][0].receipt_review).toMatchObject({
+      extraction_source: "manual",
+      extraction_version: null,
+    });
+  });
+
   it("successful confirmation creates one expense with the receipt attached", async () => {
     const res = await call("confirm", confirmBody({ edited_fields: ["total", "category"], vat_acknowledged: false }));
     expect(res.statusCode).toBe(201);
@@ -324,7 +349,12 @@ describe("confirm", () => {
       category: "supplies",
       description: "Receipt from Woolworths",
     });
-    expect(row.receipt_review).toMatchObject({ vat_status: "consistent", extraction_source: "server", edited_fields: ["total", "category"] });
+    expect(row.receipt_review).toMatchObject({
+      vat_status: "consistent",
+      extraction_source: "server",
+      extraction_version: RECEIPT_EXTRACTION_VERSION,
+      edited_fields: ["total", "category"],
+    });
     expect(repo.writeAudit).toHaveBeenCalledWith(expect.objectContaining({ action: "expense.created_from_receipt" }));
     const audit = repo.writeAudit.mock.calls.at(-1)[0];
     expect(JSON.stringify(audit)).not.toMatch(/Woolworths|483/);

@@ -25,7 +25,7 @@ import {
 } from "@/document-engine/documentStateMachine";
 import { aggregateFromItems } from "@/document-engine/documentTotals";
 import { DOCUMENT_EVENT_TYPES, resolveLifecycleEventType } from "@/document-engine/documentEventTypes";
-import { getSupabaseErrorMessage, isSupabaseMissingRelationError, isSupabaseMissingColumnError } from "@/utils/supabaseErrorUtils";
+import { getSupabaseErrorMessage, isSupabaseMissingRelationError, isSupabaseMissingColumnError, isUnsatisfiableRangeError } from "@/utils/supabaseErrorUtils";
 import { getExchangeRateForDocument } from "@/lib/exchangeRatesClientPolicy";
 import {
   resolveApproverRecipient,
@@ -553,7 +553,13 @@ export const DocumentService = {
     if (result.error && isSupabaseMissingColumnError(result.error)) {
       result = await runQuery(coreSelect, "core");
     }
-    const { data, error, count } = result;
+    let { data, error, count } = result;
+    // First page of an empty hub (or a page past the end) is zero documents, not a load failure.
+    if (isUnsatisfiableRangeError(error)) {
+      data = [];
+      error = null;
+      count = 0;
+    }
     if (error) {
       throw throwWithCause(getSupabaseErrorMessage(error, "Failed to list documents"), error);
     }

@@ -28,6 +28,8 @@ import {
   parseReceiptStoragePath,
   isEmptyExtraction,
   validateReceiptExpenseSubmission,
+  sniffReceiptMediaType,
+  RECEIPT_EXTRACTION_VERSION,
 } from "../../../shared/expenses/receiptScan.js";
 import { consumePersistedRateLimit } from "../rateLimit/consumeRateLimit.js";
 import { createReceiptScanRepo } from "./receiptScanRepo.js";
@@ -196,6 +198,10 @@ export function createReceiptScanHandler(deps = {}) {
       if (!IMAGE_TYPES.has(mediaType) || !data || bytes > MAX_IMAGE_BYTES || !/^[A-Za-z0-9+/=\s]+$/.test(data.slice(0, 256))) {
         return fail(res, 422, "INVALID_IMAGE", RECEIPT_MESSAGES.unreadable);
       }
+      // The label is the browser's claim; the first bytes are the truth.
+      if (sniffReceiptMediaType(Buffer.from(data.slice(0, 24), "base64")) !== mediaType) {
+        return fail(res, 422, "INVALID_IMAGE", RECEIPT_MESSAGES.unreadable);
+      }
       input = { data, mediaType };
     } else if (path.endsWith(".pdf")) {
       const buffer = await ctx.repo.downloadReceipt(path);
@@ -246,7 +252,13 @@ export function createReceiptScanHandler(deps = {}) {
     if (notReceipt) {
       return send(res, 200, { ok: false, available: true, code: "NOT_A_RECEIPT", error: RECEIPT_MESSAGES.notReceipt });
     }
-    return send(res, 200, { ok: true, available: true, provider: provider.id, extraction });
+    return send(res, 200, {
+      ok: true,
+      available: true,
+      provider: provider.id,
+      extraction_version: RECEIPT_EXTRACTION_VERSION,
+      extraction,
+    });
   }
 
   // ── review ───────────────────────────────────────────────────────────────────────────────
@@ -352,6 +364,8 @@ export function createReceiptScanHandler(deps = {}) {
         vat_acknowledged: body.vat_acknowledged === true,
         duplicate_acknowledged: duplicates.length > 0 && duplicateAcknowledged,
         extraction_source: extractionSource,
+        // Rules that produced the values the person reviewed (null for manual entry).
+        extraction_version: extractionSource === "manual" ? null : RECEIPT_EXTRACTION_VERSION,
         edited_fields: editedFields,
       },
     };
@@ -391,6 +405,7 @@ export function createReceiptScanHandler(deps = {}) {
         vat_status: value.vat_status,
         duplicate_acknowledged: row.receipt_review.duplicate_acknowledged,
         extraction_source: extractionSource,
+        extraction_version: row.receipt_review.extraction_version,
         edited_fields: editedFields,
       },
     });

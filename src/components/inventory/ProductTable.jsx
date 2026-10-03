@@ -94,6 +94,8 @@ export default function ProductTable({
   sortKey = "name",
   sortDirection = "asc",
   onSort,
+  emptyTitle = "No items found",
+  emptyDescription = "Try adjusting filters or add a product or service",
 }) {
   const [selected, setSelected] = useState(() => new Set());
 
@@ -128,8 +130,8 @@ export default function ProductTable({
   if (!products.length) {
     return (
       <div className="text-center py-20 text-muted-foreground px-4">
-        <p className="text-base font-medium text-foreground">No items found</p>
-        <p className="text-sm mt-1">Try adjusting filters or add a product or service</p>
+        <p className="text-base font-medium text-foreground">{emptyTitle}</p>
+        <p className="text-sm mt-1">{emptyDescription}</p>
       </div>
     );
   }

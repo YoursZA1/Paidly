@@ -143,6 +143,8 @@ export default function DocumentHubTable({
   onToggleSelectAll,
   onOpen,
   onAction,
+  emptyTitle = "No documents found",
+  emptyDescription = "Try clearing filters or create your first document with the New Document button.",
 }) {
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id));
   const someSelected = rows.some((r) => selectedIds.has(r.id));
@@ -171,8 +173,8 @@ export default function DocumentHubTable({
       <div className="rounded-xl border border-border bg-card">
         <EmptyState
           icon={<FileText className="h-6 w-6 text-muted-foreground" />}
-          title="No documents found"
-          description="Try clearing filters or create your first document with the New Document button."
+          title={emptyTitle}
+          description={emptyDescription}
         />
       </div>
     );

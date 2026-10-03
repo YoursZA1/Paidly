@@ -7,6 +7,7 @@ import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequest } from "@/utils/apiRequest";
 import { supabase } from "@/lib/supabaseClient";
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from "@/lib/sessionTimeoutControls";
+import { inspectReceiptFile } from "@/lib/receipts/receiptFile.js";
 
 export class ReceiptApiError extends Error {
   /**
@@ -134,4 +135,28 @@ export async function getReceiptViewUrl(objectPath, expiresInSeconds = 120) {
   const { data, error } = await supabase.storage.from("receipts").createSignedUrl(objectPath, expiresInSeconds);
   if (error) return null;
   return data?.signedUrl || null;
+}
+
+/**
+ * Stored reference to a receipts-bucket object. Not a public link (the bucket is private): it only
+ * identifies the object; opening it goes through {@link getReceiptViewUrl} and storage RLS.
+ * @param {string} objectPath
+ */
+export function receiptAttachmentUrl(objectPath) {
+  const { data } = supabase.storage.from("receipts").getPublicUrl(objectPath);
+  return String(data?.publicUrl || "").replace("/storage/v1/object/public/", "/storage/v1/object/authenticated/");
+}
+
+/**
+ * Attach a receipt to an expense typed by hand (Expense form). Same path as Scan Receipt: the file type
+ * is checked by content, the server chooses the path inside the caller's company folder, and the
+ * original goes to the PRIVATE receipts bucket (company- and uploader-scoped storage policies).
+ * @param {File} file
+ * @returns {Promise<{ name: string, url: string, receipt_path: string }>}
+ */
+export async function attachReceiptFile(file) {
+  const { mime } = await inspectReceiptFile(file);
+  const prepared = await prepareReceiptUpload(mime);
+  await uploadReceiptOriginal(prepared.receipt_path, file, mime);
+  return { name: file.name || "Receipt", url: receiptAttachmentUrl(prepared.receipt_path), receipt_path: prepared.receipt_path };
 }

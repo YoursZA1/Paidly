@@ -34,6 +34,9 @@ describe("parseMoney", () => {
     ["12,5", 12.5],
     [245.8, 245.8],
     ["-10.00", -10],
+    ["-R5.00", -5],
+    ["R-5.00", -5],
+    ["(R5.00)", -5],
   ])("%s → %s", (input, expected) => {
     expect(parseMoney(input)).toBe(expected);
   });

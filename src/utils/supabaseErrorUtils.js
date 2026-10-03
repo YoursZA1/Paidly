@@ -6,6 +6,21 @@
 import { isIntegerBindError } from "@shared/admin/adminPlatformDirectory.js";
 import { isAbortError } from "@/utils/retryOnAbort";
 
+/**
+ * PostgREST 416 / PGRST103: `.range()` past the end of a result, including the first page of an empty table.
+ * That is a successful empty page, not a failed request.
+ * @param {unknown} error
+ */
+export function isUnsatisfiableRangeError(error) {
+  if (!error || typeof error !== "object") return false;
+  const code = String(error.code ?? "").toUpperCase();
+  if (code === "PGRST103") return true;
+  const status = Number(error.status ?? error.statusCode ?? NaN);
+  if (status === 416) return true;
+  const msg = String(error.message ?? error.details ?? "").toLowerCase();
+  return /range not satisfiable|requested range/.test(msg);
+}
+
 /** User-visible copy when an operation was cancelled (navigation, Strict Mode teardown, timeout, duplicate in-flight). */
 export const SUPABASE_ABORT_USER_MESSAGE = "The request was interrupted. Please try again.";
 

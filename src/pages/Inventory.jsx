@@ -346,19 +346,22 @@ export default function Inventory() {
     }
   }, []);
 
-  const loadProducts = useCallback(async () => {
+  /** Catalog of the ACTIVE business only — RLS alone would return every business the user manages. */
+  const loadProducts = useCallback(async (orgId) => {
     const catalogSelect =
       "id, org_id, name, description, sku, barcode, category, image_url, item_type, default_unit, min_quantity, stock_quantity, stock_capacity, low_stock_threshold, price, cost_price, is_active, company_id, created_at, updated_at";
     const catalogSelectLegacy = catalogSelect.replace(", company_id", "");
     let { data, error } = await supabase
       .from("services")
       .select(catalogSelect)
+      .eq("org_id", orgId)
       .order("updated_at", { ascending: false })
       .limit(500);
     if (error && /company_id/i.test(error.message || "")) {
       const retry = await supabase
         .from("services")
         .select(catalogSelectLegacy)
+        .eq("org_id", orgId)
         .order("updated_at", { ascending: false })
         .limit(500);
       data = retry.data;
@@ -370,10 +373,13 @@ export default function Inventory() {
     return normalizeCatalogRows(rows);
   }, []);
 
-  const loadTransactions = useCallback(async () => {
+  /** Movements carry no org_id: scope through this business's product ids. */
+  const loadTransactions = useCallback(async (productIds) => {
+    if (!productIds.length) return [];
     const { data, error } = await supabase
       .from("inventory_movements")
       .select("id, product_id, quantity, type, source, reference_id, created_at")
+      .in("product_id", productIds)
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -384,13 +390,15 @@ export default function Inventory() {
     return normalizeInventoryRows("transactions", rows);
   }, []);
 
-  const loadDeliveries = useCallback(async () => {
+  const loadDeliveries = useCallback(async (productIds) => {
+    if (!productIds.length) return [];
     // Schema (Paidly migration): created_date / updated_date — not created_at / updated_at.
     const { data, error } = await supabase
       .from("deliveries")
       .select(
         "id, product_id, quantity, status, supplier, expected_date, tracking_number, notes, created_date, updated_date"
       )
+      .in("product_id", productIds)
       .order("created_date", { ascending: false })
       .limit(200);
 
@@ -408,8 +416,13 @@ export default function Inventory() {
     setIsLoading(true);
     setLoadError("");
     try {
-      const [p, t, d] = await Promise.allSettled([loadProducts(), loadTransactions(), loadDeliveries()]);
-      if (p.status === "fulfilled") setProducts(p.value);
+      const orgId = await getOrgIdForCurrentUser();
+      if (!orgId) throw new Error("Could not resolve your business. Sign out and sign in again.");
+      // A successful query with zero rows is an empty catalog (empty state), not a load failure.
+      const catalog = await loadProducts(orgId);
+      setProducts(catalog);
+      const productIds = catalog.map((row) => row.id).filter(Boolean);
+      const [t, d] = await Promise.allSettled([loadTransactions(productIds), loadDeliveries(productIds)]);
       if (t.status === "fulfilled") setTransactions(t.value);
       if (d.status === "fulfilled") setDeliveries(d.value);
 
@@ -417,16 +430,11 @@ export default function Inventory() {
       if (t.status === "rejected") {
         console.warn("Inventory: transactions load skipped", t.reason?.message || t.reason);
       }
-
-      if (p.status === "rejected") {
-        const raw = String(p.reason?.message || p.reason || "");
-        throw new Error(raw || "Failed to load products.");
-      }
     } finally {
       setIsLoading(false);
     }
     await invalidateServicesCatalog(queryClient);
-  }, [loadDeliveries, loadProducts, loadTransactions, queryClient]);
+  }, [getOrgIdForCurrentUser, loadDeliveries, loadProducts, loadTransactions, queryClient]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1263,6 +1271,12 @@ export default function Inventory() {
         onOpenProduct={handleOpenProduct}
         onEditProduct={(row) => (row?.item_type === "product" ? withInventory(handleEditRow)(row) : handleEditRow(row))}
         onDeleteProduct={handleDeleteProduct}
+        emptyTitle={products.length === 0 ? "No products yet" : "No items found"}
+        emptyDescription={
+          products.length === 0
+            ? "Add your first product or service to get started."
+            : "Try adjusting filters or add a product or service"
+        }
         page={safePage}
         pageSize={pageSize}
         totalItems={totalFiltered}

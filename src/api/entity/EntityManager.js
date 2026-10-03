@@ -2,7 +2,7 @@
  * EntityManager — Supabase-backed CRUD for all Paidly entities.
  */
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
-import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
+import { getSupabaseErrorMessage, alertSupabaseWriteFailure, isUnsatisfiableRangeError } from "@/utils/supabaseErrorUtils";
 import { runPostgrestWithResilience } from "@/lib/supabaseDataResilience";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { readStoredAuthUser } from "@/utils/authStorage";
@@ -165,6 +165,10 @@ export function planGuardErrorFromSupabase(error) {
   return err;
 }
 
+
+/** Resolved by the list() race when maxWaitMs elapses before the Supabase pull settles. */
+const PULL_TIMED_OUT = Symbol("entity-pull-timed-out");
+
 export class EntityManager {
   /** @type {{ auth: { user?: object } } | null} */
   static breakApiClient = null;
@@ -288,16 +292,21 @@ export class EntityManager {
     return Object.values(this.data);
   }
 
+  /**
+   * Refresh `this.data` from Supabase for the active business.
+   * @returns {Promise<{ status: "ok" | "skipped" | "error", error?: unknown }>} what happened — `ok` with zero
+   *   rows is a successful empty list (empty state), `error` is a real failure (error state).
+   */
   async pullFromSupabase() {
     if (!isBrowserOnline()) {
       console.info(
         `[Paidly][EntityManager] ${this.entityName}: offline — skipped Supabase pull (using in-memory / local cache only).`
       );
-      return;
+      return { status: "skipped" };
     }
     try {
       const { data: sessionData } = await getSessionWithRetry();
-      if (!sessionData?.session?.user) return;
+      if (!sessionData?.session?.user) return { status: "skipped" };
 
       const userId = sessionData.session.user.id;
 
@@ -307,14 +316,14 @@ export class EntityManager {
         orgId = await this.ensureUserHasOrganization(userId);
       } catch (error) {
         console.warn(`Failed to ensure organization for user ${userId}:`, error);
-        return;
+        return { status: "error", error };
       }
 
       const table = this.entityName.toLowerCase() + "s";
       const isNotesEntity = table === "notes";
       if (!orgId && !isNotesEntity) {
         console.warn(`No organization found for user ${userId}`);
-        return;
+        return { status: "error", error: new Error("No business found for this account.") };
       }
 
       let companyCtx = null;
@@ -447,10 +456,17 @@ export class EntityManager {
           error = retry.error;
         }
 
-        if (!error && data) {
-          // Clear existing data and reload from Supabase
+        // An empty table (or a range past the last row) is a successful empty list.
+        if (isUnsatisfiableRangeError(error)) {
+          data = [];
+          error = null;
+        }
+
+        if (!error) {
+          // Replace the cache. `data: null` with no error is zero rows, not a failure.
+          const rows = Array.isArray(data) ? data : [];
           this.data = {};
-          data.forEach(item => {
+          rows.forEach(item => {
             const rec = {
               ...item,
               created_date: item.created_at || item.created_date,
@@ -467,15 +483,16 @@ export class EntityManager {
           this.saveToStorage();
           this.notifySubscribers();
         } else if (error) {
-          if (!isAbortError(error)) {
-            console.error(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(error, "Fetch failed"));
-          }
+          if (isAbortError(error)) return { status: "skipped" };
+          console.error(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(error, "Fetch failed"));
+          return { status: "error", error };
         }
       }
+      return { status: "ok" };
     } catch (e) {
-      if (!isAbortError(e)) {
-        console.warn(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(e, "Sync failed"));
-      }
+      if (isAbortError(e)) return { status: "skipped" };
+      console.warn(`Failed to pull ${this.entityName} from Supabase:`, getSupabaseErrorMessage(e, "Sync failed"));
+      return { status: "error", error: e };
     }
   }
 
@@ -730,10 +747,27 @@ export class EntityManager {
       // Online: bounded wait for responsiveness, but log pull failures instead of swallowing them.
       // Offline: pullFromSupabase no-ops immediately — await is cheap; no race needed.
       if (useRace && isBrowserOnline()) {
-        await Promise.race([
+        let timer = null;
+        const outcome = await Promise.race([
           pull,
-          new Promise((resolve) => setTimeout(resolve, maxWaitMs)),
+          new Promise((resolve) => {
+            timer = setTimeout(() => resolve(PULL_TIMED_OUT), maxWaitMs);
+          }),
         ]);
+        if (timer) clearTimeout(timer);
+        if (outcome !== PULL_TIMED_OUT) {
+          // The pull finished: zero rows is a successful empty list (empty state, never "could not load");
+          // a failed pull is a real error the list page must show (stale rows stay visible via the query cache).
+          if (outcome?.status === "error" && errorOnEmptyTimeout) {
+            const loadErr = new Error(
+              getSupabaseErrorMessage(outcome.error, `Could not load ${this.entityName}.`)
+            );
+            loadErr.name = "EntityListLoadError";
+            loadErr.cause = outcome.error;
+            throw loadErr;
+          }
+          return this.sortedRecords(sortBy);
+        }
         void pull.catch((err) => {
           if (!isAbortError(err) && import.meta.env?.DEV) {
             console.warn(
@@ -769,6 +803,11 @@ export class EntityManager {
       this._listOptions = {};
     }
 
+    return this.sortedRecords(sortBy);
+  }
+
+  /** @param {string} sortBy */
+  sortedRecords(sortBy) {
     let records = Object.values(this.data);
 
     if (sortBy) {

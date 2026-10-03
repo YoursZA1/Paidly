@@ -197,6 +197,28 @@ describe("expenses with receipts", () => {
     expect(delOther.ok && delOther.rows.length).toBeFalsy();
   });
 
+  it("a receipt attached in the Expense form (receipt_url reference) cannot be deleted either", async () => {
+    const attached = receiptPath(ORG.A, U.staffA);
+    expect((await upload(U.staffA, attached)).ok).toBe(true);
+    const url = `https://example.supabase.co/storage/v1/object/authenticated/receipts/${attached}`;
+    const created = await as(
+      U.staffA,
+      `insert into public.expenses (org_id, amount, date, vendor, receipt_url, created_by_id)
+       values ($1, 120, '2026-10-01', 'Spar', $2, auth.uid()) returning id`,
+      [ORG.A, url]
+    );
+    expect(created.ok, created.message).toBe(true);
+    for (const user of [U.staffA, U.ownerA]) {
+      const del = await as(user, `delete from storage.objects where name = $1 returning name`, [attached]);
+      expect(del.ok && del.rows.length, user).toBeFalsy();
+    }
+    // The cashier and another company still cannot even see it.
+    expect(await visible(U.cashierA, [attached])).toEqual([]);
+    expect(await visible(U.ownerZ, [attached])).toEqual([]);
+    expect(await visible(U.staffA2, [attached])).toEqual([]);
+    expect(await visible(U.ownerA, [attached])).toEqual([attached]);
+  });
+
   it("receipt_path must be inside the expense's own company folder", async () => {
     const r = await insertExpense(U.ownerA, { org: ORG.A, receiptPath: receiptPath(ORG.Z, U.ownerZ) });
     expect(r.ok).toBe(false);

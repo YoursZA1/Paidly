@@ -183,9 +183,30 @@ describe("Scan Receipt dialog", () => {
     expect(text()).toContain("We couldn't read this receipt clearly.");
     await click(button("Enter manually"));
     expect(text()).toContain("Review receipt");
-    expect(text()).toContain("The receipt is attached.");
+    expect(text()).toContain("Receipt attached.");
     expect(text()).not.toContain("Needs review");
     expect(service.discardReceiptUpload).not.toHaveBeenCalled();
+  });
+
+  it("PDF the server couldn't read → says PDF (not a photo problem), manual entry keeps it attached", async () => {
+    service.extractReceiptOnServer.mockResolvedValueOnce({ ok: false, available: true, code: "EXTRACTION_FAILED" });
+    const pdf = new File([new TextEncoder().encode("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF")], "receipt.pdf", { type: "application/pdf" });
+    await renderScanner();
+    await pickFile(pdf);
+    expect(text()).toContain("We couldn't read this PDF.");
+    expect(text()).not.toContain("For a clearer photo");
+    expect(readReceiptOnDevice).not.toHaveBeenCalled(); // on-device OCR never pretends to read PDFs
+    await click(button("Enter manually"));
+    expect(text()).toContain("Receipt attached.");
+  });
+
+  it("unreadable photo → retake guidance", async () => {
+    service.extractReceiptOnServer.mockResolvedValueOnce({ ok: false, available: true, code: "EXTRACTION_FAILED" });
+    readReceiptOnDevice.mockResolvedValueOnce({});
+    await renderScanner();
+    await pickFile(jpeg());
+    expect(text()).toContain("We couldn't read this receipt clearly.");
+    expect(text()).toContain("keep all four edges in the photo");
   });
 
   it("not a receipt → Retake / Upload another", async () => {
@@ -289,6 +310,24 @@ describe("review form rules", () => {
     if (onSave.mock.calls.length === 0) await click(button("Save expense"));
     const [, flags] = onSave.mock.calls.at(-1);
     expect(flags.editedFields).toContain("total");
+  });
+
+  it("headline says what was actually read — no fake success", async () => {
+    await renderForm({});
+    expect(document.querySelector('[data-read-level]').dataset.readLevel).toBe("complete");
+    expect(text()).toContain("Receipt read.");
+
+    await renderForm({ extraction: { ...EXTRACTION, total: undefined, confidence: {} }, source: "on_device" });
+    expect(document.querySelector('[data-read-level]').dataset.readLevel).toBe("partial");
+    expect(text()).toContain("We could only read part of this receipt.");
+    expect(text()).toContain("Fill in the total");
+    expect(text()).toContain("Read on this device");
+    expect(text()).not.toContain("Receipt read.");
+
+    // The bug-report case: only a garbled merchant line came back.
+    await renderForm({ extraction: { isReceipt: true, merchantName: "SHOPRITE CHE I 10" }, source: "on_device" });
+    expect(document.querySelector('[data-read-level]').dataset.readLevel).toBe("none");
+    expect(text()).toContain("we couldn't read the amounts");
   });
 
   it("invalid date shows a field error and does not save", async () => {

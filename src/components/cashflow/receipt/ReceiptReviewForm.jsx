@@ -19,8 +19,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/components/CurrencySelector";
 import { Supplier } from "@/api/entities";
-import { initialReceiptFields, NONE } from "@/components/cashflow/receipt/receiptReviewFields";
+import { initialReceiptFields, NONE, readSummary } from "@/components/cashflow/receipt/receiptReviewFields";
 import {
+  assessExtractionCompleteness,
   confidenceLevel,
   parseMoney,
   RECEIPT_EXPENSE_CATEGORIES,
@@ -287,6 +288,21 @@ function DuplicateWarning({ duplicates, acknowledged, onAcknowledge, onViewExpen
   );
 }
 
+/** What was actually read — never "read for you" when the amounts were not. */
+function ReadSummary({ summary }) {
+  const warn = summary.tone === "warning";
+  return (
+    <div
+      role="status"
+      data-read-level={summary.level}
+      className={`mt-2 rounded-lg px-3 py-2 text-xs ${warn ? "border border-amber-500/40 bg-amber-500/5 text-foreground" : "text-muted-foreground"}`}
+    >
+      {warn ? <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5 align-[-2px] text-amber-600" aria-hidden="true" /> : null}
+      <span className={warn ? "font-medium" : undefined}>{summary.title}</span> {summary.detail}
+    </div>
+  );
+}
+
 /**
  * @param {{
  *   receipt: any, extraction: any, source: "server" | "on_device" | "manual",
@@ -421,13 +437,7 @@ export default function ReceiptReviewForm({ receipt, extraction, source, reviewI
     <div className="grid gap-5 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:gap-6">
       <div className="md:sticky md:top-0 md:self-start">
         <ReceiptPreview receipt={receipt} />
-        {source !== "manual" ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Paidly read this receipt for you. Check the highlighted fields — nothing is saved until you tap Save expense.
-          </p>
-        ) : (
-          <p className="mt-2 text-xs text-muted-foreground">The receipt is attached. Enter the details from it below.</p>
-        )}
+        <ReadSummary summary={readSummary(source, assessExtractionCompleteness(extraction))} />
       </div>
 
       <form ref={formRef} id={formId} onSubmit={handleSubmit} noValidate className="space-y-4" aria-label="Receipt details">

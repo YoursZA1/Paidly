@@ -573,6 +573,12 @@ export default function DocumentsPage() {
               onToggleSelectAll={toggleSelectAll}
               onOpen={openDocument}
               onAction={handleAction}
+              emptyTitle={filtersActive ? "No documents found" : "No documents yet"}
+              emptyDescription={
+                filtersActive
+                  ? "Try clearing filters or create your first document with the New Document button."
+                  : "Create your first document to get started."
+              }
             />
             <TablePagination
               page={page}

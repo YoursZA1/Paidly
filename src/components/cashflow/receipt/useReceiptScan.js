@@ -263,7 +263,16 @@ export function useReceiptScan({ onExpenseCreated } = {}) {
         if (err?.kind === "not_receipt") {
           safeDispatch({ type: "fail", failure: { kind: "not_receipt", message: "This image doesn't appear to contain a readable receipt.", stage: current } });
         } else if (err?.kind === "unreadable") {
-          safeDispatch({ type: "fail", failure: { kind: "unreadable", message: "We couldn't read this receipt clearly.", stage: current } });
+          const pdf = live.current.receipt?.kind === "pdf";
+          safeDispatch({
+            type: "fail",
+            failure: {
+              kind: "unreadable",
+              fileKind: pdf ? "pdf" : "image",
+              message: pdf ? "We couldn't read this PDF." : "We couldn't read this receipt clearly.",
+              stage: current,
+            },
+          });
         } else {
           safeDispatch({ type: "fail", failure: failureFrom(err, current) });
         }

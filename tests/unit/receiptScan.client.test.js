@@ -60,9 +60,63 @@ describe("on-device OCR text parser", () => {
     expect(x.vatAmount).toBe(15);
   });
 
-  it("non-receipt text → isReceipt false", () => {
-    expect(parseReceiptOcrText("Hello there\nnothing to see", { confidence: 70 })).toEqual({ isReceipt: false });
-    expect(parseReceiptOcrText("", {})).toEqual({ isReceipt: false });
+  it("Shoprite till slip: tax summary is the sale, cash tender is not", () => {
+    const slip = `LiquorShop
+SHOPRITE CHECKERS (PTY) LTD
+VOSLOORUS Tel No +27 11 906 9140
+VAT No: 4420106777
+TAX INVOICE
+4TH STREET 1L R44.99
+XTRASAVE 4THSTR 1L -R5.00
+CIDER 500ML CAN R27.99
+TOTAL (2)
+R67.98
+Cash
+R100.00
+Change
+-R32.10
+Cash Rounding
+R0.08
+RATE TAX GROSS NET
+15% R8.87 R67.98 R59.11
+Today you saved R5.00`;
+    const x = parseReceiptOcrText(slip, { confidence: 80 });
+    expect(x).toMatchObject({
+      isReceipt: true,
+      merchantName: "LiquorShop",
+      supplierVatNumber: "4420106777",
+      subtotal: 59.11,
+      vatAmount: 8.87,
+      vatRate: 15,
+      total: 67.98,
+      paymentMethod: "cash",
+      currency: "ZAR",
+    });
+    expect(x.transactionDate).toBeUndefined();
+    expect(x.total).not.toBe(100);
+    expect(x.lineItems.map((item) => item.amount)).toEqual([44.99, -5, 27.99]);
+    expect(x.confidence.total).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("a garbled merchant still yields the tax-summary total, not the largest number", () => {
+    const slip = `SHOPRITE CHE I 10
+VAT No: 4420106777
+TOTAL (2) R67.98
+Cash R100.00
+Change -R32.10
+RATE TAX GROSS NET
+15% R8.87 R67.98 R59.11`;
+    const x = parseReceiptOcrText(slip, { confidence: 40 });
+    expect(x.merchantName).toBe("SHOPRITE CHE I 10");
+    expect(x.total).toBe(67.98);
+    expect(x.vatAmount).toBe(8.87);
+    expect(x.subtotal).toBe(59.11);
+    expect(x.confidence.merchantName).toBeLessThan(0.6);
+  });
+
+  it("nothing legible → empty result (\"couldn't read clearly\"), never a claim that it isn't a receipt", () => {
+    expect(parseReceiptOcrText("Hello there\nnothing to see", { confidence: 70 })).toEqual({});
+    expect(parseReceiptOcrText("", {})).toEqual({});
   });
 });
 

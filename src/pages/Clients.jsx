@@ -407,17 +407,6 @@ export default function Clients() {
           />
 
           <div className="space-y-3 overflow-x-hidden pb-2">
-            {loadError && (
-              <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3">
-                <p className="text-sm text-amber-800 dark:text-amber-200 flex-1 min-w-0">
-                  Could not refresh clients. Showing cached data. {loadError}
-                </p>
-                <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="shrink-0 gap-1">
-                  <ArrowPathIcon className={`w-4 h-4 ${isRefetching ? "animate-spin" : ""}`} />
-                  Try again
-                </Button>
-              </div>
-            )}
             {showLoadingSkeleton ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
@@ -426,6 +415,16 @@ export default function Clients() {
                     className="h-20 rounded-[28px] bg-slate-100 dark:bg-slate-700 animate-pulse"
                   />
                 ))}
+              </div>
+            ) : loadError ? (
+              <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3">
+                <p className="text-sm text-amber-800 dark:text-amber-200 flex-1 min-w-0">
+                  Could not load clients. Try again or refresh the page.
+                </p>
+                <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="shrink-0 gap-1">
+                  <ArrowPathIcon className={`w-4 h-4 ${isRefetching ? "animate-spin" : ""}`} />
+                  Try again
+                </Button>
               </div>
             ) : searchFilteredClients.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground text-sm">
@@ -524,6 +523,16 @@ export default function Clients() {
                 />
               ))}
             </div>
+          ) : loadError ? (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-3 py-3 flex items-center justify-between gap-2">
+              <p className="text-xs text-amber-800 dark:text-amber-200 flex-1 min-w-0">
+                Could not load clients. Try again or refresh the page.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="shrink-0 h-8 text-xs gap-1">
+                <ArrowPathIcon className={`w-3.5 h-3.5 ${isRefetching ? "animate-spin" : ""}`} />
+                Try again
+              </Button>
+            </div>
           ) : searchFilteredClients.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
               {searchTerm ? "No clients match your search." : "No clients yet. Add one to get started."}
@@ -590,25 +599,28 @@ export default function Clients() {
       <main className="hidden min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 lg:flex lg:flex-col lg:p-6">
         {!activeClient ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            {loadError && (
+            {loadError ? (
               <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 mb-6 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md w-full text-center sm:text-left">
                 <p className="text-sm text-amber-800 dark:text-amber-200 flex-1">
-                  {clients.length > 0 ? "Showing cached data. Refresh failed." : "Could not load clients. Try again or refresh the page."}
+                  Could not load clients. Try again or refresh the page.
                 </p>
                 <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="shrink-0 gap-1">
                   <ArrowPathIcon className={`w-4 h-4 ${isRefetching ? "animate-spin" : ""}`} />
                   Try again
                 </Button>
               </div>
+            ) : (
+              <>
+                <p className="text-sm font-medium">
+                  {showLoadingSkeleton ? "Loading…" : "Select a client"}
+                </p>
+                <p className="text-xs mt-1">
+                  {!showLoadingSkeleton && clients.length === 0
+                    ? "No clients yet. Add one to get started."
+                    : "Choose a client from the list to view details and invoices."}
+                </p>
+              </>
             )}
-            <p className="text-sm font-medium">
-              {showLoadingSkeleton ? "Loading…" : "Select a client"}
-            </p>
-            <p className="text-xs mt-1">
-              {!showLoadingSkeleton && clients.length === 0
-                ? "Add a client to see their details here."
-                : "Choose a client from the list to view details and invoices."}
-            </p>
           </div>
         ) : (
           <>

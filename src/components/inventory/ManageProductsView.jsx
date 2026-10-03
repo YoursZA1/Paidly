@@ -48,6 +48,8 @@ export default function ManageProductsView({
   onOpenProduct,
   onEditProduct,
   onDeleteProduct,
+  emptyTitle,
+  emptyDescription,
   page,
   pageSize,
   totalItems,
@@ -205,6 +207,8 @@ export default function ManageProductsView({
                 onOpenProduct={onOpenProduct}
                 onEdit={onEditProduct}
                 onDelete={onDeleteProduct}
+                emptyTitle={emptyTitle}
+                emptyDescription={emptyDescription}
               />
               <InventoryTableFooter
                 page={page}

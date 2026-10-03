@@ -102,6 +102,8 @@ Rules:
 - Report only what is printed on the document. When a value is not visible or not legible, return null. Never estimate, calculate or guess a missing value — a blank field is correct and useful; an invented one is harmful.
 - Numbers: copy amounts exactly as printed, as plain numbers without currency symbols or thousands separators (R1 234,56 → 1234.56). Do not round.
 - subtotal is the amount before VAT, vatAmount is the VAT/tax amount, total is the final amount payable. Keep them distinct. If the receipt shows only a VAT-inclusive total and a VAT amount, return the total and VAT and leave subtotal null.
+- South African till slips often print a tax summary with the headings RATE, TAX, GROSS and NET, and the figures on the following line. NET is the amount before VAT (subtotal), TAX is vatAmount, GROSS is the VAT-inclusive total. Copy those printed figures; do not invent a figure that is not in that row.
+- "TOTAL (2)" (a count in brackets) is the sale total for that many items, not a count to ignore. Cash, Change and Cash Rounding are what the customer tendered — they are not the sale total. A R100 cash line and R32.10 change on a R67.98 sale is a cash payment, not a R100 expense.
 - Only report vatAmount and vatRate when the receipt itself shows them (for example "VAT 15%", "VAT", "Tax"). Do not work VAT out from the total, and do not assume the buyer or seller is VAT registered.
 - merchantName is the business that issued the receipt. supplierVatNumber is that business's VAT/tax number only if printed. receiptNumber / invoiceNumber only if printed; never make one up.
 - transactionDate as YYYY-MM-DD. South African receipts write dates day first (30/09/2026 is 30 September).

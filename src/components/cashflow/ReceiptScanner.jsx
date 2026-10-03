@@ -183,6 +183,8 @@ function Failure({ failure, uploaded, onRetry, onManual, onRetake, onUploadAnoth
     upgrade: { icon: AlertTriangle, title: "Upgrade to add expenses" },
     forbidden: { icon: AlertTriangle, title: "You can't add this expense" },
   };
+  const pdf = failure.fileKind === "pdf";
+  if (pdf) presets.unreadable = { icon: FileWarning, title: "We couldn't read this PDF." };
   const preset = presets[failure.kind] || presets.unreadable;
   const Icon = preset.icon;
   let body = failure.message;
@@ -222,6 +224,17 @@ function Failure({ failure, uploaded, onRetry, onManual, onRetake, onUploadAnoth
           );
         })}
       </div>
+      {(failure.kind === "unreadable" && !pdf) || failure.kind === "not_receipt" ? (
+        <div className="mx-auto max-w-sm rounded-lg bg-muted/50 px-4 py-3 text-left text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">For a clearer photo:</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            <li>use good light, without glare</li>
+            <li>lay the receipt flat</li>
+            <li>keep all four edges in the photo</li>
+            <li>move close enough to read the small print</li>
+          </ul>
+        </div>
+      ) : null}
       {failure.kind === "not_receipt" && uploaded ? (
         <button type="button" onClick={onManual} className="text-sm text-primary underline-offset-2 hover:underline">
           It is a receipt — enter the details myself
