@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { sendInvoiceEmail, sendHtmlEmail } from "./sendInvoice.js";
+import sendInvoiceHandler from "./sendInvoiceApi.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
 import { postgrestErrorToApiBody } from "./postgrestErrorToApiBody.js";
 import {
@@ -60,12 +60,10 @@ import {
   sanitizeInviteMetadata,
   sanitizeOneLine,
   sanitizeSignUpUserMetadata,
-  validateBase64Pdf,
 } from "./inputValidation.js";
 import { generateHtmlPdfBuffer, getAnvilClient } from "./anvilPdf.js";
 import { parseBody } from "./validateBody.js";
 import { waitlistBodySchema } from "./schemas/apiBodySchemas.js";
-import { sendInvoiceBodySchema } from "./schemas/invoiceSchemas.js";
 import {
   adminBootstrapBodySchema,
   adminInviteBodySchema,
@@ -86,7 +84,7 @@ import { registerPaymentIntentRoutes } from "./payments/registerPaymentIntentRou
 import { registerAdminCompanyInviteRoutes } from "./adminCompanyInviteRoutes.js";
 import authSignInHandler from "./auth/authSignInApi.js";
 import { handleDemoEnd, handleDemoReset, handleDemoStart } from "./demo/demoSessionApi.js";
-import { isDemoUserId, sendDemoNotSent, sendDemoRestricted } from "./demo/demoMode.js";
+import { isDemoUserId, sendDemoRestricted } from "./demo/demoMode.js";
 import authSignUpHandler from "./auth/authSignUpApi.js";
 import authWelcomeEmailHandler from "./auth/authWelcomeEmailApi.js";
 import authForgotPasswordHandler from "./auth/authForgotPasswordApi.js";
@@ -933,63 +931,7 @@ app.post("/api/generate-pdf-html", requireAuthMiddleware, async (req, res) => {
   }
 });
 
-app.post("/api/send-invoice", requireAuthMiddleware, async (req, res) => {
-  try {
-    const user = req.authUser;
-
-    await assertUserHasFeature(supabaseAdmin, user.id, "invoices");
-    await assertUserHasFeature(supabaseAdmin, user.id, "email");
-
-    const parsed = parseBody(sendInvoiceBodySchema, req, res, () =>
-      logSecurity("warn", "send_invoice_bad_request", {
-        userId: user.id || null,
-        reason: "validation",
-      })
-    );
-    if (!parsed) return;
-
-    const pdfCheck = validateBase64Pdf(parsed.base64PDF);
-    if (!pdfCheck.ok) {
-      return res.status(400).json({ error: pdfCheck.error || "Invalid document" });
-    }
-
-    const toEmail = parsed.clientEmail;
-    const invNum = sanitizeOneLine(parsed.invoiceNum, 120);
-    if (!invNum) {
-      return res.status(400).json({ error: "Invalid invoice number" });
-    }
-
-    if (await isDemoUserId(user.id)) {
-      return sendDemoNotSent(res, { channel: "email", to: toEmail, subject: `Invoice ${invNum}`, kind: "invoice" });
-    }
-
-    const senderName = sanitizeOneLine(parsed.fromName ?? "Paidly", 200) || "Paidly";
-
-    const template = [parsed.clientName, parsed.amountDue, parsed.dueDate].some(Boolean)
-      ? {
-          clientName: sanitizeOneLine(parsed.clientName ?? "there", 200) || "there",
-          amountDue: sanitizeOneLine(parsed.amountDue ?? "", 80),
-          dueDate: sanitizeOneLine(parsed.dueDate ?? "", 80),
-        }
-      : null;
-
-    const result = await sendInvoiceEmail(
-      parsed.base64PDF,
-      toEmail,
-      invNum,
-      senderName,
-      template,
-      parsed.idempotencyKey
-    );
-
-    if (!result.success) {
-      return res.status(500).json({ success: false, error: result.error });
-    }
-    return res.json({ success: true, data: result.data });
-  } catch (err) {
-    return sendUnexpectedError(res, err, "send-invoice", { success: false });
-  }
-});
+app.post("/api/send-invoice", sendInvoiceHandler);
 
 app.post("/api/send-email", sendEmailHandler);
 

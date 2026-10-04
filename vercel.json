@@ -57,6 +57,10 @@
       "destination": "/api/system?op=send-email"
     },
     {
+      "source": "/api/send-invoice",
+      "destination": "/api/system?op=send-invoice"
+    },
+    {
       "source": "/api/email-track",
       "destination": "/api/public-share?doc=email-track"
     },

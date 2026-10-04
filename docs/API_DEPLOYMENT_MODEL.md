@@ -42,6 +42,7 @@ These routes use **one implementation** in `server/src/` re-exported from `api/`
 | `POST /api/auth/forgot-password` | `server/src/auth/authForgotPasswordApi.js` |
 | `POST /api/auth/refresh` | `server/src/auth/authRefreshApi.js` |
 | `POST /api/send-email` | `server/src/sendEmailApi.js` |
+| `POST /api/send-invoice` | `server/src/sendInvoiceApi.js` (`/api/system?op=send-invoice`) |
 
 **Production auth (default):** `shouldUseNodeAuthApi()` is **true** on production builds unless `VITE_SUPABASE_ONLY=1` or `VITE_DISABLE_NODE_AUTH_API=1`. JWTs still come from Supabase; the API adds IP rate limits and security logs.
 

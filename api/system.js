@@ -3,12 +3,14 @@
  * Rewrites: /api/health → ?op=health, /api/keep-alive → ?op=keep-alive,
  *           /api/dashboard/bootstrap → ?op=dashboard-bootstrap
  *           /api/send-email → ?op=send-email
+ *           /api/send-invoice → ?op=send-invoice
  *           /api/drafts/get|save|delete → ?op=drafts-get|drafts-save|drafts-delete
  */
 import { createClient } from "@supabase/supabase-js";
 import { isEmailVerifiedUser } from "../shared/auth/emailVerification.js";
 import dashboardBootstrapHandler from "../server/src/dashboardBootstrapHandler.js";
 import sendEmailHandler from "../server/src/sendEmailApi.js";
+import sendInvoiceHandler from "../server/src/sendInvoiceApi.js";
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -130,6 +132,10 @@ export default async function handler(req, res) {
 
   if (op === "send-email") {
     return sendEmailHandler(req, res);
+  }
+
+  if (op === "send-invoice") {
+    return sendInvoiceHandler(req, res);
   }
 
   if (op === "drafts-get") return handleDrafts(req, res, "get");

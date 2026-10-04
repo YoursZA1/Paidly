@@ -105,6 +105,7 @@ export async function dispatchDocumentEmail({
     );
   }
 
+  const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
   const sessionResult = await getStableSessionResult();
   if (sessionResult?.error) throw sessionResult.error;
   const accessToken =
@@ -125,6 +126,7 @@ export async function dispatchDocumentEmail({
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
+        ...(anonKey ? { apikey: anonKey } : {}),
       },
       body: JSON.stringify({
         pdfBase64,
