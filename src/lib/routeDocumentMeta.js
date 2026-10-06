@@ -58,6 +58,7 @@ const TITLE_OVERRIDES = {
   publicinvoice: "Invoice",
   publicquote: "Quote",
   publicdocument: "Document",
+  documentpdf: "Document",
   publicpayslip: "Payslip",
   view: "Invoice",
   "leave-approval": "Leave approval",

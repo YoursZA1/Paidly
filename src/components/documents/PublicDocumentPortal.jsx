@@ -55,12 +55,20 @@ export default function PublicDocumentPortal({
               {documentNumber ? <span className="font-medium text-slate-500"> {documentNumber}</span> : null}
             </p>
             {summary ? <p className="hidden truncate text-sm text-slate-500 sm:block">{summary}</p> : null}
-            {amount ? <p className="text-sm font-semibold tabular-nums text-slate-900 sm:hidden">{amount}</p> : null}
+            {amount ? (
+              <p className="text-sm font-semibold tabular-nums text-slate-900 sm:hidden">{amount}</p>
+            ) : meta ? (
+              <p className="text-xs text-slate-500 sm:hidden">{meta}</p>
+            ) : null}
           </div>
-          {amount ? (
+          {amount || meta ? (
             <div className="hidden shrink-0 text-right sm:block">
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-400">{amountLabel}</p>
-              <p className="text-xl font-semibold tabular-nums leading-tight text-slate-900">{amount}</p>
+              {amount ? (
+                <>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-400">{amountLabel}</p>
+                  <p className="text-xl font-semibold tabular-nums leading-tight text-slate-900">{amount}</p>
+                </>
+              ) : null}
               {meta ? <p className="text-xs text-slate-500">{meta}</p> : null}
             </div>
           ) : null}

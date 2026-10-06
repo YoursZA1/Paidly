@@ -34,6 +34,7 @@ const EditQuote = lazy(() => import("./EditQuote"));
 const QuotePDF = lazy(() => import("./QuotePDF"));
 const PublicQuote = lazy(() => import("./PublicQuote"));
 const PublicHubDocument = lazy(() => import("./PublicHubDocument"));
+const DocumentPDF = lazy(() => import("./DocumentPDF"));
 const ClientPortal = lazy(() => import("./ClientPortal"));
 const RecurringInvoices = lazy(() => import("./RecurringInvoices"));
 const CreateRecurringInvoice = lazy(() => import("./CreateRecurringInvoice"));
@@ -174,6 +175,7 @@ const AUTH_ROUTES = [
     { path: "/InvoicePDF", element: <InvoicePDF /> },
     { path: "/PublicQuote", element: <PublicQuote /> },
     { path: "/PublicDocument", element: <PublicHubDocument /> },
+    { path: "/DocumentPDF", element: <DocumentPDF /> },
     { path: "/PublicPayslip", element: <PublicPayslip /> },
     { path: "/leave-approval/:token", element: <PublicLeaveApproval /> },
     { path: "/LeaveApproval/:token", element: <PublicLeaveApproval /> },
@@ -595,6 +597,7 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/publicinvoice$/i,
     /^\/publicquote$/i,
     /^\/publicdocument$/i,
+    /^\/documentpdf$/i,
     /^\/publicpayslip$/i,
     /^\/leave-approval(\/|$)/i,
     /^\/leaveapproval(\/|$)/i,

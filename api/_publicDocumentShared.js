@@ -6,6 +6,50 @@ import { getSupabaseAdmin, isValidShareTokenUuid } from "./_publicInvoiceShared.
 
 const CLIENT_COLUMNS = "id, name, email, phone, address, contact_person, vat_number";
 
+/** Hub types whose sent status becomes viewed when the client opens the public link. */
+const OPENS_AS_VIEWED = new Set([
+  "proposal",
+  "contract",
+  "service_agreement",
+  "scope_of_work",
+  "nda",
+  "retainer_agreement",
+  "employment_contract",
+  "offer_letter",
+  "sponsorship_proposal",
+  "proforma_invoice",
+  "credit_note",
+  "debit_note",
+  "receipt",
+  "event_budget",
+]);
+
+async function markHubDocumentOpened(supabase, row) {
+  if (!row?.id || row.status !== "sent" || !OPENS_AS_VIEWED.has(row.type)) return row;
+  const { error } = await supabase
+    .from("documents")
+    .update({ status: "viewed", updated_at: new Date().toISOString() })
+    .eq("id", row.id)
+    .eq("status", "sent");
+  if (error) {
+    console.warn("[document] viewed status update failed", error.message || error);
+    return row;
+  }
+  const { error: eventError } = await supabase.from("document_events").insert({
+    document_id: row.id,
+    org_id: row.org_id,
+    source_kind: "hub",
+    source_id: row.id,
+    actor_type: "recipient",
+    event_type: "viewed",
+    payload: { source: "public_portal" },
+  });
+  if (eventError) {
+    console.warn("[document] viewed event skipped", eventError.message || eventError);
+  }
+  return { ...row, status: "viewed" };
+}
+
 function publicDocument(row, items) {
   if (!row) return null;
   return {
@@ -116,8 +160,9 @@ export async function handlePublicDocumentGet(req, res) {
   }
 
   const owner = await loadOwner(supabase, row.user_id || row.created_by);
+  const opened = await markHubDocumentOpened(supabase, row);
   return res.status(200).json({
-    document: publicDocument(row, items),
+    document: publicDocument(opened, items),
     client,
     owner,
   });
