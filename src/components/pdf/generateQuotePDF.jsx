@@ -16,8 +16,9 @@ export async function generateQuotePDF({ quote, client, user, bankingDetail = nu
 
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
+  // html2canvas paints a blank page when an ancestor has opacity:0. Keep it opaque and behind the app.
   host.style.cssText =
-    "position:fixed;left:0;top:0;width:210mm;max-width:210mm;z-index:-1;opacity:0;pointer-events:none;";
+    "position:fixed;left:0;top:0;width:210mm;max-width:210mm;z-index:-1;opacity:1;pointer-events:none;background:#ffffff;";
   document.body.appendChild(host);
 
   const root = createRoot(host);

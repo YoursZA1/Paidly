@@ -7,7 +7,7 @@ import { supabaseAdmin } from "./supabaseAdmin.js";
 import { assertUserHasFeature } from "./featureGate.js";
 import { parseBody } from "./validateBody.js";
 import { sendInvoiceBodySchema } from "./schemas/invoiceSchemas.js";
-import { sanitizeOneLine, validateBase64Pdf } from "./inputValidation.js";
+import { sanitizeEmailHtmlBody, sanitizeOneLine, validateBase64Pdf } from "./inputValidation.js";
 import { sendInvoiceEmail } from "./sendInvoice.js";
 import { sendUnexpectedError } from "./apiResponse.js";
 import { applyApiCors } from "./auth/applyApiCors.js";
@@ -85,13 +85,19 @@ export default async function sendInvoiceHandler(req, res) {
         }
       : null;
 
+    const customHtml = parsed.html ? sanitizeEmailHtmlBody(parsed.html) : "";
     const result = await sendInvoiceEmail(
       parsed.base64PDF,
       parsed.clientEmail,
       invNum,
       senderName,
       template,
-      parsed.idempotencyKey
+      parsed.idempotencyKey,
+      {
+        html: customHtml,
+        subject: parsed.subject ? sanitizeOneLine(parsed.subject, 998) : "",
+        filename: parsed.filename || "",
+      }
     );
 
     if (!result.success) {

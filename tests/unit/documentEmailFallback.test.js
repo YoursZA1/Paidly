@@ -33,6 +33,24 @@ describe("dispatchDocumentEmail fallback", () => {
     ]);
   });
 
+  it("forwards quote html, subject, and filename when the invoice fallback runs", async () => {
+    const fetchSpy = edgeDown();
+    vi.stubGlobal("fetch", fetchSpy);
+    await dispatchDocumentEmail({
+      pdfBase64: "JVBERi0=",
+      email: "a@b.co",
+      subject: "Quote #QUO-1001 from BrandCafé Agency",
+      html: "<a href=\"https://www.paidly.co.za/PublicQuote?token=abc\">View Quote</a>",
+      filename: "QUO-1001.pdf",
+      invoiceNum: "QUO-1001",
+    });
+    const fallback = JSON.parse(fetchSpy.mock.calls[1][1].body);
+    expect(fallback.subject).toContain("Quote #QUO-1001");
+    expect(fallback.html).toContain("View Quote");
+    expect(fallback.html).toContain("/PublicQuote?token=");
+    expect(fallback.filename).toBe("QUO-1001.pdf");
+  });
+
   it("invoiceApiFallback: false surfaces the edge failure instead", async () => {
     const fetchSpy = edgeDown();
     vi.stubGlobal("fetch", fetchSpy);

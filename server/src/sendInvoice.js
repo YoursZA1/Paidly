@@ -8,6 +8,17 @@ import { getInvoiceEmailContent } from "./invoiceEmailTemplate.js";
 
 let resendClient = null;
 
+function safeAttachmentFilename(name, fallback) {
+  const cleaned = String(name || "")
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[.-]+|[.-]+$/g, "")
+    .slice(0, 120);
+  if (!cleaned || !cleaned.toLowerCase().endsWith(".pdf")) return fallback;
+  return cleaned;
+}
+
 function getResend() {
   if (!process.env.RESEND_API_KEY) return null;
   if (!resendClient) {
@@ -23,6 +34,8 @@ function getResend() {
  * @param {string} [fromName="Paidly"]
  * @param {{ clientName?: string, amountDue?: string, dueDate?: string }} [template]
  * @param {string} [idempotencyKey] - Forwarded to Resend so retries do not send a second email.
+ * @param {{ html?: string, subject?: string, filename?: string }} [overrides]
+ *   When `html` is set (quote emails), it replaces the invoice template. Filename stays a PDF name.
  */
 export async function sendInvoiceEmail(
   base64PDF,
@@ -30,7 +43,8 @@ export async function sendInvoiceEmail(
   invoiceNum,
   fromName = "Paidly",
   template = null,
-  idempotencyKey = ""
+  idempotencyKey = "",
+  overrides = {}
 ) {
   if (!process.env.RESEND_API_KEY) {
     return { success: false, error: "RESEND_API_KEY is not configured" };
@@ -71,8 +85,15 @@ export async function sendInvoiceEmail(
   const clientName = template?.clientName ?? "there";
   const amountDue = template?.amountDue ?? "";
   const dueDate = template?.dueDate ?? "";
-  const useTemplate = clientName !== "there" || amountDue || dueDate;
-  const { subject, html } = useTemplate
+  const customHtml = typeof overrides?.html === "string" ? overrides.html.trim() : "";
+  const customSubject = typeof overrides?.subject === "string" ? overrides.subject.trim() : "";
+  const useTemplate = !customHtml && (clientName !== "there" || amountDue || dueDate);
+  const { subject, html } = customHtml
+    ? {
+        subject: customSubject || `Document ${invoiceNum} from ${fromName}`,
+        html: customHtml,
+      }
+    : useTemplate
     ? getInvoiceEmailContent({
         clientName,
         invoiceNum,
@@ -81,9 +102,10 @@ export async function sendInvoiceEmail(
         brandName: fromName,
       })
     : {
-        subject: `Invoice ${invoiceNum} from ${fromName}`,
+        subject: customSubject || `Invoice ${invoiceNum} from ${fromName}`,
         html: `<strong>Hello,</strong><p>Please find your invoice ${invoiceNum} attached.</p>`,
       };
+  const attachmentName = safeAttachmentFilename(overrides?.filename, `Invoice_${invoiceNum}.pdf`);
 
   try {
     const payload = {
@@ -94,7 +116,7 @@ export async function sendInvoiceEmail(
       attachments: [
         {
           content: cleanBase64,
-          filename: `Invoice_${invoiceNum}.pdf`,
+          filename: attachmentName,
         },
       ],
     };

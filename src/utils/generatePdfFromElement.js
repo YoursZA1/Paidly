@@ -21,8 +21,15 @@ function html2CanvasOnClone(clonedDoc) {
       el.remove();
     });
     const roots = clonedDoc.querySelectorAll(
-      '[data-invoice-pdf-capture="true"], .document-preview-styled'
+      '[data-invoice-pdf-capture="true"], .document-preview-styled, [data-paidly-doc-ready]'
     );
+    roots.forEach((root) => {
+      let node = root;
+      while (node && node !== clonedDoc) {
+        node.style.opacity = "1";
+        node = node.parentElement;
+      }
+    });
     roots.forEach((root) => {
       root.querySelectorAll(".line-clamp-1, .line-clamp-2, .line-clamp-3, .line-clamp-4, .line-clamp-5, .line-clamp-6").forEach((el) => {
         el.style.setProperty("display", "block", "important");

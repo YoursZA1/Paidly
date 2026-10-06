@@ -4,6 +4,7 @@ import { buildBrandedEmailDocumentHtml } from "@/utils/brandedEmailTemplates";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { escapeHtml, sanitizeHttpUrl } from "@/utils/htmlSecurity";
 import { getLogo } from "@/services/AssetService";
+import { buildViewDocumentButtonHtml } from "@/utils/shareEmailHtml";
 
 /**
  * Branded HTML body for quote emails (used by QuoteEmailPreviewModal and sendQuotePdfEmailToClient).
@@ -48,11 +49,7 @@ export function generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl
           </table>
         </td></tr>
       </table>
-      <div style="text-align:center;margin:28px 0;">
-        <a href="${escapeHtml(safeCta)}" style="display:inline-block;background:linear-gradient(135deg, ${primary} 0%, ${secondary} 100%);color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;box-shadow:0 4px 14px rgba(242,78,0,0.25);">
-          View quote online
-        </a>
-      </div>
+      ${buildViewDocumentButtonHtml(safeCta, "View Quote")}
       <p style="margin:0;color:#71717a;font-size:13px;line-height:1.55;">
         We look forward to working with you.
       </p>

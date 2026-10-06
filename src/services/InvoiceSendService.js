@@ -263,11 +263,26 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
 
   const userData = await retryOnAbort(() => User.me());
   let html = htmlOverride;
-  let quoteForSend = quote;
+  let quoteForSend = await ensureQuotePublicShareToken(quote);
   let trackingToken = null;
 
+  if (!Array.isArray(quoteForSend.items) || quoteForSend.items.length === 0) {
+    try {
+      const full = await retryOnAbort(() => Quote.get(quoteForSend.id));
+      if (full) {
+        quoteForSend = {
+          ...quoteForSend,
+          ...full,
+          items: Array.isArray(full.items) ? full.items : quoteForSend.items || [],
+          public_share_token: quoteForSend.public_share_token || full.public_share_token,
+        };
+      }
+    } catch {
+      /* The PDF uses the quote row already in hand. */
+    }
+  }
+
   if (!html) {
-    quoteForSend = await ensureQuotePublicShareToken(quote);
     const prepared = prepareQuoteTrackingLink(quoteForSend);
     trackingToken = prepared.trackingToken;
     const pixelUrl = trackingToken ? getEmailOpenTrackingPixelUrl(trackingToken) : '';

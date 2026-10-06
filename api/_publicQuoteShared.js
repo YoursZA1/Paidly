@@ -32,26 +32,44 @@ function parseJsonBody(req) {
 
 function mapQuoteItems(rawItems) {
   if (!Array.isArray(rawItems)) return [];
-  return rawItems.map((item) => ({
-    description: item?.description || item?.service_name || "",
-    quantity: Number(item?.quantity ?? 0) || 0,
-    rate: Number(item?.rate ?? item?.unit_price ?? 0) || 0,
-  }));
+  return rawItems.map((item) => {
+    const unit = Number(item?.unit_price ?? item?.rate ?? 0) || 0;
+    const quantity = Number(item?.quantity ?? 0) || 0;
+    return {
+      service_name: item?.service_name || "",
+      description: item?.description || item?.service_name || "",
+      quantity,
+      unit_price: unit,
+      rate: unit,
+      total_price: Number(item?.total_price ?? quantity * unit) || 0,
+    };
+  });
 }
 
 async function loadOwnerProfile(supabase, ownerId) {
   if (!ownerId) return null;
-  const { data } = await supabase
-    .from("profiles")
-    .select("full_name, email, phone, company_name")
-    .eq("id", ownerId)
-    .maybeSingle();
+  const rich =
+    "full_name, email, phone, company_name, company_address, logo_url, document_brand_primary, document_brand_secondary, currency";
+  let { data, error } = await supabase.from("profiles").select(rich).eq("id", ownerId).maybeSingle();
+  if (error || !data) {
+    const basic = await supabase
+      .from("profiles")
+      .select("full_name, email, phone, company_name")
+      .eq("id", ownerId)
+      .maybeSingle();
+    data = basic.data;
+  }
   if (!data) return null;
   return {
     name: data.full_name || data.company_name || "Paidly",
     email: data.email || "",
     phone: data.phone || "",
     company_name: data.company_name || "",
+    company_address: data.company_address || "",
+    logo_url: data.logo_url || "",
+    document_brand_primary: data.document_brand_primary || null,
+    document_brand_secondary: data.document_brand_secondary || null,
+    currency: data.currency || "",
   };
 }
 
@@ -111,7 +129,7 @@ export async function handlePublicQuoteGet(req, res) {
     const { data: quoteRow, error } = await supabase
       .from("quotes")
       .select(
-        "id, org_id, quote_number, created_at, valid_until, status, subtotal, tax_rate, tax_amount, total_amount, currency, notes, terms_conditions, client_id, created_by"
+        "id, org_id, quote_number, created_at, valid_until, status, subtotal, tax_rate, tax_amount, discount_type, discount_value, discount_amount, total_amount, vat_mode, currency, notes, terms_conditions, project_title, client_id, created_by, document_brand_primary, document_brand_secondary, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_phone, owner_vat_number, owner_currency"
       )
       .eq("public_share_token", shareToken)
       .maybeSingle();
@@ -126,7 +144,7 @@ export async function handlePublicQuoteGet(req, res) {
 
     const { data: quoteItems, error: quoteItemsError } = await supabase
       .from("quote_items")
-      .select("service_name, description, quantity, unit_price")
+      .select("service_name, description, quantity, unit_price, total_price")
       .eq("quote_id", quoteRow.id)
       .order("id", { ascending: true });
     if (quoteItemsError) {

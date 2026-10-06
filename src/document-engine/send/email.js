@@ -162,7 +162,7 @@ export async function dispatchDocumentEmail({
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({
+      body: JSON.stringify({
       base64PDF: pdfBase64,
       clientEmail: email,
       invoiceNum: String(invoiceNum || ""),
@@ -170,6 +170,9 @@ export async function dispatchDocumentEmail({
       clientName: String(clientName || "there"),
       amountDue: String(amountDue ?? ""),
       dueDate: String(dueDate || ""),
+      ...(subject ? { subject: String(subject) } : {}),
+      ...(html ? { html: String(html) } : {}),
+      ...(filename ? { filename: String(filename) } : {}),
       ...(idempotency ? { idempotencyKey: idempotency } : {}),
     }),
   });

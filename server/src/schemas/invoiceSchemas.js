@@ -41,4 +41,7 @@ export const sendInvoiceBodySchema = z.object({
   amountDue: optionalLine(80),
   dueDate: optionalLine(80),
   idempotencyKey: optionalLine(256),
+  subject: optionalLine(998),
+  html: z.string().max(500_000).optional(),
+  filename: optionalLine(180),
 });

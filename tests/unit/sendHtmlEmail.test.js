@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resendSendCalls } from "../mocks/resend-test-double.js";
-import { sendHtmlEmail } from "../../server/src/sendInvoice.js";
+import { sendHtmlEmail, sendInvoiceEmail } from "../../server/src/sendInvoice.js";
 
 describe("sendHtmlEmail", () => {
   let prevKey;
@@ -45,5 +45,26 @@ describe("sendHtmlEmail", () => {
     expect(resendSendCalls[0]).toMatchObject({
       text: "Plain five",
     });
+  });
+
+  it("quote override keeps the View Quote html and quote filename", async () => {
+    const result = await sendInvoiceEmail(
+      "JVBERi0xLjQK",
+      "client@example.com",
+      "QUO-1001",
+      "BrandCafé Agency",
+      { clientName: "On The Design Agency", amountDue: "", dueDate: "2026-10-09" },
+      "",
+      {
+        subject: "Quote #QUO-1001 from BrandCafé Agency",
+        html: '<a href="https://www.paidly.co.za/PublicQuote?token=abc">View Quote</a>',
+        filename: "QUO-1001.pdf",
+      }
+    );
+    expect(result.success).toBe(true);
+    expect(resendSendCalls.at(-1).subject).toBe("Quote #QUO-1001 from BrandCafé Agency");
+    expect(resendSendCalls.at(-1).html).toContain("View Quote");
+    expect(resendSendCalls.at(-1).html).not.toContain("Please find attached your invoice");
+    expect(resendSendCalls.at(-1).attachments[0].filename).toBe("QUO-1001.pdf");
   });
 });
