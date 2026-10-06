@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { sanitizeEmailHtmlBody } from "../../server/src/inputValidation.js";
 import { buildDocumentShareEmailHtml } from "../../src/utils/shareEmailHtml.js";
-import { buildBrandedEmailDocumentHtml } from "../../src/utils/brandedEmailTemplates.js";
+import { buildBrandedEmailDocumentHtml, fitEmailLogoPixels } from "../../src/utils/brandedEmailTemplates.js";
 
 describe("send-email HTML sanitization (shared Vercel + Express)", () => {
   it("strips script tags from outbound email HTML", () => {
@@ -54,9 +54,26 @@ describe("send-email HTML sanitization (shared Vercel + Express)", () => {
     const clean = sanitizeEmailHtmlBody(html);
     expect(clean).toContain('width="96"');
     expect(clean).toContain("max-width:96px");
-    expect(clean).toContain("max-height:48px");
+    expect(clean).toContain("height:auto");
+    expect(clean).not.toContain("max-height:");
     expect(clean).toContain('bgcolor="#f24e00"');
     expect(clean).not.toMatch(/<img[^>]*style="[^"]*url\s*\(/i);
+
+    const fitted = fitEmailLogoPixels(800, 500);
+    expect(fitted).toEqual({ width: 96, height: 60 });
+    const shaped = buildBrandedEmailDocumentHtml({
+      title: "Quote",
+      innerHtml: "<p>Hello</p>",
+      companyName: "BrandCafé Agency",
+      logoUrl: "https://example.supabase.co/storage/v1/object/public/paidly/logo.png",
+      logoWidth: fitted.width,
+      logoHeight: fitted.height,
+    });
+    const shapedClean = sanitizeEmailHtmlBody(shaped);
+    expect(shapedClean).toContain('width="96"');
+    expect(shapedClean).toContain('height="60"');
+    expect(shapedClean).toContain("height:60px");
+    expect(shapedClean).not.toContain("max-height:");
 
     const unsafe = sanitizeEmailHtmlBody(
       '<img src="https://example.com/logo.png" style="width:expression(alert(1));max-height:48px" alt="">'

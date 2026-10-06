@@ -10,6 +10,8 @@ import { createPageUrl } from '@/utils';
 import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
 import { getEmailOpenTrackingPixelUrl, getTrackedLinkUrl } from '@/services/InvoiceSendService';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
+import { measureEmailLogo } from '@/utils/brandedEmailTemplates';
+import { getLogo } from '@/services/AssetService';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/utils/currencyCalculations';
 
@@ -18,6 +20,7 @@ export { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
 export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend, isSending, getTrackableLink }) {
     const { profile } = useAuth();
     const [company, setCompany] = useState(null);
+    const [logoBox, setLogoBox] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -37,6 +40,18 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
     useEffect(() => {
         setCompany(profile || null);
     }, [profile]);
+
+    useEffect(() => {
+        const raw = company?.logo_url || company?.company_logo_url || '';
+        const resolved = raw ? getLogo(raw) : '';
+        let cancelled = false;
+        measureEmailLogo(resolved).then((box) => {
+            if (!cancelled) setLogoBox(box);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [company?.logo_url, company?.company_logo_url]);
 
     if (isLoading) {
         return (
@@ -58,7 +73,7 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
         ? `${window.location.origin}${createPageUrl(`PublicQuote?token=${encodeURIComponent(shareToken)}`)}`
         : "";
     
-    const emailHtml = generateQuoteEmailHtml(quote, client, company, publicViewUrl);
+    const emailHtml = generateQuoteEmailHtml(quote, client, company, publicViewUrl, '', logoBox);
 
     const handleSendClick = async () => {
         const result = getTrackableLink ? await getTrackableLink().catch(() => ({ url: publicViewUrl })) : { url: publicViewUrl };
@@ -68,7 +83,7 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
             result?.trackingToken && viewUrl
                 ? getTrackedLinkUrl(result.trackingToken, viewUrl)
                 : viewUrl;
-        const html = generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl);
+        const html = generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl, logoBox);
         onSend(html);
     };
 

@@ -43,7 +43,7 @@ export function Totals({ data, styles, formatMoney }) {
         <View style={styles.totalsDivider} />
 
         <View style={styles.totalsDueRow}>
-          <Text style={styles.totalsDueLabel}>Total due</Text>
+          <Text style={styles.totalsDueLabel}>{data?.totalLabel || "Total due"}</Text>
           <Text style={styles.totalsDueValue}>{formatMoney(total)}</Text>
         </View>
 

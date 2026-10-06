@@ -29,7 +29,7 @@ export function DocumentHeader({ data, styles }) {
       </View>
 
       <View style={styles.headerRight}>
-        <Text style={styles.invoiceTitle}>INVOICE</Text>
+        <Text style={styles.invoiceTitle}>{data?.documentTitle || "INVOICE"}</Text>
         <Text style={styles.invoiceNumber}>{data?.number || "—"}</Text>
 
         {data?.issuedDateFormatted ? (
@@ -41,7 +41,7 @@ export function DocumentHeader({ data, styles }) {
 
         {data?.dueDateFormatted ? (
           <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Due</Text>
+            <Text style={styles.metaLabel}>{data?.dueLabel || "Due"}</Text>
             <Text style={styles.metaValue}>{data.dueDateFormatted}</Text>
           </View>
         ) : null}

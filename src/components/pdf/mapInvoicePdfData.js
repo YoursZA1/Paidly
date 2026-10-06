@@ -14,6 +14,7 @@ import {
 import {
   invoiceStatusLabel,
   normalizeInvoiceStatus,
+  quoteStatusLabel,
 } from "@shared/commercial/documentStatuses.js";
 
 function str(v) {
@@ -221,6 +222,35 @@ export function mapInvoicePdfData(invoice, client, user = null, bankingDetail = 
     dueDateFormatted: formatDisplayDate(dueDateRaw),
     bankingRows,
     bankDetails,
+  };
+}
+
+/**
+ * Quote email/download PDF. Same document as an invoice, titled as a quote.
+ * @param {object} quote
+ * @param {object} client
+ * @param {object|null} user
+ * @param {object|null} bankingDetail
+ */
+export function mapQuotePdfData(quote, client, user = null, bankingDetail = null) {
+  const data = mapInvoicePdfData(
+    {
+      ...quote,
+      invoice_number: quote?.quote_number || quote?.invoice_number,
+      invoice_date: quote?.created_at || quote?.created_date || quote?.invoice_date,
+      delivery_date: quote?.valid_until || quote?.delivery_date,
+      due_date: quote?.valid_until || quote?.due_date,
+    },
+    client,
+    user,
+    bankingDetail
+  );
+  return {
+    ...data,
+    documentTitle: "QUOTE",
+    dueLabel: "Valid until",
+    totalLabel: "Total",
+    statusLabel: quoteStatusLabel(quote?.status || "draft"),
   };
 }
 

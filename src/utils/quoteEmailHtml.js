@@ -14,7 +14,7 @@ import { buildViewDocumentButtonHtml } from "@/utils/shareEmailHtml";
  * @param {string} ctaHref - Public quote URL (often track-wrapped)
  * @param {string} [pixelUrl] - Optional open-tracking pixel URL
  */
-export function generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl = "") {
+export function generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl = "", logoBox = null) {
     const companyName = company?.company_name || "Your Company";
     const userCurrency = company?.currency || "USD";
     const formattedAmount = formatCurrency(quote.total_amount, userCurrency);
@@ -66,5 +66,7 @@ export function generateQuoteEmailHtml(quote, client, company, ctaHref, pixelUrl
         secondaryHex: secondary,
         pixelUrl,
         logoUrl,
+        logoWidth: logoBox?.width,
+        logoHeight: logoBox?.height,
     });
 }

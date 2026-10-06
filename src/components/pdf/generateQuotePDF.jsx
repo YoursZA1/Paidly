@@ -1,53 +1,25 @@
-import { createRoot } from "react-dom/client";
-import DocumentPreview from "@/components/DocumentPreview";
-import { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
-import { profileForQuotePreview, recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
-import { waitForPdfDocumentReady } from "@/lib/documentPdf/waitForPdfDocumentReady";
+import { pdf } from "@react-pdf/renderer";
+import Invoice from "@/components/pdf/Invoice";
+import { mapQuotePdfData } from "@/components/pdf/mapInvoicePdfData";
 
 /**
- * Generate a quote PDF blob using the same DocumentPreview used by QuotePDF page.
+ * Quote PDF blob for email and download.
+ * Uses the same @react-pdf document as invoices. A screen capture of the preview
+ * was producing a blank page once the company logo was on the quote.
+ *
  * @param {{ quote: object, client: object, user: object, bankingDetail?: object|null }} params
  * @returns {Promise<Blob>}
  */
-export async function generateQuotePDF({ quote, client, user, bankingDetail = null, scale, quality } = {}) {
-  if (typeof document === "undefined") {
-    throw new Error("Quote PDF generation requires a browser environment.");
-  }
-
-  const host = document.createElement("div");
-  host.setAttribute("aria-hidden", "true");
-  // html2canvas paints a blank page when an ancestor has opacity:0. Keep it opaque and behind the app.
-  host.style.cssText =
-    "position:fixed;left:0;top:0;width:210mm;max-width:210mm;z-index:-1;opacity:1;pointer-events:none;background:#ffffff;";
-  document.body.appendChild(host);
-
-  const root = createRoot(host);
-  const filename = `${quote?.quote_number || "quote"}.pdf`;
-
+export async function generateQuotePDF({ quote, client, user, bankingDetail = null } = {}) {
+  const resolvedClient =
+    client && typeof client === "object"
+      ? client
+      : { name: quote?.client_name || "Client", id: quote?.client_id };
+  const data = mapQuotePdfData(quote, resolvedClient, user, bankingDetail);
   try {
-    const resolvedClient = client || { name: quote?.client_name || "Client", id: quote?.client_id };
-    const profile = profileForQuotePreview(quote, user);
-    const previewDoc = recordToStyledPreviewDoc(quote, resolvedClient, "quote", profile);
-
-    root.render(
-      <DocumentPreview
-        doc={previewDoc}
-        docType="quote"
-        clients={[resolvedClient]}
-        user={profile}
-        bankingDetail={bankingDetail}
-        hideStatus
-      />
-    );
-
-    const el = await waitForPdfDocumentReady(host);
-    if (!el) throw new Error("Quote PDF capture node missing");
-    return await generatePdfBlobFromElement(el, filename, {
-      ...(scale ? { scale } : {}),
-      ...(quality ? { quality } : {}),
-    });
-  } finally {
-    root.unmount();
-    host.remove();
+    return await pdf(<Invoice data={data} currency={data.currency} />).toBlob();
+  } catch (error) {
+    if (!data.logo_url) throw error;
+    return pdf(<Invoice data={{ ...data, logo_url: "" }} currency={data.currency} />).toBlob();
   }
 }

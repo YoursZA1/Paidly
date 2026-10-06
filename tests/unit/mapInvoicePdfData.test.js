@@ -19,7 +19,7 @@ vi.mock("@/lib/documentIssuerBrand", () => ({
   }),
 }));
 
-import { mapInvoicePdfData } from "@/components/pdf/mapInvoicePdfData";
+import { mapInvoicePdfData, mapQuotePdfData } from "@/components/pdf/mapInvoicePdfData";
 
 const baseInvoice = {
   invoice_number: "INV-1004",
@@ -159,5 +159,31 @@ describe("mapInvoicePdfData", () => {
     const data = mapInvoicePdfData({ ...baseInvoice, items }, client, user, banking);
     expect(data.items).toHaveLength(25);
     expect(data.items[0].description.length).toBeGreaterThan(20);
+  });
+
+  it("maps a quote as a quote, with its number and valid-until date", () => {
+    const data = mapQuotePdfData(
+      {
+        quote_number: "QUO-1001",
+        status: "sent",
+        created_at: "2026-10-06",
+        valid_until: "2026-10-09",
+        project_title: "Quote for On The Design Agency",
+        total_amount: 1650,
+        currency: "ZAR",
+        owner_company_name: "BrandCafé Agency",
+        items: [{ service_name: "Design", quantity: 1, unit_price: 1650, total_price: 1650 }],
+      },
+      { name: "On The Design Agency", email: "hello@design.test" },
+      { company_name: "BrandCafé Agency", currency: "ZAR" }
+    );
+    expect(data.documentTitle).toBe("QUOTE");
+    expect(data.dueLabel).toBe("Valid until");
+    expect(data.totalLabel).toBe("Total");
+    expect(data.number).toBe("QUO-1001");
+    expect(data.dueDateFormatted).toContain("2026");
+    expect(data.client.name).toBe("On The Design Agency");
+    expect(data.items).toHaveLength(1);
+    expect(data.total).toBe(1650);
   });
 });

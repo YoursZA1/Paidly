@@ -9,6 +9,8 @@ import { generateInvoiceDocumentPdf } from '@/document-engine/pdf/invoice';
 import { generateQuoteDocumentPdf } from '@/document-engine/pdf/quote';
 import { dispatchDocumentEmail, userFacingDocumentSendError } from '@/document-engine/send/email';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
+import { measureEmailLogo } from '@/utils/brandedEmailTemplates';
+import { getLogo } from '@/services/AssetService';
 import { generateInvoiceEmailHtml } from '@/utils/invoiceEmailHtml';
 import { createPageUrl } from '@/utils';
 import { retryOnAbort, isAbortError, retryOnTransientFetch } from '@/utils/retryOnAbort';
@@ -287,7 +289,10 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
     trackingToken = prepared.trackingToken;
     const pixelUrl = trackingToken ? getEmailOpenTrackingPixelUrl(trackingToken) : '';
     const ctaHref = trackingToken && prepared.url ? getTrackedLinkUrl(trackingToken, prepared.url) : prepared.url;
-    html = generateQuoteEmailHtml(quoteForSend, client, userData, ctaHref, pixelUrl);
+    const rawLogo = userData?.logo_url || userData?.company_logo_url || '';
+    const resolvedLogo = rawLogo ? getLogo(rawLogo) : '';
+    const logoBox = await measureEmailLogo(resolvedLogo);
+    html = generateQuoteEmailHtml(quoteForSend, client, userData, ctaHref, pixelUrl, logoBox);
   }
 
   const quoteForPdf = {
