@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import DocumentPreview from '@/components/DocumentPreview';
 import { getPublicApiBase } from '@/api/backendClient';
 import { decidePublicQuote, fetchPublicQuotePayload } from '@/api/publicQuoteApiClient';
 import { profileForQuotePreview, recordToStyledPreviewDoc } from '@/utils/documentPreviewData';
-import { downloadDocumentPreviewFromElement } from '@/utils/documentPreviewPdf';
+import { downloadQuotePdfBlob, generateQuotePDF } from '@/components/pdf/generateQuotePDF';
 import { QUOTE_STATUS, normalizeQuoteStatus } from '@shared/commercial/documentStatuses.js';
 
 function PublicQuoteDecision({ quote, deciding, decideError, onDecide }) {
@@ -51,6 +51,7 @@ export default function PublicQuote() {
     const [quote, setQuote] = useState(null);
     const [client, setClient] = useState(null); // New state for client
     const [user, setUser] = useState(null);
+    const [banking, setBanking] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [deciding, setDeciding] = useState(null);
     const [decideError, setDecideError] = useState("");
@@ -77,12 +78,14 @@ export default function PublicQuote() {
             setQuote(quoteData);
             setClient(payload?.client || null);
             setUser(payload?.owner || null);
+            setBanking(payload?.banking || null);
         } catch (error) {
             console.error('Error loading public quote:', error);
             // Optionally set quote/client/user to null on error to display error message
             setQuote(null);
             setClient(null);
             setUser(null);
+            setBanking(null);
         } finally {
             setIsLoading(false); // Set loading false after data is fetched or an error occurs
         }
@@ -123,7 +126,6 @@ export default function PublicQuote() {
         return recordToStyledPreviewDoc(quote, previewClient, "quote", previewUser);
     }, [quote, previewClient, previewUser]);
 
-    const previewRef = useRef(null);
     const [downloading, setDownloading] = useState(false);
 
     if (isLoading) {
@@ -146,11 +148,16 @@ export default function PublicQuote() {
     }
 
     const downloadPdf = async () => {
-        const el = previewRef.current;
-        if (!el) return;
+        if (!quote) return;
         setDownloading(true);
         try {
-            await downloadDocumentPreviewFromElement(el, "quote", quote.quote_number, { doc: previewDoc });
+            const blob = await generateQuotePDF({
+                quote,
+                client: previewClient,
+                user: previewUser,
+                bankingDetail: banking,
+            });
+            downloadQuotePdfBlob(blob, `${quote.quote_number || "quote"}.pdf`);
         } catch (error) {
             console.error("Public quote PDF failed", error);
         } finally {
@@ -188,7 +195,6 @@ export default function PublicQuote() {
                 />
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                     <DocumentPreview
-                        ref={previewRef}
                         doc={previewDoc}
                         docType="quote"
                         clients={previewClient ? [previewClient] : []}

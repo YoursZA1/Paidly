@@ -3,8 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Quote, Client, User, BankingDetail } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { DocumentPageSkeleton } from '@/components/shared/PageSkeleton';
-import generatePdfFromElement from '@/utils/generatePdfFromElement';
-import { waitUntilElementReady } from '@/lib/documentPdf/waitForPdfDocumentReady';
+import { downloadQuotePdfBlob, generateQuotePDF } from '@/components/pdf/generateQuotePDF';
 import DocumentPreview from '@/components/DocumentPreview';
 import { recordToStyledPreviewDoc, profileForQuotePreview } from '@/utils/documentPreviewData';
 import { readQuoteDraftRaw } from '@/utils/invoiceDraftStorage';
@@ -80,16 +79,20 @@ export default function QuotePDF() {
     }, [quoteId, isDraft]);
 
     useEffect(() => {
-        if (!autoDownload || isLoading || !quote || !printRef.current) return;
+        if (!autoDownload || isLoading || !quote || !user) return;
         let cancelled = false;
         const timer = setTimeout(async () => {
             if (cancelled) return;
             try {
                 setIsGeneratingPdf(true);
-                const filename = `${quote.quote_number || 'quote'}.pdf`;
-                const el = await waitUntilElementReady(printRef.current);
-                if (cancelled || !el) return;
-                await generatePdfFromElement(el, filename);
+                const blob = await generateQuotePDF({
+                    quote,
+                    client: client || { name: quote.client_name || 'Client', id: quote.client_id },
+                    user,
+                    bankingDetail,
+                });
+                if (cancelled) return;
+                downloadQuotePdfBlob(blob, `${quote.quote_number || 'quote'}.pdf`);
             } catch (e) {
                 console.error('Auto-download quote PDF failed, falling back to print:', e);
                 window.print();
@@ -101,7 +104,7 @@ export default function QuotePDF() {
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [autoDownload, isLoading, quote]);
+    }, [autoDownload, isLoading, quote, user, client, bankingDetail]);
 
     const loadQuoteData = async () => {
         try {
@@ -161,13 +164,16 @@ export default function QuotePDF() {
     }
 
     const handleDownloadPDF = async () => {
-        if (!printRef.current || !quote) return;
+        if (!quote || !user) return;
         try {
             setIsGeneratingPdf(true);
-            const filename = `${quote.quote_number || 'quote'}.pdf`;
-            const el = await waitUntilElementReady(printRef.current);
-            if (!el) return;
-            await generatePdfFromElement(el, filename);
+            const blob = await generateQuotePDF({
+                quote,
+                client: clientResolved,
+                user,
+                bankingDetail,
+            });
+            downloadQuotePdfBlob(blob, `${quote.quote_number || 'quote'}.pdf`);
         } catch (e) {
             console.error('Quote PDF generation failed, falling back to print:', e);
             window.print();

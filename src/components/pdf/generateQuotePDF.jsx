@@ -1,55 +1,40 @@
-import { createRoot } from "react-dom/client";
-import DocumentPreview from "@/components/DocumentPreview";
-import { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
-import { profileForQuotePreview, recordToStyledPreviewDoc } from "@/utils/documentPreviewData";
-import { waitForPdfDocumentReady } from "@/lib/documentPdf/waitForPdfDocumentReady";
+import { pdf } from "@react-pdf/renderer";
+import Invoice from "@/components/pdf/Invoice";
+import { mapQuotePdfData } from "@/components/pdf/mapInvoicePdfData";
 
 /**
- * Quote PDF blob. Same DocumentPreview as the public page, the in-app quote, and Download PDF.
+ * Quote PDF file used for the email attachment and every Download PDF action.
+ * Vector text, same layout. A screen capture of the preview is a photo of the page
+ * and comes out soft, with the footer cut off.
  *
- * @param {{ quote: object, client: object, user: object, bankingDetail?: object|null, scale?: number, quality?: number }} params
+ * @param {{ quote: object, client: object, user: object, bankingDetail?: object|null }} params
  * @returns {Promise<Blob>}
  */
-export async function generateQuotePDF({ quote, client, user, bankingDetail = null, scale, quality } = {}) {
-  if (typeof document === "undefined") {
-    throw new Error("Quote PDF generation requires a browser environment.");
-  }
-
-  const host = document.createElement("div");
-  host.setAttribute("aria-hidden", "true");
-  // html2canvas paints a blank page when an ancestor has opacity 0 or sits behind the page.
-  // Keep this host opaque and in the viewport, under any open dialog.
-  host.style.cssText =
-    "position:fixed;left:0;top:0;width:210mm;max-width:210mm;opacity:1;z-index:1;pointer-events:none;background:#ffffff;";
-  document.body.appendChild(host);
-
-  const root = createRoot(host);
-  const filename = `${quote?.quote_number || "quote"}.pdf`;
-
+export async function generateQuotePDF({ quote, client, user, bankingDetail = null } = {}) {
+  const resolvedClient =
+    client && typeof client === "object"
+      ? client
+      : { name: quote?.client_name || "Client", id: quote?.client_id };
+  const data = mapQuotePdfData(quote, resolvedClient, user, bankingDetail);
   try {
-    const resolvedClient = client || { name: quote?.client_name || "Client", id: quote?.client_id };
-    const profile = profileForQuotePreview(quote, user);
-    const previewDoc = recordToStyledPreviewDoc(quote, resolvedClient, "quote", profile);
-
-    root.render(
-      <DocumentPreview
-        doc={previewDoc}
-        docType="quote"
-        clients={[resolvedClient]}
-        user={profile}
-        bankingDetail={bankingDetail}
-        hideStatus
-      />
-    );
-
-    const el = await waitForPdfDocumentReady(host);
-    if (!el) throw new Error("Quote PDF capture node missing");
-    return await generatePdfBlobFromElement(el, filename, {
-      ...(scale ? { scale } : {}),
-      ...(quality ? { quality } : {}),
-    });
-  } finally {
-    root.unmount();
-    host.remove();
+    return await pdf(<Invoice data={data} currency={data.currency} />).toBlob();
+  } catch (error) {
+    if (!data.logo_url) throw error;
+    return pdf(<Invoice data={{ ...data, logo_url: "" }} currency={data.currency} />).toBlob();
   }
+}
+
+/**
+ * @param {Blob} blob
+ * @param {string} filename
+ */
+export function downloadQuotePdfBlob(blob, filename = "quote.pdf") {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }

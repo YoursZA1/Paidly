@@ -49,7 +49,7 @@ function mapQuoteItems(rawItems) {
 async function loadOwnerProfile(supabase, ownerId) {
   if (!ownerId) return null;
   const rich =
-    "full_name, email, phone, company_name, company_address, logo_url, document_brand_primary, document_brand_secondary, currency";
+    "full_name, email, phone, company_name, company_address, company_website, logo_url, document_brand_primary, document_brand_secondary, currency";
   let { data, error } = await supabase.from("profiles").select(rich).eq("id", ownerId).maybeSingle();
   if (error || !data) {
     const basic = await supabase
@@ -66,6 +66,8 @@ async function loadOwnerProfile(supabase, ownerId) {
     phone: data.phone || "",
     company_name: data.company_name || "",
     company_address: data.company_address || "",
+    company_website: data.company_website || "",
+    website: data.company_website || "",
     logo_url: data.logo_url || "",
     document_brand_primary: data.document_brand_primary || null,
     document_brand_secondary: data.document_brand_secondary || null,
@@ -73,11 +75,22 @@ async function loadOwnerProfile(supabase, ownerId) {
   };
 }
 
+async function loadBanking(supabase, bankingDetailId) {
+  const id = String(bankingDetailId || "").trim();
+  if (!id) return null;
+  const { data } = await supabase
+    .from("banking_details")
+    .select("bank_name, account_name, account_number, routing_number, branch_code, swift_code, additional_info")
+    .eq("id", id)
+    .maybeSingle();
+  return data || null;
+}
+
 async function loadClient(supabase, clientId) {
   if (!clientId) return null;
   const { data } = await supabase
     .from("clients")
-    .select("name, email, address, city, state, zip")
+    .select("name, email, phone, address, city, state, zip, contact_person")
     .eq("id", clientId)
     .maybeSingle();
   return data || null;
@@ -129,7 +142,7 @@ export async function handlePublicQuoteGet(req, res) {
     const { data: quoteRow, error } = await supabase
       .from("quotes")
       .select(
-        "id, org_id, quote_number, created_at, valid_until, status, subtotal, tax_rate, tax_amount, discount_type, discount_value, discount_amount, total_amount, vat_mode, currency, notes, terms_conditions, project_title, client_id, created_by, document_brand_primary, document_brand_secondary, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_phone, owner_vat_number, owner_currency"
+        "id, org_id, quote_number, created_at, valid_until, status, subtotal, tax_rate, tax_amount, discount_type, discount_value, discount_amount, total_amount, vat_mode, currency, notes, terms_conditions, project_title, client_id, created_by, banking_detail_id, document_brand_primary, document_brand_secondary, owner_company_name, owner_company_address, owner_logo_url, owner_email, owner_phone, owner_vat_number, owner_currency"
       )
       .eq("public_share_token", shareToken)
       .maybeSingle();
@@ -152,9 +165,10 @@ export async function handlePublicQuoteGet(req, res) {
       return res.status(500).json({ error: "Failed to load quote items" });
     }
 
-    const [client, owner] = await Promise.all([
+    const [client, owner, banking] = await Promise.all([
       loadClient(supabase, quoteRow.client_id),
       loadOwnerProfile(supabase, quoteRow.created_by),
+      loadBanking(supabase, quoteRow.banking_detail_id),
     ]);
 
     const viewedQuote = await markQuoteViewed(supabase, quoteRow);
@@ -182,6 +196,7 @@ export async function handlePublicQuoteGet(req, res) {
       },
       client,
       owner,
+      banking,
     });
   } catch (e) {
     console.error("[public-quote]", e);
