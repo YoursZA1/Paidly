@@ -27,7 +27,21 @@ describe("mapHubDocumentPdfData", () => {
 
     expect(data.documentTitle).toBe("CONTRACT");
     expect(data.showFinancials).toBe(false);
-    expect(data.partyLabel).toBe("Bill to");
+    expect(data.parties).toEqual([
+      expect.objectContaining({
+        label: "Between",
+        name: "On The Design Agency",
+        role: "Client",
+      }),
+      expect.objectContaining({
+        label: "And",
+        name: "BrandCafé Agency",
+        role: "Service Provider",
+      }),
+    ]);
+    expect(data.parties[0].lines).toContain("onthedesignagency@gmail.com");
+    expect(data.effectiveDateLine).toBe("7 October 2026");
+    expect(data.issuedLabel).toBe("Effective");
     expect(data.client.name).toBe("On The Design Agency");
     expect(data.issuer.name).toBe("BrandCafé Agency");
     expect(data.issuedDateFormatted).toBe("7 October 2026");

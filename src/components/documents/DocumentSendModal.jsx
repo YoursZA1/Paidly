@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Send, Clock } from "lucide-react";
 import { typeLabel } from "@/document-engine";
+import { hubDocumentEmailSubject } from "@/services/DocumentEmailService";
 
 function toLocalDatetimeValue(date) {
   if (!date) return "";
@@ -45,6 +46,7 @@ export default function DocumentSendModal({
   doc,
   defaultRecipientEmail = "",
   defaultRecipientName = "",
+  companyName = "",
   onSend,
 }) {
   const docTypeLabel = typeLabel(doc?.type) || "Document";
@@ -53,18 +55,31 @@ export default function DocumentSendModal({
   const [tab, setTab] = useState("now");
   const [recipientName, setRecipientName] = useState(defaultRecipientName);
   const [recipientEmail, setRecipientEmail] = useState(defaultRecipientEmail);
-  const [subject, setSubject] = useState(
-    () => (doc?.title ? `${docTypeLabel}: ${doc.title}` : docTypeLabel)
+  const [subject, setSubject] = useState(() =>
+    hubDocumentEmailSubject(companyName, isInvoice ? "invoice" : docTypeLabel)
   );
   const [message, setMessage] = useState(
     isInvoice
-      ? "Your invoice is ready. Open it from the link in this email."
-      : "Please find the attached document. Do not hesitate to reach out if you have any questions."
+      ? "Your invoice is ready. Open it with the button below."
+      : `Your ${docTypeLabel.toLowerCase()} is ready — PDF attached.`
   );
   const [attachPdf, setAttachPdf] = useState(!isInvoice);
   const [includeBranding, setIncludeBranding] = useState(true);
   const [scheduledAt, setScheduledAt] = useState(defaultScheduledAt);
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSubject(hubDocumentEmailSubject(companyName, isInvoice ? "invoice" : docTypeLabel));
+    setRecipientName(defaultRecipientName || "");
+    setRecipientEmail(defaultRecipientEmail || "");
+    setMessage(
+      isInvoice
+        ? "Your invoice is ready. Open it with the button below."
+        : `Your ${docTypeLabel.toLowerCase()} is ready — PDF attached.`
+    );
+    setAttachPdf(!isInvoice);
+  }, [open, companyName, defaultRecipientEmail, defaultRecipientName, docTypeLabel, isInvoice]);
 
   const canSend = Boolean(recipientEmail.trim());
   const canSchedule =
@@ -88,6 +103,8 @@ export default function DocumentSendModal({
     try {
       await onSend?.(buildPayload(false));
       onOpenChange(false);
+    } catch {
+      /* The page toasts the failure. Leave this form open. */
     } finally {
       setSending(false);
     }
@@ -99,6 +116,8 @@ export default function DocumentSendModal({
     try {
       await onSend?.(buildPayload(true));
       onOpenChange(false);
+    } catch {
+      /* The page toasts the failure. Leave this form open. */
     } finally {
       setSending(false);
     }

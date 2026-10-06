@@ -33,6 +33,7 @@ const ViewQuote = lazy(() => import("./ViewQuote"));
 const EditQuote = lazy(() => import("./EditQuote"));
 const QuotePDF = lazy(() => import("./QuotePDF"));
 const PublicQuote = lazy(() => import("./PublicQuote"));
+const PublicHubDocument = lazy(() => import("./PublicHubDocument"));
 const ClientPortal = lazy(() => import("./ClientPortal"));
 const RecurringInvoices = lazy(() => import("./RecurringInvoices"));
 const CreateRecurringInvoice = lazy(() => import("./CreateRecurringInvoice"));
@@ -172,6 +173,7 @@ const AUTH_ROUTES = [
     /** Guest-safe PDF + download; uses ?token= (public API) or ?id= when logged in */
     { path: "/InvoicePDF", element: <InvoicePDF /> },
     { path: "/PublicQuote", element: <PublicQuote /> },
+    { path: "/PublicDocument", element: <PublicHubDocument /> },
     { path: "/PublicPayslip", element: <PublicPayslip /> },
     { path: "/leave-approval/:token", element: <PublicLeaveApproval /> },
     { path: "/LeaveApproval/:token", element: <PublicLeaveApproval /> },
@@ -592,6 +594,7 @@ const PUBLIC_LAYOUT_BYPASS_PATTERNS = [
     /^\/pos\/join$/i,
     /^\/publicinvoice$/i,
     /^\/publicquote$/i,
+    /^\/publicdocument$/i,
     /^\/publicpayslip$/i,
     /^\/leave-approval(\/|$)/i,
     /^\/leaveapproval(\/|$)/i,

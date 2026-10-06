@@ -102,6 +102,22 @@ export function mapHubDocumentPdfData(doc, client = null, user = null) {
         ? "End"
         : "Due";
 
+  const isContract = str(doc.type) === "contract";
+  const clientVat = str(clientObj.vat_number) || str(clientObj.tax_id);
+  const clientContactLines = [
+    str(doc.contact_person) || str(clientObj.contact_person) || str(clientObj.contact_name),
+    clientAddress,
+    clientEmail,
+    clientPhone,
+    clientVat ? `VAT ${clientVat}` : "",
+  ].filter(Boolean);
+  const parties = isContract
+    ? [
+        { label: "Between", name: clientName, role: "Client", lines: clientContactLines },
+        { label: "And", name: issuerName, role: "Service Provider", lines: [] },
+      ].filter((party) => party.name)
+    : null;
+
   const body = str(doc.body);
   const sections = [];
   for (const field of profile?.fields || []) {
@@ -137,7 +153,10 @@ export function mapHubDocumentPdfData(doc, client = null, user = null) {
     statusLabel: statusLabel(doc.status),
     headline: str(doc.title),
     showFinancials: financial,
-    partyLabel: "Bill to",
+    partyLabel: isContract ? "Contract for" : "Bill to",
+    parties,
+    issuedLabel: isContract ? "Effective" : "Issued",
+    effectiveDateLine: isContract && formatDisplayDate(issuedRaw) ? formatDisplayDate(issuedRaw) : "",
     sections,
     issuer: {
       name: issuerName,

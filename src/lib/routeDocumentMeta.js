@@ -57,6 +57,7 @@ const TITLE_OVERRIDES = {
   resetpassword: "Choose a new password",
   publicinvoice: "Invoice",
   publicquote: "Quote",
+  publicdocument: "Document",
   publicpayslip: "Payslip",
   view: "Invoice",
   "leave-approval": "Leave approval",

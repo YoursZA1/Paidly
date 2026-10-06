@@ -4,13 +4,34 @@
  * Uses the existing `send-invoice-email` Supabase Edge Function (Resend).
  */
 
-import { getStableSession } from "@/core/auth/SessionCoordinator";
-import { buildBrandedEmailDocumentHtml } from "@/utils/brandedEmailTemplates";
+import { buildBrandedEmailDocumentHtml, measureEmailLogo } from "@/utils/brandedEmailTemplates";
 import { generatePdfBlobFromElement } from "@/utils/generatePdfFromElement";
 import { waitUntilElementReady } from "@/lib/documentPdf/waitForPdfDocumentReady";
-import { resolveDocumentBrandColors } from "@/utils/documentBrandColors";
+import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { typeLabel } from "@/document-engine";
-import { escapeHtml } from "@/utils/htmlSecurity";
+import { escapeHtml, sanitizeHttpUrl } from "@/utils/htmlSecurity";
+import { getLogo } from "@/services/AssetService";
+import { buildViewDocumentButtonHtml } from "@/utils/shareEmailHtml";
+import { dispatchDocumentEmail } from "@/document-engine/send/email";
+import { supabase } from "@/lib/supabaseClient";
+
+async function ensureHubShareToken(doc) {
+  const existing = String(doc?.public_share_token || "").trim();
+  if (existing) return existing;
+  if (!doc?.id) return "";
+  const token = crypto.randomUUID();
+  const { error } = await supabase
+    .from("documents")
+    .update({ public_share_token: token })
+    .eq("id", doc.id);
+  if (error) return "";
+  return token;
+}
+
+function hubShareUrl(token) {
+  if (!token || typeof window === "undefined") return "";
+  return `${window.location.origin}/PublicDocument?token=${encodeURIComponent(token)}`;
+}
 
 function pdfBlobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -25,53 +46,74 @@ function pdfBlobToBase64(blob) {
   });
 }
 
-/**
- * Build the inner HTML for the document email body.
- */
-function buildDocumentEmailInnerHtml({
-  docTypeLabel,
-  documentNumber,
-  title,
+/** Same shell as invoice and quote emails: summary, Paidly orange button, company logo. */
+export function generateHubDocumentEmailHtml({
+  doc,
+  recipientName,
+  company,
   message,
-  companyName,
+  shareUrl = "",
+  includePdf = true,
+  logoBox = null,
 }) {
-  const safeType = escapeHtml(docTypeLabel || "Document");
-  const safeNum = documentNumber ? escapeHtml(`#${documentNumber}`) : "";
-  const safeTitle = title ? escapeHtml(title) : "";
-  const safeMsg = message
-    ? message
-        .split("\n")
-        .map((l) => `<p style="margin:0 0 8px;">${escapeHtml(l)}</p>`)
-        .join("")
-    : "";
-  const safeCompany = escapeHtml(companyName || "");
+  const docTypeLabel = typeLabel(doc?.type) || "Document";
+  const companyName = company?.company_name || "Your Company";
+  const number = String(doc?.document_number || "").trim();
+  const title = String(doc?.title || "").trim();
+  const primary =
+    parseDocumentBrandHex(doc?.document_brand_primary) ||
+    parseDocumentBrandHex(company?.document_brand_primary) ||
+    "#f24e00";
+  const secondary =
+    parseDocumentBrandHex(doc?.document_brand_secondary) ||
+    parseDocumentBrandHex(company?.document_brand_secondary) ||
+    "#ff7c00";
+  const rawLogo = company?.logo_url || company?.company_logo_url || "";
+  const resolvedLogo = rawLogo ? getLogo(rawLogo) : "";
+  const logoUrl = resolvedLogo && resolvedLogo.startsWith("https://") ? resolvedLogo : "";
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  const safeCta = shareUrl ? sanitizeHttpUrl(shareUrl, base) : "";
+  const intro = String(message || "").trim()
+    || (includePdf
+      ? `Your ${docTypeLabel.toLowerCase()} is ready — PDF attached.`
+      : `Your ${docTypeLabel.toLowerCase()} is ready. Open it with the button below.`);
 
-  return `
-    <p style="margin:0 0 16px;font-size:15px;color:#18181b;line-height:1.6;">
-      Hi${safeTitle ? ` ${safeTitle},` : ","}
-    </p>
-    ${
-      safeMsg ||
-      `<p style="margin:0 0 16px;font-size:15px;color:#18181b;line-height:1.6;">
-        Please find your ${safeType.toLowerCase()}${safeNum ? ` ${safeNum}` : ""} attached.
-      </p>`
-    }
-    ${
-      safeNum
-        ? `<table role="presentation" width="100%" style="background:#f4f4f5;border-radius:8px;padding:16px;margin:0 0 20px;">
-        <tr>
-          <td>
-            <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#71717a;">${safeType}</p>
-            <p style="margin:4px 0 0;font-size:18px;font-weight:700;color:#18181b;">${safeNum}</p>
-          </td>
-        </tr>
-      </table>`
-        : ""
-    }
-    <p style="margin:0;font-size:13px;color:#71717a;">
-      If you have any questions, please reply to this email or contact ${safeCompany ? `<strong>${safeCompany}</strong>` : "us"} directly.
-    </p>
+  const innerHtml = `
+      <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;">Dear ${escapeHtml(recipientName || "there")},</p>
+      <p style="margin:0 0 20px;color:#52525b;line-height:1.6;">${escapeHtml(intro)}</p>
+      <table role="presentation" width="100%" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;margin:0 0 20px;">
+        <tr><td style="padding:16px 18px;">
+          <p style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;">${escapeHtml(docTypeLabel)} summary</p>
+          <table role="presentation" width="100%" style="font-size:14px;color:#18181b;">
+            ${number ? `<tr><td style="padding:4px 0;color:#71717a;">Number</td><td align="right" style="font-weight:600;">${escapeHtml(number)}</td></tr>` : ""}
+            ${title ? `<tr><td style="padding:4px 0;color:#71717a;">Title</td><td align="right" style="font-weight:600;">${escapeHtml(title)}</td></tr>` : ""}
+          </table>
+        </td></tr>
+      </table>
+      ${safeCta ? buildViewDocumentButtonHtml(safeCta, `View ${docTypeLabel}`) : ""}
+      <p style="margin:0;color:#71717a;font-size:13px;line-height:1.55;">We look forward to working with you.</p>
   `;
+
+  return buildBrandedEmailDocumentHtml({
+    preheader: [docTypeLabel, number, title].filter(Boolean).join(" · "),
+    title: docTypeLabel,
+    subtitle: number ? `#${number}` : title,
+    innerHtml,
+    companyName,
+    footerNote: "This is an automated message from your supplier.",
+    primaryHex: primary,
+    secondaryHex: secondary,
+    logoUrl,
+    logoWidth: logoBox?.width,
+    logoHeight: logoBox?.height,
+  });
+}
+
+/** Inbox subject, same shape as "{company name} invoice". */
+export function hubDocumentEmailSubject(companyName, docTypeLabel) {
+  const name = String(companyName || "").trim() || "Paidly";
+  const label = String(docTypeLabel || "document").trim().toLowerCase();
+  return `${name} ${label}`;
 }
 
 /**
@@ -98,51 +140,23 @@ export async function sendDocumentEmail({
   includePdf = true,
   workspace = null,
 }) {
-  const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
-  const supabaseUrl = rawSupabaseUrl.replace(/\.supabase\.com$/i, ".supabase.co");
-  if (!supabaseUrl) throw new Error("Supabase URL is not configured.");
-
-  const session = await getStableSession();
-  const accessToken = session?.access_token;
-  if (!accessToken) throw new Error("You must be logged in to send emails.");
-
   const docTypeLabel = typeLabel(doc?.type) || "Document";
   const documentNumber = doc?.document_number || null;
-  const title = doc?.title || null;
-  const companyName =
-    workspace?.company_name || doc?.company_name || "Your Company";
+  const companyName = workspace?.company_name || doc?.company_name || "Your Company";
+  const rawLogo = workspace?.logo_url || workspace?.company_logo_url || "";
+  const resolvedLogo = rawLogo ? getLogo(rawLogo) : "";
+  const logoBox = await measureEmailLogo(resolvedLogo);
 
-  const { primary: primaryHex, secondary: secondaryHex } =
-    resolveDocumentBrandColors(workspace);
-
-  const logoUrl =
-    workspace?.logo_url ||
-    workspace?.company_logo_url ||
-    null;
-
-  const emailSubject =
-    subject?.trim() ||
-    [docTypeLabel, documentNumber ? `#${documentNumber}` : null, title]
-      .filter(Boolean)
-      .join(" · ");
-
-  const innerHtml = buildDocumentEmailInnerHtml({
-    docTypeLabel,
-    documentNumber,
-    title: recipientName || null,
-    message: message?.trim() || null,
-    companyName,
-  });
-
-  const html = buildBrandedEmailDocumentHtml({
-    title: emailSubject,
-    subtitle: title || undefined,
-    innerHtml,
-    companyName,
-    primaryHex,
-    secondaryHex,
-    logoUrl: logoUrl || "",
-    footerNote: `Sent by ${companyName} via Paidly.`,
+  const emailSubject = subject?.trim() || hubDocumentEmailSubject(companyName, docTypeLabel);
+  const shareToken = await ensureHubShareToken(doc);
+  const html = generateHubDocumentEmailHtml({
+    doc,
+    recipientName,
+    company: workspace,
+    message,
+    shareUrl: hubShareUrl(shareToken),
+    includePdf,
+    logoBox,
   });
 
   let pdfBase64 = null;
@@ -157,34 +171,19 @@ export async function sendDocumentEmail({
     pdfBase64 = await pdfBlobToBase64(blob);
   }
 
-  const body = {
+  await dispatchDocumentEmail({
+    pdfBase64: pdfBase64 || undefined,
     email: recipientEmail.trim(),
     subject: emailSubject,
     html,
-    ...(pdfBase64 ? { pdfBase64, filename } : {}),
-  };
-
-  const res = await fetch(
-    `${supabaseUrl}/functions/v1/send-invoice-email`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(body),
-    }
-  );
-
-  if (!res.ok) {
-    let details = "";
-    try {
-      details = await res.text();
-    } catch {
-      details = "";
-    }
-    throw new Error(details || `Email send failed (${res.status}).`);
-  }
+    filename: filename || undefined,
+    invoiceNum: documentNumber || doc?.id || docTypeLabel,
+    fromName: companyName,
+    clientName: recipientName || "there",
+    amountDue: "",
+    dueDate: "",
+    idempotencyKey: crypto.randomUUID(),
+  });
 
   return { success: true, sentAt: new Date().toISOString() };
 }

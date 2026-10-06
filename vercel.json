@@ -105,6 +105,10 @@
       "destination": "/api/public-share?doc=quote&op=get"
     },
     {
+      "source": "/api/public-document",
+      "destination": "/api/public-share?doc=document&op=get"
+    },
+    {
       "source": "/api/public-quote/decide",
       "destination": "/api/public-share?doc=quote&op=decide"
     },

@@ -110,7 +110,7 @@ export default function PaidlyCleanDocument({ data }) {
             {data.number || "—"}
           </div>
           {data.issuedDateFormatted ? (
-            <MetaRow label="Issued" value={data.issuedDateFormatted} />
+            <MetaRow label={data.issuedLabel || "Issued"} value={data.issuedDateFormatted} />
           ) : null}
           {data.dueDateFormatted ? (
             <MetaRow label={data.dueLabel || "Due"} value={data.dueDateFormatted} />
@@ -132,7 +132,34 @@ export default function PaidlyCleanDocument({ data }) {
         </div>
       </header>
 
-      {client.name || clientLines.length > 0 ? (
+      {Array.isArray(data.parties) && data.parties.length > 0 ? (
+        <section style={{ marginBottom: 24 }}>
+          {data.parties.map((party) => (
+            <div key={party.label} style={{ marginBottom: 14 }}>
+              <SectionLabel color={accent}>{party.label}</SectionLabel>
+              {party.name ? (
+                <div style={{ fontSize: "11px", fontWeight: 700, marginBottom: 2 }}>{party.name}</div>
+              ) : null}
+              {(party.lines || []).map((line) => (
+                <div key={line} style={{ color: SECONDARY, whiteSpace: "pre-line" }}>
+                  {line}
+                </div>
+              ))}
+              {party.role ? (
+                <div style={{ marginTop: 2, color: SECONDARY, fontStyle: "italic" }}>
+                  {`(hereinafter referred to as the "${party.role}")`}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          {data.effectiveDateLine ? (
+            <div>
+              <span style={{ fontWeight: 700 }}>Effective Date: </span>
+              {data.effectiveDateLine}
+            </div>
+          ) : null}
+        </section>
+      ) : client.name || clientLines.length > 0 ? (
         <section style={{ marginBottom: 24 }}>
           <SectionLabel color={accent}>{partyLabel}</SectionLabel>
           {client.name ? (

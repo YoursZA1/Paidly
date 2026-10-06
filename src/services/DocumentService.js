@@ -1763,31 +1763,22 @@ export const DocumentService = {
     if (!email) throw new Error("Recipient email is required.");
 
     const isScheduled = Boolean(scheduled_at);
-    const sendStatus = isScheduled ? "scheduled" : "sent";
 
-    // Insert send record (graceful if table not yet migrated)
-    const { error: sendErr } = await supabase
-      .from("document_sends")
-      .insert({
+    // The live document_sends table only has the invoice/quote columns.
+    // A missing column must not block the email that already went out.
+    const sendType = existing.type === "quote" ? "quote" : existing.type === "invoice" ? "invoice" : null;
+    if (sendType) {
+      const { error: sendErr } = await supabase.from("document_sends").insert({
         org_id: orgId,
+        document_type: sendType,
         document_id: documentId,
-        recipient_name: recipient_name || null,
-        recipient_email: email,
-        subject: subject || null,
-        message: message || null,
-        include_pdf: Boolean(include_pdf !== false),
-        include_branding: Boolean(include_branding !== false),
-        scheduled_at: scheduled_at || null,
-        status: sendStatus,
+        client_id: existing.client_id || null,
         channel: "email",
-        created_by: userId,
+        sent_at: new Date().toISOString(),
       });
-
-    if (sendErr && !isSupabaseMissingRelationError(sendErr)) {
-      throw throwWithCause(
-        getSupabaseErrorMessage(sendErr, "Failed to record send"),
-        sendErr
-      );
+      if (sendErr && !isSupabaseMissingRelationError(sendErr) && !isSupabaseMissingColumnError(sendErr)) {
+        console.warn("document_sends record skipped:", sendErr.message || sendErr);
+      }
     }
 
     // Only advance document status immediately for non-scheduled sends
@@ -1822,7 +1813,10 @@ export const DocumentService = {
       payload: {
         recipient_email: email,
         recipient_name: recipient_name || null,
+        subject: subject || null,
+        message: message || null,
         include_pdf: Boolean(include_pdf !== false),
+        include_branding: Boolean(include_branding !== false),
         ...(isScheduled ? { scheduled_at } : {}),
       },
     });

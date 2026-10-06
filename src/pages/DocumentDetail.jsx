@@ -606,28 +606,24 @@ export default function DocumentDetailPage() {
     try {
       const isScheduled = Boolean(payload.scheduled_at);
 
-      if (!isScheduled && payload.include_pdf !== false) {
-        try {
-          await sendDocumentEmail({
-            pdfElement: hiddenPdfRef.current,
-            doc: {
-              ...doc,
-              title,
-              body,
-              tax_rate: Number(taxRate) || 0,
-              discount_amount: Number(discount) || 0,
-              document_items: toPersistItems(lines).map((it, i) => ({ ...it, id: `line-${i}` })),
-            },
-            recipientEmail: payload.recipient_email,
-            recipientName: payload.recipient_name,
-            subject: payload.subject,
-            message: payload.message,
-            includePdf: true,
-            workspace: authUser,
-          });
-        } catch (emailErr) {
-          console.warn("[DocumentDetail] email send failed:", emailErr?.message);
-        }
+      if (!isScheduled) {
+        await sendDocumentEmail({
+          pdfElement: hiddenPdfRef.current,
+          doc: {
+            ...doc,
+            title,
+            body,
+            tax_rate: Number(taxRate) || 0,
+            discount_amount: Number(discount) || 0,
+            document_items: toPersistItems(lines).map((it, i) => ({ ...it, id: `line-${i}` })),
+          },
+          recipientEmail: payload.recipient_email,
+          recipientName: payload.recipient_name,
+          subject: payload.subject,
+          message: payload.message,
+          includePdf: payload.include_pdf !== false,
+          workspace: authUser,
+        });
       }
 
       await DocumentService.sendToClient(documentId, payload);
@@ -1634,6 +1630,7 @@ export default function DocumentDetailPage() {
         doc={doc}
         defaultRecipientEmail={defaultRecipientEmail}
         defaultRecipientName={defaultRecipientName}
+        companyName={authUser?.company_name || ""}
         onSend={handleSendToClient}
       />
 
