@@ -380,6 +380,41 @@ describe("demo restrictions (database-enforced)", () => {
     expect(r.ok, r.message).toBe(true);
   });
 
+  it("deleting a client clears the document link and removes relationship history", async () => {
+    const client = await one(
+      `insert into public.clients (org_id, name, email) values ($1, 'Delete Me', 'delete-me@realco.test') returning id`,
+      [ORG.real]
+    );
+    const note = await one(
+      `insert into public.client_notes (org_id, client_id, body) values ($1, $2, 'Internal note') returning id`,
+      [ORG.real, client.id]
+    );
+    const event = await one(
+      `insert into public.document_events (org_id, source_kind, source_id, event_type, client_id, actor_type, payload)
+       values ($1, 'invoice', $2, 'sent', $3, 'user', '{}'::jsonb) returning id`,
+      [ORG.real, ROW.realInvoice, client.id]
+    );
+    await one(
+      `insert into public.client_relationship_events (org_id, client_id, event_type, actor_type, note_id)
+       values ($1, $2, 'note_added', 'user', $3)`,
+      [ORG.real, client.id, note.id]
+    );
+
+    const removed = await as(U.owner, `delete from public.clients where id = $1`, [client.id]);
+    expect(removed.ok, removed.message).toBe(true);
+    expect(await one(`select count(*)::int n from public.clients where id = $1`, [client.id])).toMatchObject({ n: 0 });
+    expect(await one(`select client_id from public.document_events where id = $1`, [event.id])).toMatchObject({ client_id: null });
+    expect(await one(`select count(*)::int n from public.client_relationship_events where client_id = $1`, [client.id])).toMatchObject({ n: 0 });
+    expect(await one(`select count(*)::int n from public.client_notes where client_id = $1`, [client.id])).toMatchObject({ n: 0 });
+
+    await expect(
+      db.query(`update public.document_events set event_type = 'opened' where id = $1`, [event.id])
+    ).rejects.toThrow(/immutable/);
+    await expect(
+      db.query(`delete from public.client_relationship_events where org_id = $1`, [ORG.real])
+    ).rejects.toThrow(/immutable/);
+  });
+
   it("the append-only audit exception only applies inside a demo purge of a demo org", async () => {
     const del = await as(U.owner, `delete from public.document_events where org_id = $1`, [ORG.real]);
     expect(del.ok ? del.affectedRows : 0).toBe(0);

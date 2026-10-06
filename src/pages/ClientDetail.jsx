@@ -156,8 +156,8 @@ export default function ClientDetail() {
         } catch (error) {
             console.error("Error deleting client:", error);
             toast({
-                title: "✗ Error",
-                description: "Failed to delete client. Please try again.",
+                title: "Could not delete client",
+                description: error?.message || "Failed to delete client. Please try again.",
                 variant: "destructive"
             });
         } finally {

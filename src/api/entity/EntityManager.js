@@ -1886,6 +1886,7 @@ export class EntityManager {
       this.saveToStorage();
 
       // Optionally sync to Supabase if authenticated
+      let clientDeleteError = null;
       try {
         const { data: sessionData } = await getSessionWithRetry();
         if (sessionData?.session?.user && id.includes('-')) {
@@ -1921,12 +1922,21 @@ export class EntityManager {
             const { error: deleteError } = await deleteQuery;
             if (deleteError) {
               console.warn(`Failed to delete ${this.entityName} from Supabase:`, getSupabaseErrorMessage(deleteError, "Delete failed"));
-              alertSupabaseWriteFailure(deleteError, `Delete ${this.entityName} failed`);
+              if (supabaseTable === "clients") {
+                clientDeleteError = deleteError;
+              } else {
+                alertSupabaseWriteFailure(deleteError, `Delete ${this.entityName} failed`);
+              }
             }
           }
         }
       } catch (e) {
         console.warn(`Failed to delete ${this.entityName} from Supabase:`, getSupabaseErrorMessage(e, "Delete failed"));
+        if (this.entityName === "Client" && !clientDeleteError) clientDeleteError = e;
+      }
+
+      if (clientDeleteError) {
+        throw new Error(getSupabaseErrorMessage(clientDeleteError, "Could not delete this client."));
       }
 
       this.notifySubscribers();
