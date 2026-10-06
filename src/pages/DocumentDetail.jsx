@@ -670,8 +670,8 @@ export default function DocumentDetailPage() {
     if (!documentId) return;
     setSaving(true);
     try {
-      await DocumentService.update(documentId, { client_id: clientId });
-      await load();
+      await DocumentService.updateFields(documentId, { client_id: clientId });
+      setDoc((current) => (current ? { ...current, client_id: clientId } : current));
     } catch (e) {
       toast({ variant: "destructive", title: "Could not update client", description: e?.message });
     } finally {
@@ -683,9 +683,8 @@ export default function DocumentDetailPage() {
     if (!documentId) return;
     setSaving(true);
     try {
-      await DocumentService.update(documentId, { assigned_user_id: assignedUserId });
-      await load();
-      toast({ title: "Assignee updated" });
+      await DocumentService.updateFields(documentId, { assigned_user_id: assignedUserId });
+      setDoc((current) => (current ? { ...current, assigned_user_id: assignedUserId } : current));
     } catch (e) {
       toast({ variant: "destructive", title: "Could not assign", description: e?.message });
     } finally {

@@ -799,7 +799,7 @@ export const DocumentService = {
       throw throwWithCause(getSupabaseErrorMessage(error, "Failed to create document"), error);
     }
     await replaceDocumentItems(doc.id, rows);
-    await insertDocumentEvent({
+    await insertDocumentEventBestEffort({
       orgId,
       documentId: doc.id,
       userId,
@@ -1006,7 +1006,7 @@ export const DocumentService = {
       };
     }
 
-    await insertDocumentEvent({
+    await insertDocumentEventBestEffort({
       orgId,
       documentId,
       userId,
@@ -1014,6 +1014,37 @@ export const DocumentService = {
       payload: eventPayload,
     });
     return this.get(documentId);
+  },
+
+  /**
+   * Update one or two header fields (client, assignee) without rewriting the document
+   * or reloading its items and history.
+   * @param {string} documentId
+   * @param {{ client_id?: string|null, assigned_user_id?: string|null }} fields
+   */
+  async updateFields(documentId, fields = {}) {
+    const { userId, orgId } = await getActorContext();
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(fields, "client_id")) {
+      patch.client_id = fields.client_id || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(fields, "assigned_user_id")) {
+      patch.assigned_user_id = fields.assigned_user_id || null;
+    }
+    if (!Object.keys(patch).length) return patch;
+    try {
+      await updateDocumentRow(documentId, orgId, patch);
+    } catch (e) {
+      throw throwWithCause(getSupabaseErrorMessage(e, "Failed to update document"), e);
+    }
+    await insertDocumentEventBestEffort({
+      orgId,
+      documentId,
+      userId,
+      eventType: DOCUMENT_EVENT_TYPES.updated,
+      payload: { keys: Object.keys(patch) },
+    });
+    return patch;
   },
 
   /**
@@ -1175,7 +1206,7 @@ export const DocumentService = {
     if (!full) return null;
     const [clientRes, attachments, comments, linkedDocuments] = await Promise.all([
       full.client_id
-        ? supabase.from("clients").select("id, name, email, company").eq("id", full.client_id).maybeSingle()
+        ? supabase.from("clients").select("id, name, email").eq("id", full.client_id).maybeSingle()
         : Promise.resolve({ data: null }),
       this.listAttachments(documentId),
       this.listComments(documentId),
@@ -1874,9 +1905,7 @@ export const DocumentService = {
     const { orgId } = await getActorContext();
     const { data, error } = await supabase
       .from("document_sends")
-      .select(
-        "id, recipient_name, recipient_email, subject, sent_at, opened_at, downloaded_at, scheduled_at, status, channel"
-      )
+      .select("*")
       .eq("document_id", documentId)
       .eq("org_id", orgId)
       .order("sent_at", { ascending: false });

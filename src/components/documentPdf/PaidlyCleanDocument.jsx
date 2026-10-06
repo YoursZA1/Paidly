@@ -45,7 +45,13 @@ export default function PaidlyCleanDocument({ data }) {
   const amountPaid = Number(data.amount_paid) || 0;
   const balanceDue =
     data.balance_due != null && data.balance_due !== "" ? Number(data.balance_due) : null;
-  const footerLeft = [issuer.name, data.number ? `Invoice ${data.number}` : ""].filter(Boolean).join(" · ");
+  const showFinancials = data.showFinancials !== false;
+  const sections = Array.isArray(data.sections) ? data.sections : [];
+  const partyLabel = data.partyLabel || "Bill to";
+  const footerLeft =
+    data.footerLabel != null
+      ? data.footerLabel
+      : [issuer.name, data.number ? `Invoice ${data.number}` : ""].filter(Boolean).join(" · ");
 
   return (
     <article
@@ -128,7 +134,7 @@ export default function PaidlyCleanDocument({ data }) {
 
       {client.name || clientLines.length > 0 ? (
         <section style={{ marginBottom: 24 }}>
-          <SectionLabel color={accent}>Bill to</SectionLabel>
+          <SectionLabel color={accent}>{partyLabel}</SectionLabel>
           {client.name ? (
             <div style={{ fontSize: "11px", fontWeight: 700, marginBottom: 2 }}>{client.name}</div>
           ) : null}
@@ -140,6 +146,18 @@ export default function PaidlyCleanDocument({ data }) {
         </section>
       ) : null}
 
+      {data.headline ? (
+        <h2 style={{ margin: "0 0 16px", fontSize: "15px", fontWeight: 700, lineHeight: 1.3 }}>{data.headline}</h2>
+      ) : null}
+
+      {sections.map((section) => (
+        <section key={`${section.title}:${section.body}`} style={{ marginBottom: 16 }}>
+          {section.title ? <div style={notesTitle}>{section.title}</div> : null}
+          <div style={{ color: TEXT, whiteSpace: "pre-line" }}>{section.body}</div>
+        </section>
+      ))}
+
+      {showFinancials ? (
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
         <thead>
           <tr style={{ background: HEADER_BG, borderBottom: `1px solid ${BORDER_STRONG}` }}>
@@ -193,8 +211,9 @@ export default function PaidlyCleanDocument({ data }) {
           ) : null}
         </div>
       </div>
+      ) : null}
 
-      {bankingRows.length > 0 ? (
+      {showFinancials && bankingRows.length > 0 ? (
         <section style={{ marginBottom: 24 }}>
           <SectionLabel color={accent}>Payment details</SectionLabel>
           {bankingRows.map((row) => (
