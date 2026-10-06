@@ -5,7 +5,6 @@
 
 import { Invoice, Quote, Client, BankingDetail, DocumentSend, MessageLog, User } from '@/api/entities';
 import { supabase } from '@/lib/supabaseClient';
-import { generateInvoiceDocumentPdf } from '@/document-engine/pdf/invoice';
 import { generateQuoteDocumentPdf } from '@/document-engine/pdf/quote';
 import { dispatchDocumentEmail, userFacingDocumentSendError } from '@/document-engine/send/email';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
@@ -18,7 +17,7 @@ import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from '@/lib/sessionTimeoutControls';
 import { isValidEmail } from '@/utils/inputSanitization';
 import { createDocumentContext } from '@/document-engine/core/documentContext';
-import { loadInvoiceDocumentInputs, withSavedClient } from '@/services/invoiceDocumentInputs';
+import { withSavedClient } from '@/services/invoiceDocumentInputs';
 import { INVOICE_STATUS, normalizeInvoiceStatus } from '@shared/commercial/documentStatuses.js';
 
 /**
@@ -464,49 +463,14 @@ export async function sendInvoicePdfEmailToClient(invoice, client, options = {})
     const sentAt = new Date().toISOString();
 
     if (!alreadyDelivered) {
-      const loaded = await loadInvoiceDocumentInputs({
-        invoice: invoiceForSend,
-        client,
-        user: userData,
-      });
-      const invoiceForPdf = loaded.invoice;
-      const pdfClient = loaded.client;
-      const bankingRow = loaded.bankingDetail;
-
-      let artifact;
-      try {
-        const invoiceContext = createDocumentContext({
-          documentType: 'invoice',
-          documentId: invoiceForPdf.id,
-          businessId: invoiceForPdf.org_id,
-          clientId: pdfClient?.id || invoiceForPdf.client_id,
-          documentNumber: invoiceForPdf.invoice_number || invoiceForPdf.reference_number,
-          record: invoiceForPdf,
-          client: pdfClient,
-          user: userData,
-          bankingDetail: bankingRow,
-        });
-        artifact = await generateInvoiceDocumentPdf(invoiceContext);
-      } catch (pdfErr) {
-        console.error('Invoice PDF generation failed:', pdfErr);
-        throw new Error('Invoice PDF generation failed. Please try again.');
-      }
-      const pdfBase64 = await pdfBlobToBase64(artifact.blob);
-      if (!pdfBase64) {
-        throw new Error('Invoice PDF generation failed. Please try again.');
-      }
-
       const subject = invoiceEmailSubject(
         invoiceForSend.owner_company_name || userData?.company_name
       );
-      const filename = `invoice-${invoiceForSend.invoice_number || invoiceForSend.reference_number || invoiceForSend.id || 'invoice'}.pdf`;
 
       await dispatchInvoiceEmailViaCanonicalPath({
-        pdfBase64,
         email,
         subject,
         html,
-        filename,
         invoiceNum: invoiceForSend.invoice_number || invoiceForSend.reference_number || invoiceForSend.id,
         fromName: userData?.company_name || userData?.full_name || 'Paidly',
         clientName: client?.name || 'there',

@@ -128,7 +128,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Mail className="w-5 h-5" />
-                        Email & PDF Preview
+                        Email preview
                     </DialogTitle>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Badge variant="outline">To: {client.email}</Badge>
@@ -156,7 +156,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                             <CardHeader>
                                 <CardTitle className="text-lg">Email Content</CardTitle>
                                 <p className="text-sm text-gray-600">
-                                    Includes secure link to view and download PDF
+                                    Includes a link to open the invoice
                                 </p>
                             </CardHeader>
                             <CardContent>
@@ -171,7 +171,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                         <Card>
                             <CardHeader>
                                 <CardTitle className="text-lg">PDF Preview</CardTitle>
-                                <p className="text-sm text-gray-600">This is what your client will see in the PDF attachment</p>
+                                <p className="text-sm text-gray-600">This is the invoice your client opens from the email</p>
                             </CardHeader>
                             <CardContent>
                                 <div className="border rounded-lg p-6 bg-white max-h-96 overflow-y-auto" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>

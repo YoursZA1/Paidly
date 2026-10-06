@@ -43,9 +43,11 @@ export default async function sendInvoiceHandler(req, res) {
     );
     if (!parsed) return;
 
-    const pdfCheck = validateBase64Pdf(parsed.base64PDF);
-    if (!pdfCheck.ok) {
-      return res.status(400).json({ error: pdfCheck.error || "Invalid document" });
+    if (parsed.base64PDF) {
+      const pdfCheck = validateBase64Pdf(parsed.base64PDF);
+      if (!pdfCheck.ok) {
+        return res.status(400).json({ error: pdfCheck.error || "Invalid document" });
+      }
     }
 
     const invNum = sanitizeOneLine(parsed.invoiceNum, 120);

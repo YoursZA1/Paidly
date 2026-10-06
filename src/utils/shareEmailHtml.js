@@ -12,13 +12,16 @@ function viewLabel(itemType) {
   return `View ${raw.charAt(0).toUpperCase()}${raw.slice(1)}`;
 }
 
+/** Paidly orange. A solid fill survives email clients that strip gradients. */
+const PAIDLY_BUTTON = "#f24e00";
+
 /** Email-safe button. bgcolor covers clients that drop the style attribute. */
 export function buildViewDocumentButtonHtml(shareUrl, label = "View Quote") {
   const safeUrl = escapeHtml(shareUrl);
   const safeLabel = escapeHtml(label);
   return `<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:28px auto;">
     <tr>
-      <td align="center" bgcolor="#4f46e5" style="background-color:#4f46e5;border-radius:8px;">
+      <td align="center" bgcolor="${PAIDLY_BUTTON}" style="background-color:${PAIDLY_BUTTON};border-radius:8px;">
         <a href="${safeUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-family:Arial,sans-serif;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;">${safeLabel}</a>
       </td>
     </tr>
@@ -52,7 +55,7 @@ export function buildDocumentShareEmailHtml({
         ${buildViewDocumentButtonHtml(shareUrl, viewLabel(itemType))}
         <p style="font-size:14px;color:#71717a;margin:20px 0 0;">
           Or copy this link:<br/>
-          <a href="${safeUrl}" target="_blank" style="color:#4f46e5;word-break:break-all;">${safeUrl}</a>
+          <a href="${safeUrl}" target="_blank" style="color:#f24e00;word-break:break-all;">${safeUrl}</a>
         </p>
       </div>
       <p style="text-align:center;margin:20px 0 0;font-size:12px;color:#a1a1aa;">Sent from ${company}</p>

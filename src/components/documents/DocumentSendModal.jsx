@@ -48,6 +48,7 @@ export default function DocumentSendModal({
   onSend,
 }) {
   const docTypeLabel = typeLabel(doc?.type) || "Document";
+  const isInvoice = String(doc?.type || "").toLowerCase() === "invoice";
 
   const [tab, setTab] = useState("now");
   const [recipientName, setRecipientName] = useState(defaultRecipientName);
@@ -56,9 +57,11 @@ export default function DocumentSendModal({
     () => (doc?.title ? `${docTypeLabel}: ${doc.title}` : docTypeLabel)
   );
   const [message, setMessage] = useState(
-    "Please find the attached document. Do not hesitate to reach out if you have any questions."
+    isInvoice
+      ? "Your invoice is ready. Open it from the link in this email."
+      : "Please find the attached document. Do not hesitate to reach out if you have any questions."
   );
-  const [attachPdf, setAttachPdf] = useState(true);
+  const [attachPdf, setAttachPdf] = useState(!isInvoice);
   const [includeBranding, setIncludeBranding] = useState(true);
   const [scheduledAt, setScheduledAt] = useState(defaultScheduledAt);
   const [sending, setSending] = useState(false);
@@ -151,6 +154,7 @@ export default function DocumentSendModal({
       </div>
 
       <div className="space-y-3 rounded-lg border border-border p-4">
+        {isInvoice ? null : (
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium leading-none">Attach PDF</p>
@@ -160,6 +164,7 @@ export default function DocumentSendModal({
           </div>
           <Switch checked={attachPdf} onCheckedChange={setAttachPdf} />
         </div>
+        )}
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium leading-none">

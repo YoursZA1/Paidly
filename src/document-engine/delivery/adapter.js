@@ -22,7 +22,7 @@ export function resolveDocumentDelivery(contextOrInput, options = {}) {
     path,
     url,
     secure: context.documentType === "payslip",
-    attachPdf: context.documentType !== "payslip",
+    attachPdf: context.documentType !== "payslip" && context.documentType !== "invoice",
   };
 }
 

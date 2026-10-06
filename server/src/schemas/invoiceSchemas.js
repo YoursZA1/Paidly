@@ -30,7 +30,7 @@ const optionalLine = (max) =>
 
 /** Body for `POST /api/send-invoice` (PDF + routing fields). */
 export const sendInvoiceBodySchema = z.object({
-  base64PDF: z.string().min(1, "PDF payload required"),
+  base64PDF: z.string().optional(),
   clientEmail: apiEmailSchema,
   invoiceNum: z.preprocess(
     (v) => (v == null ? "" : String(v).trim()),

@@ -28,10 +28,10 @@ describe("send-email HTML sanitization (shared Vercel + Express)", () => {
     });
     const clean = sanitizeEmailHtmlBody(html);
     expect(clean).toContain("View Quote");
-    expect(clean).toContain("background-color:#4f46e5");
+    expect(clean).toContain("background-color:#f24e00");
     expect(clean).toContain("color:#ffffff");
     expect(clean).toContain("text-decoration:none");
-    expect(clean).toContain("bgcolor=\"#4f46e5\"");
+    expect(clean).toContain("bgcolor=\"#f24e00\"");
     expect(clean).toContain("A PDF copy is attached");
     expect(clean).not.toMatch(/javascript:/i);
 

@@ -74,8 +74,8 @@ serve(async (req) => {
     const html: string | undefined = payload?.html;
     const filename: string | undefined = payload?.filename;
 
-    if (!pdfBase64 || typeof pdfBase64 !== "string") {
-      return new Response("Missing pdfBase64", { status: 400, headers: corsHeaders });
+    if (pdfBase64 != null && typeof pdfBase64 !== "string") {
+      return new Response("Invalid pdfBase64", { status: 400, headers: corsHeaders });
     }
     if (!email || typeof email !== "string") {
       return new Response("Missing email", { status: 400, headers: corsHeaders });
@@ -86,7 +86,7 @@ serve(async (req) => {
 
     // Safety limit: base64 string can be large; reject unexpectedly big payloads.
     // 12,000,000 chars is roughly ~9MB base64-ish; adjust if needed.
-    if (pdfBase64.length > 12_000_000) {
+    if (pdfBase64 && pdfBase64.length > 12_000_000) {
       return new Response("pdfBase64 payload too large", { status: 413, headers: corsHeaders });
     }
 
@@ -103,22 +103,26 @@ serve(async (req) => {
       resendHeaders["Idempotency-Key"] = idempotencyKey;
     }
 
+    const resendPayload: Record<string, unknown> = {
+      from: RESEND_FROM,
+      to: email,
+      subject: emailSubject,
+      html,
+    };
+    if (pdfBase64) {
+      resendPayload.attachments = [
+        {
+          filename: attachmentFilename,
+          content: pdfBase64,
+          contentType: "application/pdf",
+        },
+      ];
+    }
+
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: resendHeaders,
-      body: JSON.stringify({
-        from: RESEND_FROM,
-        to: email,
-        subject: emailSubject,
-        html,
-        attachments: [
-          {
-            filename: attachmentFilename,
-            content: pdfBase64,
-            contentType: "application/pdf",
-          },
-        ],
-      }),
+      body: JSON.stringify(resendPayload),
     });
 
     const resendBody = await resendRes.json().catch(() => ({}));

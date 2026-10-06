@@ -61,7 +61,7 @@ export function generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixe
   const innerHtml = `
       <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;">Dear ${escapeHtml(client.name || "there")},</p>
       <p style="margin:0 0 20px;color:#52525b;line-height:1.6;">
-        Thank you for your business. Your invoice for <strong>${escapeHtml(invoice.project_title || "")}</strong> is ready — PDF attached.
+        Thank you for your business. Your invoice for <strong>${escapeHtml(invoice.project_title || "")}</strong> is ready. Open it with the button below.
       </p>
       <table role="presentation" width="100%" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;margin:0 0 20px;">
         <tr><td style="padding:16px 18px;">

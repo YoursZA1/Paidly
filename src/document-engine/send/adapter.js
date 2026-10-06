@@ -69,7 +69,8 @@ export async function sendDocument(input = {}, deps = {}) {
   const attachPdf =
     options.attachPdf !== undefined
       ? Boolean(options.attachPdf)
-      : context.documentType !== DOCUMENT_ENGINE_TYPES.payslip;
+      : context.documentType !== DOCUMENT_ENGINE_TYPES.payslip &&
+        context.documentType !== DOCUMENT_ENGINE_TYPES.invoice;
 
   if (context.documentType === DOCUMENT_ENGINE_TYPES.payslip && attachPdf) {
     throw new DocumentEngineError(

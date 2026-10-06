@@ -102,12 +102,6 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
                 const resolvedLogo = rawLogo ? getLogo(rawLogo) : '';
                 const logoBox = await measureEmailLogo(resolvedLogo);
                 emailBody = generateInvoiceEmailHtml(record, mailClient, profile, shareUrl, '', logoBox);
-                const { buildInvoicePdfAttachment } = await import('@/services/invoiceShareEmail');
-                attachment = await buildInvoicePdfAttachment({
-                    invoice: record,
-                    client: mailClient,
-                    user: profile,
-                });
             } else {
                 if (isQuote) {
                     const { buildQuotePdfAttachment } = await import('@/services/quoteShareEmail');

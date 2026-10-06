@@ -58,23 +58,22 @@ export async function sendInvoiceEmail(
   // Canonical transactional sender (override with RESEND_FROM in env)
   const fromAddress = process.env.RESEND_FROM || "Paidly <invoices@paidly.co.za>";
 
-  // Resend requires raw base64 only; never send data URI prefix.
-  let cleanBase64;
-  if (typeof base64PDF !== "string") {
-    return { success: false, error: "base64PDF must be a string" };
-  }
-  if (base64PDF.includes("base64,")) {
-    const after = base64PDF.split("base64,")[1];
-    cleanBase64 = typeof after === "string" ? after.trim() : "";
-    if (!cleanBase64) {
-      return { success: false, error: "Invalid base64PDF: data URI has no base64 content after 'base64,'" };
+  // Invoice emails are a link only. A PDF is attached when the caller sends one (quotes, receipts).
+  let cleanBase64 = "";
+  if (base64PDF != null && String(base64PDF).trim() !== "") {
+    if (typeof base64PDF !== "string") {
+      return { success: false, error: "base64PDF must be a string" };
     }
-  } else if (base64PDF.startsWith("data:")) {
-    return { success: false, error: "Invalid base64PDF: unexpected data URI format (expected ...base64,content)" };
-  } else {
-    cleanBase64 = base64PDF.trim();
-    if (!cleanBase64) {
-      return { success: false, error: "Missing base64PDF content" };
+    if (base64PDF.includes("base64,")) {
+      const after = base64PDF.split("base64,")[1];
+      cleanBase64 = typeof after === "string" ? after.trim() : "";
+      if (!cleanBase64) {
+        return { success: false, error: "Invalid base64PDF: data URI has no base64 content after 'base64,'" };
+      }
+    } else if (base64PDF.startsWith("data:")) {
+      return { success: false, error: "Invalid base64PDF: unexpected data URI format (expected ...base64,content)" };
+    } else {
+      cleanBase64 = base64PDF.trim();
     }
   }
 
@@ -103,7 +102,7 @@ export async function sendInvoiceEmail(
       })
     : {
         subject: customSubject || `Invoice ${invoiceNum} from ${fromName}`,
-        html: `<strong>Hello,</strong><p>Please find your invoice ${invoiceNum} attached.</p>`,
+        html: `<strong>Hello,</strong><p>Your invoice ${invoiceNum} is ready.</p>`,
       };
   const attachmentName = safeAttachmentFilename(overrides?.filename, `Invoice_${invoiceNum}.pdf`);
 
@@ -113,13 +112,15 @@ export async function sendInvoiceEmail(
       to: [clientEmail],
       subject,
       html,
-      attachments: [
+    };
+    if (cleanBase64) {
+      payload.attachments = [
         {
           content: cleanBase64,
           filename: attachmentName,
         },
-      ],
-    };
+      ];
+    }
     const key = typeof idempotencyKey === "string" ? idempotencyKey.trim().slice(0, 256) : "";
     const result = key
       ? await resend.emails.send(payload, { idempotencyKey: key })
