@@ -34,18 +34,27 @@
   page-break-before: always;
 }
 
+.paidly-doc-page-end {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
 @media screen {
   .paidly-doc-page + .paidly-doc-page {
     margin-top: 16px;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   }
   .paidly-doc-page {
-    min-height: 267mm;
+    /* Stay under the html2pdf content box (267mm) so the footer is not sliced. */
+    min-height: 252mm;
   }
 }
 
 .invoice-pdf-export .paidly-doc-page {
-  min-height: 0 !important;
+  min-height: 252mm !important;
+  height: auto !important;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .invoice-pdf-export .paidly-doc-page + .paidly-doc-page,

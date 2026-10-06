@@ -91,6 +91,8 @@ async function withInvoicePdfElementStyles(element, filename, run) {
   const originalBoxSizing = element.style.boxSizing;
   const originalPadding = element.style.padding;
   const originalBackground = element.style.backgroundColor;
+  let pages = [];
+  let pageStyles = [];
 
   try {
     element.classList.add("invoice-pdf-export");
@@ -104,6 +106,15 @@ async function withInvoicePdfElementStyles(element, filename, run) {
     element.style.boxSizing = "border-box";
     element.style.backgroundColor = "#ffffff";
     element.style.padding = "0";
+    // Keep each preview page inside the PDF page so the footer is not sliced over the brand bar.
+    pages = [...element.querySelectorAll(".paidly-doc-page")];
+    pageStyles = pages.map((page) => page.getAttribute("style"));
+    pages.forEach((page) => {
+      page.style.setProperty("min-height", "252mm", "important");
+      page.style.setProperty("height", "auto", "important");
+      page.style.setProperty("break-inside", "avoid", "important");
+      page.style.setProperty("page-break-inside", "avoid", "important");
+    });
     clampDocLogos(element);
 
     const html2pdf = (await import("html2pdf.js")).default;
@@ -111,6 +122,11 @@ async function withInvoicePdfElementStyles(element, filename, run) {
     return await run(html2pdf, options);
   } finally {
     element.classList.remove("invoice-pdf-export");
+    pages.forEach((page, index) => {
+      const previous = pageStyles[index];
+      if (previous == null) page.removeAttribute("style");
+      else page.setAttribute("style", previous);
+    });
     element.style.width = originalWidth;
     element.style.maxWidth = originalMaxWidth;
     element.style.boxSizing = originalBoxSizing;

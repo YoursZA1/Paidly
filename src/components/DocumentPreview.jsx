@@ -503,14 +503,16 @@ const DocumentPreview = forwardRef(function DocumentPreview(
                 primary={BRAND_PRIMARY}
                 secondary={BRAND_SECONDARY}
               />
-              <PageFooter
-                companyEmail={resolved.company_email}
-                pageIndex={pageIndex}
-                pageCount={pageCount}
-              />
-              {pageIndex === pageCount - 1 ? (
-                <BrandBar primary={BRAND_PRIMARY} secondary={BRAND_SECONDARY} height={4} />
-              ) : null}
+              <div className="paidly-doc-page-end" style={{ marginTop: "auto" }}>
+                <PageFooter
+                  companyEmail={resolved.company_email}
+                  pageIndex={pageIndex}
+                  pageCount={pageCount}
+                />
+                {pageIndex === pageCount - 1 ? (
+                  <BrandBar primary={BRAND_PRIMARY} secondary={BRAND_SECONDARY} height={4} />
+                ) : null}
+              </div>
             </section>
           );
         })}

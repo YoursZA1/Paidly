@@ -674,7 +674,6 @@ export function PageFooter({ companyEmail, pageIndex, pageCount }) {
       data-measure="footer"
       data-doc-chrome="footer"
       style={{
-        marginTop: "auto",
         paddingTop: "16px",
         borderTop: "1px solid #f1f5f9",
         display: "flex",
