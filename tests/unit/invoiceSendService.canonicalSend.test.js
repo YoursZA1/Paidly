@@ -170,7 +170,7 @@ describe("sendInvoiceToClient provider-gated sent status", () => {
 
   it("marks sent and records document_sends only after provider success", async () => {
     const fetchMock = vi.fn(async (url) => {
-      if (String(url).includes("send-invoice-email")) {
+      if (String(url).includes("/api/send-invoice")) {
         return jsonResponse(200, { success: true });
       }
       return jsonResponse(500, { success: false });
@@ -180,7 +180,8 @@ describe("sendInvoiceToClient provider-gated sent status", () => {
     const result = await sendInvoiceToClient("inv-1");
     expect(result.success).toBe(true);
     expect(fetchMock).toHaveBeenCalled();
-    expect(String(fetchMock.mock.calls[0][0])).toContain("/functions/v1/send-invoice-email");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/send-invoice");
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("send-invoice-email"))).toBe(false);
     expect(Invoice.update).toHaveBeenCalledWith(
       "inv-1",
       expect.objectContaining({ status: "sent", sent_to_email: "client@example.com" })
@@ -233,7 +234,7 @@ describe("sendInvoiceToClient provider-gated sent status", () => {
     );
   });
 
-  it("uses /api/send-invoice fallback when the edge function fails, then marks sent", async () => {
+  it("uses /api/send-invoice and does not call the undeployed edge function", async () => {
     const fetchMock = vi.fn(async (url) => {
       if (String(url).includes("send-invoice-email")) {
         return jsonResponse(500, { success: false, error: "edge down" });

@@ -79,9 +79,11 @@ function normalizeIdempotencyKey(raw) {
 
 /**
  * Canonical document email dispatch.
- * Primary: Supabase edge `send-invoice-email` (Resend). Fallback: POST /api/send-invoice.
- * `invoiceApiFallback: false` for non-invoice documents (e.g. purchase orders): that fallback names the
- * attachment `Invoice_<num>.pdf` and uses the invoice template, so it must not carry other documents.
+ * Invoices, quotes, and hub documents go through POST /api/send-invoice (Resend on Vercel).
+ * The Supabase `send-invoice-email` function is not deployed: a browser preflight gets HTTP 404,
+ * which the console reports as a CORS failure, so the browser must not call it for those sends.
+ * `invoiceApiFallback: false` keeps purchase orders on the edge function. That API route is gated
+ * on the invoices feature and must not carry a purchase order.
  */
 export async function dispatchDocumentEmail({
   pdfBase64,
@@ -125,8 +127,7 @@ export async function dispatchDocumentEmail({
 
   const idempotency = normalizeIdempotencyKey(idempotencyKey);
 
-  let primaryError = null;
-  try {
+  if (!invoiceApiFallback) {
     const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
       method: "POST",
       headers: {
@@ -150,12 +151,6 @@ export async function dispatchDocumentEmail({
       return { success: true, demo: true, sent: false, channel: "demo" };
     }
     return { success: true, channel: "edge", provider: body.json || { success: true } };
-  } catch (edgeErr) {
-    primaryError = edgeErr;
-  }
-
-  if (!invoiceApiFallback) {
-    throw primaryError;
   }
 
   const apiBase = getPublicApiBase() || "";
@@ -165,7 +160,7 @@ export async function dispatchDocumentEmail({
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-      body: JSON.stringify({
+    body: JSON.stringify({
       base64PDF: pdfBase64,
       clientEmail: email,
       invoiceNum: String(invoiceNum || ""),
@@ -180,17 +175,10 @@ export async function dispatchDocumentEmail({
     }),
   });
   const fallbackBody = await readFetchBody(fallbackRes);
-  try {
-    assertProviderAccepted(fallbackRes, fallbackBody, "Email service");
-  } catch (fallbackErr) {
-    const primaryMsg = primaryError?.message || "Email service failed";
-    throw new DocumentEngineError(
-      DOCUMENT_ENGINE_ERROR.EMAIL_PROVIDER_FAILED,
-      userFacingDocumentSendError(
-        `${primaryMsg} | ${fallbackErr.message}`,
-        "Document could not be sent. Please try again."
-      )
-    );
+  assertProviderAccepted(fallbackRes, fallbackBody, "Email service");
+  if (fallbackBody.json?.demo) {
+    notifyDemoNotSent({ to: email, subject });
+    return { success: true, demo: true, sent: false, channel: "demo" };
   }
   return { success: true, channel: "api", provider: fallbackBody.json || { success: true } };
 }

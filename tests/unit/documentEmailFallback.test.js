@@ -22,18 +22,17 @@ const edgeDown = () =>
   );
 
 describe("dispatchDocumentEmail fallback", () => {
-  it("invoices still fall back to /api/send-invoice", async () => {
+  it("invoices send through /api/send-invoice and skip the undeployed edge function", async () => {
     const fetchSpy = edgeDown();
     vi.stubGlobal("fetch", fetchSpy);
     const out = await dispatchDocumentEmail({ pdfBase64: "JVBERi0=", email: "a@b.co", subject: "Invoice", html: "<p/>" });
     expect(out.channel).toBe("api");
     expect(fetchSpy.mock.calls.map(([u]) => String(u))).toEqual([
-      "https://example.supabase.co/functions/v1/send-invoice-email",
       expect.stringContaining("/api/send-invoice"),
     ]);
   });
 
-  it("forwards quote html, subject, and filename when the invoice fallback runs", async () => {
+  it("forwards quote html, subject, and filename on the invoice route", async () => {
     const fetchSpy = edgeDown();
     vi.stubGlobal("fetch", fetchSpy);
     await dispatchDocumentEmail({
@@ -44,7 +43,7 @@ describe("dispatchDocumentEmail fallback", () => {
       filename: "QUO-1001.pdf",
       invoiceNum: "QUO-1001",
     });
-    const fallback = JSON.parse(fetchSpy.mock.calls[1][1].body);
+    const fallback = JSON.parse(fetchSpy.mock.calls[0][1].body);
     expect(fallback.subject).toContain("Quote #QUO-1001");
     expect(fallback.html).toContain("View Quote");
     expect(fallback.html).toContain("/PublicQuote?token=");
