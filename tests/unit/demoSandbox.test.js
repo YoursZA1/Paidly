@@ -11,7 +11,9 @@ import {
   resetDemoSandbox,
 } from "../../src/lib/demo/demoSandboxStore.js";
 import { demoPosResponse } from "../../src/lib/demo/demoPosSandbox.js";
+import { demoPayrollRequest } from "../../src/lib/demo/demoPayrollSandbox.js";
 import { startLiveDemo } from "../../src/lib/demo/demoModeApi.js";
+import { payrollApi } from "../../src/services/PayrollApiService.js";
 
 describe("demo sandbox", () => {
   beforeEach(() => {
@@ -134,5 +136,20 @@ describe("demo sandbox", () => {
     expect(paid.tab.balance.settled).toBe(true);
     expect(paid.sale.receipt_number).toMatch(/^DEMO-/);
     expect(DEMO_SANDBOX_TOKEN.startsWith("eyJ")).toBe(false);
+  });
+
+  it("builds the payroll register from seeded payslips without a JWT", async () => {
+    installSandboxSession();
+    const report = demoPayrollRequest("/api/payroll/reports?type=net_pay");
+    expect(report.report.rows).toHaveLength(4);
+    expect(report.report.rows.map((row) => row.employee_name)).toEqual(
+      expect.arrayContaining(["Sipho Nkosi", "Elena Rossi"])
+    );
+    const viaApi = await payrollApi.reports({ type: "summary" });
+    expect(viaApi.report.employee_count).toBe(4);
+    expect(viaApi.report.net_payroll).toBeGreaterThan(0);
+    const summary = demoPayrollRequest("/api/company/workforce-summary");
+    expect(summary.payroll.payslips_generated).toBe(4);
+    expect(summary.workforce.active).toBe(4);
   });
 });

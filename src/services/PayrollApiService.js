@@ -2,6 +2,8 @@ import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequest } from "@/utils/apiRequest";
 import { looksLikeEmployeeDisplayLabel, parseUuid } from "@shared/ids/uuid.js";
+import { demoPayrollRequest } from "@/lib/demo/demoPayrollSandbox";
+import { isDemoSandbox } from "@/lib/demo/demoSandboxStore";
 
 function requireRecordUuid(value, fieldName) {
   const id = parseUuid(value);
@@ -24,6 +26,13 @@ function apiBase() {
 }
 
 export async function payrollRequest(path, { method = "GET", body } = {}) {
+  if (isDemoSandbox()) {
+    const local = demoPayrollRequest(path, { method, body });
+    if (local != null) return local;
+    const err = new Error("This payroll action stays in the demo and is not sent to Paidly.");
+    err.code = "DEMO_SANDBOX";
+    throw err;
+  }
   const headers = await authHeaders();
   const res = await apiRequest(`${apiBase()}${path}`, {
     method,
@@ -60,6 +69,11 @@ function filenameFromDisposition(header, fallback) {
  * @returns {Promise<{ blob: Blob, filename: string }>}
  */
 export async function downloadPayslipPdf(payslipId) {
+  if (isDemoSandbox()) {
+    const err = new Error("Payslip PDFs open in a real Paidly account. The demo shows the payroll register.");
+    err.code = "DEMO_SANDBOX";
+    throw err;
+  }
   const id = requireRecordUuid(payslipId, "payslip id");
   const { Authorization } = await authHeaders();
   const res = await apiRequest(`${apiBase()}/api/payroll/payslips/${id}/pdf`, { method: "GET", headers: { Authorization } });
