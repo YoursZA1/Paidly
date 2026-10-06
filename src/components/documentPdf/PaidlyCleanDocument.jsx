@@ -158,6 +158,7 @@ export default function PaidlyCleanDocument({ data }) {
       ))}
 
       {showFinancials ? (
+      <>
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
         <thead>
           <tr style={{ background: HEADER_BG, borderBottom: `1px solid ${BORDER_STRONG}` }}>
@@ -211,6 +212,7 @@ export default function PaidlyCleanDocument({ data }) {
           ) : null}
         </div>
       </div>
+      </>
       ) : null}
 
       {showFinancials && bankingRows.length > 0 ? (
