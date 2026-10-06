@@ -53,7 +53,7 @@ export function generateHubDocumentEmailHtml({
   company,
   message,
   shareUrl = "",
-  includePdf = true,
+  includePdf = false,
   logoBox = null,
 }) {
   const docTypeLabel = typeLabel(doc?.type) || "Document";
@@ -137,7 +137,7 @@ export async function sendDocumentEmail({
   recipientName,
   subject,
   message,
-  includePdf = true,
+  includePdf = false,
   workspace = null,
 }) {
   const docTypeLabel = typeLabel(doc?.type) || "Document";

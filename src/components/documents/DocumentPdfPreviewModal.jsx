@@ -39,6 +39,7 @@ export default function DocumentPdfPreviewModal({
 }) {
   const { toast } = useToast();
   const templateRef = useRef(null);
+  const scalerRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
@@ -68,7 +69,10 @@ export default function DocumentPdfPreviewModal({
   const handleDownload = useCallback(async () => {
     if (!templateRef.current) return;
     setDownloading(true);
+    const scaler = scalerRef.current;
+    const previousTransform = scaler?.style.transform;
     try {
+      if (scaler) scaler.style.transform = "none";
       await generatePdfFromElement(templateRef.current, filename);
       toast({ title: "PDF downloaded" });
     } catch (e) {
@@ -78,6 +82,7 @@ export default function DocumentPdfPreviewModal({
         description: e?.message || String(e),
       });
     } finally {
+      if (scaler) scaler.style.transform = previousTransform || "";
       setDownloading(false);
     }
   }, [filename, toast]);
@@ -99,6 +104,7 @@ export default function DocumentPdfPreviewModal({
         `<style>` +
         `body{margin:0;padding:0;}` +
         `@page{margin:15mm 18mm;}` +
+        `.paidly-keep{break-inside:avoid;page-break-inside:avoid;}` +
         `@media print{body{margin:0;} .no-print{display:none;}}` +
         `</style></head><body>${html}</body></html>`
     );
@@ -222,6 +228,7 @@ export default function DocumentPdfPreviewModal({
         <div className="flex-1 overflow-auto bg-neutral-200/60 p-8">
           {/* Zoom wrapper — scale from top-center so the document stays aligned */}
           <div
+            ref={scalerRef}
             style={{
               transformOrigin: "top center",
               transform: `scale(${zoom / 100})`,

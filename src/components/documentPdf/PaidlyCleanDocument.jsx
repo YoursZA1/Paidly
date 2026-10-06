@@ -177,12 +177,22 @@ export default function PaidlyCleanDocument({ data }) {
         <h2 style={{ margin: "0 0 16px", fontSize: "15px", fontWeight: 700, lineHeight: 1.3 }}>{data.headline}</h2>
       ) : null}
 
-      {sections.map((section) => (
-        <section key={`${section.title}:${section.body}`} style={{ marginBottom: 16 }}>
-          {section.title ? <div style={notesTitle}>{section.title}</div> : null}
-          <div style={{ color: TEXT, whiteSpace: "pre-line" }}>{section.body}</div>
-        </section>
-      ))}
+      {sections.map((section) => {
+        const blocks = String(section.body || "")
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        return (
+          <section key={`${section.title}:${section.body}`} style={{ marginBottom: 16 }}>
+            {blocks.map((block, index) => (
+              <div key={`${index}:${block}`} className="paidly-keep" style={keepTogether}>
+                {index === 0 && section.title ? <div style={notesTitle}>{section.title}</div> : null}
+                <div style={{ color: TEXT }}>{block}</div>
+              </div>
+            ))}
+          </section>
+        );
+      })}
 
       {showFinancials ? (
       <>
@@ -361,6 +371,12 @@ const bodyCell = {
   padding: "12px 8px",
   verticalAlign: "top",
   lineHeight: 1.35,
+};
+
+const keepTogether = {
+  breakInside: "avoid",
+  pageBreakInside: "avoid",
+  marginBottom: 8,
 };
 
 const notesTitle = {

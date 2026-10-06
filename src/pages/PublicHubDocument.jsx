@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { fetchPublicDocumentPayload } from "@/api/publicDocumentApiClient";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { fetchPublicDocumentPayload, signPublicDocument } from "@/api/publicDocumentApiClient";
 import { isFinancialType, typeLabel } from "@/document-engine";
 import PaidlyCleanDocument from "@/components/documentPdf/PaidlyCleanDocument";
 import { mapHubDocumentPdfData } from "@/components/documents/mapHubDocumentPdfData";
@@ -19,6 +28,11 @@ export default function PublicHubDocument() {
   const [payload, setPayload] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [signOpen, setSignOpen] = useState(false);
+  const [signerName, setSignerName] = useState("");
+  const [signerEmail, setSignerEmail] = useState("");
+  const [signing, setSigning] = useState(false);
+  const [signError, setSignError] = useState("");
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -26,6 +40,7 @@ export default function PublicHubDocument() {
     try {
       const next = await fetchPublicDocumentPayload(shareToken);
       setPayload(next);
+      setSignerEmail(next?.client?.email || "");
     } catch (err) {
       setPayload(null);
       setError(err?.message || "Could not load this document. Please check the link and try again.");
@@ -69,6 +84,25 @@ export default function PublicHubDocument() {
   const financial = isFinancialType(doc.type);
   const currency = doc.currency || payload?.owner?.currency || "ZAR";
   const pdfHref = `${createPageUrl("DocumentPDF")}?token=${encodeURIComponent(shareToken)}&download=true`;
+  const signState = payload?.signing || { required: false, canSign: false, signed: false, signedName: "" };
+
+  const submitSignature = async () => {
+    setSigning(true);
+    setSignError("");
+    try {
+      const result = await signPublicDocument({ shareToken, signerName, signerEmail });
+      setPayload((prev) => ({
+        ...prev,
+        document: { ...prev.document, ...(result?.document || {}) },
+        signing: result?.signing || { required: true, canSign: false, signed: true, signedName: signerName },
+      }));
+      setSignOpen(false);
+    } catch (err) {
+      setSignError(err?.message || "Could not sign this document.");
+    } finally {
+      setSigning(false);
+    }
+  };
 
   return (
     <PublicDocumentPortal
@@ -84,20 +118,73 @@ export default function PublicHubDocument() {
           : ""
       }
       actions={
-        <Button variant="outline" className="gap-2 border-slate-200 bg-white" asChild>
-          <a href={pdfHref} target="_blank" rel="noopener noreferrer">
-            <Download className="h-4 w-4" />
-            <span className="sm:hidden">PDF</span>
-            <span className="hidden sm:inline">Download PDF</span>
-          </a>
-        </Button>
+        <>
+          <Button variant="outline" className="gap-2 border-slate-200 bg-white" asChild>
+            <a href={pdfHref} target="_blank" rel="noopener noreferrer">
+              <Download className="h-4 w-4" />
+              <span className="sm:hidden">PDF</span>
+              <span className="hidden sm:inline">Download PDF</span>
+            </a>
+          </Button>
+          {signState.canSign ? (
+            <Button className="gap-2" onClick={() => { setSignError(""); setSignOpen(true); }}>
+              <PenLine className="h-4 w-4" />
+              Sign
+            </Button>
+          ) : null}
+        </>
       }
     >
+      {signState.signed ? (
+        <p className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+          Signed{signState.signedName ? ` by ${signState.signedName}` : ""}.
+        </p>
+      ) : null}
       <PublicDocumentSheet>
         <div className="overflow-x-auto p-3 sm:p-6">
           <PaidlyCleanDocument data={data} />
         </div>
       </PublicDocumentSheet>
+      <Dialog open={signOpen} onOpenChange={setSignOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sign this {label.toLowerCase()}</DialogTitle>
+            <DialogDescription>
+              Type your name. That name is your signature on this {label.toLowerCase()}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={signerName}
+              onChange={(event) => setSignerName(event.target.value)}
+              placeholder="Your full name"
+              autoComplete="name"
+            />
+            <div
+              className="min-h-16 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-2xl text-slate-900"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
+            >
+              {signerName.trim() || "Your signature"}
+            </div>
+            <Input
+              type="email"
+              value={signerEmail}
+              onChange={(event) => setSignerEmail(event.target.value)}
+              placeholder="Email this was sent to"
+              autoComplete="email"
+            />
+            {signError ? <p className="text-sm text-red-600">{signError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSignOpen(false)} disabled={signing}>
+              Cancel
+            </Button>
+            <Button onClick={submitSignature} disabled={signing || signerName.trim().length < 2}>
+              {signing ? "Signing…" : "Sign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PublicDocumentPortal>
   );
 }

@@ -59,11 +59,9 @@ export default function DocumentSendModal({
     hubDocumentEmailSubject(companyName, isInvoice ? "invoice" : docTypeLabel)
   );
   const [message, setMessage] = useState(
-    isInvoice
-      ? "Your invoice is ready. Open it with the button below."
-      : `Your ${docTypeLabel.toLowerCase()} is ready — PDF attached.`
+    `Your ${docTypeLabel.toLowerCase()} is ready. Open it with the button below.`
   );
-  const [attachPdf, setAttachPdf] = useState(!isInvoice);
+  const [attachPdf, setAttachPdf] = useState(false);
   const [includeBranding, setIncludeBranding] = useState(true);
   const [scheduledAt, setScheduledAt] = useState(defaultScheduledAt);
   const [sending, setSending] = useState(false);
@@ -73,12 +71,8 @@ export default function DocumentSendModal({
     setSubject(hubDocumentEmailSubject(companyName, isInvoice ? "invoice" : docTypeLabel));
     setRecipientName(defaultRecipientName || "");
     setRecipientEmail(defaultRecipientEmail || "");
-    setMessage(
-      isInvoice
-        ? "Your invoice is ready. Open it with the button below."
-        : `Your ${docTypeLabel.toLowerCase()} is ready — PDF attached.`
-    );
-    setAttachPdf(!isInvoice);
+    setMessage(`Your ${docTypeLabel.toLowerCase()} is ready. Open it with the button below.`);
+    setAttachPdf(false);
   }, [open, companyName, defaultRecipientEmail, defaultRecipientName, docTypeLabel, isInvoice]);
 
   const canSend = Boolean(recipientEmail.trim());
@@ -173,17 +167,6 @@ export default function DocumentSendModal({
       </div>
 
       <div className="space-y-3 rounded-lg border border-border p-4">
-        {isInvoice ? null : (
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium leading-none">Attach PDF</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Include a PDF copy of this document
-            </p>
-          </div>
-          <Switch checked={attachPdf} onCheckedChange={setAttachPdf} />
-        </div>
-        )}
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium leading-none">

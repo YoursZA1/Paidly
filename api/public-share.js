@@ -6,7 +6,7 @@ import { handlePublicInvoiceGet, handlePublicInvoiceVerify } from "./_publicInvo
 import { handlePublicPayslipGet, handlePublicPayslipPdf, handlePublicPayslipVerify } from "./_publicPayslipShared.js";
 import { handlePublicQuoteGet, handlePublicQuoteDecide } from "./_publicQuoteShared.js";
 import { handlePublicLeaveGet, handlePublicLeaveDecide } from "./_publicLeaveShared.js";
-import { handlePublicDocumentGet } from "./_publicDocumentShared.js";
+import { handlePublicDocumentGet, handlePublicDocumentSign } from "./_publicDocumentShared.js";
 import { handleEmailTrack } from "./_emailTrackShared.js";
 import renderOgImageHandler from "../server/src/vercelOgImage.js";
 
@@ -32,6 +32,7 @@ export default async function handler(req, res) {
   if (doc === "payslip" && op === "verify") return handlePublicPayslipVerify(req, res);
   if (doc === "payslip" && op === "pdf") return handlePublicPayslipPdf(req, res);
   if (doc === "document" && op === "get") return handlePublicDocumentGet(req, res);
+  if (doc === "document" && op === "sign") return handlePublicDocumentSign(req, res);
 
   return res.status(404).json({ error: "Not found" });
 }

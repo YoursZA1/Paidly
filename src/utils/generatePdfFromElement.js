@@ -81,7 +81,7 @@ function buildHtml2PdfOptions(filename) {
     },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
     /* Omit avoid-all so long invoices can span multiple A4 pages (css + legacy pagebreak). */
-    pagebreak: { mode: ["css", "legacy"] },
+    pagebreak: { mode: ["css", "legacy"], avoid: [".paidly-keep", ".paidly-doc-page"] },
   };
 }
 
@@ -107,6 +107,10 @@ async function withInvoicePdfElementStyles(element, filename, run) {
     element.style.backgroundColor = "#ffffff";
     element.style.padding = "0";
     // Keep each preview page inside the PDF page so the footer is not sliced over the brand bar.
+    element.querySelectorAll(".paidly-clean-document").forEach((sheet) => {
+      sheet.style.setProperty("min-height", "auto", "important");
+      sheet.style.setProperty("height", "auto", "important");
+    });
     pages = [...element.querySelectorAll(".paidly-doc-page")];
     pageStyles = pages.map((page) => page.getAttribute("style"));
     pages.forEach((page) => {

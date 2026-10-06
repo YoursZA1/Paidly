@@ -621,7 +621,7 @@ export default function DocumentDetailPage() {
           recipientName: payload.recipient_name,
           subject: payload.subject,
           message: payload.message,
-          includePdf: payload.include_pdf !== false,
+          includePdf: payload.include_pdf === true,
           workspace: authUser,
         });
       }

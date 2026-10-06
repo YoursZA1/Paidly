@@ -11,9 +11,9 @@ describe("hub document email", () => {
       },
       recipientName: "On The Design Agency",
       company: { company_name: "BrandCafé Agency" },
-      message: "Your contract is ready — PDF attached.",
+      message: "Your contract is ready. Open it with the button below.",
       shareUrl: "https://paidly.co.za/PublicDocument?token=4cbbfbc3-2b12-48b8-a279-a46ba723c965",
-      includePdf: true,
+      includePdf: false,
     });
 
     expect(hubDocumentEmailSubject("BrandCafé Agency", "Contract")).toBe("BrandCafé Agency contract");
