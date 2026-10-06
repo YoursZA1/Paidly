@@ -41,11 +41,16 @@ async function loadCompanyAccessContextInner(userId, cacheKey) {
     throw new Error("Could not resolve your company. Refresh and try again.");
   }
 
-  let { data: org, error: orgError } = await supabase
-    .from("organizations")
-    .select("owner_id, business_type")
-    .eq("id", orgId)
-    .maybeSingle();
+  // Org row and membership are independent once the org id is known — one round trip, not two.
+  let [{ data: org, error: orgError }, { data: membership, error }] = await Promise.all([
+    supabase.from("organizations").select("owner_id, business_type").eq("id", orgId).maybeSingle(),
+    supabase
+      .from("memberships")
+      .select("id, org_id, role, job_function, pos_register_id, created_at")
+      .eq("user_id", userId)
+      .eq("org_id", orgId)
+      .maybeSingle(),
+  ]);
   if (orgError && /business_type/i.test(String(orgError.message || ""))) {
     ({ data: org, error: orgError } = await supabase
       .from("organizations")
@@ -53,13 +58,6 @@ async function loadCompanyAccessContextInner(userId, cacheKey) {
       .eq("id", orgId)
       .maybeSingle());
   }
-
-  const { data: membership, error } = await supabase
-    .from("memberships")
-    .select("id, org_id, role, job_function, pos_register_id, created_at")
-    .eq("user_id", userId)
-    .eq("org_id", orgId)
-    .maybeSingle();
 
   if (error && /pos_register_id/i.test(String(error.message || ""))) {
     const retry = await supabase

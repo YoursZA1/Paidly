@@ -39,6 +39,12 @@ import CashFlowKpiCard from "@/components/cashflow/CashFlowKpiCard";
 import CashPositionCard from "@/components/cashflow/CashPositionCard";
 import CashFlowOverTimeChart from "@/components/cashflow/CashFlowOverTimeChart";
 import UpcomingCashEventsPanel from "@/components/cashflow/UpcomingCashEventsPanel";
+import SupplierCommitmentsCard from "@/components/cashflow/SupplierCommitmentsCard";
+import { fetchPurchaseOrderHeaders } from "@/services/purchaseOrderQueries";
+import {
+  purchaseOrderPaymentSchedule,
+  supplierOutflowWithin,
+} from "@shared/procurement/purchaseOrderMath.js";
 import InsightTiles from "@/components/cashflow/InsightTiles";
 import CashFlowLedger from "@/components/cashflow/CashFlowLedger";
 import ExpenseFilters, { applyExpenseFilters } from "@/components/filters/ExpenseFilters";
@@ -282,16 +288,54 @@ export default function CashFlowPage() {
         [incomeEvents, expenseEvents, timeRange, now]
     );
 
+    // Approved purchase orders: open supplier balances are planned outflows on their due dates (overdue
+    // = today). They are not expenses — actuals above still only count recorded payments.
+    // Under the cashflow-page key so invalidateRevenueReadModels refreshes it after a supplier payment.
+    const hasPurchaseOrders = planHasFeature("purchase_orders");
+    const { data: purchaseOrders = [] } = useQuery({
+        queryKey: [...CASHFLOW_PAGE_QUERY_KEY, "purchase-orders", authUserId ?? null],
+        // Only statuses that can still owe a supplier; drafts and pending approvals are not commitments.
+        queryFn: () => fetchPurchaseOrderHeaders({ statuses: ["approved", "partially_received", "received", "cancelled"] }),
+        enabled: hasPurchaseOrders,
+        staleTime: 60 * 1000,
+    });
+    // Real today (not the "last month" snapshot): due dates and overdue are about now. Keyed by day so
+    // the memo is stable across renders.
+    const todayKey = now.toDateString();
+    const supplierSchedule = useMemo(
+      () => (hasPurchaseOrders ? purchaseOrderPaymentSchedule(purchaseOrders, { now: new Date(todayKey) }) : []),
+      [hasPurchaseOrders, purchaseOrders, todayKey]
+    );
+    const supplierOutflow30 = useMemo(
+      () => supplierOutflowWithin(supplierSchedule, { now: new Date(todayKey), windowDays: 30 }),
+      [supplierSchedule, todayKey]
+    );
+
     const upcomingCashEvents = useMemo(
-      () =>
-        buildUpcomingCashEvents({
-          invoices,
-          expenses: storeExpenses || [],
-          payments,
-          now,
-          windowDays: 30,
-        }).slice(0, 10),
-      [invoices, storeExpenses, payments, now]
+      () => {
+        const supplierEvents = supplierSchedule
+          .filter((row) => row.date && supplierOutflowWithin([row], { now: new Date(todayKey), windowDays: 30 }) > 0)
+          .map((row) => ({
+            id: row.id,
+            type: "expense",
+            name: `${row.overdue ? "Overdue · " : ""}${row.poNumber} supplier payment`,
+            date: row.date,
+            amount: row.amount,
+          }));
+        return [
+          ...buildUpcomingCashEvents({
+            invoices,
+            expenses: storeExpenses || [],
+            payments,
+            now,
+            windowDays: 30,
+          }),
+          ...supplierEvents,
+        ]
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+          .slice(0, 10);
+      },
+      [invoices, storeExpenses, payments, now, supplierSchedule, todayKey]
     );
 
     const insights = useMemo(
@@ -325,10 +369,10 @@ export default function CashFlowPage() {
         buildCashPositionModel({
           currentBalance,
           incomingProjection,
-          outgoingProjection,
-          netProjection,
+          outgoingProjection: outgoingProjection + supplierOutflow30,
+          netProjection: netProjection - supplierOutflow30,
         }),
-      [currentBalance, incomingProjection, outgoingProjection, netProjection]
+      [currentBalance, incomingProjection, outgoingProjection, netProjection, supplierOutflow30]
     );
 
     const ledgerRows = useMemo(() => {
@@ -557,6 +601,7 @@ export default function CashFlowPage() {
                   currentBalance={cashPositionModel.currentBalance}
                   incomingProjection={cashPositionModel.incomingProjection}
                   outgoingProjection={cashPositionModel.outgoingProjection}
+                  outgoingNote={supplierOutflow30 > 0 ? `incl. ${formatCurrency(supplierOutflow30, userCurrency)} due to suppliers` : null}
                   netProjection={cashPositionModel.netProjection}
                   currency={userCurrency}
                 />
@@ -597,6 +642,14 @@ export default function CashFlowPage() {
                     />
 
                     <div className="space-y-4">
+                      {hasPurchaseOrders && (
+                        <SupplierCommitmentsCard
+                          purchaseOrders={purchaseOrders}
+                          schedule={supplierSchedule}
+                          currentBalance={cashPositionModel.currentBalance}
+                          currency={userCurrency}
+                        />
+                      )}
                       <UpcomingCashEventsPanel
                         events={upcomingCashEvents}
                         userCurrency={userCurrency}

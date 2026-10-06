@@ -11,6 +11,8 @@ import { format, parseISO } from "date-fns";
 import ConfirmationDialog from "../shared/ConfirmationDialog";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuth } from "@/contexts/AuthContext";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 
 const ROW_HEIGHT = 56;
 const VIRTUAL_TABLE_MAX_HEIGHT = 480;
@@ -23,8 +25,25 @@ const categoryColors = {
     salary: "bg-red-100 text-red-700",
     marketing: "bg-pink-100 text-pink-700",
     software: "bg-primary/15 text-primary",
+    inventory: "bg-amber-100 text-amber-800",
+    equipment: "bg-slate-200 text-slate-800",
     other: "bg-muted text-muted-foreground"
 };
+
+/** Supplier payment recorded from a purchase order: link back to its source document. */
+function PurchaseOrderSource({ expense }) {
+    if (!expense.purchase_order_id) return null;
+    return (
+        <Link
+            to={`${createPageUrl("PurchaseOrders")}?po=${encodeURIComponent(expense.purchase_order_id)}`}
+            className="mr-1.5 inline-flex align-middle"
+            title="Paid against a purchase order — open it"
+            onClick={(e) => e.stopPropagation()}
+        >
+            <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-medium hover:bg-muted">PO</Badge>
+        </Link>
+    );
+}
 
 const statusConfig = {
     pending: { color: "bg-yellow-100 text-yellow-800", icon: Clock },
@@ -53,6 +72,7 @@ const ExpenseRow = React.memo(function ExpenseRow({
                 </Badge>
             </TableCell>
             <TableCell className="font-medium max-w-[200px] truncate" title={expense.description}>
+                <PurchaseOrderSource expense={expense} />
                 {expense.description}
                 {expense.is_mileage && <span className="ml-2 text-xs text-muted-foreground">(Mileage)</span>}
             </TableCell>
@@ -281,7 +301,7 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
                                         <CardContent>
                                             <div className="flex justify-between items-start mb-2">
                                                 <div className="flex-1 mr-2">
-                                                    <p className="font-semibold text-foreground line-clamp-1">{expense.description}</p>
+                                                    <p className="font-semibold text-foreground line-clamp-1"><PurchaseOrderSource expense={expense} />{expense.description}</p>
                                                     <p className="text-sm text-muted-foreground">{expense.vendor || 'No vendor'}</p>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1">

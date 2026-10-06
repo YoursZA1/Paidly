@@ -98,13 +98,20 @@ async function withInvoicePdfElementStyles(element, filename, run) {
  *
  * @param {HTMLElement} element
  * @param {string} [filename]
+ * @param {{ scale?: number, quality?: number }} [render] — html2canvas scale / JPEG quality overrides
  * @returns {Promise<Blob>}
  */
-export async function generatePdfBlobFromElement(element, filename = "document.pdf") {
+export async function generatePdfBlobFromElement(element, filename = "document.pdf", { scale, quality } = {}) {
   if (!element) throw new Error("No element provided to generate PDF");
-  return withInvoicePdfElementStyles(element, filename, (html2pdf, options) =>
-    html2pdf().set(options).from(element).outputPdf("blob")
-  );
+  return withInvoicePdfElementStyles(element, filename, (html2pdf, options) => {
+    // Optional lighter render for email attachments (long multi-page documents); defaults unchanged.
+    const set = {
+      ...options,
+      ...(quality ? { image: { ...options.image, quality } } : {}),
+      ...(scale ? { html2canvas: { ...options.html2canvas, scale } } : {}),
+    };
+    return html2pdf().set(set).from(element).outputPdf("blob");
+  });
 }
 
 /**

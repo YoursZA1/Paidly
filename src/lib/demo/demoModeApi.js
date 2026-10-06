@@ -9,6 +9,7 @@ import { safeFetch } from "@/utils/apiRequest";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { clearPersistedQueryCache } from "@/lib/paidlyIdbQueryPersistence";
 import { getOrCreateAppQueryClient } from "@/lib/query-client";
+import { patchAuthSession, useAuthSessionStore } from "@/stores/authSessionStore";
 
 function demoApiUrl(path) {
   const base = import.meta.env.DEV ? "" : getBackendBaseUrl();
@@ -90,13 +91,24 @@ export async function startLiveDemo() {
     // No Paidly error code: the API itself did not answer (not deployed, proxy / gateway error).
     const code = body?.code || (!res.ok && !body?.error ? "DEMO_SERVICE_UNREACHABLE" : null);
     if (import.meta.env.DEV) console.warn("[demo] start failed", res.status, code || "(no code)");
-    throw demoError(code, "We couldn't start the demo right now. Please try again in a moment.");
+    throw demoError(code, "We couldn't start the demo. Please try again.");
   }
   await purgeLocalAppCaches();
-  await SupabaseAuthService.signInWithIssuedTokens({
+  const session = await SupabaseAuthService.signInWithIssuedTokens({
     access_token: body.access_token,
     refresh_token: body.refresh_token,
   });
+  // One profile read, before the dashboard route mounts, so the shell is not held on "Restoring your profile".
+  // Company data is not loaded here.
+  try {
+    const { User } = await import("@/api/entities");
+    const restored = await User.restoreFromSupabaseSession(useAuthSessionStore.getState().session || session);
+    if (restored) {
+      patchAuthSession({ user: restored, profileReady: restored.profileReady === true });
+    }
+  } catch {
+    /* RequireAuth retries the same profile read if this one did not land */
+  }
   return {
     businessName: body.demo?.business_name || "Mavela Café",
     expiresAt: body.demo?.expires_at || null,

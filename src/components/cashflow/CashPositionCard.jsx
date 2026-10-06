@@ -7,6 +7,7 @@ export default function CashPositionCard({
   incomingProjection,
   outgoingProjection,
   netProjection,
+  outgoingNote = null,
   currency = "ZAR",
 }) {
   return (
@@ -26,6 +27,7 @@ export default function CashPositionCard({
         <div className="rounded-lg bg-red-500/10 p-3">
           <p className="text-xs text-muted-foreground">Outgoing (30D)</p>
           <p className="text-lg font-semibold text-red-700">{formatCurrency(outgoingProjection, currency)}</p>
+          {outgoingNote ? <p className="mt-0.5 text-xs text-muted-foreground">{outgoingNote}</p> : null}
         </div>
         <div className="rounded-lg bg-primary/10 p-3">
           <p className="text-xs text-muted-foreground">Net Projection</p>

@@ -6,7 +6,7 @@
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -60,9 +60,18 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
+function PathProbe() {
+  const { pathname } = useLocation();
+  return <span data-testid="path">{pathname}</span>;
+}
 const render = (ui, path = "/Dashboard") =>
   act(async () => {
-    root.render(<MemoryRouter initialEntries={[path]}>{ui}</MemoryRouter>);
+    root.render(
+      <MemoryRouter initialEntries={[path]}>
+        <PathProbe />
+        {ui}
+      </MemoryRouter>
+    );
   });
 const click = (el) =>
   act(async () => {
@@ -205,7 +214,9 @@ describe("/demo landing", () => {
     await flush();
     expect(api.startLiveDemo).toHaveBeenCalledTimes(1);
     expect(auth.logout).not.toHaveBeenCalled();
-    expect(assign).toHaveBeenCalledWith("/Dashboard");
+    expect(assign).not.toHaveBeenCalled();
+    expect(byTestId("path").textContent).toBe("/Dashboard");
+    expect(byTestId("enter-live-demo").textContent).toContain("Signing you into the demo");
   });
 
   it("signs a real account out before entering the demo", async () => {

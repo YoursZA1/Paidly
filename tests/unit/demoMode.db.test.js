@@ -488,3 +488,39 @@ describe("expiry and cleanup", () => {
     expect(await one(`select public.demo_active_workspace_count() as n`)).toEqual({ n: 1 });
   });
 });
+
+describe("prepared demo pool", () => {
+  const pooledUser = "d0000000-0000-4000-8000-000000000099";
+
+  it("keeps a prepared workspace unclaimed until the server claims it", async () => {
+    await q(
+      `insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data, email_confirmed_at)
+       values ($1, 'demo-pool@example.com', '{"pending_company_invite":"true","full_name":"Demo visitor"}', '{"paidly_demo":true}', now())`,
+      [pooledUser]
+    );
+    await one(`select public.provision_demo_workspace($1, 120, 'pool', true) as out`, [pooledUser]);
+    const row = await one(`select claimed_at from public.demo_sessions where user_id = $1`, [pooledUser]);
+    expect(row.claimed_at).toBeNull();
+
+    const denied = await as(U.demo, `select public.claim_pooled_demo_workspace(90, 'visitor')`);
+    expect(denied.ok).toBe(false);
+
+    const claimed = await one(`select public.claim_pooled_demo_workspace(90, 'visitor') as out`);
+    expect(claimed.out.user_id).toBe(pooledUser);
+    expect(claimed.out.email).toBe("demo-pool@example.com");
+    expect(claimed.out.business_name).toBe("Mavela Café");
+
+    const after = await one(
+      `select claimed_at is not null as claimed, client_hash from public.demo_sessions where user_id = $1`,
+      [pooledUser]
+    );
+    expect(after.claimed).toBe(true);
+    expect(after.client_hash).toBe("visitor");
+
+    const again = await one(`select public.claim_pooled_demo_workspace(90, 'other') as out`);
+    expect(again.out).toBeNull();
+
+    const own = await rowsAs(U.demo, `select user_id from public.demo_sessions`);
+    expect(own.map((r) => r.user_id)).toEqual([U.demo]);
+  });
+});

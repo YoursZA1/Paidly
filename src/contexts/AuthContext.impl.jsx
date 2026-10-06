@@ -1259,7 +1259,10 @@ export function AuthProvider({ children }) {
           void refreshUserRef.current();
           // Welcome email fallback (e.g. verified via an older link or OAuth): the server sends it
           // at most once and only to verified business owners, so repeat sign-ins send nothing.
-          if (norm.user?.email_confirmed_at) void SupabaseAuthService.requestWelcomeEmail(norm.accessToken);
+          // Demo sessions are not real sign-ups. Skip the welcome-email round trip.
+          if (norm.user?.email_confirmed_at && norm.user?.app_metadata?.paidly_demo !== true) {
+            void SupabaseAuthService.requestWelcomeEmail(norm.accessToken);
+          }
         });
         touchAuthHeartbeatIfValid(norm);
         authTabSyncRef.current?.publish("AUTH_SESSION_UPDATED", { event: "SIGNED_IN" });

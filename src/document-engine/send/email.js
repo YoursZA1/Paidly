@@ -77,6 +77,8 @@ function normalizeIdempotencyKey(raw) {
 /**
  * Canonical document email dispatch.
  * Primary: Supabase edge `send-invoice-email` (Resend). Fallback: POST /api/send-invoice.
+ * `invoiceApiFallback: false` for non-invoice documents (e.g. purchase orders): that fallback names the
+ * attachment `Invoice_<num>.pdf` and uses the invoice template, so it must not carry other documents.
  */
 export async function dispatchDocumentEmail({
   pdfBase64,
@@ -90,6 +92,7 @@ export async function dispatchDocumentEmail({
   amountDue,
   dueDate,
   idempotencyKey,
+  invoiceApiFallback = true,
 } = {}) {
   // Demo Mode: nothing leaves Paidly (the edge function and /api/send-invoice refuse it as well).
   if (isDemoModeActive()) {
@@ -146,6 +149,10 @@ export async function dispatchDocumentEmail({
     return { success: true, channel: "edge", provider: body.json || { success: true } };
   } catch (edgeErr) {
     primaryError = edgeErr;
+  }
+
+  if (!invoiceApiFallback) {
+    throw primaryError;
   }
 
   const apiBase = getPublicApiBase() || "";

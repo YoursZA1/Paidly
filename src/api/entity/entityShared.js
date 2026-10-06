@@ -67,12 +67,21 @@ export const SUPABASE_SELECT_COLUMNS = {
   // receipt_path/supplier_id/… from 20260930120000 — list/get fall back to "*" on an older schema.
   expenses:
     "id, org_id, expense_number, category, description, amount, date, payment_method, vendor, vat, receipt_url, notes, " +
-    "subtotal, vat_rate, supplier_id, receipt_number, receipt_path, capture_source, created_at, updated_at",
+    "subtotal, vat_rate, supplier_id, receipt_number, receipt_path, capture_source, purchase_order_id, payment_reference, " +
+    "created_at, updated_at",
   tasks: "id, org_id, title, description, client_id, assigned_to, due_date, priority, status, category, created_at, updated_at",
   notes: "id, user_id, title, content, category, is_pinned, created_at, updated_at",
   suppliers: "id, org_id, name, email, phone, address, tax_number, payment_terms, lead_time_days, notes, created_by, created_at, updated_at",
-  purchase_orders: "id, org_id, supplier_id, po_number, status, expected_date, notes, created_by, created_at, updated_at, received_at",
-  purchase_order_items: "id, purchase_order_id, org_id, product_id, quantity_ordered, quantity_received, unit_cost, created_at, updated_at",
+  // Money columns are database-maintained (20261006120000_purchase_order_financials.sql).
+  purchase_orders:
+    "id, org_id, supplier_id, po_number, status, order_date, expected_date, currency, payment_terms, " +
+    "delivery_address, delivery_instructions, terms, notes, expense_category, subtotal, discount_total, vat_total, " +
+    "total_amount, received_amount, amount_paid, approved_at, approved_by, cancelled_at, last_received_at, " +
+    "sent_at, sent_to_email, payment_terms_code, due_date, submitted_at, submitted_by, revises_purchase_order_id, " +
+    "cancellation_reason, created_by, created_at, updated_at, received_at",
+  purchase_order_items:
+    "id, purchase_order_id, org_id, product_id, description, quantity_ordered, quantity_received, unit_cost, " +
+    "discount_percent, vat_rate, line_subtotal, line_discount, line_vat, line_total, sort_order, created_at, updated_at",
 };
 export function getSelectColumns(table) {
   return SUPABASE_SELECT_COLUMNS[table] || "id, created_at, updated_at";

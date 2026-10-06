@@ -135,17 +135,24 @@ async function loadCommercialChildItems(itemsTable, parentIdField, parentId, lab
   return [];
 }
 
-/** Maps app-shape line items to `purchase_order_items` rows for a given PO. */
+/**
+ * Maps app-shape line items to `purchase_order_items` rows for a given PO.
+ * A line is a catalog product or a free-text description; line amounts are computed by the database.
+ */
 function buildPurchaseOrderItemRows(purchaseOrderId, orgId, items) {
   if (!Array.isArray(items)) return [];
   return items
-    .filter((item) => item?.product_id)
-    .map((item) => ({
+    .filter((item) => item?.product_id || String(item?.description || "").trim())
+    .map((item, index) => ({
       purchase_order_id: purchaseOrderId,
       org_id: orgId,
-      product_id: item.product_id,
+      product_id: item.product_id || null,
+      description: String(item.description || "").trim() || null,
       quantity_ordered: Number(item.quantity_ordered || item.quantity || 1),
       unit_cost: Number(item.unit_cost || item.cost || 0),
+      discount_percent: Number(item.discount_percent || 0),
+      vat_rate: Number(item.vat_rate || 0),
+      sort_order: index,
     }));
 }
 

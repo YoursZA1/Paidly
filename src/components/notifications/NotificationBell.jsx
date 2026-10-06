@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { markNotificationRead, markAllNotificationsReadForCurrentUser } from "@/services/ActivityNotificationService";
 import { runDedupedAsync } from "@/lib/inflightRequestDedupe";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Bell, CheckCheck } from "lucide-react";
 
 const REALTIME_REFRESH_DEBOUNCE_MS = 350;
@@ -15,9 +16,7 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [fetchError, setFetchError] = useState(null);
-  const panelId = useId();
   const headingId = useId();
-  const triggerRef = useRef(null);
   const realtimeDebounceRef = useRef(null);
   const openRef = useRef(open);
   openRef.current = open;
@@ -164,18 +163,6 @@ export default function NotificationBell() {
     }
   }, [authUserId, open, fetchNotifications, fetchUnreadCount]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus?.();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
-
   const handleMarkRead = async (item) => {
     let ok = false;
     if (item.source === "activity") {
@@ -225,75 +212,70 @@ export default function NotificationBell() {
   };
 
   return (
-    <div className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        className="relative flex size-11 items-center justify-center rounded-full hover:bg-muted transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card lg:size-10"
-        onClick={() => setOpen((o) => !o)}
-        aria-label="Notifications"
-        aria-expanded={open}
-        aria-controls={panelId}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="relative flex size-11 items-center justify-center rounded-full hover:bg-muted transition-colors touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card lg:size-10"
+          aria-label="Notifications"
+        >
+          <Bell className="size-5 text-muted-foreground" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-semibold min-w-[18px] h-[18px] flex items-center justify-center rounded-full">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      {/* Portaled out of the app bar. The bar's slide transform and blur were splitting this panel. */}
+      <PopoverContent
+        align="end"
+        side="bottom"
+        sideOffset={8}
+        collisionPadding={12}
+        aria-labelledby={headingId}
+        className="w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border-border bg-card p-0 shadow-lg"
       >
-        <Bell className="size-5 text-muted-foreground" />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-semibold min-w-[18px] h-[18px] flex items-center justify-center rounded-full">
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
-        )}
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" aria-hidden onClick={() => setOpen(false)} />
-          <div
-            id={panelId}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={headingId}
-            className="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top,0px)+0.5rem)] max-h-[min(24rem,70vh)] bg-card shadow-lg rounded-xl z-50 border border-border sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80"
-          >
-            <div className="p-3 border-b border-border flex items-center justify-between">
-              <span id={headingId} className="font-semibold text-foreground">Activity</span>
-              {unreadCount > 0 && (
+        <div className="flex items-center justify-between border-b border-border p-3">
+          <span id={headingId} className="font-semibold text-foreground">Activity</span>
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={handleMarkAllRead}
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+              aria-label="Mark all notifications as read"
+            >
+              <CheckCheck className="size-3.5" /> Mark all read
+            </button>
+          )}
+        </div>
+        <ul className="max-h-[min(24rem,70vh)] overflow-y-auto">
+          {fetchError ? (
+            <li className="p-4 text-sm text-destructive">{fetchError}</li>
+          ) : notifications.length === 0 ? (
+            <li className="p-4 text-sm text-muted-foreground">No notifications yet. Activity from invoices and quotes will appear here.</li>
+          ) : (
+            notifications.map((n) => (
+              <li
+                key={n.id}
+                className={`border-b border-border p-3 last:border-b-0 ${n.read ? "bg-transparent" : "bg-primary/5"}`}
+              >
                 <button
                   type="button"
-                  onClick={handleMarkAllRead}
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                  aria-label="Mark all notifications as read"
+                  onClick={() => {
+                    if (!n.read) handleMarkRead(n);
+                  }}
+                  className="w-full text-left text-sm text-foreground"
+                  aria-label={`${n.read ? "Read" : "Unread"} notification: ${n.message}`}
                 >
-                  <CheckCheck className="size-3.5" /> Mark all read
+                  {n.message}
                 </button>
-              )}
-            </div>
-            <ul className="max-h-80 overflow-y-auto">
-              {fetchError ? (
-                <li className="p-4 text-destructive text-sm">{fetchError}</li>
-              ) : notifications.length === 0 ? (
-                <li className="p-4 text-muted-foreground text-sm">No notifications yet. Activity from invoices and quotes will appear here.</li>
-              ) : (
-                notifications.map((n) => (
-                  <li
-                    key={n.id}
-                    className={`p-3 border-b border-border last:border-b-0 ${n.read ? "bg-transparent" : "bg-primary/5"}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!n.read) handleMarkRead(n);
-                      }}
-                      className="text-sm text-foreground text-left w-full"
-                      aria-label={`${n.read ? "Read" : "Unread"} notification: ${n.message}`}
-                    >
-                      {n.message}
-                    </button>
-                    <div className="text-xs text-muted-foreground mt-1">{formatTime(n.createdAt)}</div>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-        </>
-      )}
-    </div>
+                <div className="mt-1 text-xs text-muted-foreground">{formatTime(n.createdAt)}</div>
+              </li>
+            ))
+          )}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }

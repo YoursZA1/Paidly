@@ -12,7 +12,7 @@ import { generateDocumentPdf } from "../pdf/adapter";
 import { dispatchDocumentEmail } from "./email";
 import { recordDocumentSend, persistDocumentMessageLog } from "./message";
 
-function pdfBlobToBase64(blob) {
+export function pdfBlobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {

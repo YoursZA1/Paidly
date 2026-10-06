@@ -11,7 +11,8 @@ import { Expense } from "@/api/entities";
 import { Payment } from "@/api/entities";
 import { User } from "@/api/entities";
 import { Service } from "@/api/entities";
-import { PurchaseOrder } from "@/api/entities";
+import { fetchPurchaseOrderHeaders } from "@/services/purchaseOrderQueries";
+import { purchaseOrderFinancials, summarizePurchaseOrders } from "@shared/procurement/purchaseOrderMath.js";
 import { withTimeoutRetry } from "@/utils/fetchWithTimeout";
 import { useAppStore } from "@/stores/useAppStore";
 import { useShallow } from "zustand/shallow";
@@ -257,11 +258,14 @@ function DashboardMain() {
   const canQueryBusinessDashboard =
     tokenReady && !companyCtxLoading && (isAdmin || Boolean(companyId && showBusinessDashboard));
 
-  const dashboardInvoicesQuery = useDashboardInvoicesQuery(authUser?.id, canQueryBusinessDashboard);
-  const dashboardPayslipsQuery = useDashboardPayslipsQuery(authUser?.id, canQueryBusinessDashboard);
+  // Bootstrap already fills invoice and payslip previews. These queries run after that, and only
+  // refetch when the cache is stale — they must not hold the KPI cards.
+  const dashboardListsReady = canQueryBusinessDashboard && !storeIsLoading;
+  const dashboardInvoicesQuery = useDashboardInvoicesQuery(authUser?.id, dashboardListsReady);
+  const dashboardPayslipsQuery = useDashboardPayslipsQuery(authUser?.id, dashboardListsReady);
   const revenueSourcesQuery = useDashboardRevenueSourcesQuery(
     authUser?.id,
-    canQueryBusinessDashboard && !isAdmin
+    canQueryBusinessDashboard && !isAdmin && !storeIsLoading
   );
   const currentSubscriptionQuery = useCurrentSubscriptionQuery({ enabled: !isAdmin });
   const invoices = isAdmin ? invoicesState : storeInvoices;
@@ -276,9 +280,7 @@ function DashboardMain() {
   const payments = isAdmin ? paymentsState : storePayments;
   const quotes = isAdmin ? [] : (Array.isArray(storeQuotes) ? storeQuotes : []);
   const user = isAdmin ? userState : profileFromQuery ?? authUser;
-  const isLoading = isAdmin
-    ? isLoadingState
-    : storeIsLoading || appLoading || dashboardInvoicesQuery.isLoading || dashboardPayslipsQuery.isLoading;
+  const isLoading = isAdmin ? isLoadingState : storeIsLoading || appLoading;
 
   const onboardingChecklist = useMemo(() => {
     const businessName = String(user?.company_name || "").trim();
@@ -401,7 +403,12 @@ function DashboardMain() {
       try {
         const [servicesSettled, posSettled] = await Promise.allSettled([
           withTimeoutRetry(() => Service.list(), 15000, 1),
-          withTimeoutRetry(() => PurchaseOrder.list(), 15000, 1),
+          // Committed orders only: drafts and pending approvals are not spend yet.
+          withTimeoutRetry(
+            () => fetchPurchaseOrderHeaders({ statuses: ['approved', 'partially_received', 'received', 'cancelled'] }),
+            15000,
+            1
+          ),
         ]);
         if (cancelled || !mountedRef.current) return;
         const services = servicesSettled.status === 'fulfilled' && Array.isArray(servicesSettled.value)
@@ -411,8 +418,12 @@ function DashboardMain() {
         const purchaseOrders = posSettled.status === 'fulfilled' && Array.isArray(posSettled.value)
           ? posSettled.value
           : [];
+        // Outstanding = money still owed to the supplier or goods still to come.
         setOutstandingPurchaseOrdersState(
-          purchaseOrders.filter((po) => po.status === 'draft' || po.status === 'approved')
+          purchaseOrders.filter((po) => {
+            const f = purchaseOrderFinancials(po);
+            return f.owed > 0 || f.awaitingDelivery > 0;
+          })
         );
       } catch (err) {
         if (!cancelled) console.warn('Dashboard: inventory KPI fetch failed', err);
@@ -958,6 +969,7 @@ function DashboardMain() {
       outOfStockCount,
       inventoryValue,
       outstandingPOs: outstandingPurchaseOrdersState.length,
+      supplierOwed: summarizePurchaseOrders(outstandingPurchaseOrdersState).owed,
     };
   }, [inventoryProductsState, outstandingPurchaseOrdersState]);
 
@@ -1174,6 +1186,11 @@ function DashboardMain() {
             <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Outstanding POs</p>
               <p className="currency-nums mt-1 text-lg font-medium tabular-nums">{inventoryKpis.outstandingPOs}</p>
+              {inventoryKpis.supplierOwed > 0 && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {formatCurrency(inventoryKpis.supplierOwed, userCurrency)} owed to suppliers
+                </p>
+              )}
             </div>
           </div>
         )}

@@ -77,6 +77,9 @@ export async function buildDashboardBootstrapPayload(supabase, ctx) {
     throw new Error("missing_user_id");
   }
 
+  // Profile does not depend on the org id, so it overlaps that lookup instead of waiting behind it.
+  const profilePromise = supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+
   // RLS decides what the caller may read; the org filter decides which business this dashboard is about.
   // Without it a user who owns Business B and works at Company A gets both companies' rows merged.
   const orgId = await resolveBootstrapOrgId(supabase, userId);
@@ -84,7 +87,7 @@ export async function buildDashboardBootstrapPayload(supabase, ctx) {
 
   const [profileRes, invoicesRes, clientsRes, quotesRes, payslipsRes, expensesRes, paymentsRes, orgRes] =
     await Promise.all([
-      supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+      profilePromise,
       orgRows(supabase.from("invoices").select("*").order("created_at", { ascending: false }).limit(INVOICE_LIMIT)),
       orgRows(supabase.from("clients").select("*").order("created_at", { ascending: false }).limit(CLIENT_LIMIT)),
       orgRows(supabase.from("quotes").select("*").order("created_at", { ascending: false }).limit(QUOTE_LIMIT)),

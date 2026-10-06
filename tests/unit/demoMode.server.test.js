@@ -68,6 +68,10 @@ vi.mock("../../server/src/supabaseAdmin.js", () => {
             state.calls.push(["deleteUser", id]);
             return { error: null };
           },
+          updateUserById: async (id) => {
+            state.calls.push(["updateUser", id]);
+            return { data: { user: { id } }, error: null };
+          },
         },
       },
     },
@@ -118,7 +122,7 @@ vi.mock("../../server/src/payments/paymentEngine.js", async (orig) => ({
   },
 }));
 
-const { handleDemoStart, handleDemoReset, handleDemoEnd, runDemoCleanup, demoConfig } = await import(
+const { handleDemoStart, handleDemoReset, handleDemoEnd, runDemoCleanup, runDemoMaintenance, demoConfig } = await import(
   "../../server/src/demo/demoSessionApi.js"
 );
 const { clearDemoOrgCache } = await import("../../server/src/demo/demoMode.js");
@@ -239,12 +243,43 @@ describe("POST /api/auth/demo", () => {
     expect(codes).toEqual([201, 201, 429]);
   });
 
-  it("sweeps a few expired demos before starting a new one", async () => {
+  it("returns a session without waiting for expired-demo cleanup", async () => {
     state.rpc.purge_expired_demo_workspaces = () => ({ data: [{ user_id: "old-user", org_id: "old-org" }], error: null });
     const res = mockRes();
     await handleDemoStart(req({ ip: freshIp() }), res);
     expect(res.statusCode).toBe(201);
-    expect(state.calls).toContainEqual(["deleteUser", "old-user"]);
+    expect(state.calls).not.toContainEqual(["deleteUser", "old-user"]);
+  });
+
+  it("claims a prepared workspace instead of seeding one during login", async () => {
+    state.rpc.claim_pooled_demo_workspace = () => ({
+      data: {
+        user_id: "pooled-user",
+        email: "demo-pool@example.com",
+        expires_at: "2026-10-01T14:00:00Z",
+        business_name: "Mavela Café",
+      },
+      error: null,
+    });
+    const res = mockRes();
+    await handleDemoStart(req({ ip: freshIp(), body: { org_id: REAL_ORG, user_id: REAL_USER } }), res);
+    expect(res.statusCode).toBe(201);
+    expect(res.body.demo).toMatchObject({ business_name: "Mavela Café" });
+    expect(JSON.stringify(res.body)).not.toMatch(/password|email|pooled-user|service|secret/i);
+    expect(state.calls.some((c) => c[0] === "createUser")).toBe(false);
+    expect(state.calls.some((c) => c[1] === "provision_demo_workspace")).toBe(false);
+    expect(state.calls).toContainEqual(["updateUser", "pooled-user"]);
+    expect(JSON.stringify(state.calls)).not.toContain(REAL_ORG);
+    expect(JSON.stringify(state.calls)).not.toContain(REAL_USER);
+  });
+
+  it("refills the pool from maintenance, not from the login response", async () => {
+    state.rpc.demo_pool_available_count = () => ({ data: 0, error: null });
+    state.rpc.claim_pooled_demo_workspace = () => ({ data: null, error: null });
+    await runDemoMaintenance();
+    expect(state.calls.some((c) => c[0] === "createUser")).toBe(true);
+    const provision = state.calls.find((c) => c[1] === "provision_demo_workspace");
+    expect(provision[2]).toMatchObject({ p_for_pool: true, p_client_hash: "pool" });
   });
 
   it("rejects the honeypot field and non-POST methods", async () => {

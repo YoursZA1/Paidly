@@ -11,6 +11,7 @@
  * mint a normal Supabase session, and never returned or logged.
  */
 import crypto from "node:crypto";
+import { waitUntil } from "@vercel/functions";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { getSupabaseAnonClient } from "../supabaseAnon.js";
 import { requireBearerUser } from "../billing/httpAuth.js";
@@ -43,6 +44,8 @@ export function demoConfig(env = process.env) {
     resetsPerHour: envNumber("PAIDLY_DEMO_RESET_PER_HOUR_MAX", 12, { min: 1, max: 1000 }),
     // RFC 2606 reserved domain: mail to it can never reach a person.
     emailDomain: String(env.PAIDLY_DEMO_EMAIL_DOMAIN || "example.com").trim().toLowerCase() || "example.com",
+    // Ready workspaces prepared ahead of a click. 0 disables the pool (every start seeds inline).
+    poolSize: envNumber("PAIDLY_DEMO_POOL_SIZE", 2, { min: 0, max: 8 }),
   };
 }
 
@@ -142,6 +145,197 @@ async function rollbackDemoUser(userId) {
   }
 }
 
+async function signInDemo(email, password) {
+  const anon = getSupabaseAnonClient();
+  if (!anon) {
+    const err = new Error("no_supabase_anon");
+    err.code = "DEMO_UNAVAILABLE";
+    throw err;
+  }
+  const { data: signIn, error: signInError } = await anon.auth.signInWithPassword({ email, password });
+  const session = signIn?.session;
+  if (signInError || !session?.access_token || !session?.refresh_token) {
+    throw signInError || new Error("demo sign-in returned no session");
+  }
+  return session;
+}
+
+async function createDemoAuthUser(config) {
+  const handle = crypto.randomBytes(9).toString("hex");
+  const email = `demo-${handle}@${config.emailDomain}`;
+  const password = crypto.randomBytes(32).toString("base64url");
+  const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    // pending_company_invite: handle_new_user makes the profile only — the demo org comes from
+    // provision_demo_workspace, never from a trial signup.
+    user_metadata: { pending_company_invite: "true", full_name: "Thabo Mavela" },
+    app_metadata: { paidly_demo: true },
+  });
+  if (createError || !created?.user?.id) throw createError || new Error("createUser returned no user");
+  return { userId: created.user.id, email, password };
+}
+
+/**
+ * Takes one prepared workspace, rotates its password, and signs in. Returns null when the pool is
+ * empty or the prepared user cannot be signed in (that slot is rolled back). The browser never
+ * supplies the user or the business.
+ */
+async function startFromPreparedWorkspace(config, clientHash) {
+  const { data, error } = await supabaseAdmin.rpc("claim_pooled_demo_workspace", {
+    p_ttl_minutes: config.ttlMinutes,
+    p_client_hash: clientHash,
+  });
+  if (error) {
+    logDemo("demo_pool_claim_unavailable", { message: error.message });
+    return null;
+  }
+  if (!data?.user_id || !data?.email) return null;
+
+  const password = crypto.randomBytes(32).toString("base64url");
+  try {
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(data.user_id, { password });
+    if (updateError) throw updateError;
+    const session = await signInDemo(data.email, password);
+    return { session, demo: data, userId: data.user_id, pooled: true };
+  } catch (err) {
+    logDemo("demo_pool_claim_signin_failed", { message: err?.message || String(err) });
+    await rollbackDemoUser(data.user_id);
+    return null;
+  }
+}
+
+async function startFreshWorkspace(config, clientHash) {
+  const { data: active, error: countError } = await supabaseAdmin.rpc("demo_active_workspace_count");
+  if (countError) {
+    logDemo("demo_start_failed", { stage: "count", message: countError.message });
+    const err = new Error("count");
+    err.code = "DEMO_UNAVAILABLE";
+    throw err;
+  }
+  if (Number(active) >= config.maxActive) {
+    logDemo("demo_start_capacity", { active: Number(active), max: config.maxActive });
+    const err = new Error("busy");
+    err.code = "DEMO_BUSY";
+    throw err;
+  }
+
+  const created = await createDemoAuthUser(config);
+  try {
+    const { data: workspace, error: provisionError } = await supabaseAdmin.rpc("provision_demo_workspace", {
+      p_user_id: created.userId,
+      p_ttl_minutes: config.ttlMinutes,
+      p_client_hash: clientHash,
+    });
+    if (provisionError) throw provisionError;
+    const session = await signInDemo(created.email, created.password);
+    return { session, demo: workspace, userId: created.userId, pooled: false };
+  } catch (err) {
+    await rollbackDemoUser(created.userId);
+    throw err;
+  }
+}
+
+/** Prepares one workspace with no visitor attached. Password is discarded until claim rotates it. */
+async function provisionPooledWorkspace(config) {
+  let userId = null;
+  try {
+    const created = await createDemoAuthUser(config);
+    userId = created.userId;
+    const { error } = await supabaseAdmin.rpc("provision_demo_workspace", {
+      p_user_id: userId,
+      p_ttl_minutes: config.ttlMinutes,
+      p_client_hash: "pool",
+      p_for_pool: true,
+    });
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    logDemo("demo_pool_refill_failed", { message: err?.message || String(err) });
+    if (userId) await rollbackDemoUser(userId);
+    return false;
+  }
+}
+
+/**
+ * Tops the pool back up. Bounded so one invocation cannot seed an unbounded number of cafés.
+ * @returns {Promise<{ added: number }>}
+ */
+export async function replenishDemoPool({ maxAdd = 1 } = {}) {
+  const config = demoConfig();
+  if (!config.enabled || config.poolSize <= 0) return { added: 0 };
+  const { data: available, error } = await supabaseAdmin.rpc("demo_pool_available_count");
+  if (error) {
+    logDemo("demo_pool_count_failed", { message: error.message });
+    return { added: 0 };
+  }
+  const room = config.poolSize - Number(available || 0);
+  const toAdd = Math.max(0, Math.min(room, maxAdd));
+  if (!toAdd) return { added: 0 };
+
+  const { data: active, error: countError } = await supabaseAdmin.rpc("demo_active_workspace_count");
+  if (countError) {
+    logDemo("demo_pool_count_failed", { message: countError.message });
+    return { added: 0 };
+  }
+
+  let added = 0;
+  for (let i = 0; i < toAdd; i += 1) {
+    if (Number(active) + added >= config.maxActive) break;
+    const ok = await provisionPooledWorkspace(config);
+    if (!ok) break;
+    added += 1;
+  }
+  if (added) logDemo("demo_pool_refilled", { added, target: config.poolSize });
+  return { added };
+}
+
+/** Expired-demo sweep plus one pool refill. Not on the visitor's critical path. */
+export async function runDemoMaintenance() {
+  try {
+    await runDemoCleanup({ limit: 2 });
+  } catch (err) {
+    logDemo("demo_cleanup_inline_failed", { message: err?.message || String(err) });
+  }
+  try {
+    await replenishDemoPool({ maxAdd: 1 });
+  } catch (err) {
+    logDemo("demo_pool_refill_failed", { message: err?.message || String(err) });
+  }
+}
+
+function scheduleDemoMaintenance() {
+  // Registered while the request is still open so Vercel can keep the refill alive after
+  // res.json(). The promise is not awaited. Tests call runDemoMaintenance directly.
+  if (process.env.VITEST) return;
+  const work = runDemoMaintenance();
+  try {
+    waitUntil(work);
+  } catch {
+    /* outside a Vercel request the promise still runs in a long-lived server */
+  }
+}
+
+function sendDemoSession(res, pack, { ttlMinutes, clientHash, startedAt }) {
+  logDemo("demo_session_created", {
+    user: String(pack.userId || "").slice(0, 8),
+    ttl_minutes: ttlMinutes,
+    client: clientHash.slice(0, 8),
+    pooled: pack.pooled === true,
+    ms: Date.now() - startedAt,
+  });
+  return res.status(201).json({
+    ok: true,
+    access_token: pack.session.access_token,
+    refresh_token: pack.session.refresh_token,
+    demo: {
+      business_name: pack.demo?.business_name || DEMO_BUSINESS_NAME,
+      expires_at: pack.demo?.expires_at || null,
+    },
+  });
+}
+
 /** POST /api/auth/demo */
 export async function handleDemoStart(req, res) {
   if (!preflight(req, res)) return;
@@ -165,72 +359,28 @@ export async function handleDemoStart(req, res) {
     });
   }
 
-  const anon = getSupabaseAnonClient();
-  if (!anon) {
+  if (!getSupabaseAnonClient()) {
     logDemo("demo_start_misconfigured", { reason: "no_supabase_anon" });
     return jsonError(res, 503, "The live demo is not available right now.", "DEMO_UNAVAILABLE");
   }
 
+  const startedAt = Date.now();
+  const clientHash = hashClient(ip);
   try {
-    await runDemoCleanup({ limit: 5 });
+    // A prepared workspace is only a password rotation and a sign-in. Seeding happens off this request.
+    const pack =
+      (await startFromPreparedWorkspace(config, clientHash)) || (await startFreshWorkspace(config, clientHash));
+    scheduleDemoMaintenance();
+    return sendDemoSession(res, pack, { ttlMinutes: config.ttlMinutes, clientHash, startedAt });
   } catch (err) {
-    logDemo("demo_cleanup_inline_failed", { message: err?.message || String(err) });
-  }
-
-  const { data: active, error: countError } = await supabaseAdmin.rpc("demo_active_workspace_count");
-  if (countError) {
-    logDemo("demo_start_failed", { stage: "count", message: countError.message });
-    return jsonError(res, 503, "The live demo is not available right now.", "DEMO_UNAVAILABLE");
-  }
-  if (Number(active) >= config.maxActive) {
-    logDemo("demo_start_capacity", { active: Number(active), max: config.maxActive });
-    return jsonError(res, 503, "The live demo is very busy right now. Please try again in a few minutes.", "DEMO_BUSY");
-  }
-
-  const handle = crypto.randomBytes(9).toString("hex");
-  const email = `demo-${handle}@${config.emailDomain}`;
-  const password = crypto.randomBytes(32).toString("base64url");
-  let userId = null;
-  try {
-    const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      // pending_company_invite: handle_new_user makes the profile only — the demo org comes from
-      // provision_demo_workspace, never from a trial signup.
-      user_metadata: { pending_company_invite: "true", full_name: "Thabo Mavela" },
-      app_metadata: { paidly_demo: true },
-    });
-    if (createError || !created?.user?.id) throw createError || new Error("createUser returned no user");
-    userId = created.user.id;
-
-    const { data: workspace, error: provisionError } = await supabaseAdmin.rpc("provision_demo_workspace", {
-      p_user_id: userId,
-      p_ttl_minutes: config.ttlMinutes,
-      p_client_hash: hashClient(ip),
-    });
-    if (provisionError) throw provisionError;
-
-    const { data: signIn, error: signInError } = await anon.auth.signInWithPassword({ email, password });
-    const session = signIn?.session;
-    if (signInError || !session?.access_token || !session?.refresh_token) {
-      throw signInError || new Error("demo sign-in returned no session");
+    if (err?.code === "DEMO_BUSY") {
+      return jsonError(res, 503, "The live demo is very busy right now. Please try again in a few minutes.", "DEMO_BUSY");
     }
-
-    logDemo("demo_session_created", { user: userId.slice(0, 8), ttl_minutes: config.ttlMinutes, client: hashClient(ip).slice(0, 8) });
-    return res.status(201).json({
-      ok: true,
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      demo: {
-        business_name: workspace?.business_name || DEMO_BUSINESS_NAME,
-        expires_at: workspace?.expires_at || null,
-      },
-    });
-  } catch (err) {
-    logDemo("demo_start_failed", { stage: userId ? "provision" : "create_user", message: err?.message || String(err) });
-    if (userId) await rollbackDemoUser(userId);
-    return jsonError(res, 500, "We couldn't start the demo right now. Please try again in a moment.", "DEMO_START_FAILED");
+    if (err?.code === "DEMO_UNAVAILABLE") {
+      return jsonError(res, 503, "The live demo is not available right now.", "DEMO_UNAVAILABLE");
+    }
+    logDemo("demo_start_failed", { stage: "provision", message: err?.message || String(err) });
+    return jsonError(res, 500, "We couldn't start the demo. Please try again.", "DEMO_START_FAILED");
   }
 }
 

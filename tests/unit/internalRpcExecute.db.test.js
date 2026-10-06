@@ -39,6 +39,9 @@ const SERVER_ONLY = [
   "company_access_subscription",
   "paidly_company_plan",
   "paidly_user_company_id",
+  "purchase_order_recalculate",
+  "purchase_order_refresh_paid",
+  "purchase_order_log_event",
 ];
 
 beforeAll(async () => {

@@ -25,6 +25,10 @@ import { CASHFLOW_PAGE_QUERY_KEY, fetchCashFlowPageData } from '@/utils/cashFlow
 import { buildMoneyTotals, getReportPeriodBounds, inDayRange } from '@/utils/cashFlowTruth';
 import { summarizePosSales } from '@/utils/posSalesTruth';
 import PosSalesReportCard from '@/components/reports/PosSalesReportCard';
+import PurchasingReportCard from '@/components/reports/PurchasingReportCard';
+import { useEntitlementAccess } from '@/hooks/useEntitlementAccess';
+import { fetchPurchaseOrderHeaders, fetchSupplierPaymentsBetween } from '@/services/purchaseOrderQueries';
+import { summarizePurchaseOrders } from '@shared/procurement/purchaseOrderMath.js';
 
 export default function Reports() {
   const navigate = useNavigate();
@@ -142,6 +146,25 @@ export default function Reports() {
   const marginPercentQuarter = quarterTotals.marginPercent;
 
   const userCurrency = user?.currency || 'ZAR';
+
+  // Purchasing: commitments / payables / upcoming / paid kept as four separate figures.
+  const { hasFeature: planHasFeature } = useEntitlementAccess();
+  const hasPurchaseOrders = planHasFeature('purchase_orders');
+  const monthStartIso = format(thisMonthStart, 'yyyy-MM-dd');
+  const monthEndIso = format(thisMonthEnd, 'yyyy-MM-dd');
+  const { data: purchasing } = useQuery({
+    queryKey: ['reports', 'purchasing', authUserId ?? null, monthStartIso],
+    queryFn: async () => {
+      const [orders, paidRows] = await Promise.all([
+        fetchPurchaseOrderHeaders({ statuses: ['approved', 'partially_received', 'received', 'cancelled'] }),
+        fetchSupplierPaymentsBetween(monthStartIso, monthEndIso),
+      ]);
+      const paidCents = paidRows.reduce((sum, row) => sum + Math.round(Number(row.amount || 0) * 100), 0);
+      return { summary: summarizePurchaseOrders(orders), paidThisMonth: paidCents / 100, hasOrders: orders.length > 0 };
+    },
+    enabled: hasPurchaseOrders,
+    staleTime: 60 * 1000,
+  });
 
   const handleExportConsolidated = () => {
     if (consolidatedFallbackUrl) {
@@ -287,6 +310,12 @@ export default function Reports() {
             />
           )}
         </div>
+
+        {purchasing?.hasOrders && (
+          <div className="mt-8">
+            <PurchasingReportCard summary={purchasing.summary} paidThisMonth={purchasing.paidThisMonth} currency={userCurrency} />
+          </div>
+        )}
 
         {/* Consolidated report: unified KPIs and margin */}
         <Card className="mt-8 rounded-xl border border-border shadow-sm">

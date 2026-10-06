@@ -3,15 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthUserId } from "@/lib/authUserId";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
-import { resolveSessionActiveOrgId } from "@/api/auth/sessionActiveOrg.js";
+import { resolveActiveOrgIdForUser } from "@/api/auth/orgCache.js";
 import { DEMO_BUSINESS_NAME, sessionUserIsDemo, setDemoModeActive } from "@/lib/demo/demoModeState";
 
 export const DEMO_MODE_QUERY_ROOT = "demo-mode";
 
 /** Active business's Demo Mode flags, straight from the database (RLS: the owner reads their org). */
-async function fetchDemoWorkspace() {
+async function fetchDemoWorkspace(userId) {
   if (!isSupabaseConfigured) return null;
-  const orgId = await resolveSessionActiveOrgId();
+  const orgId = await resolveActiveOrgIdForUser(userId);
   if (!orgId) return null;
   const { data, error } = await supabase
     .from("organizations")
@@ -49,7 +49,7 @@ export function useDemoMode() {
 
   const query = useQuery({
     queryKey: [DEMO_MODE_QUERY_ROOT, userId],
-    queryFn: fetchDemoWorkspace,
+    queryFn: () => fetchDemoWorkspace(userId),
     enabled: Boolean(userId),
     staleTime: 60_000,
     retry: 1,

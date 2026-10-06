@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   BarChart3,
@@ -37,6 +37,7 @@ const INSIDE = [
  */
 export default function DemoLanding() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, session, logout } = useAuth();
   const demo = useDemoMode();
   const signedIn = Boolean(getAuthUserId(user) || session?.user?.id);
@@ -49,18 +50,22 @@ export default function DemoLanding() {
     if (starting) return;
     setStarting(true);
     setError("");
+    // The dashboard chunk downloads while the session is created, so arrival is not a second wait.
+    if (!import.meta.env.VITEST) {
+      void import("@/pages/Dashboard").catch(() => {});
+    }
     try {
       if (signedIn && !demo.isDemo) {
         // A demo never shares a browser session with a real account.
         await logout?.();
       }
       await startLiveDemo();
-      window.location.assign("/Dashboard");
+      navigate("/Dashboard", { replace: true });
     } catch (err) {
-      setError(err?.message || "We couldn't start the demo right now. Please try again in a moment.");
+      setError(err?.message || "We couldn't start the demo. Please try again.");
       setStarting(false);
     }
-  }, [demo.isDemo, logout, signedIn, starting]);
+  }, [demo.isDemo, logout, navigate, signedIn, starting]);
 
   const inDemo = signedIn && demo.isDemo && !demo.expired;
 
@@ -109,7 +114,7 @@ export default function DemoLanding() {
                   className="inline-flex min-h-12 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-[#FF4F00] px-8 text-sm font-semibold text-white shadow-lg shadow-[#FF4F00]/30 transition-colors hover:bg-[#E64700] disabled:cursor-wait disabled:opacity-80 sm:w-auto"
                 >
                   {starting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-                  {starting ? "Setting up Mavela Café…" : signedIn && !demo.isDemo ? "Sign out & enter live demo" : "Enter Live Demo"}
+                  {starting ? "Signing you into the demo…" : signedIn && !demo.isDemo ? "Sign out & enter live demo" : "Enter Live Demo"}
                   {starting ? null : <ArrowRight className="h-4 w-4" aria-hidden />}
                 </button>
               )}

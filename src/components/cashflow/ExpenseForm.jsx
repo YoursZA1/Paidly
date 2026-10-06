@@ -339,7 +339,9 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                                                 <SelectItem value="office">Office</SelectItem>
                                                 <SelectItem value="travel">Travel</SelectItem>
                                                 <SelectItem value="utilities">Utilities</SelectItem>
+                                                <SelectItem value="inventory">Inventory / Stock</SelectItem>
                                                 <SelectItem value="supplies">Supplies</SelectItem>
+                                                <SelectItem value="equipment">Equipment</SelectItem>
                                                 <SelectItem value="salary">Salary</SelectItem>
                                                 <SelectItem value="marketing">Marketing</SelectItem>
                                                 <SelectItem value="software">Software</SelectItem>
