@@ -3,8 +3,27 @@ import {
   PDF_PAGE_MARGIN_MM,
 } from "@/lib/documentPdf/pageGeometry";
 
+function clampDocLogos(root) {
+  if (!root?.querySelectorAll) return;
+  root.querySelectorAll("img.paidly-doc-logo").forEach((img) => {
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!nw || !nh) return;
+    const scale = Math.min(180 / nw, 64 / nh, 1);
+    const w = Math.max(1, Math.round(nw * scale));
+    const h = Math.max(1, Math.round(nh * scale));
+    img.setAttribute("width", String(w));
+    img.setAttribute("height", String(h));
+    img.style.width = `${w}px`;
+    img.style.height = `${h}px`;
+    img.style.maxWidth = `${w}px`;
+    img.style.maxHeight = `${h}px`;
+  });
+}
+
 function html2CanvasOnClone(clonedDoc) {
   try {
+    clampDocLogos(clonedDoc);
     const win = clonedDoc.defaultView;
     if (!win) return;
     clonedDoc.body.querySelectorAll("*").forEach((el) => {
@@ -85,6 +104,7 @@ async function withInvoicePdfElementStyles(element, filename, run) {
     element.style.boxSizing = "border-box";
     element.style.backgroundColor = "#ffffff";
     element.style.padding = "0";
+    clampDocLogos(element);
 
     const html2pdf = (await import("html2pdf.js")).default;
     const options = buildHtml2PdfOptions(filename);

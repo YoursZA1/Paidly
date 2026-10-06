@@ -196,6 +196,7 @@ const DocumentPdfTemplate = forwardRef(function DocumentPdfTemplate(
                   src={logoUrl}
                   alt=""
                   crossOrigin="anonymous"
+                  className="paidly-doc-logo"
                   style={{
                     maxHeight: 64,
                     maxWidth: 180,

@@ -69,7 +69,7 @@ const EMAIL_BODY_OPTIONS = {
   ],
   allowedAttributes: {
     a: ["href", "title", "name", "target", "rel", "style"],
-    img: ["src", "alt", "title", "width", "height"],
+    img: ["src", "alt", "title", "width", "height", "style"],
     td: ["colspan", "rowspan", "align", "valign", "bgcolor", "style"],
     th: ["colspan", "rowspan", "align", "valign", "bgcolor", "style"],
     table: ["border", "cellpadding", "cellspacing", "width", "role", "align", "style"],
@@ -100,7 +100,9 @@ const EMAIL_BODY_OPTIONS = {
       border: [/^\d+px\s+(?:solid|none)\s+#[0-9a-f]{3,6}$/i],
       "border-radius": [/^\d+px$/],
       width: [/^(?:\d+px|\d+%)$/],
+      height: [/^(?:auto|\d+px)$/],
       "max-width": [/^\d+px$/],
+      "max-height": [/^\d+px$/],
       "word-break": [/^(?:break-all|break-word|normal)$/],
     },
   },

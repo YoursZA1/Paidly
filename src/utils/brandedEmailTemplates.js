@@ -26,16 +26,24 @@ export function buildBrandedEmailDocumentHtml(opts) {
     companyName,
     footerNote = 'This message was sent securely.',
     primaryHex = '#f24e00',
-    secondaryHex = '#ff7c00',
+    secondaryHex: _secondaryHex = '#ff7c00',
     pixelUrl = '',
     logoUrl = '',
   } = opts;
+  void _secondaryHex;
 
   const pre = escapeHtml(preheader);
   const safeTitle = escapeHtml(title);
   const safeSub = escapeHtml(subtitle);
   const safeCompany = escapeHtml(companyName);
   const safeLogoUrl = logoUrl && logoUrl.startsWith('https://') ? escapeHtml(logoUrl) : '';
+  const headerBg = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(primaryHex || '').trim())
+    ? String(primaryHex).trim()
+    : '#18181b';
+  // Inbox clients ignore CSS max-height on images. The width attribute is what keeps the logo small.
+  const logoHtml = safeLogoUrl
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr><td width="96" style="width:96px;"><img src="${safeLogoUrl}" alt="${safeCompany}" width="96" style="display:block;width:96px;max-width:96px;height:auto;max-height:48px;" /></td></tr></table>`
+    : '';
 
   return `
 <!DOCTYPE html>
@@ -54,15 +62,15 @@ export function buildBrandedEmailDocumentHtml(opts) {
       <td align="center">
         <table role="presentation" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.08);border:1px solid #e4e4e7;">
           <tr>
-            <td style="background:linear-gradient(135deg, ${escapeHtml(primaryHex)} 0%, ${escapeHtml(secondaryHex)} 100%);padding:28px 24px;text-align:center;">
-              <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.85);">Document</p>
+            <td bgcolor="${headerBg}" style="background-color:${headerBg};padding:28px 24px;text-align:center;">
+              <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#fff7ed;">Document</p>
               <h1 style="margin:8px 0 0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.25;">${safeTitle}</h1>
-              ${safeSub ? `<p style="margin:10px 0 0;font-size:14px;color:rgba(255,255,255,0.92);">${safeSub}</p>` : ''}
+              ${safeSub ? `<p style="margin:10px 0 0;font-size:14px;color:#ffedd5;">${safeSub}</p>` : ''}
             </td>
           </tr>
           <tr>
             <td style="padding:28px 24px 8px;color:#18181b;font-size:15px;line-height:1.6;">
-              ${safeLogoUrl ? `<div style="margin:0 0 20px;"><img src="${safeLogoUrl}" alt="${safeCompany}" style="max-width:160px;max-height:56px;display:block;border:0;outline:none;" /></div>` : ''}
+              ${logoHtml}
               ${innerHtml}
             </td>
           </tr>

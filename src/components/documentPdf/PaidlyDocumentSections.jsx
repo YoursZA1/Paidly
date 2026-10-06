@@ -35,7 +35,7 @@ export function DocumentLogo({ logoUrl, companyName, primary }) {
         src={logoUrl}
         alt=""
         loading="eager"
-        className="shrink-0 object-contain object-left"
+        className="paidly-doc-logo shrink-0 object-contain object-left"
         style={{ maxHeight: 64, maxWidth: 180, width: "auto", height: "auto" }}
       />
     );
