@@ -12,13 +12,13 @@
 }
 
 .paidly-doc-sheet {
-  width: 174mm;
-  max-width: 174mm;
+  width: 210mm;
+  max-width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
   background: #fff;
   color: #111827;
-  font-family: system-ui, Inter, sans-serif;
+  font-family: Helvetica, Arial, sans-serif;
   font-size: 12px;
   line-height: 1.4;
 }

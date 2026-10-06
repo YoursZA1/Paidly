@@ -21,6 +21,7 @@ import {
   downloadInvoicePdfBlob,
   generateInvoicePDF,
 } from "@/components/pdf/generateInvoicePDF";
+import { downloadQuotePdfBlob, generateQuotePDF } from "@/components/pdf/generateQuotePDF";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { createPageUrl, createViewDocumentUrl } from "@/utils";
@@ -1314,7 +1315,7 @@ function CreateDocumentCore({ docType }) {
     const run = async () => {
       if (cancelled) return;
 
-      if (docType !== "invoice") {
+      if (docType !== "invoice" && docType !== "quote") {
         await waitForPreviewPaint();
         if (cancelled) return;
         const el = previewPdfRef.current;
@@ -1356,11 +1357,15 @@ function CreateDocumentCore({ docType }) {
             status: "draft",
             company: selectedBrand || undefined,
           };
+          const selectedClient = clients.find((c) => c.id === form.client_id) || {};
           const clientForPdf = {
+            ...selectedClient,
             id: form.client_id || undefined,
-            name: form.client_name || "Client",
-            email: form.client_email || "",
-            address: form.client_address || "",
+            name: form.client_name || selectedClient.name || "Client",
+            email: form.client_email || selectedClient.email || "",
+            address: form.client_address || selectedClient.address || "",
+            phone: selectedClient.phone || "",
+            contact_person: selectedClient.contact_person || "",
           };
           const blob = await generateInvoicePDF({
             invoice: invoiceForPdf,
@@ -1369,6 +1374,41 @@ function CreateDocumentCore({ docType }) {
             bankingDetail: previewBankingRow,
           });
           downloadInvoicePdfBlob(blob, `${numberRaw}.pdf`);
+        } else if (docType === "quote") {
+          const selectedClient = clients.find((c) => c.id === form.client_id) || {};
+          const clientForPdf = {
+            ...selectedClient,
+            id: form.client_id || undefined,
+            name: form.client_name || selectedClient.name || "Client",
+            email: form.client_email || selectedClient.email || "",
+            address: form.client_address || selectedClient.address || "",
+            phone: selectedClient.phone || "",
+            contact_person: selectedClient.contact_person || "",
+          };
+          const quoteForPdf = {
+            ...previewDoc,
+            quote_number: numberRaw,
+            created_at: form.issue_date,
+            valid_until: form.due_date,
+            items: Array.isArray(form.line_items) ? form.line_items : [],
+            subtotal: computed.subtotal,
+            tax_rate: Number(form.tax_rate) || 0,
+            tax_amount: computed.tax_amount,
+            discount_amount: computed.discount_amount,
+            total_amount: computed.total,
+            currency: form.currency || user?.currency || "ZAR",
+            notes: form.notes || "",
+            terms_conditions: form.terms_conditions || "",
+            status: "draft",
+            company: selectedBrand || undefined,
+          };
+          const blob = await generateQuotePDF({
+            quote: quoteForPdf,
+            client: clientForPdf,
+            user,
+            bankingDetail: previewBankingRow,
+          });
+          downloadQuotePdfBlob(blob, `${numberRaw}.pdf`);
         } else {
           const el = previewPdfRef.current;
           await downloadDocumentPreviewFromElement(el, docType, numberRaw);
