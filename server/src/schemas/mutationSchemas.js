@@ -33,6 +33,8 @@ export const sendEmailBodySchema = z.object({
   to: apiEmailSchema,
   subject: z.string().trim().min(1).max(998),
   body: z.string().optional().default(""),
+  pdfBase64: z.string().max(12_000_000).optional(),
+  pdfFilename: z.string().max(180).optional(),
 });
 
 /** POST /api/payfast/subscription */

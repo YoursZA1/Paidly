@@ -1,6 +1,7 @@
 import { Quote, Client, QuoteReminder } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 import { createPageUrl } from '@/utils';
+import { buildViewDocumentButtonHtml } from '@/utils/shareEmailHtml';
 import { format } from 'date-fns';
 
 class QuoteReminderService {
@@ -89,7 +90,13 @@ class QuoteReminderService {
 
     static async sendEmail(quote, client, user, settings) {
         const companyName = user.company_name || user.full_name || 'Your Company';
-        const publicViewUrl = `${window.location.origin}${createPageUrl(`PublicQuote?id=${quote.id}`)}`;
+        let shareToken = String(quote.public_share_token || "").trim();
+        if (!shareToken) {
+            shareToken = crypto.randomUUID();
+            await Quote.update(quote.id, { public_share_token: shareToken });
+            quote.public_share_token = shareToken;
+        }
+        const publicViewUrl = `${window.location.origin}${createPageUrl(`PublicQuote?token=${encodeURIComponent(shareToken)}`)}`;
         
         let subject = settings.subject || "Following up on Quote {{quote_number}}";
         let body = settings.body || "Hi {{client_name}},\n\nI just wanted to follow up on the quote I sent a few days ago. Have you had a chance to review it?\n\nYou can view it here: {{view_link}}\n\nLet me know if you have any questions.\n\nBest regards,\n{{company_name}}";
@@ -113,7 +120,7 @@ class QuoteReminderService {
             <div style="font-family: sans-serif; padding: 20px;">
                 <p style="white-space: pre-wrap;">${body}</p>
                 <br/>
-                <a href="${publicViewUrl}" style="background-color: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Quote</a>
+                ${buildViewDocumentButtonHtml(publicViewUrl, "View Quote")}
             </div>
         `;
 

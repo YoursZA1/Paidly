@@ -10,14 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchEmailTemplates } from '@/services/EmailTemplatesService';
 import { effectiveEmailTemplate, renderEmailTemplate } from '@shared/emailTemplates.js';
 import { DocumentSentDone } from '@/components/shared/DocumentSentDone';
-
-function escapeHtml(text) {
-    return String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
+import { buildDocumentShareEmailHtml } from '@/utils/shareEmailHtml';
 
 /**
  * Share a document by link or email. After an email is sent the modal becomes the Done State
@@ -88,34 +81,30 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
         setSendError('');
         setIsSending(true);
         try {
-            const emailBody = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; background-color: #f9fafb;">
-                    <div style="text-align: center; padding: 20px 0;">
-                        <h1 style="font-size: 24px; color: #333;">You've received a new ${itemType}</h1>
-                    </div>
-                    <div style="background: white; padding: 30px; border: 1px solid #e1e5e9; border-radius: 8px;">
-                        <p style="font-size: 16px; color: #555;">${escapeHtml(emailMessage || `Please find your ${itemType} below.`).replace(/\n/g, '<br/>')}</p>
-                        <div style="text-align: center; margin: 30px 0;">
-                            <a href="${shareUrl}" 
-                               style="background-color: #4f46e5; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; display: inline-block;">
-                                View ${itemType.charAt(0).toUpperCase() + itemType.slice(1)}
-                            </a>
-                        </div>
-                        <p style="font-size: 14px; color: #888; margin-top: 20px;">
-                            Or copy this link: <br/>
-                            <a href="${shareUrl}" style="color: #4f46e5; word-break: break-all;">${shareUrl}</a>
-                        </p>
-                    </div>
-                    <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
-                        <p>Sent from ${profile?.company_name || profile?.full_name || "Paidly"}</p>
-                    </div>
-                </div>
-            `;
+            const record = docRecord || invoice || {};
+            const isQuote = itemType === 'quote';
+            let attachment = null;
+            if (isQuote) {
+                const { buildQuotePdfAttachment } = await import('@/services/quoteShareEmail');
+                attachment = await buildQuotePdfAttachment({
+                    quote: record,
+                    client: client || { id: record.client_id, name: record.client_name, email: emailTo },
+                    user: profile,
+                });
+            }
+            const emailBody = buildDocumentShareEmailHtml({
+                itemType,
+                message: emailMessage,
+                shareUrl,
+                companyName: profile?.company_name || profile?.full_name || 'Paidly',
+                attachPdf: isQuote,
+            });
 
             await breakApi.integrations.Core.SendEmail({
                 to: emailTo,
                 subject: emailSubject,
-                body: emailBody
+                body: emailBody,
+                ...(attachment || {}),
             });
 
             if (onMarkAsSent) {
@@ -129,7 +118,7 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
             setSentTo(emailTo.trim());
         } catch (error) {
             console.error('Failed to send email:', error);
-            setSendError('The email could not be sent. Check the address and try again.');
+            setSendError(error?.message || 'The email could not be sent. Check the address and try again.');
         } finally {
             setIsSending(false);
         }

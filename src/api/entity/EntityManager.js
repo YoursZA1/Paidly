@@ -1252,6 +1252,7 @@ export class EntityManager {
         'banking_detail_id', 'company_id',
         'document_brand_primary', 'document_brand_secondary',
         'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_phone', 'owner_vat_number', 'owner_currency',
+        'public_share_token', 'sent_date',
       ];
       if (supabaseTable === 'quotes') {
         Object.keys(supabaseData).forEach(key => {
@@ -1589,6 +1590,7 @@ export class EntityManager {
         'notes', 'terms_conditions', 'updated_at', 'banking_detail_id',
         'document_brand_primary', 'document_brand_secondary',
         'owner_company_name', 'owner_company_address', 'owner_logo_url', 'owner_email', 'owner_phone', 'owner_vat_number', 'owner_currency',
+        'public_share_token', 'sent_date',
       ];
       if (supabaseTable === 'quotes') {
         Object.keys(updateData).forEach(key => {

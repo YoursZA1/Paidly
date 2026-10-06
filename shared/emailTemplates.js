@@ -23,7 +23,7 @@ export const DEFAULT_EMAIL_TEMPLATES = Object.freeze({
   }),
   quote: Object.freeze({
     subject: "Quote {document_number} from {company_name}",
-    message: "Hi {client_name},\n\nPlease find quote {document_number} for {amount}, valid until {due_date}.\n\nKind regards,\n{company_name}",
+    message: "Hi {client_name},\n\nPlease find quote {document_number} for {amount}, valid until {due_date}. A PDF copy is attached.\n\nKind regards,\n{company_name}",
   }),
 });
 

@@ -53,7 +53,10 @@ export default function QuoteEmailPreviewModal({ quote, client, onClose, onSend,
 
     const companyName = company?.company_name || 'Your Company';
     const userCurrency = company?.currency || 'USD';
-    const publicViewUrl = `${window.location.origin}${createPageUrl(`PublicQuote?token=${quote.public_share_token || quote.id}`)}`;
+    const shareToken = String(quote.public_share_token || "").trim();
+    const publicViewUrl = shareToken
+        ? `${window.location.origin}${createPageUrl(`PublicQuote?token=${encodeURIComponent(shareToken)}`)}`
+        : "";
     
     const emailHtml = generateQuoteEmailHtml(quote, client, company, publicViewUrl);
 

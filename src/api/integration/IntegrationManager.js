@@ -164,7 +164,7 @@ export class IntegrationManager {
         return null;
       },
       SendEmail: async (emailConfig) => {
-        const { to, subject, body } = emailConfig || {};
+        const { to, subject, body, pdfBase64, pdfFilename } = emailConfig || {};
         if (!to || !subject) {
           throw new Error("Missing to or subject");
         }
@@ -175,10 +175,15 @@ export class IntegrationManager {
             throw new Error("Not signed in");
           }
           const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
+          const payload = { to, subject, body: body || "" };
+          if (pdfBase64) {
+            payload.pdfBase64 = pdfBase64;
+            if (pdfFilename) payload.pdfFilename = pdfFilename;
+          }
           const res = await apiRequest(`${apiBase}/api/send-email`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ to, subject, body: body || "" }),
+            body: JSON.stringify(payload),
           });
           const json = await res.json().catch(() => ({}));
           if (!res.ok) {
