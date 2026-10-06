@@ -167,7 +167,7 @@ function accountInfoRowsFromUser(user) {
 }
 
 /** Bank / account lines — saved banking row on the invoice or default from profile `user.business`. */
-function accountDetailsBankRows(bankingDetail, user) {
+function accountDetailsBankRows(bankingDetail, user, paymentReference) {
   const b = bankingDetail && typeof bankingDetail === "object" ? bankingDetail : null;
   const biz = user?.business && typeof user.business === "object" ? user.business : null;
   const t = (v) => (typeof v === "string" ? v.trim() : "");
@@ -177,13 +177,19 @@ function accountDetailsBankRows(bankingDetail, user) {
   const branch = t(b?.routing_number || b?.branch_code || biz?.branch_code);
   const swift = t(b?.swift_code);
   const addInfo = t(b?.additional_info);
+  const internalNote = /^auto-created from default bank details\.?$/i.test(addInfo);
   const rows = [];
   if (bankName) rows.push({ key: "bank", label: "Bank name", value: bankName });
   if (accountName) rows.push({ key: "acctnm", label: "Account name", value: accountName });
   if (accountNo) rows.push({ key: "acctno", label: "Account number", value: accountNo });
   if (branch) rows.push({ key: "branch", label: "Branch / routing code", value: branch });
   if (swift) rows.push({ key: "swift", label: "SWIFT / BIC", value: swift });
-  if (addInfo) rows.push({ key: "add", label: "Payment reference", value: addInfo, multiline: true });
+  const ref = t(paymentReference);
+  if (addInfo && !internalNote) {
+    rows.push({ key: "add", label: "Payment reference", value: addInfo, multiline: true });
+  } else if (ref && ref !== "—") {
+    rows.push({ key: "add", label: "Payment reference", value: ref });
+  }
   return rows;
 }
 
@@ -496,7 +502,7 @@ export default function UnifiedInvoiceTemplate({
 
   const logoPath = issuerBrand.logo;
   const businessContactRows = accountInfoRowsFromUser(brandedUser);
-  const accountBankRows = accountDetailsBankRows(bankingDetail, user);
+  const accountBankRows = accountDetailsBankRows(bankingDetail, user, displayNumber);
   const hasAccountDetailsSection = accountBankRows.length > 0 || businessContactRows.length > 0;
 
   const items = Array.isArray(invoice.items) ? invoice.items : [];

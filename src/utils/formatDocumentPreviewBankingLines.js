@@ -10,6 +10,11 @@ function str(v) {
   return String(v).trim();
 }
 
+/** Placeholder written when a bank row is created from profile defaults. Not a client payment reference. */
+export function isInternalBankingNote(value) {
+  return /^auto-created from default bank details\.?$/i.test(str(value));
+}
+
 /**
  * @param {object|null|undefined} bd
  * @returns {Array<{ label: string, value: string }>|null}
@@ -24,7 +29,9 @@ export function formatDocumentPreviewBankingRows(bd) {
   if (branch) rows.push({ label: "Branch / routing", value: branch });
   if (str(bd.swift_code)) rows.push({ label: "SWIFT / BIC", value: str(bd.swift_code) });
   const paymentRef = sanitizeDocumentDisplayText(bd.additional_info);
-  if (paymentRef) rows.push({ label: "Payment reference", value: paymentRef });
+  if (paymentRef && !isInternalBankingNote(paymentRef)) {
+    rows.push({ label: "Payment reference", value: paymentRef });
+  }
   return rows.length ? rows : null;
 }
 

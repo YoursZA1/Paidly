@@ -223,5 +223,6 @@ describe("mapInvoicePdfData", () => {
       "Branch / routing",
       "Payment reference",
     ]);
+    expect(data.bankingRows.find((row) => row.label === "Payment reference")?.value).toBe("QUO-1001");
   });
 });

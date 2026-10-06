@@ -23,6 +23,13 @@ export function invoiceEmailSubject(companyName) {
   return `${name} invoice`;
 }
 
+/** Drop a leading "Invoice" so the subject and preview do not both say it. */
+export function invoiceNumberLabel(invoiceNumber) {
+  const raw = String(invoiceNumber || "").trim();
+  const stripped = raw.replace(/^invoice\s*#?\s*/i, "").trim();
+  return stripped || raw;
+}
+
 /**
  * Branded HTML body for invoice emails (used by EmailPreviewModal and sendInvoicePdfEmailToClient).
  * @param {object} invoice
@@ -36,6 +43,7 @@ export function generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixe
   const userCurrency = company?.currency || "USD";
   const formattedAmount = formatCurrency(invoice.total_amount, userCurrency);
   const dueDate = formatDueDate(invoice);
+  const numberLabel = invoiceNumberLabel(invoice.invoice_number);
   const primary =
     parseDocumentBrandHex(invoice?.document_brand_primary) ||
     parseDocumentBrandHex(company?.document_brand_primary) ||
@@ -59,7 +67,7 @@ export function generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixe
         <tr><td style="padding:16px 18px;">
           <p style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;">Invoice summary</p>
           <table role="presentation" width="100%" style="font-size:14px;color:#18181b;">
-            <tr><td style="padding:4px 0;color:#71717a;">Invoice #</td><td align="right" style="font-weight:600;">${escapeHtml(invoice.invoice_number || "")}</td></tr>
+            <tr><td style="padding:4px 0;color:#71717a;">Invoice #</td><td align="right" style="font-weight:600;">${escapeHtml(numberLabel)}</td></tr>
             <tr><td style="padding:4px 0;color:#71717a;">Amount due</td><td align="right" style="font-weight:700;font-size:18px;color:${primary};">${escapeHtml(formattedAmount)}</td></tr>
             ${dueDate ? `<tr><td style="padding:4px 0;color:#71717a;">Due</td><td align="right" style="font-weight:600;">${escapeHtml(dueDate)}</td></tr>` : ""}
           </table>
@@ -73,10 +81,10 @@ export function generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixe
 
   return buildBrandedEmailDocumentHtml({
     preheader: dueDate
-      ? `Invoice ${invoice.invoice_number} — ${formattedAmount} due ${dueDate}`
-      : `Invoice ${invoice.invoice_number} — ${formattedAmount}`,
+      ? `${numberLabel} — ${formattedAmount} due ${dueDate}`
+      : `${numberLabel} — ${formattedAmount}`,
     title: "Invoice",
-    subtitle: `Invoice #${invoice.invoice_number}`,
+    subtitle: numberLabel ? `#${numberLabel}` : "",
     innerHtml,
     companyName,
     footerNote: "This is an automated message from your supplier.",

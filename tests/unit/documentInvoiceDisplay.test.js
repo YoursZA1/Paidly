@@ -71,7 +71,6 @@ describe("formatDocumentPreviewBankingRows", () => {
       { label: "Account name", value: "Onthedesign Agency" },
       { label: "Account number", value: "2965000000" },
       { label: "Branch / routing", value: "198764" },
-      { label: "Payment reference", value: "Auto-created from Default Bank Details" },
     ]);
     expect(formatDocumentPreviewBankingLines({
       bank_name: "Nedbank",
