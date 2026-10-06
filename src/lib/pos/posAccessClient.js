@@ -1,4 +1,5 @@
 import { getBackendBaseUrl } from "@/api/backendClient";
+import { DEMO_SANDBOX_TOKEN, isDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { POS_ACCESS_BEARER_PREFIX } from "@shared/posStaffInvite.js";
 import { posInvitePublicErrorMessage } from "@shared/companyInviteMessages.js";
@@ -72,6 +73,10 @@ function rememberPosAccessProfile(access) {
 export async function posAuthHeaders({ includeJsonContentType = true } = {}) {
   const headers = {};
   if (includeJsonContentType) headers["Content-Type"] = "application/json";
+  if (isDemoSandbox()) {
+    headers.Authorization = `Bearer ${DEMO_SANDBOX_TOKEN}`;
+    return headers;
+  }
   try {
     const session = await getStableSession();
     if (session?.access_token) {

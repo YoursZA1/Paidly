@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { isDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
 import { redirectToLoginIfProtectedPath } from "@/utils/sessionGuard";
 import { SESSION_STATUS, applySessionHealthFromAuthority } from "@/stores/sessionHealthStore";
 import { decideSessionAction, SESSION_DECISION } from "@/lib/sessionDecisionEngine";
@@ -21,6 +22,7 @@ export function setUnauthorizedSessionHandler(fn) {
  * @param {string} [_reason]
  */
 export async function triggerUnauthorizedSession(_reason, context = {}) {
+  if (isDemoSandbox()) return;
   if (typeof window === "undefined") return;
   if (inFlight) return;
   inFlight = true;

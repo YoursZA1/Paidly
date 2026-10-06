@@ -5,6 +5,8 @@ import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { getBackendBaseUrl } from "@/api/backendClient";
 import { apiRequest } from "@/utils/apiRequest";
 import { posApiFetch, posAuthHeaders } from "@/lib/pos/posAccessClient";
+import { isDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
+import { demoPosResponse } from "@/lib/demo/demoPosSandbox.js";
 
 export async function authHeaders({ includeJsonContentType = true } = {}) {
   const headers = await posAuthHeaders({ includeJsonContentType });
@@ -13,6 +15,7 @@ export async function authHeaders({ includeJsonContentType = true } = {}) {
 }
 
 export async function posServiceRequest(url, init = {}) {
+  if (isDemoSandbox()) return demoPosResponse(url, init);
   const headers = await authHeaders({
     includeJsonContentType: Boolean(init.body),
   });

@@ -124,8 +124,10 @@ BEGIN
   JOIN totals t ON t.seq = p.seq;
 
   ALTER TABLE demo_hist_sales ADD COLUMN change_due numeric;
+  -- Production rejects UPDATE without WHERE (safeupdate). seq is always set.
   UPDATE demo_hist_sales
-  SET change_due = CASE WHEN method = 'card' THEN NULL ELSE tendered - total END;
+  SET change_due = CASE WHEN method = 'card' THEN NULL ELSE tendered - total END
+  WHERE seq IS NOT NULL;
 
   ALTER TABLE demo_hist_sales ADD COLUMN receipt text;
   UPDATE demo_hist_sales
@@ -133,7 +135,8 @@ BEGIN
     'POS-%s-%s',
     to_char(sold_at AT TIME ZONE 'Africa/Johannesburg', 'YYYYMMDD'),
     upper(to_hex(4096 + seq))
-  );
+  )
+  WHERE seq IS NOT NULL;
 
   CREATE TEMP TABLE demo_hist_lines ON COMMIT DROP AS
   SELECT

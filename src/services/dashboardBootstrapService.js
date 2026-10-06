@@ -1,6 +1,7 @@
 import { backendApi } from "@/api/backendClient";
 import { runDedupedAsync } from "@/lib/inflightRequestDedupe";
 import { recordFetchDurationMs } from "@/lib/paidlyPerformanceMetrics";
+import { DEMO_SANDBOX_TOKEN, buildDemoBootstrap, isDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
 
 /**
  * Single GET that returns dashboard lists + profile slice (see server `buildDashboardBootstrapPayload`).
@@ -15,6 +16,9 @@ import { recordFetchDurationMs } from "@/lib/paidlyPerformanceMetrics";
  * }>}
  */
 export async function fetchDashboardBootstrap({ accessToken, calendarYear }) {
+  if (isDemoSandbox() || accessToken === DEMO_SANDBOX_TOKEN) {
+    return buildDemoBootstrap();
+  }
   if (!accessToken) {
     throw new Error("missing_access_token");
   }

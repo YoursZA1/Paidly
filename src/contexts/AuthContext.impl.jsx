@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { User } from "@/api/entities";
 import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { installSandboxSession, isDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
 import { createPageUrl } from "@/utils";
 import { backendApi, clearNodeAuthUnreachable } from "@/api/backendClient";
 import { clearSessionOrgIdCache } from "@/api/auth/orgCache.js";
@@ -384,6 +385,10 @@ export function AuthProvider({ children }) {
     if (refreshUserInflightRef.current) return refreshUserInflightRef.current;
 
     const run = (async () => {
+    if (isDemoSandbox()) {
+      installSandboxSession();
+      return;
+    }
     const generation = refreshGenerationRef.current;
     const stillCurrent = () => generation === refreshGenerationRef.current;
     const startedAt = Date.now();
@@ -690,6 +695,10 @@ export function AuthProvider({ children }) {
     const SESSION_INIT_MS = 15_000;
     (async () => {
       try {
+        if (isDemoSandbox()) {
+          installSandboxSession();
+          return;
+        }
         await consumeAuthCallbackFromUrl();
         let initialSession = null;
         try {
@@ -721,6 +730,10 @@ export function AuthProvider({ children }) {
           }
         }
         if (cancelled) return;
+        if (isDemoSandbox()) {
+          installSandboxSession();
+          return;
+        }
         const hasValidSession = isSessionValid(initialSession);
         patchAuthSession({ session: hasValidSession ? initialSession : null });
         let currentUser = null;
@@ -1148,6 +1161,10 @@ export function AuthProvider({ children }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (isDemoSandbox()) {
+        installSandboxSession();
+        return;
+      }
       if (event === "SIGNED_OUT") {
         clearSessionOrgIdCache();
         useWakeRecoveryStore.getState().reset();

@@ -8,6 +8,7 @@ import {
 import { getSupabaseErrorMessage } from "@/utils/supabaseErrorUtils";
 import { retryOnAbort, isAbortError } from "@/utils/retryOnAbort";
 import { invalidateSessionSnapshot } from "@/core/auth/SessionCoordinator";
+import { clearDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
 import { authFlowLog } from "@/lib/auth/authFlowLog";
 
 const mapAuthError = (error) => getSupabaseErrorMessage(error, "Authentication error");
@@ -310,6 +311,7 @@ const SupabaseAuthService = {
    * Otherwise direct Supabase only — default in Vite dev avoids 503 when the Node server is not running.
    */
   async signInWithEmail(email, password) {
+    clearDemoSandbox();
     const normalized = (email || "").trim().toLowerCase();
     authFlowLog("AUTH", "sign-in started", { stage: "password" });
 
@@ -443,6 +445,7 @@ const SupabaseAuthService = {
   },
 
   async signInWithMagicLink(email, redirectTo = null) {
+    clearDemoSandbox();
     let safeRedirectTo = typeof window !== "undefined" ? window.location.origin : null;
     if (redirectTo) {
       try {
@@ -464,6 +467,7 @@ const SupabaseAuthService = {
   },
 
   async signInWithOAuth(provider, redirectTo = null) {
+    clearDemoSandbox();
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -480,6 +484,7 @@ const SupabaseAuthService = {
    * account and returns only its tokens. Same activation path as API sign-in.
    */
   async signInWithIssuedTokens({ access_token, refresh_token }) {
+    clearDemoSandbox();
     if (!access_token || !refresh_token) throw new Error("The demo session could not be started.");
     return activateSessionFromApiTokens({ access_token, refresh_token }, "Starting the demo was interrupted. Please try again.");
   },

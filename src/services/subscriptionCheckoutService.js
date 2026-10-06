@@ -7,6 +7,7 @@
  */
 
 import { getStableSession } from "@/core/auth/SessionCoordinator";
+import { buildDemoSubscription, isDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
 import { useAuthSessionStore } from "@/stores/authSessionStore";
 import { normalizePlanSlug } from "@/lib/plans.js";
 import { promiseWithTimeout } from "@/utils/fetchWithTimeout";
@@ -459,6 +460,7 @@ export async function abandonPendingCheckout() {
  * GET /api/subscriptions/current — display-only. Never mutates subscription status.
  */
 export async function fetchSubscriptionCurrent() {
+  if (isDemoSandbox()) return buildDemoSubscription();
   const session = await getStableSession();
   const accessToken = session?.access_token;
   if (!accessToken) throw new Error("Please sign in.");

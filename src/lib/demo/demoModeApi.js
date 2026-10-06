@@ -1,28 +1,23 @@
 /**
- * Demo Mode API client: /api/auth/demo (start), /demo-reset, /demo-end — all served by the existing
- * auth serverless function. The browser sends no ids: the server derives the demo user from the
- * verified bearer token.
+ * Demo Mode entry. Try Demo installs a browser sandbox (no Supabase user, no company row).
+ * Reset and end stay in this browser. The server demo routes remain for the pooled workspace
+ * and are not on this path.
  */
-import { getBackendBaseUrl } from "@/api/backendClient";
-import { authedApiRequest } from "@/lib/authedApiRequest";
-import { safeFetch } from "@/utils/apiRequest";
-import SupabaseAuthService from "@/services/SupabaseAuthService";
 import { clearPersistedQueryCache } from "@/lib/paidlyIdbQueryPersistence";
 import { getOrCreateAppQueryClient } from "@/lib/query-client";
-import { patchAuthSession, useAuthSessionStore } from "@/stores/authSessionStore";
+import { clearDemoSandbox, installSandboxSession, resetDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
+import { useAppStore } from "@/stores/useAppStore";
 
-function demoApiUrl(path) {
-  const base = import.meta.env.DEV ? "" : getBackendBaseUrl();
-  return `${base || ""}${path}`;
-}
-
-async function readJson(res) {
-  const text = await res.text().catch(() => "");
-  if (!text) return {};
+function dropPersistedBusinessCache() {
   try {
-    return JSON.parse(text);
+    useAppStore.getState().reset();
   } catch {
-    return {};
+    /* store not ready */
+  }
+  try {
+    localStorage.removeItem("paidly_app_store_v1");
+  } catch {
+    /* ignore */
   }
 }
 
@@ -76,69 +71,25 @@ export async function purgeLocalAppCaches() {
  * @returns {Promise<{ businessName: string, expiresAt: string | null }>}
  */
 export async function startLiveDemo() {
-  let res;
-  try {
-    res = await safeFetch(demoApiUrl("/api/auth/demo"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-  } catch {
-    throw demoError("DEMO_NETWORK", "We couldn't reach Paidly. Check your connection and try again.");
-  }
-  const body = await readJson(res);
-  if (!res.ok || !body?.access_token || !body?.refresh_token) {
-    // No Paidly error code: the API itself did not answer (not deployed, proxy / gateway error).
-    const code = body?.code || (!res.ok && !body?.error ? "DEMO_SERVICE_UNREACHABLE" : null);
-    if (import.meta.env.DEV) console.warn("[demo] start failed", res.status, code || "(no code)");
-    throw demoError(code, "We couldn't start the demo. Please try again.");
-  }
   await purgeLocalAppCaches();
-  const session = await SupabaseAuthService.signInWithIssuedTokens({
-    access_token: body.access_token,
-    refresh_token: body.refresh_token,
-  });
-  // One profile read, before the dashboard route mounts, so the shell is not held on "Restoring your profile".
-  // Company data is not loaded here.
-  try {
-    const { User } = await import("@/api/entities");
-    const restored = await User.restoreFromSupabaseSession(useAuthSessionStore.getState().session || session);
-    if (restored) {
-      patchAuthSession({ user: restored, profileReady: restored.profileReady === true });
-    }
-  } catch {
-    /* RequireAuth retries the same profile read if this one did not land */
+  dropPersistedBusinessCache();
+  const started = installSandboxSession();
+  if (!started) {
+    throw demoError("DEMO_UNAVAILABLE", "We couldn't start the demo. Please try again.");
   }
-  return {
-    businessName: body.demo?.business_name || "Mavela Café",
-    expiresAt: body.demo?.expires_at || null,
-  };
+  return started;
 }
 
-async function postAuthed(path) {
-  const res = await authedApiRequest(
-    demoApiUrl(path),
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
-    { reason: "demo_mode", unauthorizedMessage: demoErrorMessage("DEMO_SESSION_INVALID") }
-  );
-  const body = await readJson(res);
-  if (!res.ok) throw demoError(body?.code, "We couldn't complete that. Please try again.");
-  return body;
-}
-
-/** Restores the caller's demo workspace to the original Mavela Café dataset. */
+/** Restores this browser's demo to the original Mavela Café dataset. */
 export async function resetLiveDemo() {
-  const body = await postAuthed("/api/auth/demo-reset");
+  const body = resetDemoSandbox();
+  dropPersistedBusinessCache();
   await purgeLocalAppCaches();
-  return { expiresAt: body?.demo?.expires_at || null };
+  return { expiresAt: body?.expiresAt || null };
 }
 
-/** Ends the demo now: the server deletes the workspace and the demo account. */
+/** Ends the demo in this browser. No production account is deleted because none was created. */
 export async function endLiveDemo() {
-  try {
-    await postAuthed("/api/auth/demo-end");
-  } catch {
-    /* expired / already gone: the cleanup sweep removes it — the visitor is signed out either way */
-  }
+  clearDemoSandbox();
   await purgeLocalAppCaches();
 }

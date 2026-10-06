@@ -17,6 +17,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { wrapStorageWithCorruptionGuard } from "@/lib/safeAuthStorage";
 import { isRecoveryCircuitOpen } from "@/lib/session/recoveryCircuit";
+import { demoAuthSession, demoFrom, demoRpc, isDemoSandbox } from "@/lib/demo/demoSandboxStore.js";
 
 // Normalize URL: Supabase project APIs use .supabase.co only. .supabase.com does not resolve → ERR_NAME_NOT_RESOLVED.
 let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
@@ -186,13 +187,61 @@ function wrapMutationGuards(builder, tableName) {
 
 const originalFrom = supabase.from.bind(supabase);
 supabase.from = (...args) => {
+  if (isDemoSandbox()) return demoFrom(String(args?.[0] || ""));
   const tableName = String(args?.[0] || "");
   const builder = originalFrom(...args);
   return wrapMutationGuards(builder, tableName);
 };
 
+const originalGetSession = supabase.auth.getSession.bind(supabase.auth);
+supabase.auth.getSession = async (...args) => {
+  if (isDemoSandbox()) return { data: { session: demoAuthSession() }, error: null };
+  return originalGetSession(...args);
+};
+
+const originalGetUser = supabase.auth.getUser.bind(supabase.auth);
+supabase.auth.getUser = async (...args) => {
+  if (isDemoSandbox()) {
+    const session = demoAuthSession();
+    return { data: { user: session.user }, error: null };
+  }
+  return originalGetUser(...args);
+};
+
+const originalRefreshSession = supabase.auth.refreshSession.bind(supabase.auth);
+supabase.auth.refreshSession = async (...args) => {
+  if (isDemoSandbox()) {
+    const session = demoAuthSession();
+    return { data: { session, user: session.user }, error: null };
+  }
+  return originalRefreshSession(...args);
+};
+
+function demoRealtimeChannel() {
+  const channel = {
+    on() {
+      return channel;
+    },
+    subscribe(callback) {
+      if (typeof callback === "function") callback("SUBSCRIBED");
+      return channel;
+    },
+    unsubscribe() {
+      return Promise.resolve("ok");
+    },
+  };
+  return channel;
+}
+
+const originalChannel = supabase.channel.bind(supabase);
+supabase.channel = (...args) => {
+  if (isDemoSandbox()) return demoRealtimeChannel();
+  return originalChannel(...args);
+};
+
 supabase.rpc = async (fnName, ...rest) => {
   const rpcName = String(fnName || "");
+  if (isDemoSandbox()) return demoRpc(rpcName, rest[0] || {});
   if (isRecoveryCircuitOpen()) {
     openRpcBreaker(rpcName, { code: "RPC_AUTH_TERMINAL" });
     return {

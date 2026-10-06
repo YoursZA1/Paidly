@@ -2,7 +2,19 @@
 
 Prospects explore a realistic, fully working Paidly business — **Mavela Café**, a Johannesburg café/restaurant — without signing up, and without any access to (or effect on) real customers.
 
-## Architecture: one private workspace per visitor
+## Architecture: browser sandbox on Try Demo
+
+Try Demo does **not** create a Supabase user, company, subscription, or seed. The SPA installs a session-scoped sandbox (`src/lib/demo/demoSandboxStore.js`, dataset in `src/lib/demo/demoSandboxSeed.js`):
+
+1. `startLiveDemo()` writes a non-JWT marker (`paidly-demo-sandbox`) into this tab and a profile-ready user into the auth store. No `POST /api/auth/demo`, no `setSession`.
+2. While that flag is set **and** this browser has no real Supabase access token, `supabase.from` / `supabase.rpc` / `getSession` answer from the sandbox. Dashboard bootstrap and `/api/subscriptions/current` return the same dataset without a network call. POS (`/api/pos/*` used by the till) is handled in `src/lib/demo/demoPosSandbox.js`.
+3. Mutations stay in `sessionStorage`. Reset clones the original dataset. End demo deletes that storage only.
+4. A real sign-in clears the flag before any Supabase auth call. If a real `paidly-auth` JWT is already stored, the sandbox stays off. The marker is not a JWT, so a stray request cannot pass production RLS or the API.
+5. Production auth, RLS, payment validation, and the Payment Engine are unchanged. The server workspace below is no longer on the visitor path.
+
+## Server workspace (not used by Try Demo)
+
+One private database workspace per visitor still exists for maintenance and older sessions. New visitors do not enter it.
 
 | Piece | Where |
 |---|---|
@@ -13,7 +25,7 @@ Prospects explore a realistic, fully working Paidly business — **Mavela Café*
 | Cleanup cron | `api/cron.js?job=demo-cleanup` (`/api/cron/demo-cleanup`, daily 02:30 UTC) + a small sweep on every demo start |
 | SPA | `src/pages/DemoLanding.jsx` (`/demo`), `src/hooks/useDemoMode.js`, `src/lib/demo/*`, `src/components/demo/*` |
 
-1. `POST /api/auth/demo` (IP rate-limited, capacity-capped) prefers a **prepared workspace** from a small server-side pool (`claim_pooled_demo_workspace`, service role only). The claim rotates that user's password and signs in; the browser receives only `access_token` / `refresh_token` and applies them with `supabase.auth.setSession`. The visitor's TTL starts at claim. If the pool is empty, the same request creates a dedicated auth user (`demo-<random>@example.com` — RFC 2606, undeliverable; random 32-byte password used once server-side and discarded; `app_metadata.paidly_demo = true`) and calls `provision_demo_workspace()` (service role only). That creates an organization with `is_demo = true`, the owner membership, a **demo entitlement** (`subscriptions.subscription_source = 'demo'`, Growth, trialing until the demo expires, amount 0, provider `demo`) and seeds the dataset. Historical POS sales are inserted as a set, not one database call per sale. Expired-demo cleanup and pool refill run after the response (`waitUntil`, so the visitor is not waiting), and again on the daily `demo-cleanup` cron. The SPA then navigates to the dashboard in place — it does not reload the document — after one profile read. Customers, invoices and POS history are not fetched during login.
+1. This path is not called by Try Demo. `POST /api/auth/demo` (IP rate-limited, capacity-capped) prefers a **prepared workspace** from a small server-side pool (`claim_pooled_demo_workspace`, service role only). The claim rotates that user's password and signs in; the browser receives only `access_token` / `refresh_token` and applies them with `supabase.auth.setSession`. The visitor's TTL starts at claim. If the pool is empty, the same request creates a dedicated auth user (`demo-<random>@example.com` — RFC 2606, undeliverable; random 32-byte password used once server-side and discarded; `app_metadata.paidly_demo = true`) and calls `provision_demo_workspace()` (service role only). That creates an organization with `is_demo = true`, the owner membership, a **demo entitlement** (`subscriptions.subscription_source = 'demo'`, Growth, trialing until the demo expires, amount 0, provider `demo`) and seeds the dataset. Historical POS sales are inserted as a set, not one database call per sale. Expired-demo cleanup and pool refill run after the response (`waitUntil`, so the visitor is not waiting), and again on the daily `demo-cleanup` cron. The SPA then navigates to the dashboard in place — it does not reload the document — after one profile read. Customers, invoices and POS history are not fetched during login.
 2. Because the visitor owns exactly one org, **isolation is the normal per-org RLS** that separates real customers. Nothing in Demo Mode widens a policy.
 3. Reset (`reset_demo_workspace`) keeps the org id, purges every org-scoped row (`demo_purge_org_data`: every table with an `ON DELETE CASCADE` FK to `organizations`, multi-pass for FK ordering) and re-runs the same seed. Deterministic content; dates are relative to "now" so the dashboard always looks current.
 4. Expiry (default 120 min, `PAIDLY_DEMO_TTL_MINUTES`): the demo entitlement ends → writes stop (plan guard), reads continue, the banner says the demo ended. The sweep purges the workspace and deletes the auth user (plus uploaded files). "End demo" does the same immediately.
