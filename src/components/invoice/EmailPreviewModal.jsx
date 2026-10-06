@@ -76,7 +76,14 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
         : '';
     const emailHtml = generateInvoiceEmailHtml(invoice, client, company, publicViewUrl, '', logoBox);
     const handleSend = async () => {
-        const result = getTrackableLink ? await getTrackableLink().catch(() => ({ url: publicViewUrl })) : { url: publicViewUrl };
+        let result = { url: publicViewUrl };
+        if (getTrackableLink) {
+            try {
+                result = await Promise.resolve(getTrackableLink());
+            } catch {
+                result = { url: publicViewUrl };
+            }
+        }
         const viewUrl = (result && typeof result === 'object' && result.url != null) ? result.url : result;
         const pixelUrl = result?.trackingToken ? getEmailOpenTrackingPixelUrl(result.trackingToken) : '';
         const ctaHref =
