@@ -92,7 +92,7 @@ export function mapInvoicePdfData(invoice, client, user = null, bankingDetail = 
       .filter(Boolean)
       .join(", ");
   const clientEmail = str(clientObj.email) || str(invoice?.client_email);
-  const clientPhone = str(clientObj.phone) || str(clientObj.mobile);
+  const clientPhone = str(clientObj.phone) || str(clientObj.mobile) || str(invoice?.client_phone);
   const clientVat = str(clientObj.vat_number) || str(clientObj.tax_number);
   const contactPerson =
     str(clientObj.contact_person) ||

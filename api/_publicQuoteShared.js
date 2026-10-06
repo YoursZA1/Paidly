@@ -78,22 +78,38 @@ async function loadOwnerProfile(supabase, ownerId) {
 async function loadBanking(supabase, bankingDetailId) {
   const id = String(bankingDetailId || "").trim();
   if (!id) return null;
-  const { data } = await supabase
+  // Same columns the in-app banking record uses. branch_code is not a column;
+  // asking for it makes PostgREST reject the row and the PDF loses payment details.
+  const { data, error } = await supabase
     .from("banking_details")
-    .select("bank_name, account_name, account_number, routing_number, branch_code, swift_code, additional_info")
+    .select("bank_name, account_name, account_number, routing_number, swift_code, additional_info, payment_method")
     .eq("id", id)
     .maybeSingle();
+  if (error) {
+    console.error("[public-quote] banking lookup failed", error);
+    return null;
+  }
   return data || null;
 }
 
 async function loadClient(supabase, clientId) {
   if (!clientId) return null;
-  const { data } = await supabase
+  // Same public client columns as the invoice share. city/state/zip are not columns;
+  // a failed select returns no client and the PDF prints "Client".
+  const { data, error } = await supabase
     .from("clients")
-    .select("name, email, phone, address, city, state, zip, contact_person")
+    .select("id, name, email, phone, address, contact_person, website, tax_id")
     .eq("id", clientId)
     .maybeSingle();
-  return data || null;
+  if (error) {
+    console.error("[public-quote] client lookup failed", error);
+    return null;
+  }
+  if (!data) return null;
+  return {
+    ...data,
+    vat_number: data.tax_id || "",
+  };
 }
 
 function setPublicQuoteCors(res, methods) {
@@ -190,6 +206,10 @@ export async function handlePublicQuoteGet(req, res) {
         created_date: quoteRow.created_at,
         due_date: quoteRow.valid_until,
         terms: quoteRow.terms_conditions || "",
+        terms_conditions: quoteRow.terms_conditions || "",
+        client_name: client?.name || "",
+        client_email: client?.email || "",
+        client_phone: client?.phone || "",
         total: Number(quoteRow.total_amount ?? 0) || 0,
         discount_amount: 0,
         items: mapQuoteItems(quoteItems),

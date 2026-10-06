@@ -186,4 +186,42 @@ describe("mapInvoicePdfData", () => {
     expect(data.items).toHaveLength(1);
     expect(data.total).toBe(1650);
   });
+
+  it("keeps bill-to, payment details, and terms when they live on the quote", () => {
+    const data = mapQuotePdfData(
+      {
+        quote_number: "QUO-1001",
+        status: "accepted",
+        created_at: "2026-10-06",
+        valid_until: "2026-10-09",
+        terms_conditions: "Payment is due within 15 days of invoice date upon acceptance.",
+        client_name: "On The Design Agency",
+        client_email: "onthedesignagency@gmail.com",
+        client_phone: "+27685194266",
+        total_amount: 1650,
+        currency: "ZAR",
+      },
+      { contact_person: "Armando Mavelele" },
+      { company_name: "BrandCafé Agency" },
+      {
+        bank_name: "Nedbank Limited",
+        account_name: "BrandCafe Agency",
+        account_number: "1336245093",
+        routing_number: "198764",
+        additional_info: "Auto-created from Default Bank Details",
+      }
+    );
+    expect(data.client.name).toBe("On The Design Agency");
+    expect(data.client.email).toBe("onthedesignagency@gmail.com");
+    expect(data.client.phone).toBe("+27685194266");
+    expect(data.client.contactPerson).toBe("Armando Mavelele");
+    expect(data.paymentTerms).toContain("15 days");
+    expect(data.bankingRows.map((row) => row.label)).toEqual([
+      "Bank",
+      "Account name",
+      "Account number",
+      "Branch / routing",
+      "Payment reference",
+    ]);
+  });
 });

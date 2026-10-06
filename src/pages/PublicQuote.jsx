@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import DocumentPreview from '@/components/DocumentPreview';
 import { getPublicApiBase } from '@/api/backendClient';
 import { decidePublicQuote, fetchPublicQuotePayload } from '@/api/publicQuoteApiClient';
-import { profileForQuotePreview, recordToStyledPreviewDoc } from '@/utils/documentPreviewData';
+import { profileForQuotePreview } from '@/utils/documentPreviewData';
 import { downloadQuotePdfBlob, generateQuotePDF } from '@/components/pdf/generateQuotePDF';
 import { QUOTE_STATUS, normalizeQuoteStatus } from '@shared/commercial/documentStatuses.js';
 
@@ -117,16 +116,50 @@ export default function PublicQuote() {
 
     const previewClient = useMemo(() => {
         if (!client && !quote) return null;
-        const address = [client?.address, client?.city, client?.state, client?.zip].filter(Boolean).join("\n");
-        return { ...(client || {}), id: quote?.client_id, address: address || client?.address || "" };
+        return {
+            ...(client || {}),
+            id: quote?.client_id,
+            name: client?.name || quote?.client_name || "",
+            email: client?.email || quote?.client_email || "",
+            phone: client?.phone || quote?.client_phone || "",
+            address: client?.address || "",
+            contact_person: client?.contact_person || "",
+        };
     }, [client, quote]);
 
-    const previewDoc = useMemo(() => {
-        if (!quote) return null;
-        return recordToStyledPreviewDoc(quote, previewClient, "quote", previewUser);
-    }, [quote, previewClient, previewUser]);
+    const [pdfBlob, setPdfBlob] = useState(null);
+    const [pdfUrl, setPdfUrl] = useState("");
+    const [pdfError, setPdfError] = useState("");
 
-    const [downloading, setDownloading] = useState(false);
+    useEffect(() => {
+        if (!quote || !previewUser) return undefined;
+        let cancelled = false;
+        let objectUrl = "";
+        setPdfBlob(null);
+        setPdfUrl("");
+        setPdfError("");
+        (async () => {
+            try {
+                const blob = await generateQuotePDF({
+                    quote,
+                    client: previewClient,
+                    user: previewUser,
+                    bankingDetail: banking,
+                });
+                if (cancelled) return;
+                objectUrl = URL.createObjectURL(blob);
+                setPdfBlob(blob);
+                setPdfUrl(objectUrl);
+            } catch (error) {
+                console.error("Public quote PDF failed", error);
+                if (!cancelled) setPdfError("This quote could not be prepared.");
+            }
+        })();
+        return () => {
+            cancelled = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [quote, previewClient, previewUser, banking]);
 
     if (isLoading) {
         return (
@@ -147,22 +180,9 @@ export default function PublicQuote() {
         );
     }
 
-    const downloadPdf = async () => {
-        if (!quote) return;
-        setDownloading(true);
-        try {
-            const blob = await generateQuotePDF({
-                quote,
-                client: previewClient,
-                user: previewUser,
-                bankingDetail: banking,
-            });
-            downloadQuotePdfBlob(blob, `${quote.quote_number || "quote"}.pdf`);
-        } catch (error) {
-            console.error("Public quote PDF failed", error);
-        } finally {
-            setDownloading(false);
-        }
+    const downloadPdf = () => {
+        if (!pdfBlob || !quote) return;
+        downloadQuotePdfBlob(pdfBlob, `${quote.quote_number || "quote"}.pdf`);
     };
 
     return (
@@ -170,8 +190,8 @@ export default function PublicQuote() {
             <div className="mx-auto max-w-4xl px-3">
                 <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm text-gray-600">Shared quote preview. No Paidly account is required.</p>
-                    <Button onClick={downloadPdf} disabled={downloading}>
-                        {downloading ? "Preparing PDF…" : "Download PDF"}
+                    <Button onClick={downloadPdf} disabled={!pdfBlob}>
+                        {pdfBlob ? "Download PDF" : "Preparing PDF…"}
                     </Button>
                 </div>
                 <PublicQuoteDecision
@@ -194,13 +214,17 @@ export default function PublicQuote() {
                     }}
                 />
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                    <DocumentPreview
-                        doc={previewDoc}
-                        docType="quote"
-                        clients={previewClient ? [previewClient] : []}
-                        user={previewUser}
-                        hideStatus
-                    />
+                    {pdfUrl ? (
+                        <iframe
+                            title={`${quote.quote_number || "Quote"} PDF`}
+                            src={pdfUrl}
+                            className="h-[1123px] w-full bg-white"
+                        />
+                    ) : (
+                        <div className="flex h-64 items-center justify-center text-sm text-gray-600">
+                            {pdfError || "Preparing the quote…"}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
