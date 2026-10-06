@@ -18,6 +18,7 @@ import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from '@/lib/sessionTimeoutControls';
 import { isValidEmail } from '@/utils/inputSanitization';
 import { createDocumentContext } from '@/document-engine/core/documentContext';
+import { loadInvoiceDocumentInputs, withSavedClient } from '@/services/invoiceDocumentInputs';
 import { INVOICE_STATUS, normalizeInvoiceStatus } from '@shared/commercial/documentStatuses.js';
 
 /**
@@ -273,10 +274,12 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
     try {
       const full = await retryOnAbort(() => Quote.get(quoteForSend.id));
       if (full) {
+        const savedItems = Array.isArray(full.items) ? full.items : [];
+        const heldItems = Array.isArray(quoteForSend.items) ? quoteForSend.items : [];
         quoteForSend = {
           ...quoteForSend,
           ...full,
-          items: Array.isArray(full.items) ? full.items : quoteForSend.items || [],
+          items: savedItems.length > 0 ? savedItems : heldItems,
           public_share_token: quoteForSend.public_share_token || full.public_share_token,
         };
       }
@@ -296,9 +299,15 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
     html = generateQuoteEmailHtml(quoteForSend, client, userData, ctaHref, pixelUrl, logoBox);
   }
 
+  const pdfClient = await withSavedClient(client, quoteForSend);
   const quoteForPdf = {
     ...quoteForSend,
     items: Array.isArray(quoteForSend.items) ? quoteForSend.items : [],
+    client_name: quoteForSend.client_name || pdfClient.name || "",
+    client_email: quoteForSend.client_email || pdfClient.email || "",
+    client_phone: quoteForSend.client_phone || pdfClient.phone || "",
+    client_address: quoteForSend.client_address || pdfClient.address || "",
+    contact_person: quoteForSend.contact_person || pdfClient.contact_person || "",
   };
   const bid = quoteForPdf.banking_detail_id && String(quoteForPdf.banking_detail_id).trim();
   let bankingRow = null;
@@ -314,10 +323,10 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
     documentType: 'quote',
     documentId: quoteForPdf.id,
     businessId: quoteForPdf.org_id,
-    clientId: client?.id || quoteForPdf.client_id,
+    clientId: pdfClient?.id || quoteForPdf.client_id,
     documentNumber: quoteForPdf.quote_number,
     record: quoteForPdf,
-    client,
+    client: pdfClient,
     user: userData,
     bankingDetail: bankingRow,
   });
@@ -455,26 +464,25 @@ export async function sendInvoicePdfEmailToClient(invoice, client, options = {})
     const sentAt = new Date().toISOString();
 
     if (!alreadyDelivered) {
-      const bid = invoiceForSend.banking_detail_id && String(invoiceForSend.banking_detail_id).trim();
-      let bankingRow = null;
-      if (bid) {
-        try {
-          bankingRow = await BankingDetail.get(bid);
-        } catch {
-          bankingRow = null;
-        }
-      }
+      const loaded = await loadInvoiceDocumentInputs({
+        invoice: invoiceForSend,
+        client,
+        user: userData,
+      });
+      const invoiceForPdf = loaded.invoice;
+      const pdfClient = loaded.client;
+      const bankingRow = loaded.bankingDetail;
 
       let artifact;
       try {
         const invoiceContext = createDocumentContext({
           documentType: 'invoice',
-          documentId: invoiceForSend.id,
-          businessId: invoiceForSend.org_id,
-          clientId: client?.id || invoiceForSend.client_id,
-          documentNumber: invoiceForSend.invoice_number || invoiceForSend.reference_number,
-          record: invoiceForSend,
-          client,
+          documentId: invoiceForPdf.id,
+          businessId: invoiceForPdf.org_id,
+          clientId: pdfClient?.id || invoiceForPdf.client_id,
+          documentNumber: invoiceForPdf.invoice_number || invoiceForPdf.reference_number,
+          record: invoiceForPdf,
+          client: pdfClient,
           user: userData,
           bankingDetail: bankingRow,
         });

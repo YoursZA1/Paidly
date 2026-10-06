@@ -37,6 +37,7 @@ import {
   generateInvoicePDF,
 } from "@/components/pdf/generateInvoicePDF";
 import { downloadQuotePdfBlob, generateQuotePDF } from "@/components/pdf/generateQuotePDF";
+import { loadInvoiceDocumentInputs } from "@/services/invoiceDocumentInputs";
 import { parseRouteDocumentTypeStrict, DOCUMENT_TYPES, allowedNextStatuses } from "@/document-engine";
 import {
   normalizeInvoiceStatus,
@@ -212,11 +213,16 @@ export default function ViewDocument() {
         docType === "invoice" ? record.invoice_number : record.quote_number;
 
       if (docType === "invoice") {
-        const blob = await generateInvoicePDF({
+        const loaded = await loadInvoiceDocumentInputs({
           invoice: record,
           client,
           user: profile,
-          bankingDetail,
+        });
+        const blob = await generateInvoicePDF({
+          invoice: loaded.invoice,
+          client: loaded.client,
+          user: profile,
+          bankingDetail: loaded.bankingDetail || bankingDetail,
         });
         downloadInvoicePdfBlob(blob, `${numberRaw || "invoice"}.pdf`);
       } else if (docType === "quote") {

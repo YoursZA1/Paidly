@@ -121,10 +121,19 @@ export function recordToStyledPreviewDoc(record, client, docType, profile) {
   return {
     number: isQuote ? record.quote_number : record.invoice_number,
     status: record.status,
-    client_id: record.client_id,
-    client_name: client?.name || "",
-    client_email: client?.email || "",
-    client_address: client?.address || "",
+    client_id: record.client_id || client?.id,
+    client_name: client?.name || record.client_name || "",
+    client_email: client?.email || record.client_email || "",
+    client_phone: client?.phone || client?.mobile || record.client_phone || "",
+    client_address: client?.address || client?.billing_address || record.client_address || "",
+    contact_person:
+      client?.contact_person ||
+      client?.contact_name ||
+      record.contact_person ||
+      record.client_contact_person ||
+      "",
+    client_vat:
+      client?.vat_number || client?.tax_id || client?.tax_number || record.client_vat_number || "",
     issue_date: issueDate,
     due_date: dueDate,
     line_items:

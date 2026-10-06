@@ -69,12 +69,23 @@ export function formatLineItemDisplayName(raw) {
  * @param {object} [item]
  * @returns {string}
  */
+function lineTextsOverlap(left, right) {
+  const a = left.toLowerCase();
+  const b = right.toLowerCase();
+  return a === b || a.includes(b) || b.includes(a);
+}
+
 export function formatLineItemNameAndDescription(item) {
   const rawName = String(item?.service_name ?? item?.name ?? "").trim();
   const title = rawName ? formatLineItemDisplayName(rawName) : "";
   const rawDesc = typeof item?.description === "string" ? item.description.trim() : "";
   const descOneLine = rawDesc.replace(/\s+/g, " ").trim();
-  if (title && descOneLine) return `${title} - ${descOneLine}`;
+  if (title && descOneLine) {
+    if (lineTextsOverlap(title, descOneLine)) {
+      return title.length >= descOneLine.length ? title : descOneLine;
+    }
+    return `${title} - ${descOneLine}`;
+  }
   if (title) return title;
   if (descOneLine) return descOneLine;
   return "Item";

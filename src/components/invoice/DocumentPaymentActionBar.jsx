@@ -40,6 +40,8 @@ export default function DocumentPaymentActionBar({
   client = null,
   shareToken = null,
   publicMode = false,
+  variant = "bar",
+  onAmountChange,
   onEdit,
   onSend,
   onDownloadReceipt,
@@ -88,6 +90,11 @@ export default function DocumentPaymentActionBar({
       }),
     [snapshot, invoice, amountDue]
   );
+
+  const amountLabel = documentPaymentBannerLabel(ctas.banner);
+  useEffect(() => {
+    onAmountChange?.({ amountDue, currency, label: amountLabel });
+  }, [onAmountChange, amountDue, currency, amountLabel]);
 
   const invoiceStatus = normalizeInvoiceStatus(invoice?.status);
   if (invoiceStatus === INVOICE_STATUS.draft && publicMode) return null;
@@ -166,8 +173,71 @@ export default function DocumentPaymentActionBar({
     ? `${createPageUrl(`ViewDocument/invoice/${invoice.id}`)}?pay=return&intent=${encodeURIComponent(snapshot.latest_intent.id)}`
     : createPageUrl(`ViewDocument/invoice/${invoice.id}`);
 
-  return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 md:pointer-events-auto md:static md:inset-auto">
+  const actionButtons = (
+    <>
+      {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.edit) && (
+        <Button type="button" variant="outline" onClick={onEdit} className="gap-2">
+          <Pencil className="h-4 w-4" />
+          Edit
+        </Button>
+      )}
+      {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.send) && (
+        <Button type="button" onClick={onSend} className="gap-2">
+          <Send className="h-4 w-4" />
+          Send
+        </Button>
+      )}
+      {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && !publicMode && (
+        <Button type="button" onClick={() => setRecordOpen(true)} disabled={Boolean(busy)} className="gap-2">
+          <CreditCard className="h-4 w-4" />
+          Record Payment
+        </Button>
+      )}
+      {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && publicMode && (
+        <Button type="button" onClick={() => void startPay(false)} disabled={Boolean(busy)} className="gap-2">
+          {busy === "pay" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+          Pay online
+        </Button>
+      )}
+      {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.retry) && (
+        <Button type="button" onClick={() => void startPay(true)} disabled={Boolean(busy)} className="gap-2">
+          {busy === "retry" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Retry payment
+        </Button>
+      )}
+      {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.remind) && !publicMode && (
+        <Button type="button" variant="outline" onClick={() => void sendRemind()} disabled={Boolean(busy)} className="gap-2">
+          {busy === "remind" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+          Remind
+        </Button>
+      )}
+      {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.view_status) && (
+        publicMode ? (
+          <Button type="button" variant="outline" onClick={() => void loadHistory()} className="gap-2">
+            View payment status
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" asChild className="gap-2">
+            <a href={viewStatusHref}>View payment status</a>
+          </Button>
+        )
+      )}
+      {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.view_payment) && (
+        <Button type="button" variant="outline" onClick={() => void loadHistory()} className="gap-2">
+          View payment
+        </Button>
+      )}
+      {variant !== "inline" && ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.download_receipt) && (
+        <Button type="button" variant="outline" onClick={onDownloadReceipt} className="gap-2">
+          <Download className="h-4 w-4" />
+          Download receipt
+        </Button>
+      )}
+    </>
+  );
+
+  const dialogs = (
+    <>
       {!publicMode && (
         <RecordPaymentModal
           invoice={invoice}
@@ -191,76 +261,32 @@ export default function DocumentPaymentActionBar({
           void loadHistory();
         }}
       />
+    </>
+  );
+
+  if (variant === "inline") {
+    return (
+      <>
+        {dialogs}
+        {ctas.actions.length ? actionButtons : null}
+      </>
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 md:pointer-events-auto md:static md:inset-auto">
+      {dialogs}
       <div className="pointer-events-auto border-t border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur-sm md:rounded-xl md:border md:shadow-sm">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-[max(0.25rem,env(safe-area-inset-bottom))] md:pb-0">
           <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              {documentPaymentBannerLabel(ctas.banner)}
+              {amountLabel}
             </p>
             <p className="text-lg font-semibold tabular-nums text-foreground">
               {formatCurrency(amountDue, currency)}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.edit) && (
-              <Button type="button" variant="outline" onClick={onEdit} className="gap-2">
-                <Pencil className="h-4 w-4" />
-                Edit
-              </Button>
-            )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.send) && (
-              <Button type="button" onClick={onSend} className="gap-2">
-                <Send className="h-4 w-4" />
-                Send
-              </Button>
-            )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && !publicMode && (
-              <Button type="button" onClick={() => setRecordOpen(true)} disabled={Boolean(busy)} className="gap-2">
-                <CreditCard className="h-4 w-4" />
-                Record Payment
-              </Button>
-            )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.pay_now) && publicMode && (
-              <Button type="button" onClick={() => void startPay(false)} disabled={Boolean(busy)} className="gap-2">
-                {busy === "pay" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                Pay online
-              </Button>
-            )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.retry) && (
-              <Button type="button" onClick={() => void startPay(true)} disabled={Boolean(busy)} className="gap-2">
-                {busy === "retry" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Retry payment
-              </Button>
-            )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.remind) && !publicMode && (
-              <Button type="button" variant="outline" onClick={() => void sendRemind()} disabled={Boolean(busy)} className="gap-2">
-                {busy === "remind" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                Remind
-              </Button>
-            )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.view_status) && (
-              publicMode ? (
-                <Button type="button" variant="outline" onClick={() => void loadHistory()} className="gap-2">
-                  View payment status
-                </Button>
-              ) : (
-                <Button type="button" variant="outline" asChild className="gap-2">
-                  <a href={viewStatusHref}>View payment status</a>
-                </Button>
-              )
-            )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.view_payment) && (
-              <Button type="button" variant="outline" onClick={() => void loadHistory()} className="gap-2">
-                View payment
-              </Button>
-            )}
-            {ctas.actions.includes(DOCUMENT_PAYMENT_ACTION.download_receipt) && (
-              <Button type="button" variant="outline" onClick={onDownloadReceipt} className="gap-2">
-                <Download className="h-4 w-4" />
-                Download receipt
-              </Button>
-            )}
-          </div>
+          <div className="flex flex-wrap items-center gap-2">{actionButtons}</div>
         </div>
       </div>
     </div>

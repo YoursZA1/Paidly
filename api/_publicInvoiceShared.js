@@ -151,6 +151,15 @@ export async function loadPublicInvoiceBundle(supabase, shareToken) {
     client = c;
   }
 
+  if (client) {
+    out.client_name = out.client_name || client.name || "";
+    out.client_email = out.client_email || client.email || "";
+    out.client_phone = out.client_phone || client.phone || "";
+    out.client_address = out.client_address || client.address || "";
+    out.contact_person = out.contact_person || client.contact_person || "";
+    out.client_vat_number = out.client_vat_number || client.tax_id || client.vat_number || "";
+  }
+
   let bankingDetail = null;
   if (invoice.banking_detail_id) {
     const { data: b } = await supabase

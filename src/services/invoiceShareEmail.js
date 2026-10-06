@@ -1,5 +1,6 @@
 import { createDocumentContext } from "@shared/documents/documentEngine.js";
 import { generateInvoiceDocumentPdf } from "@/document-engine/pdf/invoice";
+import { loadInvoiceDocumentInputs } from "@/services/invoiceDocumentInputs";
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -23,33 +24,19 @@ function pdfFilename(invoice) {
  */
 export async function buildInvoicePdfAttachment({ invoice, client, user }) {
   if (!invoice?.id) throw new Error("Invoice is missing.");
-  let record = invoice;
-  const { Invoice } = await import("@/api/entities");
-  const full = await Invoice.get(record.id);
-  if (full) {
-    record = {
-      ...record,
-      ...full,
-      items: full.items || record.items || [],
-      public_share_token: record.public_share_token || full.public_share_token,
-    };
-  }
-
-  let bankingDetail = null;
-  const bankingId = String(record.banking_detail_id || "").trim();
-  if (bankingId) {
-    try {
-      const { BankingDetail } = await import("@/api/entities");
-      bankingDetail = await BankingDetail.get(bankingId);
-    } catch {
-      bankingDetail = null;
-    }
-  }
-
-  const resolvedClient = client || {
-    id: record.client_id,
-    name: record.client_name || "Client",
-  };
+  const loaded = await loadInvoiceDocumentInputs({ invoice, client, user });
+  const record = loaded.invoice;
+  const bankingDetail = loaded.bankingDetail;
+  const resolvedClient = loaded.client?.name || loaded.client?.email
+    ? loaded.client
+    : {
+        id: record.client_id,
+        name: record.client_name || "Client",
+        email: record.client_email || "",
+        phone: record.client_phone || "",
+        address: record.client_address || "",
+        contact_person: record.contact_person || "",
+      };
   const context = createDocumentContext({
     documentType: "invoice",
     documentId: record.id,

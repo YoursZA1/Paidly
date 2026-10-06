@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { getPublicApiBase } from '@/api/backendClient';
 import {
@@ -21,6 +21,11 @@ import { resolveInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/inv
 import { isValidShareToken } from '@/utils/inputSanitization';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 import DocumentPaymentActionBar from '@/components/invoice/DocumentPaymentActionBar';
+import PublicDocumentPortal, {
+  PublicDocumentSheet,
+  PublicPortalMessage,
+  formatPortalDate,
+} from '@/components/documents/PublicDocumentPortal';
 import InvoicePaymentHistory from '@/components/invoice/InvoicePaymentHistory';
 import { fetchDocumentPaymentHistory, startDocumentPayment } from '@/api/documentPaymentApi';
 import PaymentReturnDone from '@/components/invoice/PaymentReturnDone';
@@ -45,6 +50,20 @@ export default function InvoiceView() {
   const [verificationError, setVerificationError] = useState('');
   const [sentToEmailHint, setSentToEmailHint] = useState('');
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [paymentDue, setPaymentDue] = useState(null);
+  const handlePaymentAmount = useCallback((next) => {
+    setPaymentDue((prev) => {
+      if (
+        prev &&
+        prev.amountDue === next.amountDue &&
+        prev.currency === next.currency &&
+        prev.label === next.label
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     clearLegacyInvoiceVerificationSessionKeys();
@@ -163,81 +182,70 @@ export default function InvoiceView() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-500" />
-        <p className="ml-2 text-slate-600">Loading Invoice...</p>
-      </div>
+      <PublicPortalMessage icon={<Loader2 className="h-8 w-8 animate-spin" />} title="Loading invoice">
+        <p className="text-center text-sm text-slate-500">Fetching the document…</p>
+      </PublicPortalMessage>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-center p-4">
-        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h1 className="text-xl font-bold text-slate-800">Oops! Something went wrong.</h1>
-        <p className="text-slate-600 mt-2">{error}</p>
-      </div>
+      <PublicPortalMessage icon={<AlertCircle className="h-8 w-8 text-red-500" />} title="This invoice could not be opened">
+        <p className="text-center text-sm text-slate-500">{error}</p>
+      </PublicPortalMessage>
     );
   }
 
   if (needsEmailVerification) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
-          <div className="text-center mb-6">
-            <Mail className="w-12 h-12 text-primary mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-slate-800 mb-2">Email Verification Required</h1>
-            <p className="text-slate-600">
-              To view this invoice, please enter the email address it was sent to
-              {sentToEmailHint ? (
-                <>
-                  {' '}
-                  <span className="text-slate-900 font-medium">(hint: {sentToEmailHint})</span>
-                </>
-              ) : null}
-              .
-            </p>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <Input
-                type="email"
-                placeholder="your.email@example.com"
-                value={emailVerification}
-                onChange={(e) => {
-                  setEmailVerification(e.target.value);
-                  setVerificationError('');
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleEmailVerification()}
-                className="w-full"
-              />
-              {verificationError && <p className="text-red-500 text-sm mt-2">{verificationError}</p>}
-            </div>
-            <Button
-              onClick={handleEmailVerification}
-              disabled={isVerifying || !emailVerification.trim()}
-              className="w-full bg-primary hover:bg-primary/90"
-            >
-              {isVerifying ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Verifying...
-                </>
-              ) : (
-                'Verify & View Invoice'
-              )}
-            </Button>
-          </div>
+      <PublicPortalMessage icon={<Mail className="h-8 w-8" />} title="Confirm your email">
+        <p className="text-center text-sm text-slate-500">
+          Enter the email address this invoice was sent to
+          {sentToEmailHint ? (
+            <>
+              {' '}
+              <span className="font-medium text-slate-800">(hint: {sentToEmailHint})</span>
+            </>
+          ) : null}
+          .
+        </p>
+        <div className="mt-5 space-y-3">
+          <Input
+            type="email"
+            placeholder="your.email@example.com"
+            value={emailVerification}
+            onChange={(e) => {
+              setEmailVerification(e.target.value);
+              setVerificationError('');
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleEmailVerification()}
+            className="w-full"
+          />
+          {verificationError ? <p className="text-sm text-red-500">{verificationError}</p> : null}
+          <Button
+            onClick={handleEmailVerification}
+            disabled={isVerifying || !emailVerification.trim()}
+            className="h-10 w-full rounded-xl"
+          >
+            {isVerifying ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Verifying…
+              </>
+            ) : (
+              'View invoice'
+            )}
+          </Button>
         </div>
-      </div>
+      </PublicPortalMessage>
     );
   }
 
   if (!invoice) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <p className="text-slate-600">Invoice not found.</p>
-      </div>
+      <PublicPortalMessage title="Invoice not found">
+        <p className="text-center text-sm text-slate-500">This link does not match an invoice.</p>
+      </PublicPortalMessage>
     );
   }
 
@@ -261,23 +269,43 @@ export default function InvoiceView() {
     invoice_header: '',
   };
 
+  const dueAmount = paymentDue?.amountDue ?? invoice.total_amount;
+  const dueCurrency = paymentDue?.currency || ownerCurrency;
+  const dueDateLabel = formatPortalDate(invoice.delivery_date);
+  const pdfHref = `${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(token)}&download=true`;
+
   return (
-    <div className="min-h-screen bg-slate-100 p-4 sm:p-8 pb-28">
-      <InvoiceMetaTags
-        invoice={invoice}
-        client={client}
-        baseUrl={publicViewUrl}
-      />
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-4 rounded-xl border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">{issuerBrand.name || invoice.owner_company_name || 'Invoice'}</p>
-          <p className="text-lg font-semibold text-foreground">{invoice.invoice_number}</p>
-          <p className="text-sm text-muted-foreground">{invoice.project_title || invoice.project_description || 'Payment request'}</p>
-          <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{formatCurrency(invoice.total_amount, ownerCurrency)}</p>
-          {invoice.delivery_date ? (
-            <p className="text-xs text-muted-foreground">Due {invoice.delivery_date}</p>
-          ) : null}
-        </div>
+    <>
+      <InvoiceMetaTags invoice={invoice} client={client} baseUrl={publicViewUrl} />
+      <PublicDocumentPortal
+        companyName={issuerBrand.name || invoice.owner_company_name || 'Invoice'}
+        documentLabel="Invoice"
+        documentNumber={invoice.invoice_number}
+        summary={invoice.project_title || invoice.project_description || ''}
+        amountLabel={paymentDue?.label || 'Due'}
+        amount={formatCurrency(dueAmount, dueCurrency)}
+        meta={dueDateLabel ? `Due ${dueDateLabel}` : ''}
+        actions={
+          <>
+            <Button variant="outline" className="gap-2 border-slate-200 bg-white" asChild>
+              <a href={pdfHref} target="_blank" rel="noopener noreferrer">
+                <Download className="h-4 w-4" />
+                <span className="sm:hidden">PDF</span>
+                <span className="hidden sm:inline">Download PDF</span>
+              </a>
+            </Button>
+            <DocumentPaymentActionBar
+              invoice={invoice}
+              client={client}
+              shareToken={token}
+              publicMode
+              variant="inline"
+              onAmountChange={handlePaymentAmount}
+              onDownloadReceipt={() => window.open(pdfHref, '_blank', 'noopener,noreferrer')}
+            />
+          </>
+        }
+      >
         {searchParams.get('pay') === 'return' && searchParams.get('intent') ? (
           <div className="mb-4">
             <PaymentReturnDone
@@ -289,15 +317,13 @@ export default function InvoiceView() {
               onStatus={(status) => {
                 if (status?.snapshot?.history) setPaymentHistory(status.snapshot.history);
               }}
-              onDownload={() =>
-                window.open(`${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(token)}&download=true`, '_blank', 'noopener,noreferrer')
-              }
+              onDownload={() => window.open(pdfHref, '_blank', 'noopener,noreferrer')}
               onRetry={async () => {
                 try {
                   const result = await startDocumentPayment({ invoiceId: invoice.id, shareToken: token, retry: true });
                   if (result?.redirect_url) window.location.assign(result.redirect_url);
                 } catch {
-                  /* the payment bar below still offers Retry payment */
+                  /* Pay online in the portal bar can be used again. */
                 }
               }}
               onDismiss={() => {
@@ -308,47 +334,25 @@ export default function InvoiceView() {
             />
           </div>
         ) : null}
-        <DocumentPaymentActionBar
-          invoice={invoice}
-          client={client}
-          shareToken={token}
-          publicMode
-          onDownloadReceipt={() =>
-            window.open(`${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(token)}&download=true`, '_blank', 'noopener,noreferrer')
-          }
-        />
-        <InvoicePaymentHistory history={paymentHistory} currency={ownerCurrency} />
-        <div className="mb-6 flex flex-col sm:flex-row gap-2 justify-end">
-          <a
-            href={`${createPageUrl('InvoicePDF')}?token=${encodeURIComponent(token)}&download=true`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-grow sm:flex-grow-0"
-          >
-            <button
-              type="button"
-              className="w-full bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2"
-            >
-              <Download className="w-5 h-5" />
-              Download as PDF
-            </button>
-          </a>
+        <PublicDocumentSheet>
+          <div className="overflow-x-auto p-3 sm:p-6">
+            <InvoicePreview
+              embedded
+              invoiceData={{ ...invoice, issuerBrand }}
+              client={client}
+              clients={[]}
+              user={publicUser}
+              bankingDetail={bankingDetail}
+              previewOnly={false}
+              showBack={false}
+              loading={false}
+            />
+          </div>
+        </PublicDocumentSheet>
+        <div className="mt-4">
+          <InvoicePaymentHistory history={paymentHistory} currency={ownerCurrency} />
         </div>
-
-        <div className="bg-white shadow-xl rounded-lg p-4 sm:p-6 overflow-x-auto">
-          <InvoicePreview
-            embedded
-            invoiceData={{ ...invoice, issuerBrand }}
-            client={client}
-            clients={[]}
-            user={publicUser}
-            bankingDetail={bankingDetail}
-            previewOnly={false}
-            showBack={false}
-            loading={false}
-          />
-        </div>
-      </div>
-    </div>
+      </PublicDocumentPortal>
+    </>
   );
 }

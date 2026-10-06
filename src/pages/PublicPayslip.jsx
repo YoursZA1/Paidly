@@ -12,7 +12,12 @@ import {
     getPublicPayslipViewerToken,
     setPublicPayslipViewerToken,
 } from '@/lib/publicPayslipViewerStorage';
-import { AlertCircle, Mail, Loader2 } from 'lucide-react';
+import { AlertCircle, Download, Mail, Loader2 } from 'lucide-react';
+import { formatCurrency } from '@/components/CurrencySelector';
+import PublicDocumentPortal, {
+    PublicDocumentSheet,
+    PublicPortalMessage,
+} from '@/components/documents/PublicDocumentPortal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import PayslipDocument from '@/components/payslips/PayslipDocument';
@@ -122,78 +127,64 @@ export default function PublicPayslip() {
 
     if (error) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-center p-4">
-                <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-                <h1 className="text-xl font-bold text-slate-800">Oops! Something went wrong.</h1>
-                <p className="text-slate-600 mt-2">{error}</p>
-            </div>
+            <PublicPortalMessage icon={<AlertCircle className="h-8 w-8 text-red-500" />} title="This payslip could not be opened">
+                <p className="text-center text-sm text-slate-500">{error}</p>
+            </PublicPortalMessage>
         );
     }
 
     if (needsEmailVerification) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
-                    <div className="text-center mb-6">
-                        <Mail className="w-12 h-12 text-primary mx-auto mb-4" />
-                        <h1 className="text-2xl font-bold text-slate-800 mb-2">Email Verification Required</h1>
-                        <p className="text-slate-600">
-                            To view this payslip, please enter the email address it was sent to.
-                            {sentToEmailHint ? (
-                                <span className="block mt-2 text-sm text-muted-foreground">
-                                    Hint: {sentToEmailHint}
-                                </span>
-                            ) : null}
-                        </p>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div>
-                            <Input
-                                type="email"
-                                placeholder="your.email@example.com"
-                                value={emailVerification}
-                                onChange={(e) => {
-                                    setEmailVerification(e.target.value);
-                                    setVerificationError('');
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        handleEmailVerification();
-                                    }
-                                }}
-                                className="w-full"
-                            />
-                            {verificationError && (
-                                <p className="text-red-500 text-sm mt-2">{verificationError}</p>
-                            )}
-                        </div>
-
-                        <Button
-                            onClick={handleEmailVerification}
-                            disabled={isVerifying || !emailVerification.trim()}
-                            className="w-full bg-primary hover:bg-primary/90"
-                        >
-                            {isVerifying ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Verifying...
-                                </>
-                            ) : (
-                                'Verify & View Payslip'
-                            )}
-                        </Button>
-                    </div>
+            <PublicPortalMessage icon={<Mail className="h-8 w-8" />} title="Confirm your email">
+                <p className="text-center text-sm text-slate-500">
+                    Enter the email address this payslip was sent to
+                    {sentToEmailHint ? (
+                        <>
+                            {' '}
+                            <span className="font-medium text-slate-800">(hint: {sentToEmailHint})</span>
+                        </>
+                    ) : null}
+                    .
+                </p>
+                <div className="mt-5 space-y-3">
+                    <Input
+                        type="email"
+                        placeholder="your.email@example.com"
+                        value={emailVerification}
+                        onChange={(e) => {
+                            setEmailVerification(e.target.value);
+                            setVerificationError('');
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleEmailVerification();
+                        }}
+                        className="w-full"
+                    />
+                    {verificationError ? <p className="text-sm text-red-500">{verificationError}</p> : null}
+                    <Button
+                        onClick={handleEmailVerification}
+                        disabled={isVerifying || !emailVerification.trim()}
+                        className="h-10 w-full rounded-xl"
+                    >
+                        {isVerifying ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Verifying…
+                            </>
+                        ) : (
+                            'View payslip'
+                        )}
+                    </Button>
                 </div>
-            </div>
+            </PublicPortalMessage>
         );
     }
 
     if (!payslip) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-slate-50">
-                <p className="text-slate-600">Payslip not found.</p>
-            </div>
+            <PublicPortalMessage title="Payslip not found">
+                <p className="text-center text-sm text-slate-500">This link does not match a payslip.</p>
+            </PublicPortalMessage>
         );
     }
 
@@ -210,31 +201,44 @@ export default function PublicPayslip() {
     const payDate = payslip.pay_date ? format(new Date(payslip.pay_date), 'MMMM d, yyyy') : 'N/A';
     const payPeriod = `${payslip.pay_period_start ? format(new Date(payslip.pay_period_start), 'MMMM d, yyyy') : 'N/A'} - ${payslip.pay_period_end ? format(new Date(payslip.pay_period_end), 'MMMM d, yyyy') : 'N/A'}`;
 
+    const currency = payslip.currency || 'ZAR';
+
     return (
-        <div className="min-h-screen bg-slate-100 py-4 sm:py-8">
-            <div className="w-full px-page sm:px-6">
-                <div className="mb-4 flex justify-end max-w-[800px] mx-auto">
+        <PublicDocumentPortal
+            companyName={payslip.owner_company_name || 'Payslip'}
+            documentLabel="Payslip"
+            documentNumber={payslip.employee_name || ''}
+            summary={payPeriod}
+            amountLabel="Net pay"
+            amount={formatCurrency(payslip.net_pay, currency)}
+            meta={payDate !== 'N/A' ? `Paid ${payDate}` : ''}
+            actions={
+                <Button variant="outline" className="gap-2 border-slate-200 bg-white" asChild>
                     <a
                         href={createPageUrl(downloadPath)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6"
                         onClick={() => {
                             if (!shareToken) return;
                             const viewerToken = getPublicPayslipViewerToken(shareToken);
                             void fetchPublicPayslipPayload(shareToken, viewerToken, { observe: 'clicked' });
                         }}
                     >
-                        Download PDF
+                        <Download className="h-4 w-4" />
+                        <span className="sm:hidden">PDF</span>
+                        <span className="hidden sm:inline">Download PDF</span>
                     </a>
-                </div>
+                </Button>
+            }
+        >
+            <PublicDocumentSheet className="p-3 sm:p-6">
                 <PayslipDocument
                     payslip={payslip}
                     user={user}
                     payDate={payDate}
                     payPeriodLabel={payPeriod}
                 />
-            </div>
-        </div>
+            </PublicDocumentSheet>
+        </PublicDocumentPortal>
     );
 }

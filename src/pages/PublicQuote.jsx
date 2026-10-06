@@ -1,45 +1,25 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getPublicApiBase } from '@/api/backendClient';
 import { decidePublicQuote, fetchPublicQuotePayload } from '@/api/publicQuoteApiClient';
 import { profileForQuotePreview } from '@/utils/documentPreviewData';
 import { downloadQuotePdfBlob, generateQuotePDF } from '@/components/pdf/generateQuotePDF';
+import { formatCurrency } from '@/components/CurrencySelector';
 import { QUOTE_STATUS, normalizeQuoteStatus } from '@shared/commercial/documentStatuses.js';
+import PublicDocumentPortal, {
+    PublicDocumentSheet,
+    PublicPortalMessage,
+    formatPortalDate,
+} from '@/components/documents/PublicDocumentPortal';
 
-function PublicQuoteDecision({ quote, deciding, decideError, onDecide }) {
-    const status = normalizeQuoteStatus(quote?.status);
-    const canDecide = [QUOTE_STATUS.sent, QUOTE_STATUS.viewed].includes(status);
-    const decisionMessage =
-        status === QUOTE_STATUS.accepted
-            ? "Thank you. This quote has been accepted."
-            : status === QUOTE_STATUS.declined
-              ? "This quote has been rejected."
-              : status === QUOTE_STATUS.expired
-                ? "This quote has expired."
-                : status === QUOTE_STATUS.converted
-                  ? "This quote has been converted to an invoice."
-                  : "";
-    if (!canDecide && !decisionMessage) return null;
-    return (
-        <div className="mx-auto mb-6 max-w-3xl rounded-lg border border-gray-200 bg-white p-5 text-center">
-            {decisionMessage ? <p className="text-sm font-medium text-gray-800">{decisionMessage}</p> : null}
-            {canDecide ? (
-                <>
-                    <p className="mb-4 text-sm text-gray-700">Please let us know if you would like to proceed.</p>
-                    <div className="flex flex-col justify-center gap-3 sm:flex-row">
-                        <Button onClick={() => onDecide("accept")} disabled={Boolean(deciding)}>
-                            {deciding === "accept" ? "Accepting…" : "Accept quote"}
-                        </Button>
-                        <Button variant="outline" onClick={() => onDecide("reject")} disabled={Boolean(deciding)}>
-                            {deciding === "reject" ? "Rejecting…" : "Reject quote"}
-                        </Button>
-                    </div>
-                    {decideError ? <p className="mt-3 text-sm text-red-600">{decideError}</p> : null}
-                </>
-            ) : null}
-        </div>
-    );
+function quoteDecisionCopy(status) {
+    if (status === QUOTE_STATUS.accepted) return "Thank you. This quote has been accepted.";
+    if (status === QUOTE_STATUS.declined) return "This quote has been declined.";
+    if (status === QUOTE_STATUS.expired) return "This quote has expired.";
+    if (status === QUOTE_STATUS.converted) return "This quote has been converted to an invoice.";
+    return "";
 }
 
 export default function PublicQuote() {
@@ -163,20 +143,17 @@ export default function PublicQuote() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-50">
-                <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-            </div>
+            <PublicPortalMessage title="Loading quote">
+                <p className="text-center text-sm text-slate-500">Fetching the document…</p>
+            </PublicPortalMessage>
         );
     }
 
     if (!quote) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-50">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold text-gray-900">Quote not found</h2>
-                    <p className="text-gray-600 mt-2">The quote you are looking for does not exist or has been removed.</p>
-                </div>
-            </div>
+            <PublicPortalMessage title="Quote not found">
+                <p className="text-center text-sm text-slate-500">This link does not match a quote.</p>
+            </PublicPortalMessage>
         );
     }
 
@@ -185,48 +162,79 @@ export default function PublicQuote() {
         downloadQuotePdfBlob(pdfBlob, `${quote.quote_number || "quote"}.pdf`);
     };
 
+    const status = normalizeQuoteStatus(quote.status);
+    const canDecide = [QUOTE_STATUS.sent, QUOTE_STATUS.viewed].includes(status);
+    const decisionMessage = quoteDecisionCopy(status);
+    const currency = quote.currency || quote.owner_currency || "ZAR";
+    const validUntil = formatPortalDate(quote.valid_until || quote.due_date);
+    const companyName = quote.owner_company_name || user?.company_name || user?.name || "Quote";
+
+    const decide = async (action) => {
+        setDecideError("");
+        setDeciding(action);
+        try {
+            const result = await decidePublicQuote({ shareToken, action });
+            if (result?.quote?.status) {
+                setQuote((prev) => (prev ? { ...prev, status: result.quote.status } : prev));
+            }
+        } catch (error) {
+            setDecideError(error?.message || "Could not update this quote.");
+        } finally {
+            setDeciding(null);
+        }
+    };
+
     return (
-        <div className="min-h-screen bg-gray-100 py-6 print:bg-white print:py-0">
-            <div className="mx-auto max-w-4xl px-3">
-                <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-gray-600">Shared quote preview. No Paidly account is required.</p>
-                    <Button onClick={downloadPdf} disabled={!pdfBlob}>
-                        {pdfBlob ? "Download PDF" : "Preparing PDF…"}
+        <PublicDocumentPortal
+            companyName={companyName}
+            documentLabel="Quote"
+            documentNumber={quote.quote_number}
+            summary={quote.project_title || ""}
+            amountLabel="Total"
+            amount={formatCurrency(quote.total_amount, currency)}
+            meta={validUntil ? `Valid until ${validUntil}` : ""}
+            actions={
+                <>
+                    <Button
+                        variant="outline"
+                        className="gap-2 border-slate-200 bg-white"
+                        onClick={downloadPdf}
+                        disabled={!pdfBlob}
+                    >
+                        <Download className="h-4 w-4" />
+                        <span className="sm:hidden">{pdfBlob ? "PDF" : "…"}</span>
+                        <span className="hidden sm:inline">{pdfBlob ? "Download PDF" : "Preparing PDF…"}</span>
                     </Button>
-                </div>
-                <PublicQuoteDecision
-                    quote={quote}
-                    deciding={deciding}
-                    decideError={decideError}
-                    onDecide={async (action) => {
-                        setDecideError("");
-                        setDeciding(action);
-                        try {
-                            const result = await decidePublicQuote({ shareToken, action });
-                            if (result?.quote?.status) {
-                                setQuote((prev) => (prev ? { ...prev, status: result.quote.status } : prev));
-                            }
-                        } catch (error) {
-                            setDecideError(error?.message || "Could not update this quote.");
-                        } finally {
-                            setDeciding(null);
-                        }
-                    }}
-                />
-                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                    {pdfUrl ? (
-                        <iframe
-                            title={`${quote.quote_number || "Quote"} PDF`}
-                            src={pdfUrl}
-                            className="h-[1123px] w-full bg-white"
-                        />
-                    ) : (
-                        <div className="flex h-64 items-center justify-center text-sm text-gray-600">
-                            {pdfError || "Preparing the quote…"}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
+                    {canDecide ? (
+                        <Button variant="outline" className="border-slate-200 bg-white" onClick={() => decide("reject")} disabled={Boolean(deciding)}>
+                            {deciding === "reject" ? "Declining…" : "Decline"}
+                        </Button>
+                    ) : null}
+                    {canDecide ? (
+                        <Button onClick={() => decide("accept")} disabled={Boolean(deciding)}>
+                            {deciding === "accept" ? "Accepting…" : "Accept"}
+                        </Button>
+                    ) : null}
+                </>
+            }
+        >
+            {decisionMessage ? (
+                <p className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{decisionMessage}</p>
+            ) : null}
+            {decideError ? <p className="mb-4 text-sm text-red-600">{decideError}</p> : null}
+            <PublicDocumentSheet>
+                {pdfUrl ? (
+                    <iframe
+                        title={`${quote.quote_number || "Quote"} PDF`}
+                        src={pdfUrl}
+                        className="h-[1123px] w-full bg-white"
+                    />
+                ) : (
+                    <div className="flex h-64 items-center justify-center text-sm text-slate-500">
+                        {pdfError || "Preparing the quote…"}
+                    </div>
+                )}
+            </PublicDocumentSheet>
+        </PublicDocumentPortal>
     );
 }

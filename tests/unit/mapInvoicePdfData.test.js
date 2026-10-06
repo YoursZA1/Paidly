@@ -225,4 +225,36 @@ describe("mapInvoicePdfData", () => {
     ]);
     expect(data.bankingRows.find((row) => row.label === "Payment reference")?.value).toBe("QUO-1001");
   });
+
+  it("keeps bill-to contact and phone when they are stored on the invoice", () => {
+    const data = mapInvoicePdfData(
+      {
+        invoice_number: "INV-1001",
+        client_name: "On The Design Agency",
+        client_email: "onthedesignagency@gmail.com",
+        client_phone: "+27685194266",
+        contact_person: "Armando Mavelele",
+        client_vat_number: "4999999999",
+        total_amount: 1650,
+        currency: "ZAR",
+        items: [
+          {
+            service_name: "Logo Design - 3x Options",
+            description: "Logo Design",
+            quantity: 1,
+            unit_price: 1500,
+            total_price: 1500,
+          },
+        ],
+      },
+      {},
+      { company_name: "BrandCafé Agency" }
+    );
+    expect(data.client.name).toBe("On The Design Agency");
+    expect(data.client.contactPerson).toBe("Armando Mavelele");
+    expect(data.client.email).toBe("onthedesignagency@gmail.com");
+    expect(data.client.phone).toBe("+27685194266");
+    expect(data.client.vatNumber).toBe("4999999999");
+    expect(data.items[0].description).toBe("Logo Design - 3x Options");
+  });
 });

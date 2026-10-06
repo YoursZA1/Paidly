@@ -69,9 +69,12 @@ const DocumentPreview = forwardRef(function DocumentPreview(
       ...(clientFromList || {}),
       name: doc.client_name || clientFromList?.name || "",
       email: doc.client_email || clientFromList?.email || "",
-      phone: doc.client_phone || clientFromList?.phone || "",
-      address: doc.client_address || clientFromList?.address || "",
-      contact_person: doc.contact_person || clientFromList?.contact_person || "",
+      phone: doc.client_phone || clientFromList?.phone || clientFromList?.mobile || "",
+      address: doc.client_address || clientFromList?.address || clientFromList?.billing_address || "",
+      contact_person:
+        doc.contact_person || clientFromList?.contact_person || clientFromList?.contact_name || "",
+      vat_number: doc.client_vat || clientFromList?.vat_number || clientFromList?.tax_id || "",
+      tax_id: doc.client_vat || clientFromList?.tax_id || clientFromList?.vat_number || "",
     };
     const record = recordForCleanDocument(doc, docType);
     const mapped =

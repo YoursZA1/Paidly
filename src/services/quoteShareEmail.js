@@ -1,5 +1,6 @@
 import { createDocumentContext } from "@shared/documents/documentEngine.js";
 import { generateQuoteDocumentPdf } from "@/document-engine/pdf/quote";
+import { withSavedClient } from "@/services/invoiceDocumentInputs";
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -30,7 +31,9 @@ export async function buildQuotePdfAttachment({ quote, client, user }) {
     record = {
       ...record,
       ...full,
-      items: full.items || record.items || [],
+      items: (Array.isArray(full.items) && full.items.length > 0)
+        ? full.items
+        : (Array.isArray(record.items) ? record.items : []),
       public_share_token: record.public_share_token || full.public_share_token,
     };
   }
@@ -46,10 +49,7 @@ export async function buildQuotePdfAttachment({ quote, client, user }) {
     }
   }
 
-  const resolvedClient = client || {
-    id: record.client_id,
-    name: record.client_name || "Client",
-  };
+  const resolvedClient = await withSavedClient(client, record);
   const context = createDocumentContext({
     documentType: "quote",
     documentId: record.id,

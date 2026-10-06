@@ -133,7 +133,13 @@ function InvoicePreview({
       <DocumentPreview
         doc={previewDoc}
         docType="invoice"
-        clients={clientList}
+        clients={
+          clientList.length > 0
+            ? clientList
+            : pack.clientForTemplate
+              ? [{ ...pack.clientForTemplate, id: pack.clientForTemplate.id || invoiceData.client_id }]
+              : []
+        }
         user={pack.resolvedUser}
         bankingDetail={bankingDetail}
       />

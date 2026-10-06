@@ -58,10 +58,10 @@ export default function PublicLeaveApproval() {
   }, [done, payload]);
 
   return (
-    <div className="min-h-screen bg-muted/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+    <div className="min-h-screen bg-[#eef1f4] flex items-center justify-center p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.45)] space-y-5">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">{payload?.company_name || "Paidly"}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">{payload?.company_name || "Paidly"}</p>
           <h1 className="text-xl font-semibold mt-1">{title}</h1>
         </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}

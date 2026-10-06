@@ -172,8 +172,17 @@ export default function InvoicePDF() {
     };
 
     const clientFallback = useMemo(
-        () => client || { name: invoice?.client_name || 'Client' },
-        [client, invoice?.client_name]
+        () => ({
+            ...(client || {}),
+            id: client?.id || invoice?.client_id,
+            name: client?.name || invoice?.client_name || 'Client',
+            email: client?.email || invoice?.client_email || '',
+            phone: client?.phone || invoice?.client_phone || '',
+            address: client?.address || invoice?.client_address || '',
+            contact_person: client?.contact_person || invoice?.contact_person || '',
+            tax_id: client?.tax_id || client?.vat_number || invoice?.client_vat_number || '',
+        }),
+        [client, invoice]
     );
 
     const pdfPack = useMemo(

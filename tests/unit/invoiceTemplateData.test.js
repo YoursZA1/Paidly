@@ -9,6 +9,7 @@ import {
   resolveInvoiceTemplateKey,
   resolveRenderTemplateKey,
   toSelectableInvoiceTemplateKey,
+  formatLineItemNameAndDescription,
 } from "@/utils/invoiceTemplateData";
 
 describe("invoice template catalogue", () => {
@@ -60,5 +61,25 @@ describe("invoice template catalogue", () => {
     expect(toSelectableInvoiceTemplateKey("minimal")).toBe("document");
     expect(toSelectableInvoiceTemplateKey("bold")).toBe("modern");
     expect(toSelectableInvoiceTemplateKey("document")).toBe("document");
+  });
+});
+
+describe("line item labels", () => {
+  it("does not repeat a description that is already in the service name", () => {
+    expect(
+      formatLineItemNameAndDescription({
+        service_name: "Logo Design - 3x Options",
+        description: "Logo Design",
+      })
+    ).toBe("Logo Design - 3x Options");
+  });
+
+  it("keeps a description that adds detail the name does not already contain", () => {
+    expect(
+      formatLineItemNameAndDescription({
+        service_name: "Logo Design",
+        description: "Three concepts with two revision rounds",
+      })
+    ).toBe("Logo Design - Three concepts with two revision rounds");
   });
 });

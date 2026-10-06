@@ -87,17 +87,24 @@ export function mapInvoicePdfData(invoice, client, user = null, bankingDetail = 
   const clientAddress =
     str(clientObj.address) ||
     str(clientObj.billing_address) ||
+    str(invoice?.client_address) ||
     [clientObj.address_line1, clientObj.city, clientObj.postal_code]
       .map(str)
       .filter(Boolean)
       .join(", ");
   const clientEmail = str(clientObj.email) || str(invoice?.client_email);
   const clientPhone = str(clientObj.phone) || str(clientObj.mobile) || str(invoice?.client_phone);
-  const clientVat = str(clientObj.vat_number) || str(clientObj.tax_number);
+  const clientVat =
+    str(clientObj.vat_number) ||
+    str(clientObj.tax_number) ||
+    str(clientObj.tax_id) ||
+    str(invoice?.client_vat_number);
   const contactPerson =
     str(clientObj.contact_person) ||
     str(clientObj.contact_name) ||
-    str(clientObj.primary_contact);
+    str(clientObj.primary_contact) ||
+    str(invoice?.contact_person) ||
+    str(invoice?.client_contact_person);
 
   const rawItems = Array.isArray(invoice?.items)
     ? invoice.items
