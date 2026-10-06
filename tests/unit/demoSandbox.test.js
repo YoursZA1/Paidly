@@ -151,5 +151,34 @@ describe("demo sandbox", () => {
     const summary = demoPayrollRequest("/api/company/workforce-summary");
     expect(summary.payroll.payslips_generated).toBe(4);
     expect(summary.workforce.active).toBe(4);
+    const directory = demoPayrollRequest("/api/company/employees?status=active");
+    expect(directory.items).toHaveLength(4);
+    expect(directory.items.map((row) => row.full_name)).toEqual(
+      expect.arrayContaining(["Sipho Nkosi", "Elena Rossi"])
+    );
+    expect(directory.items.every((row) => row.employee_number)).toBe(true);
+    const overview = demoPayrollRequest("/api/payroll/overview");
+    expect(overview.employees).toBe(4);
+    expect(overview.current_run.status).toBe("paid");
+    expect(overview.total_net).toBeGreaterThan(0);
+    const opened = demoPayrollRequest(`/api/payroll/runs/${overview.current_run.id}`);
+    expect(opened.items).toHaveLength(4);
+    expect(opened.items.reduce((sum, row) => sum + row.net_pay, 0)).toBeCloseTo(overview.total_net, 2);
+    const org = demoPayrollRequest("/api/company/workforce-organogram");
+    expect(org.company.name).toBe("Mavela Café");
+    expect(org.stats.active).toBe(4);
+    const elena = org.roots.find((node) => node.full_name === "Elena Rossi");
+    expect(elena.children.map((child) => child.full_name).sort()).toEqual([
+      "Karabo Molefe",
+      "Megan Adams",
+      "Sipho Nkosi",
+    ]);
+    const pending = demoPayrollRequest("/api/leave/requests?status=pending");
+    expect(pending).toHaveLength(1);
+    expect(pending[0].payroll_profiles.full_name).toBe("Sipho Nkosi");
+    expect(pending[0].leave_types.name).toBe("Annual leave");
+    const approved = demoPayrollRequest(`/api/leave/requests/${pending[0].id}/approve`, { method: "POST", body: {} });
+    expect(approved.status).toBe("approved");
+    expect(demoPayrollRequest("/api/leave/requests?status=pending")).toHaveLength(0);
   });
 });
