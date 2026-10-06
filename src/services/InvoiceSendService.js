@@ -315,12 +315,19 @@ export async function sendQuotePdfEmailToClient(quote, client, options = {}) {
     user: userData,
     bankingDetail: bankingRow,
   });
-  const artifact = await generateQuoteDocumentPdf(quoteContext);
-  const pdfBase64 = await pdfBlobToBase64(artifact.blob);
+  // Email attachments must stay under the request limit. A full-resolution capture of the
+  // preview is too large and the provider rejects the send.
+  let artifact = await generateQuoteDocumentPdf({ ...quoteContext, pdfScale: 1.5, pdfQuality: 0.82 });
+  let pdfBase64 = await pdfBlobToBase64(artifact.blob);
+  if (pdfBase64.length > 2_800_000) {
+    artifact = await generateQuoteDocumentPdf({ ...quoteContext, pdfScale: 1, pdfQuality: 0.7 });
+    pdfBase64 = await pdfBlobToBase64(artifact.blob);
+  }
 
   const subject = `Quote #${quoteForSend.quote_number} from ${quoteForSend.owner_company_name || userData?.company_name || 'Us'}`;
   const filename = artifact.filename || `quote-${quoteForSend.quote_number || quoteForSend.id || 'quote'}.pdf`;
-  const sendAttemptId = trackingToken || quoteForSend.id;
+  // A new id per click. Reusing the quote id makes the provider reject a second send.
+  const sendAttemptId = crypto.randomUUID();
 
   await dispatchInvoiceEmailViaCanonicalPath({
     pdfBase64,

@@ -9,7 +9,7 @@ import { waitForPdfDocumentReady } from "@/lib/documentPdf/waitForPdfDocumentRea
  * @param {{ quote: object, client: object, user: object, bankingDetail?: object|null }} params
  * @returns {Promise<Blob>}
  */
-export async function generateQuotePDF({ quote, client, user, bankingDetail = null }) {
+export async function generateQuotePDF({ quote, client, user, bankingDetail = null, scale, quality } = {}) {
   if (typeof document === "undefined") {
     throw new Error("Quote PDF generation requires a browser environment.");
   }
@@ -42,7 +42,10 @@ export async function generateQuotePDF({ quote, client, user, bankingDetail = nu
 
     const el = await waitForPdfDocumentReady(host);
     if (!el) throw new Error("Quote PDF capture node missing");
-    return await generatePdfBlobFromElement(el, filename);
+    return await generatePdfBlobFromElement(el, filename, {
+      ...(scale ? { scale } : {}),
+      ...(quality ? { quality } : {}),
+    });
   } finally {
     root.unmount();
     host.remove();

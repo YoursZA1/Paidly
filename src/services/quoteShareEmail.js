@@ -50,20 +50,23 @@ export async function buildQuotePdfAttachment({ quote, client, user }) {
     id: record.client_id,
     name: record.client_name || "Client",
   };
-  const artifact = await generateQuoteDocumentPdf(
-    createDocumentContext({
-      documentType: "quote",
-      documentId: record.id,
-      businessId: record.org_id,
-      clientId: resolvedClient.id || record.client_id,
-      documentNumber: record.quote_number,
-      record,
-      client: resolvedClient,
-      user: user || null,
-      bankingDetail,
-    })
-  );
-  const pdfBase64 = await blobToBase64(artifact.blob);
+  const context = createDocumentContext({
+    documentType: "quote",
+    documentId: record.id,
+    businessId: record.org_id,
+    clientId: resolvedClient.id || record.client_id,
+    documentNumber: record.quote_number,
+    record,
+    client: resolvedClient,
+    user: user || null,
+    bankingDetail,
+  });
+  let artifact = await generateQuoteDocumentPdf({ ...context, pdfScale: 1.5, pdfQuality: 0.82 });
+  let pdfBase64 = await blobToBase64(artifact.blob);
+  if (pdfBase64 && pdfBase64.length > 2_800_000) {
+    artifact = await generateQuoteDocumentPdf({ ...context, pdfScale: 1, pdfQuality: 0.7 });
+    pdfBase64 = await blobToBase64(artifact.blob);
+  }
   if (!pdfBase64) throw new Error("Quote PDF generation failed.");
   return {
     pdfBase64,

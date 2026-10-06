@@ -30,8 +30,11 @@ export function userFacingDocumentSendError(raw, fallback) {
   if (/unauthorized|not signed in|logged in/i.test(s)) {
     return "You must be logged in to send emails.";
   }
-  if (/too large|413/i.test(s)) {
+  if (/too large|413|payload/i.test(s)) {
     return "PDF is too large to email. Please try again or share a link.";
+  }
+  if (/idempotency|already been sent|409/i.test(s)) {
+    return "This email was already submitted. Please try sending it again.";
   }
   if (!s || s.trim().startsWith("{") || s.length > 180) {
     return fallback || "Document could not be sent. Please try again.";

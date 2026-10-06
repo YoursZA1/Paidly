@@ -23,6 +23,8 @@ export async function generateQuoteDocumentPdf(contextOrInput) {
       client: context.client || contextOrInput?.client,
       user: context.user || contextOrInput?.user,
       bankingDetail: context.bankingDetail || contextOrInput?.bankingDetail || null,
+      scale: contextOrInput?.pdfScale,
+      quality: contextOrInput?.pdfQuality,
     });
     return toPdfArtifact({
       blob,
