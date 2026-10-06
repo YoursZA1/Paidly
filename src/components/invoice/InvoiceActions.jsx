@@ -29,7 +29,7 @@ import { sendDraftInvoice, sendInvoicePdfEmailToClient, recordDocumentSend, prep
 import { retryOnAbort, isAbortError } from '@/utils/retryOnAbort';
 import { appendHistory, createHistoryEntry } from '@/utils/invoiceHistory';
 import { isManualStatusChangeAllowed } from '@/utils/invoiceStatus';
-import { INVOICE_STATUS, isInvoicePaidLike, isInvoiceVoidLike } from '@shared/commercial/documentStatuses.js';
+import { INVOICE_STATUS, isInvoicePaidLike, isInvoiceVoidLike, normalizeInvoiceStatus } from '@shared/commercial/documentStatuses.js';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePaymentActions } from '@/hooks/usePaymentActions';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -251,7 +251,7 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
                 html: htmlContent,
                 trackingToken,
             });
-            if (invoice.status === 'draft') {
+            if (normalizeInvoiceStatus(invoice.status) === INVOICE_STATUS.draft) {
                 const historyEntry = createHistoryEntry({
                     action: 'send',
                     summary: 'Invoice sent to client',
@@ -331,13 +331,13 @@ function InvoiceActions({ invoice, client, onActionSuccess, onOptimisticUpdate, 
     const handleMarkAsSentFromModal = async (sentToEmail) => {
         try {
             const updates = { sent_to_email: sentToEmail };
-            if (invoice.status === 'draft') {
+            if (normalizeInvoiceStatus(invoice.status) === INVOICE_STATUS.draft) {
                 updates.status = 'sent';
             }
             const changes = [
                 { field: 'sent_to_email', from: invoice.sent_to_email || null, to: sentToEmail },
             ];
-            if (invoice.status === 'draft') {
+            if (normalizeInvoiceStatus(invoice.status) === INVOICE_STATUS.draft) {
                 changes.push({ field: 'status', from: 'draft', to: 'sent' });
             }
             const historyEntry = createHistoryEntry({

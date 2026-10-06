@@ -214,16 +214,18 @@ export async function handlePublicInvoiceGet(req, res) {
     if (!sentTo) {
       const { recordPublicDocumentOpened } = await import("../server/src/documents/documentEventService.js");
       const { DOCUMENT_EVENT_SOURCE } = await import("../shared/documents/documentEvents.js");
+      const { markInvoiceOpened } = await import("../server/src/documents/invoiceOpenedStatus.js");
+      const openedInvoice = await markInvoiceOpened(supabase, invoice);
       await recordPublicDocumentOpened({
-        orgId: invoice.org_id,
+        orgId: openedInvoice.org_id,
         sourceKind: DOCUMENT_EVENT_SOURCE.INVOICE,
-        sourceId: invoice.id,
-        clientId: invoice.client_id || client?.id || null,
+        sourceId: openedInvoice.id,
+        clientId: openedInvoice.client_id || client?.id || null,
         source: "invoice_public_page",
       }, supabase);
       return res.status(200).json({
         requiresEmailVerification: false,
-        invoice,
+        invoice: openedInvoice,
         client,
         bankingDetail,
       });
@@ -238,16 +240,18 @@ export async function handlePublicInvoiceGet(req, res) {
     if (okViewer) {
       const { recordPublicDocumentOpened } = await import("../server/src/documents/documentEventService.js");
       const { DOCUMENT_EVENT_SOURCE } = await import("../shared/documents/documentEvents.js");
+      const { markInvoiceOpened } = await import("../server/src/documents/invoiceOpenedStatus.js");
+      const openedInvoice = await markInvoiceOpened(supabase, invoice);
       await recordPublicDocumentOpened({
-        orgId: invoice.org_id,
+        orgId: openedInvoice.org_id,
         sourceKind: DOCUMENT_EVENT_SOURCE.INVOICE,
-        sourceId: invoice.id,
-        clientId: invoice.client_id || client?.id || null,
+        sourceId: openedInvoice.id,
+        clientId: openedInvoice.client_id || client?.id || null,
         source: "invoice_public_page",
       }, supabase);
       return res.status(200).json({
         requiresEmailVerification: false,
-        invoice,
+        invoice: openedInvoice,
         client,
         bankingDetail,
       });

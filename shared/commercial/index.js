@@ -42,6 +42,7 @@ export {
   normalizeInvoiceStatus,
   normalizeQuoteStatus,
   canTransitionInvoiceStatus,
+  invoiceStatusAfterClientOpen,
   canTransitionQuoteStatus,
   assertInvoiceTransition,
   assertQuoteTransition,

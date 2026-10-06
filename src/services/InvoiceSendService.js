@@ -9,15 +9,16 @@ import { generateInvoiceDocumentPdf } from '@/document-engine/pdf/invoice';
 import { generateQuoteDocumentPdf } from '@/document-engine/pdf/quote';
 import { dispatchDocumentEmail, userFacingDocumentSendError } from '@/document-engine/send/email';
 import { generateQuoteEmailHtml } from '@/utils/quoteEmailHtml';
+import { generateInvoiceEmailHtml, invoiceEmailSubject } from '@/utils/invoiceEmailHtml';
 import { measureEmailLogo } from '@/utils/brandedEmailTemplates';
 import { getLogo } from '@/services/AssetService';
-import { generateInvoiceEmailHtml } from '@/utils/invoiceEmailHtml';
 import { createPageUrl } from '@/utils';
 import { retryOnAbort, isAbortError, retryOnTransientFetch } from '@/utils/retryOnAbort';
 import { snapshotDocumentBrandForPersist } from '@/utils/documentBrandColors';
 import { beginCriticalSessionOperation, endCriticalSessionOperation } from '@/lib/sessionTimeoutControls';
 import { isValidEmail } from '@/utils/inputSanitization';
 import { createDocumentContext } from '@/document-engine/core/documentContext';
+import { INVOICE_STATUS, normalizeInvoiceStatus } from '@shared/commercial/documentStatuses.js';
 
 /**
  * Base URL for trackable links and email pixel (client: window.origin; server: pass explicitly).
@@ -209,7 +210,7 @@ async function findMessageLogByTrackingToken(token) {
   try {
     const { data, error } = await supabase
       .from('message_logs')
-      .select('id, document_id')
+      .select('id, document_id, viewed, opened_at')
       .eq('tracking_token', trackingToken)
       .maybeSingle();
     if (error || !data) return null;
@@ -438,10 +439,12 @@ export async function sendInvoicePdfEmailToClient(invoice, client, options = {})
       const ctaHref = getTrackedLinkUrl(trackingToken, prepared.url);
       const invoiceForHtml = {
         ...invoiceForSend,
-        delivery_date:
-          invoiceForSend.delivery_date || invoiceForSend.due_date || new Date().toISOString(),
+        delivery_date: invoiceForSend.delivery_date || invoiceForSend.due_date || "",
       };
-      html = generateInvoiceEmailHtml(invoiceForHtml, client, userData, ctaHref, pixelUrl);
+      const rawLogo = userData?.logo_url || userData?.company_logo_url || "";
+      const resolvedLogo = rawLogo ? getLogo(rawLogo) : "";
+      const logoBox = await measureEmailLogo(resolvedLogo);
+      html = generateInvoiceEmailHtml(invoiceForHtml, client, userData, ctaHref, pixelUrl, logoBox);
     } else if (!trackingToken) {
       trackingToken = sendOperationId;
     }
@@ -485,7 +488,9 @@ export async function sendInvoicePdfEmailToClient(invoice, client, options = {})
         throw new Error('Invoice PDF generation failed. Please try again.');
       }
 
-      const subject = `Invoice #${invoiceForSend.invoice_number || ''} from ${invoiceForSend.owner_company_name || userData?.company_name || 'Us'}`;
+      const subject = invoiceEmailSubject(
+        invoiceForSend.owner_company_name || userData?.company_name
+      );
       const filename = `invoice-${invoiceForSend.invoice_number || invoiceForSend.reference_number || invoiceForSend.id || 'invoice'}.pdf`;
 
       await dispatchInvoiceEmailViaCanonicalPath({
@@ -522,10 +527,17 @@ export async function sendInvoicePdfEmailToClient(invoice, client, options = {})
       last_sent_date: sentAt,
       ...brandPatch,
     };
-    if (options.markSent !== false && invoiceForSend.status === 'draft') {
+    if (options.markSent !== false && normalizeInvoiceStatus(invoiceForSend.status) === INVOICE_STATUS.draft) {
       persistPatch.status = 'sent';
     }
     await retryOnAbort(() => Invoice.update(invoiceForSend.id, persistPatch));
+    const statusAfterSend = persistPatch.status || invoiceForSend.status;
+    if (normalizeInvoiceStatus(statusAfterSend) === INVOICE_STATUS.sent) {
+      const openedLog = await findMessageLogByTrackingToken(trackingToken || idempotencyKey);
+      if (openedLog?.viewed || openedLog?.opened_at) {
+        await retryOnAbort(() => Invoice.update(invoiceForSend.id, { status: INVOICE_STATUS.viewed }));
+      }
+    }
     if (!alreadyDelivered) {
       await recordDocumentSend('invoice', invoiceForSend.id, client?.id || invoiceForSend.client_id, 'email');
       const { recordDocumentSentEvent } = await import('@/services/documentEventClient');

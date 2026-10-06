@@ -4,16 +4,23 @@ import { buildBrandedEmailDocumentHtml } from "@/utils/brandedEmailTemplates";
 import { parseDocumentBrandHex } from "@/utils/documentBrandColors";
 import { escapeHtml, sanitizeHttpUrl } from "@/utils/htmlSecurity";
 import { getLogo } from "@/services/AssetService";
+import { buildViewDocumentButtonHtml } from "@/utils/shareEmailHtml";
 
 function formatDueDate(invoice) {
   const raw = invoice?.delivery_date || invoice?.due_date;
   const d = raw ? new Date(raw) : null;
-  if (!d || Number.isNaN(d.getTime())) return "—";
+  if (!d || Number.isNaN(d.getTime())) return "";
   try {
     return format(d, "MMM d, yyyy");
   } catch {
-    return "—";
+    return "";
   }
+}
+
+/** Inbox subject, same shape as the quote email: "{company name} invoice". */
+export function invoiceEmailSubject(companyName) {
+  const name = String(companyName || "").trim() || "Paidly";
+  return `${name} invoice`;
 }
 
 /**
@@ -24,7 +31,7 @@ function formatDueDate(invoice) {
  * @param {string} ctaHref
  * @param {string} [pixelUrl]
  */
-export function generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixelUrl = "") {
+export function generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixelUrl = "", logoBox = null) {
   const companyName = company?.company_name || "Your Company";
   const userCurrency = company?.currency || "USD";
   const formattedAmount = formatCurrency(invoice.total_amount, userCurrency);
@@ -50,26 +57,24 @@ export function generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixe
       </p>
       <table role="presentation" width="100%" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;margin:0 0 20px;">
         <tr><td style="padding:16px 18px;">
-          <p style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;">Summary</p>
+          <p style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;">Invoice summary</p>
           <table role="presentation" width="100%" style="font-size:14px;color:#18181b;">
             <tr><td style="padding:4px 0;color:#71717a;">Invoice #</td><td align="right" style="font-weight:600;">${escapeHtml(invoice.invoice_number || "")}</td></tr>
             <tr><td style="padding:4px 0;color:#71717a;">Amount due</td><td align="right" style="font-weight:700;font-size:18px;color:${primary};">${escapeHtml(formattedAmount)}</td></tr>
-            <tr><td style="padding:4px 0;color:#71717a;">Due</td><td align="right" style="font-weight:600;">${escapeHtml(dueDate)}</td></tr>
+            ${dueDate ? `<tr><td style="padding:4px 0;color:#71717a;">Due</td><td align="right" style="font-weight:600;">${escapeHtml(dueDate)}</td></tr>` : ""}
           </table>
         </td></tr>
       </table>
-      <div style="text-align:center;margin:28px 0;">
-        <a href="${escapeHtml(safeCta)}" style="display:inline-block;background:linear-gradient(135deg, ${primary} 0%, ${secondary} 100%);color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;box-shadow:0 4px 14px rgba(242,78,0,0.25);">
-          View invoice online
-        </a>
-      </div>
+      ${buildViewDocumentButtonHtml(safeCta, "View Invoice")}
       <p style="margin:0;color:#71717a;font-size:13px;line-height:1.55;">
-        Questions? Reply to this email or contact ${escapeHtml(companyName)}.
+        We look forward to working with you.
       </p>
     `;
 
   return buildBrandedEmailDocumentHtml({
-    preheader: `Invoice ${invoice.invoice_number} — ${formattedAmount} due ${dueDate}`,
+    preheader: dueDate
+      ? `Invoice ${invoice.invoice_number} — ${formattedAmount} due ${dueDate}`
+      : `Invoice ${invoice.invoice_number} — ${formattedAmount}`,
     title: "Invoice",
     subtitle: `Invoice #${invoice.invoice_number}`,
     innerHtml,
@@ -79,5 +84,7 @@ export function generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixe
     secondaryHex: secondary,
     pixelUrl,
     logoUrl,
+    logoWidth: logoBox?.width,
+    logoHeight: logoBox?.height,
   });
 }

@@ -5,6 +5,7 @@ import {
   normalizeInvoiceStatus,
   normalizeQuoteStatus,
   canTransitionInvoiceStatus,
+  invoiceStatusAfterClientOpen,
   canTransitionQuoteStatus,
   sanitizeInvoiceStatusWrite,
   sanitizeQuoteStatusWrite,
@@ -99,6 +100,16 @@ describe("invoice transitions", () => {
     expect(sanitizeInvoiceStatusWrite("paid", null)).toBe(INVOICE_STATUS.paid);
     expect(() => sanitizeInvoiceStatusWrite("paid", "draft")).toThrow(/Invalid invoice status/);
     expect(() => sanitizeInvoiceStatusWrite("bogus", "draft")).toThrow(/Unsupported invoice status/);
+  });
+
+  it("moves a sent invoice to viewed when the client opens or receives it", () => {
+    expect(invoiceStatusAfterClientOpen("sent")).toBe(INVOICE_STATUS.viewed);
+    expect(invoiceStatusAfterClientOpen("sending")).toBe(INVOICE_STATUS.viewed);
+    expect(invoiceStatusAfterClientOpen("viewed")).toBeNull();
+    expect(invoiceStatusAfterClientOpen("draft")).toBeNull();
+    expect(invoiceStatusAfterClientOpen("paid")).toBeNull();
+    expect(invoiceStatusAfterClientOpen("overdue")).toBeNull();
+    expect(invoiceStatusAfterClientOpen("partially_paid")).toBeNull();
   });
 });
 

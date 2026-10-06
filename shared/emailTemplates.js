@@ -18,8 +18,8 @@ export const EMAIL_TEMPLATE_LIMITS = Object.freeze({ subject: 200, message: 2000
 
 export const DEFAULT_EMAIL_TEMPLATES = Object.freeze({
   invoice: Object.freeze({
-    subject: "Invoice {document_number} from {company_name}",
-    message: "Hi {client_name},\n\nPlease find invoice {document_number} for {amount}, due {due_date}.\n\nThank you,\n{company_name}",
+    subject: "{company_name} invoice",
+    message: "Hi {client_name},\n\nPlease find invoice {document_number} for {amount}. A PDF copy is attached.\n\nKind regards,\n{company_name}",
   }),
   quote: Object.freeze({
     subject: "Quote {document_number} from {company_name}",

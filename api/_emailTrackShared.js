@@ -4,6 +4,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { DOCUMENT_EVENT_TYPE } from "../shared/documents/documentEvents.js";
 import { appendEventFromMessageLog } from "../server/src/documents/documentEventService.js";
+import { markInvoiceOpenedById } from "../server/src/documents/invoiceOpenedStatus.js";
 
 const TRACKING_PIXEL_GIF = Buffer.from(
   "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
@@ -96,6 +97,9 @@ export async function handleEmailTrack(req, res) {
       if (error) return res.status(500).json({ error: "Failed to record open" });
       if (log) {
         await appendEventFromMessageLog(log, DOCUMENT_EVENT_TYPE.opened, { channel: "public_page", source: "track_open" }, supabase);
+        if (String(log.document_type || "").toLowerCase() === "invoice") {
+          await markInvoiceOpenedById(supabase, log.document_id);
+        }
       }
       return res.status(200).json({ ok: true });
     } catch (e) {
@@ -184,6 +188,9 @@ export async function handleEmailTrack(req, res) {
         .eq("tracking_token", trimmed);
       if (log) {
         await appendEventFromMessageLog(log, DOCUMENT_EVENT_TYPE.opened, { channel: "email", source: "email_pixel" }, supabase);
+        if (String(log.document_type || "").toLowerCase() === "invoice") {
+          await markInvoiceOpenedById(supabase, log.document_id);
+        }
       }
     } catch (e) {
       console.warn("[email-track]", e?.message || e);

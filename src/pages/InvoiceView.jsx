@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Invoice } from '@/api/entities';
 import { getPublicApiBase } from '@/api/backendClient';
 import {
   fetchPublicInvoicePayload,
@@ -16,7 +15,6 @@ import { formatCurrency } from '@/utils/currencyCalculations';
 import { Loader2, AlertCircle, Download, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import InvoiceMetaTags from '@/components/invoice/InvoiceMetaTags';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
 import { resolveInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/invoiceTemplateData';
@@ -88,16 +86,6 @@ export default function InvoiceView() {
 
         setBankingDetail(payload.bankingDetail || null);
 
-        const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
-        if (autoUpdate) {
-          try {
-            await Invoice.update(currentInvoice.id, autoUpdate);
-            setInvoice((prev) => ({ ...prev, ...autoUpdate }));
-          } catch (e) {
-            console.error('Could not update invoice status:', e);
-          }
-        }
-
         const tokenParam = searchParams.get('token') || searchParams.get('tracking');
         if (tokenParam && !trackingTokenRecorded.current) {
           trackingTokenRecorded.current = true;
@@ -163,16 +151,6 @@ export default function InvoiceView() {
         setClient({ name: 'Client', email: '', address: '', phone: '' });
       }
       setBankingDetail(payload.bankingDetail || null);
-
-      const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
-      if (autoUpdate) {
-        try {
-          await Invoice.update(currentInvoice.id, autoUpdate);
-          setInvoice((prev) => ({ ...prev, ...autoUpdate }));
-        } catch (e) {
-          console.error('Could not update invoice status:', e);
-        }
-      }
     } catch (err) {
       setVerificationError(
         err?.message ||

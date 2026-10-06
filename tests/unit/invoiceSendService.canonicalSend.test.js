@@ -61,6 +61,7 @@ vi.mock("@/components/pdf/generateQuotePDF", () => ({
 
 vi.mock("@/utils/invoiceEmailHtml", () => ({
   generateInvoiceEmailHtml: vi.fn(() => "<html>invoice</html>"),
+  invoiceEmailSubject: (companyName) => `${String(companyName || "Paidly").trim() || "Paidly"} invoice`,
 }));
 
 vi.mock("@/utils/quoteEmailHtml", () => ({

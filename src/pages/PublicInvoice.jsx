@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Invoice } from '@/api/entities';
 import {
   fetchPublicInvoicePayload,
   verifyPublicInvoiceEmail,
@@ -17,7 +16,6 @@ import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 import { AlertCircle, Download, Mail, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { getAutoStatusUpdate } from '@/utils/invoiceStatus';
 import InvoicePreview from '@/components/invoice/InvoicePreview';
 import DocumentPaymentActionBar from '@/components/invoice/DocumentPaymentActionBar';
 import InvoicePaymentHistory from '@/components/invoice/InvoicePaymentHistory';
@@ -84,16 +82,6 @@ export default function PublicInvoice() {
                 }
 
                 setBankingDetail(payload.bankingDetail || null);
-                const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
-                if (autoUpdate) {
-                    try {
-                        await Invoice.update(currentInvoice.id, autoUpdate);
-                        setInvoice(prev => ({ ...prev, ...autoUpdate }));
-                    } catch (viewErr) {
-                        console.warn("Could not update invoice viewed status:", viewErr);
-                    }
-                }
-                
             } catch (e) {
                 console.error("Error fetching public invoice:", e);
                 setError(e?.message || "Could not load the invoice. Please check the link and try again.");
@@ -151,16 +139,6 @@ export default function PublicInvoice() {
                 setClient({ name: "Client", email: "", address: "", phone: "" });
             }
             setBankingDetail(payload.bankingDetail || null);
-            const autoUpdate = getAutoStatusUpdate(currentInvoice, { markViewed: true });
-            if (autoUpdate) {
-                try {
-                    await Invoice.update(currentInvoice.id, autoUpdate);
-                    setInvoice(prev => ({ ...prev, ...autoUpdate }));
-                } catch (viewErr) {
-                    console.warn("Could not update invoice viewed status:", viewErr);
-                }
-            }
-
         } catch (error) {
             setVerificationError(
                 error?.message ||

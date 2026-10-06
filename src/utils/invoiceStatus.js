@@ -59,14 +59,6 @@ export const getAutoStatusUpdate = (invoice, options = {}) => {
   const changes = [{ field: 'status', from: invoice.status, to: nextStatus }];
   const update = { status: nextStatus };
 
-  if (nextStatus === INVOICE_STATUS.viewed) {
-    update.viewed_date = new Date().toISOString();
-  }
-
-  if (nextStatus === INVOICE_STATUS.overdue) {
-    update.overdue_date = new Date().toISOString();
-  }
-
   const historyEntry = createHistoryEntry({
     action: 'status_auto',
     summary: `Status auto-updated to ${nextStatus.replace('_', ' ')}`,

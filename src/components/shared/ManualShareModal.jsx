@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import Button from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,9 @@ import { fetchEmailTemplates } from '@/services/EmailTemplatesService';
 import { effectiveEmailTemplate, renderEmailTemplate } from '@shared/emailTemplates.js';
 import { DocumentSentDone } from '@/components/shared/DocumentSentDone';
 import { buildDocumentShareEmailHtml } from '@/utils/shareEmailHtml';
+import { generateInvoiceEmailHtml } from '@/utils/invoiceEmailHtml';
+import { measureEmailLogo } from '@/utils/brandedEmailTemplates';
+import { getLogo } from '@/services/AssetService';
 
 /**
  * Share a document by link or email. After an email is sent the modal becomes the Done State
@@ -44,12 +48,18 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
                 amount = `${currency} ${Number(record.total_amount || 0).toFixed(2)}`;
             }
         }
+        const dueRaw = record.delivery_date || record.due_date || record.valid_until || '';
+        let dueLabel = '';
+        if (dueRaw) {
+            const due = new Date(String(dueRaw).includes('T') ? dueRaw : `${dueRaw}T12:00:00`);
+            if (!Number.isNaN(due.getTime())) dueLabel = format(due, 'MMM d, yyyy');
+        }
         const values = {
             client_name: client?.name || record.client_name || 'there',
             document_number: record.invoice_number || record.quote_number || '',
             company_name: profile?.company_name || profile?.full_name || 'Paidly',
             amount,
-            due_date: record.due_date || record.valid_until || '',
+            due_date: dueLabel,
         };
         const apply = (templates, allowed) => {
             if (cancelled) return;
@@ -83,22 +93,38 @@ export default function ManualShareModal({ isOpen, onClose, shareUrl, itemType =
         try {
             const record = docRecord || invoice || {};
             const isQuote = itemType === 'quote';
+            const isInvoice = itemType === 'invoice';
+            const mailClient = client || { id: record.client_id, name: record.client_name, email: emailTo };
             let attachment = null;
-            if (isQuote) {
-                const { buildQuotePdfAttachment } = await import('@/services/quoteShareEmail');
-                attachment = await buildQuotePdfAttachment({
-                    quote: record,
-                    client: client || { id: record.client_id, name: record.client_name, email: emailTo },
+            let emailBody;
+            if (isInvoice) {
+                const rawLogo = profile?.logo_url || profile?.company_logo_url || '';
+                const resolvedLogo = rawLogo ? getLogo(rawLogo) : '';
+                const logoBox = await measureEmailLogo(resolvedLogo);
+                emailBody = generateInvoiceEmailHtml(record, mailClient, profile, shareUrl, '', logoBox);
+                const { buildInvoicePdfAttachment } = await import('@/services/invoiceShareEmail');
+                attachment = await buildInvoicePdfAttachment({
+                    invoice: record,
+                    client: mailClient,
                     user: profile,
                 });
+            } else {
+                if (isQuote) {
+                    const { buildQuotePdfAttachment } = await import('@/services/quoteShareEmail');
+                    attachment = await buildQuotePdfAttachment({
+                        quote: record,
+                        client: mailClient,
+                        user: profile,
+                    });
+                }
+                emailBody = buildDocumentShareEmailHtml({
+                    itemType,
+                    message: emailMessage,
+                    shareUrl,
+                    companyName: profile?.company_name || profile?.full_name || 'Paidly',
+                    attachPdf: isQuote,
+                });
             }
-            const emailBody = buildDocumentShareEmailHtml({
-                itemType,
-                message: emailMessage,
-                shareUrl,
-                companyName: profile?.company_name || profile?.full_name || 'Paidly',
-                attachPdf: isQuote,
-            });
 
             await breakApi.integrations.Core.SendEmail({
                 to: emailTo,

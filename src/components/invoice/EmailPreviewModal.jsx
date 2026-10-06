@@ -7,7 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Mail, FileText, X, Send } from 'lucide-react';
 import { BankingDetail } from '@/api/entities';
 import { getEmailOpenTrackingPixelUrl, getTrackedLinkUrl } from '@/services/InvoiceSendService';
-import { generateInvoiceEmailHtml } from '@/utils/invoiceEmailHtml';
+import { generateInvoiceEmailHtml, invoiceEmailSubject } from '@/utils/invoiceEmailHtml';
+import { measureEmailLogo } from '@/utils/brandedEmailTemplates';
+import { getLogo } from '@/services/AssetService';
 import { formatCurrency } from '@/utils/currencyCalculations';
 import { formatLineItemNameAndDescription } from '@/utils/invoiceTemplateData';
 import { format } from 'date-fns';
@@ -19,6 +21,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
     const [bankingDetail, setBankingDetail] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [logoBox, setLogoBox] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -43,6 +46,18 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
         setCompany(profile || null);
     }, [profile]);
 
+    useEffect(() => {
+        const raw = company?.logo_url || company?.company_logo_url || '';
+        const resolved = raw ? getLogo(raw) : '';
+        let cancelled = false;
+        measureEmailLogo(resolved).then((box) => {
+            if (!cancelled) setLogoBox(box);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [company?.logo_url, company?.company_logo_url]);
+
     if (isLoading) {
         return (
             <Dialog open={true} onOpenChange={onClose}>
@@ -59,7 +74,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
     const publicViewUrl = invoice?.public_share_token
         ? `${window.location.origin}/view/${invoice.public_share_token}`
         : '';
-    const emailHtml = generateInvoiceEmailHtml(invoice, client, company, publicViewUrl);
+    const emailHtml = generateInvoiceEmailHtml(invoice, client, company, publicViewUrl, '', logoBox);
     const handleSend = async () => {
         const result = getTrackableLink ? await getTrackableLink().catch(() => ({ url: publicViewUrl })) : { url: publicViewUrl };
         const viewUrl = (result && typeof result === 'object' && result.url != null) ? result.url : result;
@@ -68,7 +83,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
             result?.trackingToken && viewUrl
                 ? getTrackedLinkUrl(result.trackingToken, viewUrl)
                 : viewUrl;
-        const html = generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixelUrl);
+        const html = generateInvoiceEmailHtml(invoice, client, company, ctaHref, pixelUrl, logoBox);
         onSend(html, result?.trackingToken);
     };
 
@@ -110,7 +125,7 @@ export default function EmailPreviewModal({ invoice, client, onClose, onSend, is
                     </DialogTitle>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Badge variant="outline">To: {client.email}</Badge>
-                        <Badge variant="outline">Subject: Invoice {invoice.invoice_number} from {companyName}</Badge>
+                        <Badge variant="outline">Subject: {invoiceEmailSubject(companyName)}</Badge>
                         <Badge variant="outline" className="bg-green-50 text-green-700">
                             🔗 Download Link Included
                         </Badge>

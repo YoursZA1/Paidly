@@ -175,6 +175,17 @@ export function canTransitionInvoiceStatus(from, to) {
   return (INVOICE_TRANSITIONS[current] || []).includes(next);
 }
 
+/**
+ * Status to store when the client opens the invoice or the email.
+ * Returns null when the current status should stay (draft, paid, overdue, already viewed).
+ */
+export function invoiceStatusAfterClientOpen(current) {
+  const status = normalizeInvoiceStatus(current);
+  if (status === INVOICE_STATUS.viewed) return null;
+  if (!canTransitionInvoiceStatus(status, INVOICE_STATUS.viewed)) return null;
+  return INVOICE_STATUS.viewed;
+}
+
 export function canTransitionQuoteStatus(from, to) {
   const current = normalizeQuoteStatus(from);
   const next = normalizeQuoteStatus(to);
