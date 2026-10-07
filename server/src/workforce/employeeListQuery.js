@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { johannesburgYmd } from "../../../shared/payroll/dates.js";
-import { computeLeaveBalance } from "../../../shared/leave/leaveMath.js";
+import { presentLeaveBalance } from "../../../shared/leave/leaveEligibility.js";
 import { buildEmployeeProfile } from "../../../shared/workforce/employeeProfile.js";
 import { mergeEmployeeTimeline } from "../../../shared/workforce/employeeTimeline.js";
 import { countEmployeesOnLeaveToday, deriveEmployeeLeaveStatus } from "../../../shared/workforce/leaveStatus.js";
@@ -467,11 +467,11 @@ export async function getEmployeeProfile(orgId, employeeId, access, { sections }
   if (wanted.has("leave")) {
     jobs.push(
       (async () => {
-        const [requests, balances] = await Promise.all([
+        const [requests, balances, adjustments] = await Promise.all([
           safeQuery(
             supabaseAdmin
               .from("leave_requests")
-              .select("id, status, start_date, end_date, working_days, reason, leave_types(name, code, paid)")
+              .select("id, status, start_date, end_date, working_days, reason, leave_type_id, leave_types(name, code, paid)")
               .eq("org_id", orgId)
               .eq("employee_id", employee.id)
               .order("start_date", { ascending: false })
@@ -481,18 +481,57 @@ export async function getEmployeeProfile(orgId, employeeId, access, { sections }
           safeQuery(
             supabaseAdmin
               .from("leave_balances")
-              .select("id, leave_type_id, accrued, used, pending, entitled, leave_year, leave_types(code, name)")
+              .select("id, leave_type_id, accrued, used, pending, entitled, leave_year, leave_types(code, name, days_per_year, accrual_method)")
               .eq("org_id", orgId)
               .eq("employee_id", employee.id)
               .eq("leave_year", johannesburgYmd().year),
             { data: [] }
           ),
+          safeQuery(
+            supabaseAdmin
+              .from("leave_transactions")
+              .select("leave_type_id, days")
+              .eq("org_id", orgId)
+              .eq("employee_id", employee.id)
+              .eq("kind", "adjustment"),
+            { data: [] }
+          ),
         ]);
         bundle.leave_requests = requests.data || [];
-        bundle.leave_balances = (balances.data || []).map((row) => ({
-          ...row,
-          available: computeLeaveBalance(row).available,
-        }));
+        const asOf = johannesburgYmd().iso;
+        const adjustmentTotals = {};
+        for (const entry of adjustments.data || []) {
+          adjustmentTotals[entry.leave_type_id] = Math.round(((adjustmentTotals[entry.leave_type_id] || 0) + Number(entry.days || 0)) * 100) / 100;
+        }
+        bundle.leave_balances = (balances.data || []).map((row) => {
+          const shown = presentLeaveBalance({
+            code: row.leave_types?.code,
+            leaveTypeId: row.leave_type_id,
+            daysPerYear: Number(row.leave_types?.days_per_year ?? row.entitled) || 0,
+            method: row.leave_types?.accrual_method,
+            employmentStartIso: employee.employment_start_date,
+            employmentEndIso: employee.employment_end_date,
+            employmentStatus: employee.employment_status,
+            asOfIso: asOf,
+            yearStartIso: `${asOf.slice(0, 4)}-01-01`,
+            used: row.used,
+            pending: row.pending,
+            storedAccrued: row.accrued,
+            adjustments: adjustmentTotals[row.leave_type_id] || 0,
+            requests: requests.data || [],
+          });
+          return {
+            ...row,
+            accrued: shown.accrued,
+            used: shown.used,
+            pending: shown.pending,
+            available: shown.available,
+            note: shown.note,
+            cycle_start: shown.cycleStart,
+            cycle_end: shown.cycleEnd,
+            cycle_label: shown.cycleLabel,
+          };
+        });
       })()
     );
   }

@@ -23,9 +23,16 @@ import PayslipStatusBadge from "@/components/payslips/PayslipStatusBadge";
 import { createPageUrl } from "@/utils";
 import { attentionReasonLabel } from "@shared/workforce/employeeLifecycle.js";
 import { PAY_TYPES, PAY_FREQUENCIES } from "@shared/payroll/constants.js";
+import { isValidSaIdNumber } from "@shared/payroll/saIdNumber.js";
 import EmployeePortalAccessPanel from "@/components/workforce/EmployeePortalAccessPanel.jsx";
 
 const SECTION_TABS = new Set(["leave", "payslips", "documents", "attendance", "activity"]);
+
+function leaveDayLabel(value) {
+  const days = Number(value);
+  if (!Number.isFinite(days)) return "—";
+  return `${days.toFixed(2)} ${days === 1 ? "day" : "days"}`;
+}
 
 function employeeIdFromRoute(params, search) {
   return parseUuid(params?.id) || parseUuid(new URLSearchParams(search).get("id"));
@@ -389,8 +396,10 @@ export default function EmployeeProfile() {
                             autoComplete="off"
                             onChange={(e) => setTaxIds((current) => ({ ...current, id_number: e.target.value }))}
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Opens this employee&apos;s payslip PDF. Payslips issued after you save print it masked.
+                          <p className={taxIds.id_number.trim() && !isValidSaIdNumber(taxIds.id_number) ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+                            {taxIds.id_number.trim() && !isValidSaIdNumber(taxIds.id_number)
+                              ? "This isn't a valid South African ID number, so the payslip PDF can't use it yet."
+                              : "Saved with these personal details. The next payslip download uses it automatically."}
                           </p>
                         </div>
                       </div>
@@ -601,11 +610,15 @@ export default function EmployeeProfile() {
                   {sectionLoading === "leave" ? <p className="text-sm text-muted-foreground">Loading leave…</p> : null}
                   <p className="text-sm text-muted-foreground">{eligibility?.copy}</p>
                   {(bundle.leave_balances || []).length ? (
-                    <ul className="text-sm space-y-1">
+                    <ul className="text-sm space-y-3">
                       {bundle.leave_balances.map((row) => (
-                        <li key={row.id || row.leave_types?.code} className="flex justify-between gap-3">
-                          <span>{row.leave_types?.name || row.leave_types?.code || "Leave"}</span>
-                          <span className="tabular-nums">{row.available ?? "—"} available</span>
+                        <li key={row.id || row.leave_types?.code}>
+                          <p className="font-medium">{row.leave_types?.name || row.leave_types?.code || "Leave"}</p>
+                          <p className="tabular-nums text-muted-foreground">
+                            Accrued: {leaveDayLabel(row.accrued)} · Used: {leaveDayLabel(row.used)} · Available: {leaveDayLabel(row.available)}
+                          </p>
+                          {row.cycle_label ? <p className="text-xs text-muted-foreground">Leave cycle: {row.cycle_label}</p> : null}
+                          {row.note ? <p className="text-xs text-muted-foreground">{row.note}</p> : null}
                         </li>
                       ))}
                     </ul>

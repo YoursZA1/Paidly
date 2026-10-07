@@ -49,6 +49,7 @@ export default function CompanyTeamManagePanel() {
   const [inviteJobFunction, setInviteJobFunction] = useState("sales");
   const [inviteRegisterId, setInviteRegisterId] = useState("");
   const [department, setDepartment] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [registers, setRegisters] = useState([]);
   const [inviting, setInviting] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
@@ -130,6 +131,7 @@ export default function CompanyTeamManagePanel() {
           role: inviteRole,
           jobFunction: showJobFunctionOnInvite ? inviteJobFunction : "general",
           department,
+          employmentStartDate: startDate,
         });
         if (result?.data?.mode === "invited" || result?.data?.invite_link) {
           setInviteNotice({
@@ -157,6 +159,7 @@ export default function CompanyTeamManagePanel() {
         setEmail("");
         setFullName("");
         setDepartment("");
+        setStartDate("");
         await reload();
         return;
       }
@@ -301,6 +304,16 @@ export default function CompanyTeamManagePanel() {
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
               placeholder="Optional"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="company-invite-start">Employment start date</Label>
+            <Input
+              id="company-invite-start"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              required={!posOnlyInvite}
             />
           </div>
           <div className="space-y-2">

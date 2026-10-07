@@ -76,6 +76,7 @@ export async function createWorkforceEmployee({
   role = COMPANY_ROLES.EMPLOYEE,
   jobFunction = "general",
   department,
+  employmentStartDate,
 } = {}) {
   const trimmed = String(email || "").trim().toLowerCase();
   if (!trimmed) throw new Error("Email is required");
@@ -90,6 +91,7 @@ export async function createWorkforceEmployee({
       role: normalizeCompanyRole(role),
       job_function: normalizeJobFunction(jobFunction),
       department: department?.trim() || null,
+      employment_start_date: employmentStartDate || null,
     }),
   });
   const raw = await res.text().catch(() => "");

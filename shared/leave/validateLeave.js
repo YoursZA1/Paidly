@@ -16,6 +16,7 @@ import { countWorkingDays, computeLeaveBalance } from "./leaveMath.js";
  *   unpaid?: boolean,
  *   overlapping?: Array<{ start_date: string, end_date: string, status: string, id?: string }>,
  *   ignoreRequestId?: string,
+ *   blockedReason?: string | null,
  * }} input
  */
 export function validateLeaveApplication(input) {
@@ -54,7 +55,9 @@ export function validateLeaveApplication(input) {
   }
 
   const computed = computeLeaveBalance(input.balance || {});
-  if (!input.unpaid && workingDays > computed.available + 1e-9) {
+  if (input.blockedReason) {
+    errors.push(input.blockedReason);
+  } else if (!input.unpaid && workingDays > computed.available + 1e-9) {
     errors.push(
       `Insufficient leave balance. Requested ${workingDays} working day(s); ${computed.available} available.`
     );

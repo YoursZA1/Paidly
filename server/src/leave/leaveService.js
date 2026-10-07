@@ -1,7 +1,8 @@
 import { supabaseAdmin, writePayrollAudit, notifyUser } from "../payroll/payrollGate.js";
 import { insertPayrollProfileRow } from "../payroll/payrollService.js";
 import { johannesburgYmd, leaveYearForDate, formatIsoDate } from "../../../shared/payroll/dates.js";
-import { countWorkingDays, computeLeaveBalance, yearToDateAccrual } from "../../../shared/leave/leaveMath.js";
+import { countWorkingDays, computeLeaveBalance } from "../../../shared/leave/leaveMath.js";
+import { bceaLeavePosition, presentLeaveBalance } from "../../../shared/leave/leaveEligibility.js";
 import { validateLeaveApplication } from "../../../shared/leave/validateLeave.js";
 import { assertLeaveRowEmployeeId, intersectEmployeeIdLists, leaveRequestEmployeeScope, mapLeaveDbError } from "../../../shared/leave/leaveIds.js";
 import { parseUuid, requireUuid } from "../../../shared/ids/uuid.js";
@@ -20,7 +21,7 @@ import { isWorkforceEmployeeActive } from "../../../shared/workforce/employeeLif
 import { suppressForDemoOrg } from "../demo/demoMode.js";
 
 const DEFAULT_LEAVE_TYPES = [
-  { code: "ANNUAL", name: "Annual leave", paid: true, accrual_method: "monthly", days_per_year: 21, requires_approval: true, sort_order: 1 },
+  { code: "ANNUAL", name: "Annual leave", paid: true, accrual_method: "monthly", days_per_year: 15, requires_approval: true, sort_order: 1 },
   { code: "SICK", name: "Sick leave", paid: true, accrual_method: "annual", days_per_year: 10, requires_approval: true, sort_order: 2 },
   { code: "FAMILY", name: "Family responsibility", paid: true, accrual_method: "annual", days_per_year: 3, requires_approval: true, sort_order: 3 },
   { code: "UNPAID", name: "Unpaid leave", paid: false, accrual_method: "none", days_per_year: 0, requires_approval: true, sort_order: 4 },
@@ -69,7 +70,7 @@ async function insertLeaveRow(table, row) {
 }
 
 const MEMBERSHIP_COLS =
-  "id, org_id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, manager_membership_id, invited_email, disabled_at, created_at";
+  "id, org_id, user_id, role, job_function, employee_number, department, employment_status, employment_start_date, employment_end_date, manager_membership_id, invited_email, disabled_at, created_at";
 
 async function loadMembership(orgId, { employeeId, userId } = {}) {
   let q = supabaseAdmin.from("memberships").select(MEMBERSHIP_COLS).eq("org_id", orgId);
@@ -111,7 +112,18 @@ async function getOrCreateProfileForMembership(orgId, membership) {
     .eq("org_id", orgId)
     .eq("membership_id", membership.id)
     .maybeSingle();
-  if (byMember) return byMember;
+  if (byMember) {
+    const start = membership.employment_start_date || null;
+    if (start && byMember.employment_start_date !== start) {
+      await supabaseAdmin.from("payroll_profiles").update({ employment_start_date: start }).eq("id", byMember.id);
+      byMember.employment_start_date = start;
+    }
+    if (membership.employment_status && byMember.employment_status !== membership.employment_status) {
+      byMember.employment_status = membership.employment_status;
+    }
+    byMember.employment_end_date = membership.employment_end_date || null;
+    return byMember;
+  }
 
   if (membership.user_id) {
     const { data: byUser } = await supabaseAdmin
@@ -204,14 +216,16 @@ async function ensureBalanceRow({ orgId, profile, leaveType, year }) {
 
   const yearStart = formatIsoDate(year, 1, 1);
   const asOf = johannesburgYmd().iso;
-  const accrued = yearToDateAccrual({
+  const accrued = bceaLeavePosition({
+    code: leaveType.code,
     daysPerYear: Number(leaveType.days_per_year) || 0,
     method: leaveType.accrual_method,
     employmentStartIso: profile.employment_start_date,
+    employmentEndIso: profile.employment_end_date,
     yearStartIso: yearStart,
     asOfIso: asOf,
     employmentStatus: profile.employment_status,
-  });
+  }).accrued;
   const entitled = Number(leaveType.days_per_year) || 0;
   const row = withEmployeeId(
     {
@@ -261,6 +275,40 @@ function availableOf(balance) {
   return computeLeaveBalance(balance).available;
 }
 
+async function adjustmentTotals(profileId) {
+  const { data, error } = await supabaseAdmin
+    .from("leave_transactions")
+    .select("leave_type_id, days")
+    .eq("payroll_profile_id", profileId)
+    .eq("kind", "adjustment");
+  if (error) return {};
+  const totals = {};
+  for (const row of data || []) {
+    const key = row.leave_type_id;
+    totals[key] = Math.round(((totals[key] || 0) + Number(row.days || 0)) * 100) / 100;
+  }
+  return totals;
+}
+
+function displayedLeaveBalance({ profile, leaveType, row, requests, adjustments, asOf }) {
+  return presentLeaveBalance({
+    code: leaveType.code,
+    leaveTypeId: leaveType.id,
+    daysPerYear: Number(leaveType.days_per_year) || 0,
+    method: leaveType.accrual_method,
+    employmentStartIso: profile.employment_start_date,
+    employmentEndIso: profile.employment_end_date,
+    employmentStatus: profile.employment_status,
+    asOfIso: asOf,
+    yearStartIso: `${String(asOf || "").slice(0, 4)}-01-01`,
+    used: row?.used,
+    pending: row?.pending,
+    storedAccrued: row?.accrued,
+    adjustments: adjustments?.[leaveType.id] || 0,
+    requests,
+  });
+}
+
 export async function myLeave(orgId, userId) {
   await ensureLeaveTypes(orgId);
   const profile = await getOrCreateProfile(orgId, userId);
@@ -271,15 +319,7 @@ export async function myLeave(orgId, userId) {
     .eq("active", true)
     .order("sort_order", { ascending: true });
   const year = johannesburgYmd().year;
-  const balances = [];
-  for (const type of types || []) {
-    const row = await ensureBalanceRow({ orgId, profile, leaveType: type, year });
-    balances.push({
-      leave_type: type,
-      ...computeLeaveBalance(row),
-      balance_id: row.id,
-    });
-  }
+  const asOf = johannesburgYmd().iso;
   const { data: requests, error: requestError } = await supabaseAdmin
     .from("leave_requests")
     .select("*, leave_types(name, code)")
@@ -288,6 +328,28 @@ export async function myLeave(orgId, userId) {
     .order("start_date", { ascending: false })
     .limit(100);
   if (requestError) throw mapLeaveDbError(requestError);
+  const adjustments = await adjustmentTotals(profile.id);
+  const balances = [];
+  for (const type of types || []) {
+    const row = await ensureBalanceRow({ orgId, profile, leaveType: type, year });
+    const shown = displayedLeaveBalance({
+      profile,
+      leaveType: type,
+      row,
+      requests: requests || [],
+      adjustments,
+      asOf,
+    });
+    balances.push({
+      leave_type: type,
+      ...shown,
+      balance_id: row.id,
+      note: shown.note,
+      cycle_start: shown.cycleStart,
+      cycle_end: shown.cycleEnd,
+      cycle_label: shown.cycleLabel,
+    });
+  }
   return { profile, balances, requests: requests || [] };
 }
 
@@ -324,12 +386,28 @@ async function prepareLeaveApplication(orgId, userId, body, membershipOverride =
   }
   const year = leaveYearForDate(body.start_date);
   const balance = await ensureBalanceRow({ orgId, profile, leaveType, year });
+  const asOf = body.start_date || johannesburgYmd().iso;
   const { data: overlapping } = await supabaseAdmin
     .from("leave_requests")
-    .select("id, start_date, end_date, status")
+    .select("id, start_date, end_date, status, working_days, leave_type_id")
     .eq("org_id", orgId)
     .eq("payroll_profile_id", profile.id)
     .in("status", ["pending", "approved"]);
+  const adjustments = String(leaveType.code || "").toUpperCase() === "ANNUAL" ? await adjustmentTotals(profile.id) : {};
+  const shown = displayedLeaveBalance({
+    profile,
+    leaveType,
+    row: balance,
+    requests: overlapping || [],
+    adjustments,
+    asOf,
+  });
+  const effectiveBalance = {
+    ...balance,
+    accrued: Math.round((Number(shown.accrued) + Number(shown.adjustments || 0)) * 100) / 100,
+    used: shown.used,
+    pending: shown.pending,
+  };
 
   const check = validateLeaveApplication({
     employeeActive: isWorkforceEmployeeActive(membership || profile),
@@ -339,11 +417,12 @@ async function prepareLeaveApplication(orgId, userId, body, membershipOverride =
     halfDay: Boolean(body.half_day),
     excludeWeekends: leaveType.exclude_weekends !== false,
     holidayIsos: body.holiday_isos,
-    balance,
+    balance: effectiveBalance,
     unpaid: !leaveType.paid,
     overlapping: overlapping || [],
+    blockedReason: shown.blocked ? shown.message : null,
   });
-  return { actorId, profile, leaveType, year, balance, check };
+  return { actorId, profile, leaveType, year, balance: effectiveBalance, check, note: shown.note };
 }
 
 export async function previewLeaveApplication(orgId, userId, body) {

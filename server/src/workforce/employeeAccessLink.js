@@ -169,9 +169,12 @@ function publicDetails(bundle, { companyName, expiresAt, email, avatarUrl }) {
       leave_type_id: row.leave_type_id || null,
       name: row.leave_types?.name || row.leave_types?.code || "Leave",
       available: row.available ?? null,
+      accrued: row.accrued ?? null,
       used: row.used ?? null,
       pending: row.pending ?? null,
       entitled: row.entitled ?? null,
+      note: row.note || null,
+      cycle_label: row.cycle_label || null,
     })),
     leave_requests: (bundle?.leave_requests || []).map((row) => ({
       id: row.id,
@@ -569,6 +572,11 @@ export async function handleEmployeeAccessLink(req, res) {
     } catch (err) {
       const status = Number(err?.status) || 500;
       console.error("[employee-access]", op, err?.message || err);
+      if (err?.code === "PAYSLIP_ID_REQUIRED") {
+        return json(res, 422, {
+          error: "Add a valid South African ID number on Personal details. The payslip download uses that number.",
+        });
+      }
       return json(res, status >= 400 && status < 600 ? status : 500, {
         error: status >= 500 ? "We couldn't complete that. Try again." : err?.message || "We couldn't complete that.",
       });

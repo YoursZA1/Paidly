@@ -290,6 +290,12 @@ export async function createEmployee(orgId, actor, payload = {}) {
     await assertEligibleManager(orgId, managerId);
   }
 
+  const startDate = String(safe.employment_start_date || safe.employmentStartDate || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    const err = new Error("Employment start date is required.");
+    err.status = 400;
+    throw err;
+  }
   const employeeNumber = await nextOrgEmployeeNumber(orgId);
   const membershipRow = {
     org_id: orgId,
@@ -299,6 +305,7 @@ export async function createEmployee(orgId, actor, payload = {}) {
     employee_number: employeeNumber,
     department: String(safe.department || "").trim() || null,
     employment_status: "active",
+    employment_start_date: startDate,
     invited_email: email,
     invited_name: fullName || null,
     job_title: String(safe.job_title || safe.jobTitle || "").trim() || null,
@@ -333,6 +340,12 @@ export async function createEmployee(orgId, actor, payload = {}) {
   if (inserted.error && /invited_name|job_title/i.test(inserted.error.message || "")) {
     delete membershipRow.invited_name;
     delete membershipRow.job_title;
+    const retry = await supabaseAdmin.from("memberships").insert(membershipRow).select("id, user_id").maybeSingle();
+    inserted.error = retry.error;
+    inserted.data = retry.data;
+  }
+  if (inserted.error && /employment_start_date/i.test(inserted.error.message || "")) {
+    delete membershipRow.employment_start_date;
     const retry = await supabaseAdmin.from("memberships").insert(membershipRow).select("id, user_id").maybeSingle();
     inserted.error = retry.error;
     inserted.data = retry.data;
@@ -430,33 +443,47 @@ export async function createEmployee(orgId, actor, payload = {}) {
 }
 
 async function saveEmployeeIdNumber(orgId, membershipId, raw) {
-  const { data: profile, error } = await supabaseAdmin
+  const { data: profiles, error } = await supabaseAdmin
     .from("payroll_profiles")
     .select("id, tax_identifiers")
     .eq("org_id", orgId)
-    .eq("membership_id", membershipId)
-    .maybeSingle();
+    .eq("membership_id", membershipId);
   if (error) throw error;
-  let profileId = profile?.id || null;
-  let tax = profile?.tax_identifiers;
-  if (!profileId) {
+  const rows = new Map((profiles || []).map((row) => [row.id, row]));
+  const slips = await supabaseAdmin
+    .from("payslips")
+    .select("payroll_profile_id")
+    .eq("org_id", orgId)
+    .eq("membership_id", membershipId);
+  if (slips.error) throw slips.error;
+  const missingIds = [...new Set((slips.data || []).map((row) => row.payroll_profile_id).filter((id) => id && !rows.has(id)))];
+  if (missingIds.length) {
+    const extra = await supabaseAdmin
+      .from("payroll_profiles")
+      .select("id, tax_identifiers")
+      .eq("org_id", orgId)
+      .in("id", missingIds);
+    if (extra.error) throw extra.error;
+    for (const row of extra.data || []) rows.set(row.id, row);
+  }
+  if (!rows.size) {
     const { getOrCreateProfileForEmployee } = await import("../leave/leaveService.js");
     const created = await getOrCreateProfileForEmployee(orgId, membershipId);
-    profileId = created?.id || null;
-    tax = created?.tax_identifiers;
+    if (!created?.id) {
+      const err = new Error("Could not save the ID number.");
+      err.status = 400;
+      throw err;
+    }
+    rows.set(created.id, created);
   }
-  if (!profileId) {
-    const err = new Error("Could not save the ID number.");
-    err.status = 400;
-    throw err;
+  for (const row of rows.values()) {
+    const updated = await supabaseAdmin
+      .from("payroll_profiles")
+      .update({ tax_identifiers: taxIdentifiersWithIdNumber(row.tax_identifiers, raw) })
+      .eq("id", row.id)
+      .eq("org_id", orgId);
+    if (updated.error) throw updated.error;
   }
-  const next = taxIdentifiersWithIdNumber(tax, raw);
-  const updated = await supabaseAdmin
-    .from("payroll_profiles")
-    .update({ tax_identifiers: next })
-    .eq("id", profileId)
-    .eq("org_id", orgId);
-  if (updated.error) throw updated.error;
 }
 
 export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
@@ -532,6 +559,13 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
     } else if (error) {
       throw error;
     }
+  }
+
+  if (patch.employment_start_date !== undefined || patch.employment_status !== undefined) {
+    const profilePatch = {};
+    if (patch.employment_start_date !== undefined) profilePatch.employment_start_date = patch.employment_start_date;
+    if (patch.employment_status !== undefined) profilePatch.employment_status = patch.employment_status;
+    await supabaseAdmin.from("payroll_profiles").update(profilePatch).eq("org_id", orgId).eq("membership_id", id);
   }
 
   const wroteIdNumber = safe.id_number !== undefined || safe.idNumber !== undefined;

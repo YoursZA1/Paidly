@@ -532,7 +532,7 @@ function leaveTypeCatalog() {
       id: ANNUAL_LEAVE_ID,
       name: "Annual leave",
       code: "ANNUAL",
-      days_per_year: 21,
+      days_per_year: 15,
       accrual_method: "monthly",
       paid: true,
       requires_approval: true,

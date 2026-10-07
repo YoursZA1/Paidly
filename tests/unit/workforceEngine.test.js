@@ -19,7 +19,7 @@ import {
   isOwnPayslipRow,
   redactEmployeeCompensation,
 } from "../../shared/workforce/employeeProfile.js";
-import { taxIdentifiersWithIdNumber } from "../../shared/payroll/saIdNumber.js";
+import { isValidSaIdNumber, selectPayslipIdProfile, taxIdentifiersWithIdNumber } from "../../shared/payroll/saIdNumber.js";
 import {
   buildCompanyAccessContext,
   canCreateDocumentType,
@@ -289,6 +289,14 @@ describe("employee compensation redaction", () => {
       { canManagePayroll: false, actorMembershipId: "33333333-3333-4333-8333-333333333333" }
     );
     expect(stranger.id_number).toBeUndefined();
+  });
+
+  it("uses the ID saved on personal details for a payslip that still points at an older profile", () => {
+    const personal = { id: "new", tax_identifiers: { id_number: "8001015009087" } };
+    const stale = { id: "old", tax_identifiers: {} };
+    expect(selectPayslipIdProfile([personal], stale)?.id).toBe("new");
+    expect(selectPayslipIdProfile([], stale)).toBe(stale);
+    expect(isValidSaIdNumber("0110086167082")).toBe(false);
   });
 });
 

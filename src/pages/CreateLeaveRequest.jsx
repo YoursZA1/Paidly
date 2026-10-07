@@ -155,9 +155,12 @@ export default function CreateLeaveRequestPage() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {(me?.balances || []).map((b) => (
-                    <div key={b.leave_type.id} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{b.leave_type.name}</span>
-                      <span className="tabular-nums font-medium">{b.available}d</span>
+                    <div key={b.leave_type.id} className="text-sm">
+                      <p className="font-medium">{b.leave_type.name}</p>
+                      <p className="tabular-nums text-muted-foreground">
+                        Accrued: {Number(b.accrued || 0).toFixed(2)} · Used: {Number(b.used || 0).toFixed(2)} · Available: {Number(b.available || 0).toFixed(2)}
+                      </p>
+                      {b.cycle_label ? <p className="text-xs text-muted-foreground">Leave cycle: {b.cycle_label}</p> : null}
                     </div>
                   ))}
                 </CardContent>
@@ -187,6 +190,7 @@ export default function CreateLeaveRequestPage() {
                     );
                   })}
                 </select>
+                {selected?.note ? <p className="mt-2 text-xs text-muted-foreground">{selected.note}</p> : null}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>

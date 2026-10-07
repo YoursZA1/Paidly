@@ -17,6 +17,8 @@ import { listWorkforceEmployees } from "@/services/CompanyTeamService";
 import { payrollApi } from "@/services/PayrollApiService";
 import EmployeeSelect from "@/components/workforce/EmployeeSelect";
 import { parseUuid } from "@shared/ids/uuid.js";
+import { isValidSaIdNumber } from "@shared/payroll/saIdNumber.js";
+import { workforceApi } from "@/services/WorkforceApiService";
 import { buildPayslipNumber } from "@shared/payroll/payslipNumber.js";
 import { requirePayslipMembershipId } from "@shared/payroll/payslipWriteGuard.js";
 import { buildEmployerSnapshot } from "@shared/payroll/employerSnapshot.js";
@@ -35,8 +37,12 @@ export default function CreatePayslip() {
     // "Payslip generated" Done State (replaces the silent redirect to the list).
     const [createdPayslip, setCreatedPayslip] = useState(null);
     const lastDraftNoticeIdRef = useRef(null);
+    const idRequestRef = useRef("");
     const [employees, setEmployees] = useState([]);
     const [employeeUuid, setEmployeeUuid] = useState("");
+    const [idNumber, setIdNumber] = useState("");
+    const [savedIdNumber, setSavedIdNumber] = useState("");
+    const [savingIdNumber, setSavingIdNumber] = useState(false);
     const [periodCovered, setPeriodCovered] = useState(false);
     const [payslipData, setPayslipData] = useState({
         employee_name: "",
@@ -136,6 +142,9 @@ export default function CreatePayslip() {
                 parseUuid(row.membership_id) === selectedId
         );
         if (!emp) {
+            idRequestRef.current = "";
+            setIdNumber("");
+            setSavedIdNumber("");
             setPayslipData((prev) => ({
                 ...prev,
                 employee_name: "",
@@ -147,6 +156,19 @@ export default function CreatePayslip() {
             }));
             return;
         }
+        idRequestRef.current = selectedId;
+        setIdNumber("");
+        setSavedIdNumber("");
+        void workforceApi.get(selectedId).then((employee) => {
+            if (idRequestRef.current !== selectedId) return;
+            const stored = employee?.id_number || employee?.tax_identifiers?.id_number || "";
+            setIdNumber(stored);
+            setSavedIdNumber(stored);
+        }).catch(() => {
+            if (idRequestRef.current !== selectedId) return;
+            setIdNumber("");
+            setSavedIdNumber("");
+        });
         setPayslipData((prev) => ({
             ...prev,
             employee_name: emp.full_name || emp.label || "",
@@ -160,6 +182,28 @@ export default function CreatePayslip() {
             pay_run_id: "",
             pay_run_item_id: "",
         }));
+    };
+
+    const saveIdNumber = async () => {
+        const membershipId = parseUuid(employeeUuid);
+        const next = idNumber.trim();
+        if (!membershipId || next === savedIdNumber.trim() || savingIdNumber) return;
+        setSavingIdNumber(true);
+        try {
+            const updated = await workforceApi.update(membershipId, { id_number: next || null });
+            const stored = updated?.id_number || updated?.tax_identifiers?.id_number || "";
+            setIdNumber(stored);
+            setSavedIdNumber(stored);
+            toast({ title: "ID number saved", description: "Payslip downloads use this number." });
+        } catch (error) {
+            toast({
+                title: "Could not save the ID number",
+                description: error?.message || "Try again from Personal details.",
+                variant: "destructive",
+            });
+        } finally {
+            setSavingIdNumber(false);
+        }
     };
 
     useEffect(() => {
@@ -510,7 +554,7 @@ export default function CreatePayslip() {
                                     </p>
                                 ) : (
                                     <p className="text-xs text-muted-foreground">
-                                        Name, employee number, and salary come from the employee record. You do not re-enter them here.
+                                        Name, employee number, and salary come from the employee record. The ID number is the same one saved on Personal details.
                                         {parseUuid(payslipData.pay_run_item_id)
                                             ? " Amounts are taken from the processed payroll entry for this period."
                                             : ""}
@@ -534,6 +578,25 @@ export default function CreatePayslip() {
                                     readOnly
                                     placeholder="EMP-002"
                                 />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="sa_id_number">ID number</Label>
+                                <Input
+                                    id="sa_id_number"
+                                    value={idNumber}
+                                    autoComplete="off"
+                                    disabled={!parseUuid(employeeUuid) || savingIdNumber}
+                                    onChange={(e) => setIdNumber(e.target.value)}
+                                    onBlur={() => {
+                                        void saveIdNumber();
+                                    }}
+                                    placeholder="South African ID number"
+                                />
+                                <p className={idNumber.trim() && !isValidSaIdNumber(idNumber) ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+                                    {idNumber.trim() && !isValidSaIdNumber(idNumber)
+                                        ? "This isn't a valid South African ID number, so the payslip PDF can't use it yet."
+                                        : "Same number as Personal details. It saves here and opens the payslip PDF."}
+                                </p>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="employee_email">Email</Label>

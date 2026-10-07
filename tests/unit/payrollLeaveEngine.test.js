@@ -4,6 +4,14 @@ import { unpaidLeaveDaysInPeriod } from "@shared/payroll/unpaidLeaveImpact.js";
 import { buildPayslipNumber, buildEmployeeNumber, nextEmployeeSequence } from "@shared/payroll/payslipNumber.js";
 import { countWorkingDays, computeLeaveBalance, accrueLeaveDays } from "@shared/leave/leaveMath.js";
 import { validateLeaveApplication } from "@shared/leave/validateLeave.js";
+import {
+  bceaLeavePosition,
+  estimateDaysWorked,
+  FAMILY_RESPONSIBILITY_BLOCKED,
+  monthsEmployed,
+  presentLeaveBalance,
+} from "@shared/leave/leaveEligibility.js";
+import { calculateLeaveAccrual, leaveCycleContaining } from "@shared/leave/leaveAccrual.js";
 import { isLeapYear, daysInMonth, eachIsoDateInclusive, johannesburgYmd } from "@shared/payroll/dates.js";
 import { resolvePayrollRoute } from "../../server/src/payroll/payrollRoutes.js";
 import { resolveLeaveRoute } from "../../server/src/leave/leaveRoutes.js";
@@ -250,6 +258,205 @@ describe("leave math", () => {
     });
     expect(result.ok).toBe(true);
     expect(result.workingDays).toBe(3);
+  });
+
+  it("applies BCEA rules for the first months of employment", () => {
+    expect(monthsEmployed("2026-09-01", "2026-10-15")).toBe(1);
+    expect(monthsEmployed("2026-09-01", "2027-01-01")).toBe(4);
+
+    const annual = bceaLeavePosition({
+      code: "ANNUAL",
+      daysPerYear: 21,
+      method: "monthly",
+      employmentStartIso: "2026-01-01",
+      yearStartIso: "2026-01-01",
+      asOfIso: "2026-02-01",
+    });
+    expect(annual.blocked).toBe(false);
+    expect(annual.accrued).toBeGreaterThan(0);
+    expect(annual.accrued).toBeLessThan(21);
+
+    const familyEarly = bceaLeavePosition({
+      code: "FAMILY",
+      daysPerYear: 3,
+      method: "annual",
+      employmentStartIso: "2026-09-01",
+      yearStartIso: "2026-01-01",
+      asOfIso: "2026-10-15",
+      storedAccrued: 3,
+    });
+    expect(familyEarly.blocked).toBe(true);
+    expect(familyEarly.accrued).toBe(0);
+    expect(familyEarly.message).toBe(FAMILY_RESPONSIBILITY_BLOCKED);
+
+    const familyLater = bceaLeavePosition({
+      code: "FAMILY",
+      employmentStartIso: "2026-09-01",
+      asOfIso: "2027-01-01",
+      storedAccrued: 3,
+    });
+    expect(familyLater.blocked).toBe(false);
+    expect(familyLater.accrued).toBe(3);
+
+    const partTime = bceaLeavePosition({
+      code: "FAMILY",
+      employmentStartIso: "2026-09-01",
+      asOfIso: "2027-01-01",
+      daysPerWeek: 3,
+      storedAccrued: 3,
+    });
+    expect(partTime.blocked).toBe(true);
+
+    const worked = estimateDaysWorked("2026-09-01", "2026-10-15");
+    const sick = bceaLeavePosition({
+      code: "SICK",
+      employmentStartIso: "2026-09-01",
+      asOfIso: "2026-10-15",
+      storedAccrued: 10,
+    });
+    expect(sick.accrued).toBe(Math.round((worked / 26) * 100) / 100);
+    expect(sick.accrued).toBeLessThan(10);
+
+    const sickLater = bceaLeavePosition({
+      code: "SICK",
+      employmentStartIso: "2026-01-01",
+      asOfIso: "2026-08-01",
+      storedAccrued: 10,
+    });
+    expect(sickLater.accrued).toBe(10);
+
+    const blocked = validateLeaveApplication({
+      employeeActive: true,
+      leaveTypeActive: true,
+      startIso: "2026-10-15",
+      endIso: "2026-10-15",
+      balance: { accrued: 0, used: 0, pending: 0 },
+      blockedReason: FAMILY_RESPONSIBILITY_BLOCKED,
+    });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.errors[0]).toBe(FAMILY_RESPONSIBILITY_BLOCKED);
+  });
+
+  it("accrues annual leave from the start date across the employment cycle", () => {
+    const startedToday = calculateLeaveAccrual({ employmentStartIso: "2026-10-07", annualEntitlement: 15 }, "2026-10-07");
+    const startedYesterday = calculateLeaveAccrual({ employmentStartIso: "2026-10-06", annualEntitlement: 15 }, "2026-10-07");
+    const started15DaysAgo = calculateLeaveAccrual({ employmentStartIso: "2026-09-22", annualEntitlement: 15 }, "2026-10-07");
+    expect(startedToday.accrued).toBeGreaterThan(0);
+    expect(startedToday.accrued).toBeLessThan(15);
+    expect(startedYesterday.accrued).toBeGreaterThan(startedToday.accrued);
+    expect(started15DaysAgo.accrued).toBeGreaterThan(startedYesterday.accrued);
+    expect(startedToday.cycleStart).toBe("2026-10-07");
+    expect(startedToday.cycleEnd).toBe("2027-10-06");
+
+    const midMonth = calculateLeaveAccrual({ employmentStartIso: "2026-10-16", annualEntitlement: 15 }, "2026-10-16");
+    expect(midMonth.accrued).toBeGreaterThan(0);
+    expect(midMonth.accrued).toBeLessThan(1);
+
+    const oneMonth = calculateLeaveAccrual({ employmentStartIso: "2026-10-01", annualEntitlement: 15 }, "2026-11-01");
+    const twoMonths = calculateLeaveAccrual({ employmentStartIso: "2026-10-01", annualEntitlement: 15 }, "2026-12-01");
+    const sixMonths = calculateLeaveAccrual({ employmentStartIso: "2026-10-01", annualEntitlement: 15 }, "2027-04-01");
+    expect(oneMonth.accrued).toBeGreaterThan(1);
+    expect(oneMonth.accrued).toBeLessThan(2);
+    expect(twoMonths.accrued).toBeGreaterThan(oneMonth.accrued);
+    expect(sixMonths.accrued).toBeGreaterThan(twoMonths.accrued);
+    expect(sixMonths.accrued).toBeLessThan(15);
+
+    const cycleEnd = calculateLeaveAccrual({ employmentStartIso: "2026-03-15", annualEntitlement: 15 }, "2027-03-14");
+    const nextCycle = calculateLeaveAccrual({ employmentStartIso: "2026-03-15", annualEntitlement: 15 }, "2027-03-15");
+    expect(cycleEnd.accrued).toBe(15);
+    expect(cycleEnd.cycleLabel).toContain("15 Mar 2026");
+    expect(nextCycle.cycleStart).toBe("2027-03-15");
+    expect(nextCycle.cycleEnd).toBe("2028-03-14");
+    expect(nextCycle.accrued).toBeLessThan(1);
+
+    const open = calculateLeaveAccrual({ employmentStartIso: "2026-01-01", annualEntitlement: 15 }, "2026-07-01");
+    const taken = calculateLeaveAccrual({ employmentStartIso: "2026-01-01", annualEntitlement: 15, used: 1 }, "2026-07-01");
+    expect(taken.available).toBeCloseTo(open.available - 1, 2);
+    const reversed = presentLeaveBalance({
+      code: "ANNUAL",
+      leaveTypeId: "annual",
+      daysPerYear: 15,
+      employmentStartIso: "2026-01-01",
+      asOfIso: "2026-07-01",
+      requests: [{ status: "cancelled", start_date: "2026-02-02", working_days: 1, leave_type_id: "annual" }],
+    });
+    const approved = presentLeaveBalance({
+      code: "ANNUAL",
+      leaveTypeId: "annual",
+      daysPerYear: 15,
+      employmentStartIso: "2026-01-01",
+      asOfIso: "2026-07-01",
+      requests: [{ status: "approved", start_date: "2026-02-02", working_days: 1, leave_type_id: "annual" }],
+    });
+    expect(reversed.available).toBeCloseTo(open.available, 2);
+    expect(approved.available).toBeCloseTo(open.available - 1, 2);
+
+    const movedEarlier = calculateLeaveAccrual({ employmentStartIso: "2026-08-01", annualEntitlement: 15 }, "2026-10-07");
+    const movedLater = calculateLeaveAccrual({ employmentStartIso: "2026-09-01", annualEntitlement: 15 }, "2026-10-07");
+    expect(movedEarlier.accrued).toBeGreaterThan(movedLater.accrued);
+
+    const terminated = calculateLeaveAccrual({
+      employmentStartIso: "2026-01-01",
+      employmentEndIso: "2026-02-01",
+      employmentStatus: "terminated",
+      annualEntitlement: 15,
+    }, "2026-10-07");
+    const atEnd = calculateLeaveAccrual({ employmentStartIso: "2026-01-01", annualEntitlement: 15 }, "2026-02-01");
+    expect(terminated.accrued).toBe(atEnd.accrued);
+
+    const rehired = presentLeaveBalance({
+      code: "ANNUAL",
+      leaveTypeId: "annual",
+      daysPerYear: 15,
+      employmentStartIso: "2026-06-01",
+      asOfIso: "2026-07-01",
+      requests: [{ status: "approved", start_date: "2026-02-02", working_days: 3, leave_type_id: "annual" }],
+    });
+    expect(rehired.used).toBe(0);
+
+    expect(calculateLeaveAccrual({ employmentStartIso: "2026-01-01", annualEntitlement: 0 }, "2026-06-01").accrued).toBe(0);
+    const richer = calculateLeaveAccrual({ employmentStartIso: "2026-01-01", annualEntitlement: 20 }, "2026-07-01");
+    expect(richer.accrued).toBeGreaterThan(open.accrued);
+    const fourDayWeek = calculateLeaveAccrual({
+      employmentStartIso: "2026-01-01",
+      annualEntitlement: 15,
+      daysPerWeek: 4,
+    }, "2026-07-01");
+    expect(fourDayWeek.accrued).toBeCloseTo(open.accrued * 0.8, 2);
+
+    const leap = leaveCycleContaining("2024-02-29", "2024-06-01");
+    expect(leap.cycleStart).toBe("2024-02-29");
+    expect(leap.cycleEnd).toBe("2025-02-27");
+    expect(leap.cycleDays).toBeGreaterThan(360);
+
+    const acrossYearEnd = calculateLeaveAccrual({ employmentStartIso: "2026-10-01", annualEntitlement: 15 }, "2027-01-15");
+    expect(acrossYearEnd.cycleStart).toBe("2026-10-01");
+    expect(acrossYearEnd.accrued).toBeGreaterThan(oneMonth.accrued);
+    expect(acrossYearEnd.accrued).toBeLessThan(15);
+
+    const ignoresStoredPot = presentLeaveBalance({
+      code: "ANNUAL",
+      daysPerYear: 15,
+      employmentStartIso: "2026-10-07",
+      asOfIso: "2026-10-07",
+      storedAccrued: 15,
+      used: 0,
+      pending: 0,
+    });
+    expect(ignoresStoredPot.accrued).toBe(startedToday.accrued);
+    expect(ignoresStoredPot.available).toBeLessThan(1);
+
+    const sick = presentLeaveBalance({
+      code: "SICK",
+      daysPerYear: 10,
+      employmentStartIso: "2026-10-01",
+      asOfIso: "2026-10-15",
+      storedAccrued: 10,
+      used: 0,
+      pending: 0,
+    });
+    expect(sick.cycleLabel).toBe("");
+    expect(sick.accrued).toBeLessThan(10);
   });
 });
 

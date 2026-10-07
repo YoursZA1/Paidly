@@ -2,7 +2,7 @@ import { supabaseAdmin } from "../supabaseAdmin.js";
 import { insertPayrollProfileRow } from "../payroll/payrollService.js";
 import { ensureLeaveTypes } from "../leave/leaveService.js";
 import { johannesburgYmd, formatIsoDate } from "../../../shared/payroll/dates.js";
-import { yearToDateAccrual } from "../../../shared/leave/leaveMath.js";
+import { bceaLeavePosition } from "../../../shared/leave/leaveEligibility.js";
 import { notifyUser } from "../payroll/payrollGate.js";
 import {
   registerWorkforceSubscriber,
@@ -91,7 +91,7 @@ async function ensureLeaveBalances(orgId, profile) {
   const year = johannesburgYmd().year;
   const { data: types } = await supabaseAdmin
     .from("leave_types")
-    .select("id, days_per_year, accrual_method")
+    .select("id, code, days_per_year, accrual_method")
     .eq("org_id", orgId)
     .eq("active", true);
   const employeeId = profile.membership_id || null;
@@ -105,14 +105,15 @@ async function ensureLeaveBalances(orgId, profile) {
       .maybeSingle();
     if (existing?.id) continue;
     const entitled = Number(leaveType.days_per_year) || 0;
-    const accrued = yearToDateAccrual({
+    const accrued = bceaLeavePosition({
+      code: leaveType.code,
       daysPerYear: entitled,
       method: leaveType.accrual_method,
       employmentStartIso: profile.employment_start_date,
       yearStartIso: formatIsoDate(year, 1, 1),
       asOfIso: johannesburgYmd().iso,
       employmentStatus: profile.employment_status,
-    });
+    }).accrued;
     const row = {
       org_id: orgId,
       payroll_profile_id: profile.id,

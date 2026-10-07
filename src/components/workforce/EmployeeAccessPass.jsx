@@ -99,6 +99,7 @@ function ApplyLeave({ balances, onSubmitted }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const selectedType = types.find((row) => row.leave_type_id === leaveTypeId);
   const workingDays = useMemo(() => {
     if (!startDate || !endDate) return null;
     return countWorkingDays(startDate, endDate, { halfDay: halfDay && startDate === endDate });
@@ -181,6 +182,7 @@ function ApplyLeave({ balances, onSubmitted }) {
             </option>
           ))}
         </select>
+        {selectedType?.note ? <p className="mt-2 text-xs text-muted-foreground">{selectedType.note}</p> : null}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
@@ -318,13 +320,15 @@ function Details({ session, onEnded, onSession }) {
                 {leave.map((row) => (
                   <div key={row.id} className="flex w-28 shrink-0 flex-col items-center text-center">
                     <div className="flex size-16 items-center justify-center rounded-full border border-border text-xl font-semibold text-foreground">
-                      {row.available ?? "—"}
+                      {Number.isFinite(Number(row.available)) ? Number(row.available).toFixed(2) : "—"}
                     </div>
                     <p className="mt-2 text-xs font-medium text-foreground">Available</p>
                     <p className="text-xs text-muted-foreground">{row.name}</p>
-                    {row.entitled != null ? (
-                      <p className="text-xs text-muted-foreground">of {row.entitled} days</p>
-                    ) : null}
+                    <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                      Accrued {Number(row.accrued || 0).toFixed(2)} · Used {Number(row.used || 0).toFixed(2)}
+                    </p>
+                    {row.cycle_label ? <p className="text-[11px] leading-snug text-muted-foreground">{row.cycle_label}</p> : null}
+                    {row.note ? <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{row.note}</p> : null}
                   </div>
                 ))}
               </div>

@@ -62,3 +62,24 @@ export function taxIdentifiersWithIdNumber(existing, idNumber) {
   else delete tax.id_number;
   return tax;
 }
+
+/**
+ * Personal details win. A valid ID on the membership profile is used even when the
+ * payslip still points at an older payroll profile.
+ * @param {Array<Record<string, any> | null | undefined>} membershipProfiles
+ * @param {Record<string, any> | null | undefined} slipProfile
+ */
+export function selectPayslipIdProfile(membershipProfiles, slipProfile = null) {
+  const members = (Array.isArray(membershipProfiles) ? membershipProfiles : []).filter(Boolean);
+  const valid = (row) => isValidSaIdNumber(employeeIdNumberOf(row));
+  const present = (row) => Boolean(employeeIdNumberOf(row));
+  return (
+    members.find(valid) ||
+    (slipProfile && valid(slipProfile) ? slipProfile : null) ||
+    members.find(present) ||
+    (slipProfile && present(slipProfile) ? slipProfile : null) ||
+    members[0] ||
+    slipProfile ||
+    null
+  );
+}

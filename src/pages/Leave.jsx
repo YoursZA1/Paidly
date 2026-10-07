@@ -26,7 +26,7 @@ const EMPTY_TYPE = {
   id: "",
   name: "",
   code: "",
-  days_per_year: 21,
+  days_per_year: 15,
   accrual_method: "monthly",
   paid: true,
   requires_approval: true,

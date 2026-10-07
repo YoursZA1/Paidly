@@ -15,7 +15,9 @@ import { useAutoDraft } from "@/hooks/useAutoDraft";
 import { useServerPayrollPreview } from "@/hooks/useServerPayrollPreview";
 import { useToast } from "@/components/ui/use-toast";
 import { parseUuid } from "@shared/ids/uuid.js";
+import { isValidSaIdNumber } from "@shared/payroll/saIdNumber.js";
 import { requirePayslipMembershipId } from "@shared/payroll/payslipWriteGuard.js";
+import { workforceApi } from "@/services/WorkforceApiService";
 
 export default function EditPayslip() {
     const navigate = useNavigate();
@@ -24,6 +26,9 @@ export default function EditPayslip() {
     const { authUserId } = useAuth();
     const lastDraftNoticeIdRef = useRef(null);
     const [payslipData, setPayslipData] = useState(null);
+    const [idNumber, setIdNumber] = useState("");
+    const [savedIdNumber, setSavedIdNumber] = useState("");
+    const [savingIdNumber, setSavingIdNumber] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const payslipId = new URLSearchParams(location.search).get("id");
     const {
@@ -72,6 +77,18 @@ export default function EditPayslip() {
         setIsLoading(true);
         try {
             const data = await Payroll.get(payslipId);
+            const membershipId = parseUuid(data.membership_id);
+            let currentId = "";
+            if (membershipId) {
+                try {
+                    const employee = await workforceApi.get(membershipId);
+                    currentId = employee?.id_number || employee?.tax_identifiers?.id_number || "";
+                } catch {
+                    currentId = "";
+                }
+            }
+            setIdNumber(currentId);
+            setSavedIdNumber(currentId);
             setPayslipData({
                 ...data,
                 allowances: data.allowances || [],
@@ -156,6 +173,28 @@ export default function EditPayslip() {
     }, [calculatedPayroll, payslipData]);
 
     const isLocked = Boolean(payslipData?.locked || payslipData?.finalized_at || payslipData?.pay_run_item_id);
+
+    const saveIdNumber = async () => {
+        const membershipId = parseUuid(payslipData?.membership_id);
+        const next = idNumber.trim();
+        if (!membershipId || next === savedIdNumber.trim() || savingIdNumber) return;
+        setSavingIdNumber(true);
+        try {
+            const updated = await workforceApi.update(membershipId, { id_number: next || null });
+            const stored = updated?.id_number || updated?.tax_identifiers?.id_number || "";
+            setIdNumber(stored);
+            setSavedIdNumber(stored);
+            toast({ title: "ID number saved", description: "Payslip downloads use this number." });
+        } catch (error) {
+            toast({
+                title: "Could not save the ID number",
+                description: error?.message || "Try again from Personal details.",
+                variant: "destructive",
+            });
+        } finally {
+            setSavingIdNumber(false);
+        }
+    };
 
     const handleUpdatePayslip = async () => {
         if (!isLocked && (previewError || !calculatedPayroll)) {
@@ -269,13 +308,32 @@ export default function EditPayslip() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="employee_id">Employee ID*</Label>
+                                <Label htmlFor="employee_id">Employee number</Label>
                                 <Input
                                     id="employee_id"
                                     value={payslipData.employee_id}
                                     readOnly
                                     placeholder="EMP-002"
                                 />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="sa_id_number">ID number</Label>
+                                <Input
+                                    id="sa_id_number"
+                                    value={idNumber}
+                                    autoComplete="off"
+                                    disabled={!parseUuid(payslipData.membership_id) || savingIdNumber}
+                                    onChange={(e) => setIdNumber(e.target.value)}
+                                    onBlur={() => {
+                                        void saveIdNumber();
+                                    }}
+                                    placeholder="South African ID number"
+                                />
+                                <p className={idNumber.trim() && !isValidSaIdNumber(idNumber) ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+                                    {idNumber.trim() && !isValidSaIdNumber(idNumber)
+                                        ? "This isn't a valid South African ID number, so the payslip PDF can't use it yet."
+                                        : "Same number as Personal details. It saves here and opens the payslip PDF."}
+                                </p>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="employee_email">Email</Label>

@@ -23,6 +23,7 @@ import { requirePayslipMembershipId } from "../../../shared/payroll/payslipWrite
 import { dobFromSaIdNumber, taxYearForDate } from "../../../shared/payroll/taxYear.js";
 import { computePayrollYtd, payslipYtd } from "../../../shared/payroll/payrollYtd.js";
 import { buildSecurePayslipPdf, PAYSLIP_ID_REQUIRED } from "./payslipPdf.js";
+import { selectPayslipIdProfile } from "../../../shared/payroll/saIdNumber.js";
 import { claimPayRunForCalculate, commitPayRunCalculate } from "./payRunLockRpc.js";
 import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/documentSendAdapter.js";
 import { loadOutstandingAdjustmentSignals } from "../workforce/adjustmentSignals.js";
@@ -1387,23 +1388,28 @@ export async function generateSecurePayslipPdf(orgId, payslipId, { deliveryMetho
 }
 
 async function securePdfForSlip(orgId, slip, { deliveryMethod, actorId = null }) {
-  let profile = null;
-  if (slip.payroll_profile_id) {
-    ({ data: profile } = await supabaseAdmin
+  let membershipProfiles = [];
+  if (slip.membership_id) {
+    const { data, error: memberError } = await supabaseAdmin
+      .from("payroll_profiles")
+      .select("id, tax_identifiers")
+      .eq("org_id", orgId)
+      .eq("membership_id", slip.membership_id);
+    if (memberError) throw memberError;
+    membershipProfiles = data || [];
+  }
+  let slipProfile = null;
+  if (slip.payroll_profile_id && !membershipProfiles.some((row) => row.id === slip.payroll_profile_id)) {
+    const { data, error: slipError } = await supabaseAdmin
       .from("payroll_profiles")
       .select("id, tax_identifiers")
       .eq("org_id", orgId)
       .eq("id", slip.payroll_profile_id)
-      .maybeSingle());
+      .maybeSingle();
+    if (slipError) throw slipError;
+    slipProfile = data;
   }
-  if (!profile && slip.membership_id) {
-    ({ data: profile } = await supabaseAdmin
-      .from("payroll_profiles")
-      .select("id, tax_identifiers")
-      .eq("org_id", orgId)
-      .eq("membership_id", slip.membership_id)
-      .maybeSingle());
-  }
+  const profile = selectPayslipIdProfile(membershipProfiles, slipProfile);
   const audit = (action, status, reason = null) =>
     writePayrollAudit({
       orgId,
