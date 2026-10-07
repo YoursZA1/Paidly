@@ -1,4 +1,5 @@
 import { isValidUuid } from "./inputValidation.js";
+import { insertUserNotifications } from "./notifications/insertUserNotification.js";
 import { processQueuedBroadcastJobs } from "./adminBroadcastQueue.js";
 import { sendAdminPlatformMessageToKnownEmail } from "./adminPlatformUserOutreachEmail.js";
 
@@ -116,8 +117,9 @@ async function deliverBroadcastWithoutQueue(supabaseAdmin, sender, recipientRows
       user_id: userId,
       message,
       read: false,
+      link: "/Messages",
     }));
-    const { error } = await supabaseAdmin.from("notifications").insert(rows);
+    const error = await insertUserNotifications(supabaseAdmin, rows);
     if (error) throw new Error(error.message || "Failed to insert notifications");
     inserted += rows.length;
   }
@@ -332,8 +334,9 @@ export async function broadcastAdminUpdateToAllUsers(supabaseAdmin, senderId, us
       user_id: userId,
       message,
       read: false,
+      link: "/Messages",
     }));
-    const { error } = await supabaseAdmin.from("notifications").insert(rows);
+    const error = await insertUserNotifications(supabaseAdmin, rows);
     if (error) {
       throw new Error(error.message || "Failed to insert notifications");
     }

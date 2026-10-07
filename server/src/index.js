@@ -8,6 +8,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import sendInvoiceHandler from "./sendInvoiceApi.js";
 import { supabaseAdmin } from "./supabaseAdmin.js";
+import { insertUserNotification } from "./notifications/insertUserNotification.js";
+import { messageNotificationPath } from "../../shared/notifications/notificationTarget.js";
 import { postgrestErrorToApiBody } from "./postgrestErrorToApiBody.js";
 import {
   authEmailVerificationFields,
@@ -1638,23 +1640,28 @@ app.post("/api/admin/send-platform-message", async (req, res) => {
     let failedReason = null;
 
     if (sendInApp && messageId) {
-      const { error: notifyErr } = await supabaseAdmin.from("notifications").insert({
+      const { data: delivery, error: inAppErr } = await supabaseAdmin
+        .from("message_deliveries")
+        .insert({
+          message_id: messageId,
+          user_id: recipient_id,
+          channel: "in_app",
+          status: "sent",
+          sent_at: nowIso,
+        })
+        .select("id")
+        .maybeSingle();
+      if (inAppErr) {
+        return res.status(500).json({ error: inAppErr.message || "Failed to save in-app delivery" });
+      }
+      const notifyErr = await insertUserNotification(supabaseAdmin, {
         user_id: recipient_id,
         message: `${String(message?.subject || subject || "Message from the Paidly team").trim()}: ${content}`,
         read: false,
+        link: messageNotificationPath(delivery?.id),
       });
       if (notifyErr) {
         return res.status(500).json({ error: notifyErr.message || "Failed to save notification" });
-      }
-      const { error: inAppErr } = await supabaseAdmin.from("message_deliveries").insert({
-        message_id: messageId,
-        user_id: recipient_id,
-        channel: "in_app",
-        status: "sent",
-        sent_at: nowIso,
-      });
-      if (inAppErr) {
-        return res.status(500).json({ error: inAppErr.message || "Failed to save in-app delivery" });
       }
     }
 
@@ -1793,23 +1800,28 @@ app.post("/api/admin/send-message", async (req, res) => {
       let deliveredAt = null;
 
       if (sendInApp) {
-        const { error: notifyErr } = await supabaseAdmin.from("notifications").insert({
+        const { data: delivery, error: inAppErr } = await supabaseAdmin
+          .from("message_deliveries")
+          .insert({
+            message_id: messageId,
+            user_id: recipientId,
+            channel: "in_app",
+            status: "sent",
+            sent_at: nowIso,
+          })
+          .select("id")
+          .maybeSingle();
+        if (inAppErr) {
+          return res.status(500).json({ error: inAppErr.message || "Failed to save in-app delivery" });
+        }
+        const notifyErr = await insertUserNotification(supabaseAdmin, {
           user_id: recipientId,
           message: `${String(message?.subject || subject || "Message from the Paidly team").trim()}: ${content}`,
           read: false,
+          link: messageNotificationPath(delivery?.id),
         });
         if (notifyErr) {
           return res.status(500).json({ error: notifyErr.message || "Failed to save notification" });
-        }
-        const { error: inAppErr } = await supabaseAdmin.from("message_deliveries").insert({
-          message_id: messageId,
-          user_id: recipientId,
-          channel: "in_app",
-          status: "sent",
-          sent_at: nowIso,
-        });
-        if (inAppErr) {
-          return res.status(500).json({ error: inAppErr.message || "Failed to save in-app delivery" });
         }
         finalStatus = "delivered";
         deliveredAt = nowIso;

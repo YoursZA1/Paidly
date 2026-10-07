@@ -7,14 +7,22 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
 import { getStableSession } from "@/core/auth/SessionCoordinator";
+import { safeNotificationPath } from "@shared/notifications/notificationTarget.js";
 
-export async function createActivityNotification(userId, message) {
+export async function createActivityNotification(userId, message, link) {
   try {
-    const { error } = await supabase.from("notifications").insert({
+    const payload = {
       user_id: userId,
       message,
       read: false,
-    });
+    };
+    const safeLink = safeNotificationPath(link);
+    if (safeLink) payload.link = safeLink;
+    let { error } = await supabase.from("notifications").insert(payload);
+    if (error && payload.link && /link/i.test(error.message || "")) {
+      delete payload.link;
+      ({ error } = await supabase.from("notifications").insert(payload));
+    }
     if (error) {
       console.warn("ActivityNotification: create failed", getSupabaseErrorMessage(error, "Create notification failed"));
       alertSupabaseWriteFailure(error, "Create notification");

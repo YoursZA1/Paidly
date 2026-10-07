@@ -80,7 +80,8 @@ export async function checkTrialSubscriptionNotifications() {
             : `tomorrow (${dateLong})`;
         await createActivityNotification(
           userId,
-          `${dedupePrefix('lastday', userId, trialEndDay)}Your free trial ends ${when}. You chose the ${planName} plan — subscribe in Settings → Subscription to keep full access.`
+          `${dedupePrefix('lastday', userId, trialEndDay)}Your free trial ends ${when}. You chose the ${planName} plan — subscribe in Settings → Subscription to keep full access.`,
+          "/Settings?tab=subscription"
         );
       }
       return;
@@ -89,7 +90,8 @@ export async function checkTrialSubscriptionNotifications() {
       if (!(await alreadySent(userId, 'soon', trialEndDay))) {
         await createActivityNotification(
           userId,
-          `${dedupePrefix('soon', userId, trialEndDay)}Your free trial ends on ${dateLong} (${planName} plan). Subscribe in Settings → Subscription before it ends to continue without interruption.`
+          `${dedupePrefix('soon', userId, trialEndDay)}Your free trial ends on ${dateLong} (${planName} plan). Subscribe in Settings → Subscription before it ends to continue without interruption.`,
+          "/Settings?tab=subscription"
         );
       }
     }
@@ -99,7 +101,8 @@ export async function checkTrialSubscriptionNotifications() {
   if (!(await alreadySent(userId, 'ended', trialEndDay))) {
     await createActivityNotification(
       userId,
-      `${dedupePrefix('ended', userId, trialEndDay)}Your free trial has ended (${planName} plan). Add a subscription in Settings → Subscription to keep using Paidly.`
+      `${dedupePrefix('ended', userId, trialEndDay)}Your free trial has ended (${planName} plan). Add a subscription in Settings → Subscription to keep using Paidly.`,
+      "/Settings?tab=subscription"
     );
   }
 }

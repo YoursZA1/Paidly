@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { CalendarOff, Check, X } from "lucide-react";
 import PageTemplate from "@/components/layout/PageTemplate";
@@ -52,6 +52,8 @@ export default function LeaveManagementPage({ embedded = false }) {
   const [employees, setEmployees] = useState([]);
   const [kpis, setKpis] = useState({ pending: 0, approved: 0, rejected: 0, upcoming: 0 });
   const [status, setStatus] = useState("pending");
+  const focusRequestId = parseUuid(new URLSearchParams(location.search).get("request")) || "";
+  const widenedForFocus = useRef(false);
   const [employeeId, setEmployeeId] = useState(
     () => parseUuid(new URLSearchParams(location.search).get("employee_id")) || ""
   );
@@ -106,6 +108,23 @@ export default function LeaveManagementPage({ embedded = false }) {
   useEffect(() => {
     loadKpis();
   }, []);
+
+  useEffect(() => {
+    if (!focusRequestId) return;
+    const row = requests.find((item) => item.id === focusRequestId);
+    if (row) {
+      if (row.status && status && row.status !== status) {
+        setStatus(row.status);
+        return;
+      }
+      document.getElementById(`leave-request-${focusRequestId}`)?.scrollIntoView({ block: "center" });
+      return;
+    }
+    if (!widenedForFocus.current && status) {
+      widenedForFocus.current = true;
+      setStatus("");
+    }
+  }, [requests, focusRequestId, status]);
 
   const departments = useMemo(() => {
     return [...new Set((employees || []).map((row) => row.department).filter(Boolean))].sort();
@@ -318,7 +337,11 @@ export default function LeaveManagementPage({ embedded = false }) {
                     </thead>
                     <tbody>
                       {requests.map((row) => (
-                        <tr key={row.id} className="border-b border-border/70 align-top">
+                        <tr
+                          key={row.id}
+                          id={`leave-request-${row.id}`}
+                          className={`border-b border-border/70 align-top ${row.id === focusRequestId ? "bg-primary/10" : ""}`}
+                        >
                           <td className="px-4 py-2.5">
                             <p className="font-medium">{row.payroll_profiles?.full_name}</p>
                             <p className="text-xs text-muted-foreground">{row.payroll_profiles?.employee_number}</p>

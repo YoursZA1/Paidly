@@ -489,8 +489,11 @@ create table if not exists public.notifications (
   user_id uuid not null references auth.users(id) on delete cascade,
   message text not null,
   read boolean not null default false,
+  link text,
   created_at timestamptz not null default now()
 );
+
+alter table if exists public.notifications add column if not exists link text;
 
 -- Existing DBs: CREATE TABLE IF NOT EXISTS does not add columns. Live `tasks`
 -- (and siblings) often predate org_id; RLS below references table.org_id.
@@ -1639,13 +1642,16 @@ as $$
 declare
   msg text;
   target_user_id uuid;
+  target_link text;
 begin
   target_user_id := null;
   msg := null;
+  target_link := null;
 
   if tg_table_name = 'invoices' then
     if old.status is distinct from new.status and new.created_by is not null then
       target_user_id := new.created_by;
+      target_link := '/ViewInvoice?id=' || new.id::text;
       if new.status = 'viewed' then
         msg := 'Invoice #' || coalesce(new.invoice_number, '') || ' was viewed by the client.';
       elsif new.status = 'paid' then
@@ -1657,6 +1663,7 @@ begin
   elsif tg_table_name = 'quotes' then
     if old.status is distinct from new.status and new.created_by is not null then
       target_user_id := new.created_by;
+      target_link := '/ViewQuote?id=' || new.id::text;
       if new.status = 'viewed' then
         msg := 'Quote #' || coalesce(new.quote_number, '') || ' was viewed by the client.';
       elsif new.status = 'accepted' then
@@ -1667,8 +1674,8 @@ begin
 
   if target_user_id is not null and msg is not null then
     begin
-      insert into public.notifications (user_id, message, read)
-      values (target_user_id, msg, false);
+      insert into public.notifications (user_id, message, read, link)
+      values (target_user_id, msg, false, target_link);
     exception when others then
       raise notice 'notify_activity: failed to insert notification: %', SQLERRM;
     end;

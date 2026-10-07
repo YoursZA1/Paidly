@@ -24,6 +24,7 @@ import { dobFromSaIdNumber, taxYearForDate } from "../../../shared/payroll/taxYe
 import { computePayrollYtd, payslipYtd } from "../../../shared/payroll/payrollYtd.js";
 import { buildSecurePayslipPdf, PAYSLIP_ID_REQUIRED } from "./payslipPdf.js";
 import { selectPayslipIdProfile } from "../../../shared/payroll/saIdNumber.js";
+import { payslipNotificationPath } from "../../../shared/notifications/notificationTarget.js";
 import { claimPayRunForCalculate, commitPayRunCalculate } from "./payRunLockRpc.js";
 import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/documentSendAdapter.js";
 import { loadOutstandingAdjustmentSignals } from "../workforce/adjustmentSignals.js";
@@ -1281,7 +1282,11 @@ export async function finalizePayRun(orgId, actorId, runId, origin = "") {
       console.warn("[workforce] payslip generated event failed:", err?.message || err);
     }
     if (item.user_id) {
-      await notifyUser(item.user_id, `Your Paidly payslip for ${run.period_label} is available.`);
+      await notifyUser(
+        item.user_id,
+        `Your Paidly payslip for ${run.period_label} is available.`,
+        payslipNotificationPath(payslip.id)
+      );
     }
   }
 
@@ -1503,7 +1508,11 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
       recordId: slip.id,
     });
     if (slip.employee_user_id) {
-      await notifyUser(slip.employee_user_id, `Your Paidly payslip for ${run.period_label} has been emailed.`);
+      await notifyUser(
+        slip.employee_user_id,
+        `Your Paidly payslip for ${run.period_label} has been emailed.`,
+        payslipNotificationPath(slip.id)
+      );
     }
     sent += 1;
   }
@@ -1619,7 +1628,11 @@ export async function sendEmployeePayslip(orgId, actorId, payslipId, origin = ""
     recordId: slip.id,
   });
   if (slip.employee_user_id) {
-    await notifyUser(slip.employee_user_id, `Your Paidly payslip for ${periodLabel} has been emailed.`);
+    await notifyUser(
+      slip.employee_user_id,
+      `Your Paidly payslip for ${periodLabel} has been emailed.`,
+      payslipNotificationPath(slip.id)
+    );
   }
   return { sent: 1, id: slip.id };
 }

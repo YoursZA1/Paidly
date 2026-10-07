@@ -10,6 +10,7 @@ import {
 import { isPosOnlyStaff } from "../../../shared/posStaffInvite.js";
 import { assertUserHasFeature, UpgradeRequiredError } from "../featureGate.js";
 import { suppressForDemoOrg } from "../demo/demoMode.js";
+import { insertUserNotification } from "../notifications/insertUserNotification.js";
 
 export { PERMISSIONS, supabaseAdmin };
 
@@ -89,14 +90,16 @@ export async function writePayrollAudit({ orgId, actorId, action, recordType, re
   }
 }
 
-export async function notifyUser(userId, message) {
+export async function notifyUser(userId, message, link) {
   if (!userId || !message) return;
   try {
-    await supabaseAdmin.from("notifications").insert({
+    const error = await insertUserNotification(supabaseAdmin, {
       user_id: userId,
       message,
       read: false,
+      link,
     });
+    if (error) console.warn("[payroll] notification insert failed:", error.message || error);
   } catch (err) {
     console.warn("[payroll] notification insert failed:", err?.message || err);
   }

@@ -4,6 +4,7 @@ import { ensureLeaveTypes } from "../leave/leaveService.js";
 import { johannesburgYmd, formatIsoDate } from "../../../shared/payroll/dates.js";
 import { bceaLeavePosition } from "../../../shared/leave/leaveEligibility.js";
 import { notifyUser } from "../payroll/payrollGate.js";
+import { employeeNotificationPath } from "../../../shared/notifications/notificationTarget.js";
 import {
   registerWorkforceSubscriber,
   WORKFORCE_EVENT_TYPES,
@@ -203,7 +204,11 @@ async function onEmployeeCreated(event) {
 async function onPortalActivated(event) {
   const employee = await loadEmployee(event.employee_id);
   if (employee?.user_id) {
-    await notifyUser(employee.user_id, "Your Paidly employee access is now active.");
+    await notifyUser(
+      employee.user_id,
+      "Your Paidly employee access is now active.",
+      employeeNotificationPath(employee.id)
+    );
   }
   await writeAudit(event, WORKFORCE_EVENT_TYPES.EMPLOYEE_PORTAL_ACTIVATED, {
     membership_id: event.employee_id,

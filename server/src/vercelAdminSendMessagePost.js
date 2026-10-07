@@ -73,7 +73,8 @@ async function insertDelivery(supabase, row) {
 }
 
 async function insertNotification(supabase, row) {
-  const { error } = await supabase.from("notifications").insert(row);
+  const { insertUserNotification } = await import("./notifications/insertUserNotification.js");
+  const error = await insertUserNotification(supabase, row);
   if (error) throw new Error(error.message || "Failed to save notification");
 }
 
@@ -146,17 +147,23 @@ export async function handleVercelAdminSendMessagePost(req, res) {
       let finalStatus = "pending";
       let failedReason = null;
       if (payload.sendInApp) {
+        const { data: delivery, error: inAppErr } = await supabase
+          .from("message_deliveries")
+          .insert({
+            message_id: messageId,
+            user_id: recipientId,
+            channel: "in_app",
+            status: "sent",
+            sent_at: nowIso,
+          })
+          .select("id")
+          .maybeSingle();
+        if (inAppErr) throw new Error(inAppErr.message || "Failed to create message delivery");
         await insertNotification(supabase, {
           user_id: recipientId,
           message: `${String(message?.subject || payload.subject || "Message from the Paidly team").trim()}: ${payload.content}`,
           read: false,
-        });
-        await insertDelivery(supabase, {
-          message_id: messageId,
-          user_id: recipientId,
-          channel: "in_app",
-          status: "sent",
-          sent_at: nowIso,
+          link: delivery?.id ? `/Messages?delivery=${delivery.id}` : "/Messages",
         });
         finalStatus = "delivered";
       }

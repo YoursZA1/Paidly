@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Message, Client, Invoice, Quote, DocumentSend, MessageLog, InvoiceView, Payment } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,6 +40,8 @@ function dedupeAdminInbox(rows) {
 
 export default function MessagesPage() {
     const { profile } = useAuth();
+    const location = useLocation();
+    const deliveryId = new URLSearchParams(location.search).get('delivery');
     const [messages, setMessages] = useState([]);
     const [clients, setClients] = useState([]);
     const [invoices, setInvoices] = useState([]);
@@ -59,6 +62,12 @@ export default function MessagesPage() {
     const [adminInboxUnread, setAdminInboxUnread] = useState(0);
     const [expandedAdminId, setExpandedAdminId] = useState(null);
     const mountedRef = useRef(true);
+
+    useEffect(() => {
+        if (!deliveryId) return;
+        setExpandedAdminId(deliveryId);
+        setPageTab('conversations');
+    }, [deliveryId]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -478,7 +487,11 @@ export default function MessagesPage() {
                                 </Button>
                             ) : null}
                         </div>
-                        {adminInboxMessages.slice(0, 4).map((row) => {
+                        {(() => {
+                            const focused = adminInboxMessages.find((row) => row.id === deliveryId);
+                            const rest = adminInboxMessages.filter((row) => row.id !== focused?.id);
+                            return (focused ? [focused, ...rest] : adminInboxMessages).slice(0, 4);
+                        })().map((row) => {
                             const expanded = expandedAdminId === row.id;
                             return (
                                 <button

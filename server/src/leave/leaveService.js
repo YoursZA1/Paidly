@@ -19,6 +19,10 @@ import {
 import { writeWorkforceAudit } from "../workforce/workforceAudit.js";
 import { isWorkforceEmployeeActive } from "../../../shared/workforce/employeeLifecycle.js";
 import { suppressForDemoOrg } from "../demo/demoMode.js";
+import {
+  employeeLeaveNotificationPath,
+  leaveNotificationPath,
+} from "../../../shared/notifications/notificationTarget.js";
 
 const DEFAULT_LEAVE_TYPES = [
   { code: "ANNUAL", name: "Annual leave", paid: true, accrual_method: "monthly", days_per_year: 15, requires_approval: true, sort_order: 1 },
@@ -522,7 +526,11 @@ export async function applyForLeave(orgId, userId, body, { origin, membership = 
   } catch (err) {
     console.warn("[workforce] leave applied event failed:", err?.message || err);
   }
-  await notifyUser(request.user_id, `Your leave request has been submitted and is awaiting approval.`);
+  await notifyUser(
+    request.user_id,
+    `Your leave request has been submitted and is awaiting approval.`,
+    employeeLeaveNotificationPath(profile.membership_id || request.employee_id)
+  );
   try {
     await notifyManagerOfLeaveRequest({
       orgId,
@@ -640,7 +648,8 @@ async function notifyManagerOfLeaveRequest({ orgId, request, profile, leaveType,
     if (manager.user_id) {
       await notifyUser(
         manager.user_id,
-        `${employeeName} has requested leave (${leaveType.name}, ${check.workingDays} day(s)).`
+        `${employeeName} has requested leave (${leaveType.name}, ${check.workingDays} day(s)).`,
+        leaveNotificationPath(request.id)
       );
     }
     if (contact?.email && !(await suppressForDemoOrg(orgId, "leave_request"))) {
@@ -1060,7 +1069,8 @@ export async function decideLeaveRequest(orgId, actorId, requestId, options = {}
       request.user_id,
       approve
         ? `Your leave request has been approved.`
-        : `Your leave request for ${dateRange} has been declined.`
+        : `Your leave request for ${dateRange} has been declined.`,
+      employeeLeaveNotificationPath(request.employee_id || request.payroll_profiles?.membership_id)
     );
     const email = request.payroll_profiles?.email;
     if (email && !(await suppressForDemoOrg(orgId, "leave_decision"))) {
@@ -1171,7 +1181,13 @@ export async function cancelLeaveRequest(orgId, actorId, requestId, { asAdmin = 
     before: { status: request.status },
     after: { status: "cancelled", leave_request_id: id, method: asAdmin ? "hr_override" : "self" },
   });
-  if (request.user_id) await notifyUser(request.user_id, "A leave request was cancelled.");
+  if (request.user_id) {
+    await notifyUser(
+      request.user_id,
+      "A leave request was cancelled.",
+      employeeLeaveNotificationPath(request.employee_id || request.payroll_profiles?.membership_id)
+    );
+  }
   return updated;
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { subscribePaidlyNotificationsRealtime } from "@/lib/realtime/paidlyRealtimeManager";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,11 +8,19 @@ import { markNotificationRead, markAllNotificationsReadForCurrentUser } from "@/
 import { runDedupedAsync } from "@/lib/inflightRequestDedupe";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Bell, CheckCheck } from "lucide-react";
+import {
+  invoiceNotificationPath,
+  messageNotificationPath,
+  notificationLookupFromMessage,
+  quoteNotificationPath,
+  safeNotificationPath,
+} from "@shared/notifications/notificationTarget.js";
 
 const REALTIME_REFRESH_DEBOUNCE_MS = 350;
 
 export default function NotificationBell() {
   const { authUserId } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -69,12 +78,21 @@ export default function NotificationBell() {
     }
     setFetchError(null);
     try {
-      const { data, error } = await supabase
+      let activityQuery = await supabase
         .from("notifications")
-        .select("id, message, created_at, read")
+        .select("id, message, created_at, read, link")
         .eq("user_id", authUserId)
         .order("created_at", { ascending: false })
         .limit(20);
+      if (activityQuery.error && /link/i.test(activityQuery.error.message || "")) {
+        activityQuery = await supabase
+          .from("notifications")
+          .select("id, message, created_at, read")
+          .eq("user_id", authUserId)
+          .order("created_at", { ascending: false })
+          .limit(20);
+      }
+      const { data, error } = activityQuery;
       if (error) {
         console.warn("NotificationBell: fetch notifications failed", getSupabaseErrorMessage(error, "Load notifications failed"));
         setFetchError(getSupabaseErrorMessage(error, "Failed to load notifications"));
@@ -100,6 +118,7 @@ export default function NotificationBell() {
         message: n.message,
         createdAt: n.created_at,
         read: Boolean(n.read),
+        link: safeNotificationPath(n.link),
       }));
       const messageRows = (inAppMessages ?? []).map((row) => {
         const msg = Array.isArray(row.admin_platform_messages)
@@ -114,6 +133,7 @@ export default function NotificationBell() {
           message: content ? `${subject}: ${content}` : subject,
           createdAt: row.sent_at || null,
           read: row.read_at != null || String(row.status || "").toLowerCase() === "read",
+          link: messageNotificationPath(row.id),
         };
       });
       const merged = [...activityRows, ...messageRows]
@@ -201,6 +221,37 @@ export default function NotificationBell() {
     }
   };
 
+  const openSource = async (item) => {
+    if (!item.read) void handleMarkRead(item);
+    const direct = safeNotificationPath(item.link);
+    if (direct) {
+      setOpen(false);
+      navigate(direct);
+      return;
+    }
+    const lookup = notificationLookupFromMessage(item.message);
+    if (!lookup) return;
+    if (lookup.path) {
+      setOpen(false);
+      navigate(lookup.path);
+      return;
+    }
+    const table = lookup.kind === "invoice_number" ? "invoices" : "quotes";
+    const column = lookup.kind === "invoice_number" ? "invoice_number" : "quote_number";
+    const { data, error } = await supabase.from(table).select("id").eq(column, lookup.number).limit(1);
+    if (error) {
+      console.warn("NotificationBell: source lookup failed", getSupabaseErrorMessage(error, "Lookup failed"));
+      return;
+    }
+    const path =
+      lookup.kind === "invoice_number"
+        ? invoiceNotificationPath(data?.[0]?.id)
+        : quoteNotificationPath(data?.[0]?.id);
+    if (!path) return;
+    setOpen(false);
+    navigate(path);
+  };
+
   const formatTime = (createdAt) => {
     const d = new Date(createdAt);
     const now = new Date();
@@ -263,10 +314,10 @@ export default function NotificationBell() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (!n.read) handleMarkRead(n);
+                    void openSource(n);
                   }}
-                  className="w-full text-left text-sm text-foreground"
-                  aria-label={`${n.read ? "Read" : "Unread"} notification: ${n.message}`}
+                  className="w-full text-left text-sm text-foreground hover:underline"
+                  aria-label={`Open notification: ${n.message}`}
                 >
                   {n.message}
                 </button>
