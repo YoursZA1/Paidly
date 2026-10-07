@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { sendHtmlEmail } from "../sendInvoice.js";
 import { resolvePublicAppOrigin } from "../companyInviteAppUrl.js";
+import { generateSecurePayslipPdf } from "../payroll/payrollService.js";
+import { applyForLeaveForMembership, previewLeaveApplicationForMembership } from "../leave/leaveService.js";
+import { resolveEntitlementForCompany } from "../billing/entitlements.js";
+import { familyHasFeature } from "../subscriptionPlans.js";
 import { isDemoOrgId, logDemo } from "../demo/demoMode.js";
 import { isSecureRequest, parseCookieHeader } from "../pos/posAccessSession.js";
 import { getEmployeeProfile } from "./employeeListQuery.js";
@@ -162,6 +166,7 @@ function publicDetails(bundle, { companyName, expiresAt, email, avatarUrl }) {
     })),
     leave_balances: (bundle?.leave_balances || []).map((row) => ({
       id: row.id,
+      leave_type_id: row.leave_type_id || null,
       name: row.leave_types?.name || row.leave_types?.code || "Leave",
       available: row.available ?? null,
       used: row.used ?? null,
@@ -182,7 +187,9 @@ function publicDetails(bundle, { companyName, expiresAt, email, avatarUrl }) {
       type: row.type || null,
       status: row.status || null,
       created_at: row.created_at || null,
+      files: [],
     })),
+    can_apply_leave: false,
   };
 }
 
@@ -230,11 +237,197 @@ async function sessionPayload(grant) {
     avatarUrl = person?.avatar_url || null;
     if (person?.phone && bundle.employee && !bundle.employee.phone) bundle.employee.phone = person.phone;
   }
-  return publicDetails(bundle, {
+  const details = publicDetails(bundle, {
     companyName: orgRes.data?.name || null,
     expiresAt: grant.expires_at,
     email: grant.email,
     avatarUrl,
+  });
+  await attachDocumentFiles(grant.org_id, details);
+  details.can_apply_leave = await orgAllowsLeave(grant.org_id);
+  return details;
+}
+
+async function orgAllowsLeave(orgId) {
+  try {
+    const ent = await resolveEntitlementForCompany(supabaseAdmin, orgId);
+    return Boolean(ent?.access) && familyHasFeature(ent.family, "leave_management");
+  } catch (err) {
+    console.warn("[employee-access] leave entitlement", err?.message || err);
+    return false;
+  }
+}
+
+async function attachDocumentFiles(orgId, details) {
+  const ids = (details.documents || []).map((row) => row.id).filter(Boolean);
+  if (!ids.length) return;
+  const { data, error } = await supabaseAdmin
+    .from("document_attachments")
+    .select("id, document_id, file_name")
+    .eq("org_id", orgId)
+    .in("document_id", ids);
+  if (error) return;
+  const byDoc = new Map();
+  for (const file of data || []) {
+    const list = byDoc.get(file.document_id) || [];
+    list.push({ id: file.id, file_name: file.file_name || "File" });
+    byDoc.set(file.document_id, list);
+  }
+  details.documents = details.documents.map((row) => ({ ...row, files: byDoc.get(row.id) || [] }));
+}
+
+function requestOrigin(req) {
+  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  if (!host) return resolvePublicAppOrigin();
+  return `${proto}://${host}`;
+}
+
+function httpsUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol !== "https:") return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+async function requireGrant(req, res) {
+  const loaded = await loadGrant(readEmployeeAccessToken(req));
+  if (loaded.missingTable) {
+    json(res, 503, { error: "Employee access links are not available yet." });
+    return null;
+  }
+  if (!loaded.grant) {
+    json(res, 401, { error: "This link has expired. Enter your email to get a new one." });
+    return null;
+  }
+  return loaded.grant;
+}
+
+async function downloadPayslip(req, res, grant) {
+  const id = String(req.query?.id || "").trim();
+  if (!id) return json(res, 400, { error: "Choose a payslip to download." });
+  const { data: slip, error } = await supabaseAdmin
+    .from("payslips")
+    .select("id")
+    .eq("id", id)
+    .eq("org_id", grant.org_id)
+    .eq("membership_id", grant.membership_id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!slip) return json(res, 404, { error: "Payslip not found." });
+  const pdf = await generateSecurePayslipPdf(grant.org_id, slip.id, {
+    deliveryMethod: "download",
+    actorId: null,
+  });
+  const filename = String(pdf.filename || "payslip.pdf").replace(/["\r\n]/g, "");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  return res.status(200).send(pdf.content);
+}
+
+async function documentDownloadUrl(req, res, grant) {
+  const id = String(req.query?.id || "").trim();
+  if (!id) return json(res, 400, { error: "Choose a document to download." });
+  const { data, error } = await supabaseAdmin
+    .from("documents")
+    .select("id, public_share_token")
+    .eq("id", id)
+    .eq("org_id", grant.org_id)
+    .eq("membership_id", grant.membership_id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return json(res, 404, { error: "Document not found." });
+  let token = String(data.public_share_token || "").trim();
+  if (!token) {
+    token = crypto.randomUUID();
+    const updated = await supabaseAdmin
+      .from("documents")
+      .update({ public_share_token: token })
+      .eq("id", data.id)
+      .eq("org_id", grant.org_id)
+      .eq("membership_id", grant.membership_id)
+      .is("public_share_token", null)
+      .select("public_share_token")
+      .maybeSingle();
+    if (updated.error) throw updated.error;
+    token = String(updated.data?.public_share_token || "").trim();
+    if (!token) {
+      const again = await supabaseAdmin
+        .from("documents")
+        .select("public_share_token")
+        .eq("id", data.id)
+        .eq("org_id", grant.org_id)
+        .eq("membership_id", grant.membership_id)
+        .maybeSingle();
+      if (again.error) throw again.error;
+      token = String(again.data?.public_share_token || "").trim();
+    }
+  }
+  if (!token) return json(res, 404, { error: "This document isn't available to download." });
+  const origin = String(requestOrigin(req) || resolvePublicAppOrigin()).replace(/\/$/, "");
+  return json(res, 200, {
+    ok: true,
+    url: `${origin}/DocumentPDF?token=${encodeURIComponent(token)}&download=true`,
+  });
+}
+
+async function attachmentDownloadUrl(req, res, grant) {
+  const id = String(req.query?.id || "").trim();
+  if (!id) return json(res, 400, { error: "Choose a file to download." });
+  const { data, error } = await supabaseAdmin
+    .from("document_attachments")
+    .select("id, file_url, document_id")
+    .eq("id", id)
+    .eq("org_id", grant.org_id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.document_id) return json(res, 404, { error: "File not found." });
+  const owned = await supabaseAdmin
+    .from("documents")
+    .select("id")
+    .eq("id", data.document_id)
+    .eq("org_id", grant.org_id)
+    .eq("membership_id", grant.membership_id)
+    .maybeSingle();
+  if (owned.error) throw owned.error;
+  if (!owned.data) return json(res, 404, { error: "File not found." });
+  const url = httpsUrl(data.file_url);
+  if (!url) return json(res, 404, { error: "This file isn't available to download." });
+  return json(res, 200, { ok: true, url });
+}
+
+async function submitLeave(req, res, grant) {
+  if (!(await orgAllowsLeave(grant.org_id))) {
+    return json(res, 403, { error: "Leave applications are not available for this company." });
+  }
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const result = await applyForLeaveForMembership(grant.org_id, grant.membership_id, body, {
+    origin: requestOrigin(req),
+  });
+  return json(res, 200, {
+    ok: true,
+    status: "pending",
+    working_days: result?.preview?.workingDays ?? null,
+  });
+}
+
+async function previewLeave(req, res, grant) {
+  if (!(await orgAllowsLeave(grant.org_id))) {
+    return json(res, 403, { error: "Leave applications are not available for this company." });
+  }
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const preview = await previewLeaveApplicationForMembership(grant.org_id, grant.membership_id, body);
+  return json(res, 200, {
+    ok: Boolean(preview.ok),
+    working_days: preview.workingDays ?? null,
+    available: preview.available ?? null,
+    remaining: preview.remainingAfterApproval ?? null,
+    errors: Array.isArray(preview.errors) ? preview.errors : [],
   });
 }
 
@@ -363,5 +556,23 @@ export async function handleEmployeeAccessLink(req, res) {
   if (req.method === "POST" && op === "redeem") return redeemLink(req, res);
   if (req.method === "GET" && op === "session") return readSession(req, res);
   if (req.method === "POST" && op === "end") return endSession(req, res);
+  if (op === "payslip-pdf" || op === "document" || op === "attachment" || op === "leave" || op === "leave-preview") {
+    try {
+      const grant = await requireGrant(req, res);
+      if (!grant) return undefined;
+      if (req.method === "GET" && op === "payslip-pdf") return await downloadPayslip(req, res, grant);
+      if (req.method === "GET" && op === "document") return await documentDownloadUrl(req, res, grant);
+      if (req.method === "GET" && op === "attachment") return await attachmentDownloadUrl(req, res, grant);
+      if (req.method === "POST" && op === "leave") return await submitLeave(req, res, grant);
+      if (req.method === "POST" && op === "leave-preview") return await previewLeave(req, res, grant);
+      return json(res, 405, { error: "Method not allowed" });
+    } catch (err) {
+      const status = Number(err?.status) || 500;
+      console.error("[employee-access]", op, err?.message || err);
+      return json(res, status >= 400 && status < 600 ? status : 500, {
+        error: status >= 500 ? "We couldn't complete that. Try again." : err?.message || "We couldn't complete that.",
+      });
+    }
+  }
   return json(res, 405, { error: "Method not allowed" });
 }

@@ -477,7 +477,7 @@ export async function getEmployeeProfile(orgId, employeeId, access, { sections }
           safeQuery(
             supabaseAdmin
               .from("leave_balances")
-              .select("id, accrued, used, pending, entitled, leave_year, leave_types(code, name)")
+              .select("id, leave_type_id, accrued, used, pending, entitled, leave_year, leave_types(code, name)")
               .eq("org_id", orgId)
               .eq("employee_id", employee.id)
               .eq("leave_year", johannesburgYmd().year),

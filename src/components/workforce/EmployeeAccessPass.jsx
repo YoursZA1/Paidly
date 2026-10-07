@@ -1,17 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Building2, Loader2 } from "lucide-react";
+import { Building2, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
+  applyEmployeeLeave,
+  downloadEmployeePayslip,
+  employeeAttachmentUrl,
+  employeeDocumentUrl,
   endEmployeeAccessSession,
   fetchEmployeeAccessSession,
+  previewEmployeeLeave,
   redeemEmployeeAccessLink,
   requestEmployeeAccessLink,
 } from "@/lib/workforcePortal/employeeAccessClient.js";
 import { EMPLOYEE_ACCESS_SENT_MESSAGE } from "@shared/workforce/employeeAccessLink.js";
+import { countWorkingDays } from "@shared/leave/leaveMath.js";
 
 function money(value) {
   if (value == null || value === "") return "—";
@@ -56,12 +64,168 @@ function Fact({ label, value }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-0.5 break-words text-sm text-foreground">{value || "—"}</p>
+      <p className="mt-0.5 break-words text-sm font-medium text-foreground">{value || "—"}</p>
     </div>
   );
 }
 
-function Details({ session, onEnded }) {
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename || "download";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function DownloadButton({ children, onClick, busy }) {
+  return (
+    <Button type="button" variant="outline" size="sm" className="rounded-xl" disabled={busy} onClick={onClick}>
+      {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
+      {children}
+    </Button>
+  );
+}
+
+function ApplyLeave({ balances, onSubmitted }) {
+  const types = balances.filter((row) => row.leave_type_id);
+  const [leaveTypeId, setLeaveTypeId] = useState(types[0]?.leave_type_id || "");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [halfDay, setHalfDay] = useState(false);
+  const [reason, setReason] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const workingDays = useMemo(() => {
+    if (!startDate || !endDate) return null;
+    return countWorkingDays(startDate, endDate, { halfDay: halfDay && startDate === endDate });
+  }, [startDate, endDate, halfDay]);
+
+  useEffect(() => {
+    if (!leaveTypeId || !startDate || !endDate) {
+      setPreview(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      previewEmployeeLeave({
+        leave_type_id: leaveTypeId,
+        start_date: startDate,
+        end_date: endDate,
+        half_day: halfDay && startDate === endDate,
+        reason,
+      })
+        .then((data) => {
+          if (!cancelled) setPreview(data);
+        })
+        .catch(() => {
+          if (!cancelled) setPreview(null);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [leaveTypeId, startDate, endDate, halfDay, reason]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await applyEmployeeLeave({
+        leave_type_id: leaveTypeId,
+        start_date: startDate,
+        end_date: endDate,
+        half_day: halfDay && startDate === endDate,
+        reason,
+      });
+      setNotice(
+        result?.working_days != null
+          ? `Leave submitted. ${result.working_days} working day(s) are waiting for approval.`
+          : "Leave submitted and waiting for approval."
+      );
+      setReason("");
+      setStartDate("");
+      setEndDate("");
+      setHalfDay(false);
+      setPreview(null);
+      await onSubmitted?.();
+    } catch (err) {
+      setError(err?.message || "We couldn't submit this leave request.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!types.length) return null;
+
+  return (
+    <form onSubmit={submit} className="mt-4 space-y-3 border-t border-border pt-4">
+      <p className="text-sm font-medium text-foreground">Apply for leave</p>
+      <div>
+        <Label htmlFor="portal-leave-type">Leave type</Label>
+        <select
+          id="portal-leave-type"
+          className="mt-1 h-12 w-full rounded-xl border border-border bg-background px-3 text-sm"
+          value={leaveTypeId}
+          onChange={(event) => setLeaveTypeId(event.target.value)}
+        >
+          {types.map((row) => (
+            <option key={row.leave_type_id} value={row.leave_type_id}>
+              {row.name} ({row.available ?? "—"} available)
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="portal-leave-start">Start date</Label>
+          <Input id="portal-leave-start" type="date" className="mt-1 rounded-xl" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
+        </div>
+        <div>
+          <Label htmlFor="portal-leave-end">End date</Label>
+          <Input id="portal-leave-end" type="date" className="mt-1 rounded-xl" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-sm text-foreground">
+        <Checkbox checked={halfDay} onCheckedChange={(value) => setHalfDay(Boolean(value))} disabled={!startDate || startDate !== endDate} />
+        Half day
+      </label>
+      <div>
+        <Label htmlFor="portal-leave-reason">Reason</Label>
+        <Textarea id="portal-leave-reason" className="mt-1 rounded-xl" value={reason} onChange={(event) => setReason(event.target.value)} />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Working days: {preview?.working_days ?? workingDays ?? "—"}
+        {preview?.remaining != null ? ` · Balance after approval: ${preview.remaining}` : ""}
+      </p>
+      {preview?.errors?.length ? (
+        <ul className="space-y-0.5 text-sm text-destructive">
+          {preview.errors.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      ) : null}
+      {notice ? <p className="text-sm text-foreground">{notice}</p> : null}
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <Button type="submit" className="rounded-xl" disabled={busy || !leaveTypeId || !startDate || !endDate}>
+        {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+        Submit leave request
+      </Button>
+    </form>
+  );
+}
+
+function Details({ session, onEnded, onSession }) {
   const employee = session.employee || {};
   const payslips = Array.isArray(session.payslips) ? session.payslips : [];
   const documents = Array.isArray(session.documents) ? session.documents : [];
@@ -70,11 +234,30 @@ function Details({ session, onEnded }) {
   const latest = payslips[0] || null;
   const expires = when(session.expires_at);
   const name = employee.name || "Employee";
+  const [actionError, setActionError] = useState("");
+  const [downloading, setDownloading] = useState("");
+
+  const refresh = async () => {
+    const next = await fetchEmployeeAccessSession();
+    if (next?.ok) onSession?.(next);
+  };
+
+  const runDownload = async (key, action) => {
+    setActionError("");
+    setDownloading(key);
+    try {
+      await action();
+    } catch (err) {
+      setActionError(err?.message || "We couldn't download that.");
+    } finally {
+      setDownloading("");
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-muted/40 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-background px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="rounded-2xl border border-border bg-card p-6">
+        <Card className="h-fit p-6">
           <div className="flex flex-col items-center text-center">
             {employee.avatar_url ? (
               <img src={employee.avatar_url} alt="" className="size-24 rounded-full object-cover" />
@@ -105,13 +288,31 @@ function Details({ session, onEnded }) {
           >
             End this access
           </Button>
-        </aside>
+        </Card>
 
         <main className="space-y-4">
-          <p className="text-sm text-muted-foreground">{session.company_name || "Employee details"}</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/40">
+              <Building2 className="size-4 text-foreground" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-display text-xl font-semibold tracking-tight text-foreground">
+                {session.company_name || "Employee details"}
+              </h2>
+              <p className="text-xs text-muted-foreground">Your record, leave, payslips, and documents</p>
+            </div>
+          </div>
+          {actionError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {actionError}
+            </p>
+          ) : null}
 
-          <section className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="font-display text-lg font-semibold text-foreground">Time off balance</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Time off balance</CardTitle>
+            </CardHeader>
+            <CardContent>
             {leave.length ? (
               <div className="mt-4 flex gap-4 overflow-x-auto pb-1">
                 {leave.map((row) => (
@@ -128,12 +329,16 @@ function Details({ session, onEnded }) {
                 ))}
               </div>
             ) : (
-              <p className="mt-3 text-sm text-muted-foreground">No leave balances yet.</p>
+              <p className="text-sm text-muted-foreground">No leave balances yet.</p>
             )}
-          </section>
+            </CardContent>
+          </Card>
 
-          <section className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="font-display text-lg font-semibold text-foreground">Applied leave</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Applied leave</CardTitle>
+            </CardHeader>
+            <CardContent>
             {requests.length ? (
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -164,12 +369,30 @@ function Details({ session, onEnded }) {
                 </table>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-muted-foreground">No leave requests yet.</p>
+              <p className="text-sm text-muted-foreground">No leave requests yet.</p>
             )}
-          </section>
+            {session.can_apply_leave ? <ApplyLeave balances={leave} onSubmitted={refresh} /> : null}
+            </CardContent>
+          </Card>
 
-          <section className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="font-display text-lg font-semibold text-foreground">Payslip</h2>
+          <Card>
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle className="text-lg">Payslip</CardTitle>
+              {latest ? (
+                <DownloadButton
+                  busy={downloading === latest.id}
+                  onClick={() =>
+                    runDownload(latest.id, async () => {
+                      const file = await downloadEmployeePayslip(latest.id);
+                      saveBlob(file.blob, file.filename);
+                    })
+                  }
+                >
+                  Download PDF
+                </DownloadButton>
+              ) : null}
+            </CardHeader>
+            <CardContent>
             {latest ? (
               <div className="mt-4">
                 <p className="text-sm text-muted-foreground">
@@ -184,37 +407,92 @@ function Details({ session, onEnded }) {
                 </dl>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-muted-foreground">No payslips yet.</p>
+              <p className="text-sm text-muted-foreground">No payslips yet.</p>
             )}
+            {latest ? (
+              <p className="mt-3 text-xs text-muted-foreground">The PDF opens with your ID number.</p>
+            ) : null}
             {payslips.length > 1 ? (
               <ul className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
                 {payslips.slice(1).map((row) => (
-                  <li key={row.id} className="flex flex-wrap justify-between gap-2 text-muted-foreground">
-                    <span>{row.payslip_number || "Payslip"}</span>
-                    <span>
-                      {day(row.pay_period_start)} – {day(row.pay_period_end)} · {money(row.net_pay)}
+                  <li key={row.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-muted-foreground">
+                      {row.payslip_number || "Payslip"} · {day(row.pay_period_start)} – {day(row.pay_period_end)} · {money(row.net_pay)}
                     </span>
+                    <DownloadButton
+                      busy={downloading === row.id}
+                      onClick={() =>
+                        runDownload(row.id, async () => {
+                          const file = await downloadEmployeePayslip(row.id);
+                          saveBlob(file.blob, file.filename);
+                        })
+                      }
+                    >
+                      PDF
+                    </DownloadButton>
                   </li>
                 ))}
               </ul>
             ) : null}
-          </section>
+            </CardContent>
+          </Card>
 
-          <section className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="font-display text-lg font-semibold text-foreground">Documents</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Documents</CardTitle>
+            </CardHeader>
+            <CardContent>
             {documents.length ? (
-              <ul className="mt-3 space-y-2 text-sm">
+              <ul className="space-y-3 text-sm">
                 {documents.map((row) => (
-                  <li key={row.id} className="flex justify-between gap-3 border-t border-border py-2 first:border-t-0">
-                    <span className="text-foreground">{row.title}</span>
-                    <span className="capitalize text-muted-foreground">{row.status || row.type || ""}</span>
+                  <li key={row.id} className="border-t border-border py-3 first:border-t-0 first:pt-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-foreground">{row.title}</p>
+                        <p className="text-xs capitalize text-muted-foreground">
+                          {[row.type, row.status].filter(Boolean).join(" · ").replace(/_/g, " ")}
+                        </p>
+                      </div>
+                      <DownloadButton
+                        busy={downloading === `doc-${row.id}`}
+                        onClick={() =>
+                          runDownload(`doc-${row.id}`, async () => {
+                            const url = await employeeDocumentUrl(row.id);
+                            window.open(url, "_blank", "noopener,noreferrer");
+                          })
+                        }
+                      >
+                        Download
+                      </DownloadButton>
+                    </div>
+                    {Array.isArray(row.files) && row.files.length ? (
+                      <ul className="mt-2 space-y-2">
+                        {row.files.map((file) => (
+                          <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 pl-3 text-muted-foreground">
+                            <span>{file.file_name}</span>
+                            <DownloadButton
+                              busy={downloading === `file-${file.id}`}
+                              onClick={() =>
+                                runDownload(`file-${file.id}`, async () => {
+                                  const url = await employeeAttachmentUrl(file.id);
+                                  window.open(url, "_blank", "noopener,noreferrer");
+                                })
+                              }
+                            >
+                              File
+                            </DownloadButton>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm text-muted-foreground">No documents yet.</p>
+              <p className="text-sm text-muted-foreground">No documents yet.</p>
             )}
-          </section>
+            </CardContent>
+          </Card>
         </main>
       </div>
     </div>
@@ -333,6 +611,7 @@ export default function EmployeeAccessPass({ slug, companyName, logoUrl = "", pa
     return (
       <Details
         session={session}
+        onSession={setSession}
         onEnded={() => {
           setSession(null);
           setPhase("request");

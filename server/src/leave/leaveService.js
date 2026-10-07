@@ -291,11 +291,20 @@ export async function myLeave(orgId, userId) {
   return { profile, balances, requests: requests || [] };
 }
 
-async function prepareLeaveApplication(orgId, userId, body) {
+async function prepareLeaveApplication(orgId, userId, body, membershipOverride = null) {
   await ensureLeaveTypes(orgId);
-  const actorId = requireUuid(userId, "user id");
-  const profile = await getOrCreateProfile(orgId, actorId);
-  const membership = await loadMembership(orgId, { userId: actorId });
+  let membership = membershipOverride || null;
+  let actorId = membership?.user_id || null;
+  if (!membership) {
+    actorId = requireUuid(userId, "user id");
+    membership = await loadMembership(orgId, { userId: actorId });
+    if (!membership) {
+      const err = new Error("This account is not an employee of this company. Add the person once in Team Members.");
+      err.status = 400;
+      throw err;
+    }
+  }
+  const profile = await getOrCreateProfileForMembership(orgId, membership);
   if (!isWorkforceEmployeeActive(membership || profile)) {
     const err = new Error("Inactive employees cannot apply for leave.");
     err.status = 400;
@@ -338,20 +347,16 @@ async function prepareLeaveApplication(orgId, userId, body) {
 }
 
 export async function previewLeaveApplication(orgId, userId, body) {
-  const prepared = await prepareLeaveApplication(orgId, userId, body);
-  return {
-    workingDays: prepared.check.workingDays,
-    available: prepared.check.available,
-    remainingAfterApproval: prepared.check.remainingAfterApproval,
-    unpaid: !prepared.leaveType.paid,
-    leave_type: prepared.leaveType.name,
-    errors: prepared.check.errors,
-    ok: prepared.check.ok,
-  };
+  return leavePreviewPayload(await prepareLeaveApplication(orgId, userId, body));
 }
 
-export async function applyForLeave(orgId, userId, body, { origin } = {}) {
-  const { actorId, profile, leaveType, year, balance, check } = await prepareLeaveApplication(orgId, userId, body);
+export async function applyForLeave(orgId, userId, body, { origin, membership = null } = {}) {
+  const { actorId, profile, leaveType, year, balance, check } = await prepareLeaveApplication(
+    orgId,
+    userId,
+    body,
+    membership
+  );
   if (!check.ok) {
     const err = new Error(check.errors[0]);
     err.status = 400;
@@ -437,6 +442,40 @@ export async function applyForLeave(orgId, userId, body, { origin } = {}) {
     origin,
   });
   return { request, preview: check };
+}
+
+function leavePreviewPayload(prepared) {
+  return {
+    workingDays: prepared.check.workingDays,
+    available: prepared.check.available,
+    remainingAfterApproval: prepared.check.remainingAfterApproval,
+    unpaid: !prepared.leaveType.paid,
+    leave_type: prepared.leaveType.name,
+    errors: prepared.check.errors,
+    ok: prepared.check.ok,
+  };
+}
+
+/** 24-hour employee portal: same leave application, scoped to this membership. */
+export async function applyForLeaveForMembership(orgId, membershipId, body, options) {
+  const membership = await loadMembership(orgId, { employeeId: membershipId });
+  if (!membership) {
+    const err = new Error("Employee not found.");
+    err.status = 404;
+    throw err;
+  }
+  return applyForLeave(orgId, membership.user_id, body, { ...options, membership });
+}
+
+export async function previewLeaveApplicationForMembership(orgId, membershipId, body) {
+  const membership = await loadMembership(orgId, { employeeId: membershipId });
+  if (!membership) {
+    const err = new Error("Employee not found.");
+    err.status = 404;
+    throw err;
+  }
+  const prepared = await prepareLeaveApplication(orgId, membership.user_id, body, membership);
+  return leavePreviewPayload(prepared);
 }
 
 async function loadManagerRecipients(orgId, employeeMembership) {
