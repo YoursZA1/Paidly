@@ -12,6 +12,7 @@ import { normalizeRequestBody } from "../../server/src/validateBody.js";
 import { handlePayrollRoute, resolvePayrollRoute } from "../../server/src/payroll/payrollRoutes.js";
 import { handleLeaveRoute, resolveLeaveRoute } from "../../server/src/leave/leaveRoutes.js";
 import { handleWorkforceEmployees, resolveWorkforceRoute } from "../../server/src/workforce/workforceRoutes.js";
+import { handleEmployeeAccessLink } from "../../server/src/workforce/employeeAccessLink.js";
 import { handleClientTimelineRoute, resolveClientTimelineRoute } from "../../server/src/clients/clientTimelineRoutes.js";
 import { resolveCompanyRoute } from "../../server/src/company/companyVercelRoute.js";
 import { handleCompanyEmailTemplates } from "../../server/src/company/emailTemplatesRoute.js";
@@ -34,6 +35,14 @@ export default async function handler(req, res) {
   req.body = normalizeRequestBody(req);
 
   const rawPath = req.query?.path;
+  const urlPath = String(req.url || "").split("?")[0] || "";
+  const pathHeadEarly = Array.isArray(rawPath) ? rawPath[0] : rawPath;
+  if (
+    pathHeadEarly === "employee-access" ||
+    /\/api\/company\/employee-access\/?$/i.test(urlPath)
+  ) {
+    return handleEmployeeAccessLink(req, res);
+  }
   const pathHead = Array.isArray(rawPath) ? rawPath[0] : rawPath;
   if (pathHead === "payroll" || req.query?.__payroll) {
     const resolvedPayroll = resolvePayrollRoute(req);
@@ -71,7 +80,6 @@ export default async function handler(req, res) {
   if (!resolved) return res.status(404).json({ error: "Not found" });
 
   const { route, parts, id: resolvedId } = resolved;
-  const urlPath = String(req.url || "").split("?")[0] || "";
   const inviteIdMatch = urlPath.match(/\/invites\/([^/]+)/i);
   const inviteId = resolvedId || parts?.[1] || inviteIdMatch?.[1] || req.query?.id || null;
   if (inviteId) req.params = { ...(req.params || {}), id: inviteId };

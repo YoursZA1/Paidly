@@ -1,3 +1,4 @@
+import { businessTypeIncludesPos } from "./businessType.js";
 import { jobFunctionExtraPermissions, resolvePermissionAlias } from "./workforcePermissions.js";
 
 /**
@@ -56,6 +57,16 @@ export function membershipIsPosEnabled(membership) {
     .replace(/\s+/g, "_");
   if (fn === POS_JOB_FUNCTION || fn === "cashier" || fn === "till" || fn === "pos_only") return true;
   return Boolean(membership?.pos_register_id || membership?.posRegisterId);
+}
+
+/**
+ * Employee portal (payslips, leave, documents, profile) is available for every business type.
+ * The till is offered from that portal only when this person can use POS and the business
+ * type includes a till (retail, mixed, restaurant).
+ * @param {{ posEnabled?: boolean, businessType?: unknown }} [input]
+ */
+export function employeePortalOffersTill(input = {}) {
+  return Boolean(input?.posEnabled) && businessTypeIncludesPos(input?.businessType);
 }
 
 /**

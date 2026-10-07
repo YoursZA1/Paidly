@@ -68,6 +68,7 @@ import { canSeeWorkforceNav, resolveWorkforceExperience } from "@/lib/workforceE
 import { useCanShowPosNav } from "@/hooks/useCanShowPosNav";
 import { isPosTerminalPage, isPosTerminalPath } from "@/lib/posNavAccess";
 import { isPosOnlyStaff, membershipIsPosEnabled } from "@shared/posStaffInvite.js";
+import { businessTypeIncludesPos } from "@shared/businessType.js";
 import { describeEntitlementBadge, isEntitlementLapsed } from "@/lib/clientEntitlement";
 import BillingLockBanner from "@/components/subscription/BillingLockBanner";
 import PortalContextBanner from "@/components/workforce/PortalContextBanner";
@@ -1020,7 +1021,8 @@ export default function Layout({ children, currentPageName }) {
     if (companyContextLoading || !posOnlyStaff) return;
     if (isPosTerminal || isAdminV2Route) return;
     if (isPosOnlyStaffAllowedPath(location.pathname)) return;
-    navigate(createPageUrl("POS"), { replace: true });
+    const businessUsesPos = businessTypeIncludesPos(companyCtx?.businessType);
+    navigate(businessUsesPos ? createPageUrl("POS") : createPageUrl("Workforce"), { replace: true });
   }, [
     companyContextLoading,
     posOnlyStaff,
@@ -1028,6 +1030,7 @@ export default function Layout({ children, currentPageName }) {
     isAdminV2Route,
     location.pathname,
     navigate,
+    companyCtx?.businessType,
   ]);
 
   const navigationItems = useMemo(() => {
@@ -1040,7 +1043,8 @@ export default function Layout({ children, currentPageName }) {
       ? getWorkforceNavChildren(has, {
           experience,
           membershipId: companyCtx?.membershipId || null,
-          posEnabled: membershipIsPosEnabled(companyCtx),
+          posEnabled:
+            membershipIsPosEnabled(companyCtx) && businessTypeIncludesPos(companyCtx?.businessType),
         }).map((child) => ({
           ...child,
           // RBAC already chose the children; the plan decides whether each is open or locked.

@@ -5,6 +5,7 @@ import { workforceApi } from "@/services/WorkforceApiService";
 import { listPosRegisters } from "@/services/PosIntegrationService";
 import { PORTAL_STATUS, portalStatusLabel } from "@shared/workforce/portalAccess.js";
 import { posAccessPath, posTillPath } from "@shared/posStaffInvite.js";
+import useCompanyContext from "@/hooks/useCompanyContext";
 import { useToast } from "@/components/ui/use-toast";
 import PosOperatorAccessControls from "@/components/pos/PosOperatorAccessControls";
 
@@ -14,8 +15,9 @@ import PosOperatorAccessControls from "@/components/pos/PosOperatorAccessControl
  */
 export default function EmployeePortalAccessPanel({ employee, canManage, onUpdated }) {
   const { toast } = useToast();
+  const { posEnabled: businessUsesPos, loading: companyLoading } = useCompanyContext();
   const [busy, setBusy] = useState("");
-  const posEnabled = Boolean(employee?.pos_access);
+  const posEnabled = Boolean(employee?.pos_access) && businessUsesPos;
   const tillId = employee?.pos_register_id || "";
   const [tillName, setTillName] = useState(employee?.pos_register_name || "");
   const [posAccess, setPosAccess] = useState(null);
@@ -247,7 +249,13 @@ export default function EmployeePortalAccessPanel({ employee, canManage, onUpdat
               </div>
             </>
           ) : (
-            <p className="text-muted-foreground">Not enabled for this employee.</p>
+            <p className="text-muted-foreground">
+              {companyLoading
+                ? "Checking till access…"
+                : businessUsesPos
+                  ? "Not enabled for this employee."
+                  : "This business type doesn't use a till. Payslips, leave, documents, and the employee record stay on the employee portal."}
+            </p>
           )}
         </CardContent>
       </Card>

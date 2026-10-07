@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { supabaseAdmin } from "../supabaseAdmin.js";
 import { normalizeCompanyRole, normalizeJobFunction, COMPANY_ROLES, membershipHasPermission, PERMISSIONS } from "../companyRouteAccess.js";
 import { isPosStaffInviteRequest, POS_JOB_FUNCTION, membershipIsPosEnabled, posAccessPath, posTillPath } from "../../../shared/posStaffInvite.js";
+import { orgHasPosCapability } from "../pos/posBusinessType.js";
 import { buildEmployeeNumber, nextEmployeeSequence } from "../../../shared/payroll/payslipNumber.js";
 import { companyInviteShareUrl, resolvePublicAppOrigin } from "../companyInviteAppUrl.js";
 import { sendCompanyTeamInviteEmail } from "../companyTeamInviteDelivery.js";
@@ -754,11 +755,13 @@ export async function inviteEmployeePortal(orgId, actor, employeeId, { resend = 
     pos_register_id: membership.pos_register_id,
   });
   const origin = resolvePublicAppOrigin();
-  const posAccessLink = posEnabled
-    ? membership.pos_register_id
-      ? posTillPath(membership.pos_register_id, origin)
-      : posAccessPath(origin)
-    : null;
+  const businessUsesPos = posEnabled ? await orgHasPosCapability(orgId) : false;
+  const posAccessLink =
+    posEnabled && businessUsesPos
+      ? membership.pos_register_id
+        ? posTillPath(membership.pos_register_id, origin)
+        : posAccessPath(origin)
+      : null;
   await sendCompanyTeamInviteEmail({
     to: email,
     inviteLink,
@@ -768,7 +771,7 @@ export async function inviteEmployeePortal(orgId, actor, employeeId, { resend = 
     employeePortal: true,
     employeeName: membership.invited_name || null,
     expiresAt,
-    includePosSection: posEnabled,
+    includePosSection: Boolean(posAccessLink),
     posAccessLink,
   });
 

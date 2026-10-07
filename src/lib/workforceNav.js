@@ -48,7 +48,8 @@ export function isWorkforceSectionPath(pathname) {
     p.startsWith("/leavecalendar") ||
     p.startsWith("/payslips") ||
     p.startsWith("/mypayroll") ||
-    p.startsWith("/createleaverequest")
+    p.startsWith("/createleaverequest") ||
+    p.startsWith("/employee")
   );
 }
 

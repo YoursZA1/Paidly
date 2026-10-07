@@ -11,6 +11,8 @@ import {
   isWorkforceGenericHomePath,
   resolveWorkforceHomePath,
 } from "@/lib/workforceExperience.js";
+import { isPosOnlyStaffAllowedPath } from "@/lib/workforceNav.js";
+import { businessTypeIncludesPos } from "@shared/businessType.js";
 
 const REDIRECT_FLAG = TENANT_HOME_REDIRECT_FLAG;
 
@@ -74,15 +76,19 @@ export default function usePostAuthHomeRedirect({ enabled = true, posOnlyStaff =
     ranRef.current = true;
 
     if (posOnlyStaff) {
-      const posHome = createPageUrl("POS");
-      if (!isPosTerminalPage(location.pathname.replace(/^\//, "")) && !path.startsWith("/pos")) {
-        try {
-          window.sessionStorage.setItem(REDIRECT_FLAG, "1");
-        } catch {
-          /* ignore */
-        }
-        navigate(posHome, { replace: true });
+      if (isPosOnlyStaffAllowedPath(location.pathname) || isPosTerminalPage(location.pathname.replace(/^\//, ""))) {
+        ranRef.current = true;
+        return;
       }
+      const home = businessTypeIncludesPos(ctx?.businessType)
+        ? createPageUrl("POS")
+        : createPageUrl("Workforce");
+      try {
+        window.sessionStorage.setItem(REDIRECT_FLAG, "1");
+      } catch {
+        /* ignore */
+      }
+      navigate(home, { replace: true });
       return;
     }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Building2, Loader2, ShieldAlert, Store, UserRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { employeePortalOffersTill } from "@shared/posStaffInvite.js";
 import { isValidPortalSlug, normalizePortalSlug } from "@shared/workforce/portalSlug.js";
 import { enterWorkforcePortal, exitWorkforcePortal } from "@/lib/workforcePortal/switchPortal.js";
 import { getActivePortalSlug } from "@/lib/workforcePortal/portalState.js";
+import EmployeeAccessPass from "@/components/workforce/EmployeeAccessPass.jsx";
 
 /**
  * /employee/<slug> — a company's employee portal.
@@ -113,12 +115,15 @@ function SignInForm({ companyName }) {
 
 export default function EmployeePortal() {
   const { slug: rawSlug } = useParams();
+  const [searchParams] = useSearchParams();
+  const accessToken = searchParams.get("access") || "";
   const slug = normalizePortalSlug(rawSlug);
   const slugValid = isValidPortalSlug(slug);
   const { authUserId, authReady, logout } = useAuth() || {};
 
   const [branding, setBranding] = useState(null); // { found, company_name, logo_url }
   const [access, setAccess] = useState(null); // resolve_my_workforce_portal result
+  const [businessType, setBusinessType] = useState(undefined);
   const [entering, setEntering] = useState(false);
 
   useEffect(() => {
@@ -152,6 +157,29 @@ export default function EmployeePortal() {
     };
   }, [slug, slugValid, authReady, authUserId, branding?.found]);
 
+  useEffect(() => {
+    if (!access?.ok || !access.pos_enabled || !access.org_id) {
+      setBusinessType(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setBusinessType(undefined);
+    supabase
+      .from("organizations")
+      .select("business_type")
+      .eq("id", access.org_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setBusinessType(data?.business_type ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setBusinessType(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [access]);
+
   const open = useCallback(
     async (path) => {
       setEntering(true);
@@ -162,10 +190,18 @@ export default function EmployeePortal() {
     [slug]
   );
 
-  // Plain employees go straight to their workspace; till staff choose.
+  const tillOffered = employeePortalOffersTill({
+    posEnabled: access?.pos_enabled,
+    businessType,
+  });
+  const waitingForBusinessType = Boolean(access?.ok && access.pos_enabled && businessType === undefined);
+
+  // Payslips, leave, and the employee record open for every business type.
+  // The till is a separate choice, and only when this business uses POS.
   useEffect(() => {
-    if (access?.ok && !access.pos_enabled && !entering) void open("/Workforce");
-  }, [access, entering, open]);
+    if (!access?.ok || entering || waitingForBusinessType || tillOffered) return;
+    void open("/Workforce");
+  }, [access, entering, open, tillOffered, waitingForBusinessType]);
 
   const companyName = branding?.company_name || "your employer";
 
@@ -199,15 +235,19 @@ export default function EmployeePortal() {
     );
   }
 
-  if (!authUserId) {
+  if (!authUserId || accessToken) {
     return (
-      <Shell logoUrl={branding.logo_url} title={companyName} subtitle="Employee portal · sign in">
-        <SignInForm companyName={companyName} />
+      <Shell logoUrl={branding.logo_url} title={companyName} subtitle="Employee details">
+        <EmployeeAccessPass
+          slug={slug}
+          companyName={companyName}
+          passwordForm={<SignInForm companyName={companyName} />}
+        />
       </Shell>
     );
   }
 
-  if (!access || entering || (access.ok && !access.pos_enabled)) {
+  if (!access || entering || waitingForBusinessType || (access.ok && !tillOffered)) {
     return (
       <Shell logoUrl={branding.logo_url} title={companyName} subtitle="Opening your employee portal…">
         <div className="flex justify-center py-6" aria-label="Opening portal">

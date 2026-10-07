@@ -14,7 +14,7 @@ import {
   POS_PIN_MAX_ATTEMPTS,
   publicPosPinState,
 } from "../../shared/pos/posPin.js";
-import { membershipIsPosEnabled, membershipCanEnterPos, posAccessPath, posTillPath } from "../../shared/posStaffInvite.js";
+import { employeePortalOffersTill, membershipIsPosEnabled, membershipCanEnterPos, posAccessPath, posTillPath } from "../../shared/posStaffInvite.js";
 
 describe("derivePortalStatus", () => {
   it("returns revoked when portal_revoked_at is set", () => {
@@ -65,6 +65,21 @@ describe("POS PIN helpers", () => {
     expect(isPosPinLocked({ pos_pin_locked_until: until })).toBe(true);
     expect(publicPosPinState({ pos_pin_hash: "x", pos_pin_locked_until: until }).pos_pin_set).toBe(true);
     expect(publicPosPinState({ pos_pin_hash: "x", pos_pin_locked_until: until }).pos_pin_locked).toBe(true);
+  });
+});
+
+describe("employeePortalOffersTill", () => {
+  it("keeps the employee portal off the till for service businesses", () => {
+    expect(employeePortalOffersTill({ posEnabled: true, businessType: "service" })).toBe(false);
+    expect(employeePortalOffersTill({ posEnabled: false, businessType: "service" })).toBe(false);
+    expect(employeePortalOffersTill({ posEnabled: true, businessType: null })).toBe(false);
+  });
+
+  it("offers the till only when the person and the business type both use POS", () => {
+    expect(employeePortalOffersTill({ posEnabled: true, businessType: "mixed" })).toBe(true);
+    expect(employeePortalOffersTill({ posEnabled: true, businessType: "retail" })).toBe(true);
+    expect(employeePortalOffersTill({ posEnabled: true, businessType: "restaurant" })).toBe(true);
+    expect(employeePortalOffersTill({ posEnabled: false, businessType: "restaurant" })).toBe(false);
   });
 });
 
