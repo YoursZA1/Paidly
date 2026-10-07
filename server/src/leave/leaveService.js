@@ -443,27 +443,38 @@ export async function applyForLeave(orgId, userId, body, { origin, membership = 
     throw err;
   }
 
-  const { data: request, error } = await insertLeaveRow(
-    "leave_requests",
-    withEmployeeId(
-      {
-        org_id: orgId,
-        payroll_profile_id: profile.id,
-        user_id: actorId,
-        leave_type_id: leaveType.id,
-        start_date: body.start_date,
-        end_date: body.end_date,
-        half_day: Boolean(body.half_day),
-        working_days: check.workingDays,
-        reason: body.reason || null,
-        attachment_url: body.attachment_url || null,
-        status: "pending",
-        submitted_at: new Date().toISOString(),
-      },
-      profile
-    )
-  );
-  if (error) throw mapLeaveDbError(error);
+  const requestRow = {
+    org_id: orgId,
+    payroll_profile_id: profile.id,
+    user_id: parseUuid(actorId) || null,
+    leave_type_id: leaveType.id,
+    start_date: body.start_date,
+    end_date: body.end_date,
+    half_day: Boolean(body.half_day),
+    working_days: check.workingDays,
+    reason: body.reason || null,
+    attachment_url: body.attachment_url || null,
+    status: "pending",
+    submitted_at: new Date().toISOString(),
+  };
+  let inserted = await insertLeaveRow("leave_requests", withEmployeeId({ ...requestRow }, profile));
+  if (inserted.error && /user_id_fkey/i.test(inserted.error.message || "")) {
+    requestRow.user_id = null;
+    inserted = await insertLeaveRow("leave_requests", withEmployeeId({ ...requestRow }, profile));
+  }
+  const { data: request, error } = inserted;
+  if (error) {
+    const mapped = mapLeaveDbError(error);
+    if (mapped instanceof Error) throw mapped;
+    const err = new Error("We couldn't submit this leave request.");
+    err.status = 500;
+    throw err;
+  }
+  if (!request?.id) {
+    const err = new Error("We couldn't submit this leave request.");
+    err.status = 500;
+    throw err;
+  }
 
   if (leaveType.paid) {
     const nextPending = Number(balance.pending) + check.workingDays;
@@ -484,7 +495,7 @@ export async function applyForLeave(orgId, userId, body, { origin, membership = 
           days: -check.workingDays,
           balance_after: computeLeaveBalance({ ...balance, pending: nextPending }).available,
           reason: "Leave application submitted",
-          actor_id: actorId,
+          actor_id: request.user_id || null,
         },
         profile
       )
@@ -511,15 +522,19 @@ export async function applyForLeave(orgId, userId, body, { origin, membership = 
   } catch (err) {
     console.warn("[workforce] leave applied event failed:", err?.message || err);
   }
-  await notifyUser(actorId, `Your leave request has been submitted and is awaiting approval.`);
-  await notifyManagerOfLeaveRequest({
-    orgId,
-    request,
-    profile,
-    leaveType,
-    check,
-    origin,
-  });
+  await notifyUser(request.user_id, `Your leave request has been submitted and is awaiting approval.`);
+  try {
+    await notifyManagerOfLeaveRequest({
+      orgId,
+      request,
+      profile,
+      leaveType,
+      check,
+      origin,
+    });
+  } catch (err) {
+    console.warn("[leave] manager notice failed:", err?.message || err);
+  }
   return { request, preview: check };
 }
 

@@ -21,6 +21,12 @@ import {
 import { EMPLOYEE_ACCESS_SENT_MESSAGE } from "@shared/workforce/employeeAccessLink.js";
 import { countWorkingDays } from "@shared/leave/leaveMath.js";
 
+function leaveAmount(value) {
+  const days = Number(value);
+  if (!Number.isFinite(days)) return "—";
+  return Number.isInteger(days) ? String(days) : days.toFixed(2);
+}
+
 function money(value) {
   if (value == null || value === "") return "—";
   const amount = Number(value);
@@ -182,7 +188,13 @@ function ApplyLeave({ balances, onSubmitted }) {
             </option>
           ))}
         </select>
-        {selectedType?.note ? <p className="mt-2 text-xs text-muted-foreground">{selectedType.note}</p> : null}
+        {selectedType ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Accrued {leaveAmount(selectedType.accrued)} · Used {leaveAmount(selectedType.used)}
+            {selectedType.cycle_label ? ` · ${selectedType.cycle_label}` : ""}
+          </p>
+        ) : null}
+        {selectedType?.note ? <p className="text-xs text-muted-foreground">{selectedType.note}</p> : null}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
@@ -318,17 +330,11 @@ function Details({ session, onEnded, onSession }) {
             {leave.length ? (
               <div className="mt-4 flex gap-4 overflow-x-auto pb-1">
                 {leave.map((row) => (
-                  <div key={row.id} className="flex w-28 shrink-0 flex-col items-center text-center">
-                    <div className="flex size-16 items-center justify-center rounded-full border border-border text-xl font-semibold text-foreground">
-                      {Number.isFinite(Number(row.available)) ? Number(row.available).toFixed(2) : "—"}
+                  <div key={row.id} className="flex w-24 shrink-0 flex-col items-center text-center">
+                    <div className="flex size-16 items-center justify-center rounded-full border border-border text-lg font-semibold tabular-nums text-foreground">
+                      {leaveAmount(row.available)}
                     </div>
-                    <p className="mt-2 text-xs font-medium text-foreground">Available</p>
-                    <p className="text-xs text-muted-foreground">{row.name}</p>
-                    <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                      Accrued {Number(row.accrued || 0).toFixed(2)} · Used {Number(row.used || 0).toFixed(2)}
-                    </p>
-                    {row.cycle_label ? <p className="text-[11px] leading-snug text-muted-foreground">{row.cycle_label}</p> : null}
-                    {row.note ? <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{row.note}</p> : null}
+                    <p className="mt-2 text-xs font-medium text-foreground">{row.name}</p>
                   </div>
                 ))}
               </div>
