@@ -15,6 +15,8 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
 export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, lockedMessage = "" }) {
   const [till, setTill] = useState(null);
   const [tillMissing, setTillMissing] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -25,19 +27,20 @@ export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, loc
   useEffect(() => {
     let cancelled = false;
     setTillMissing(false);
+    setLoadError("");
     fetchTillInfo(tillId)
       .then((info) => {
         if (cancelled) return;
         if (info) setTill(info);
         else setTillMissing(true);
       })
-      .catch(() => {
-        if (!cancelled) setTillMissing(true);
+      .catch((err) => {
+        if (!cancelled) setLoadError(err?.message || "Could not load this till. Try again.");
       });
     return () => {
       cancelled = true;
     };
-  }, [tillId]);
+  }, [tillId, attempt]);
 
   const submit = async (value = code) => {
     if (value.length !== CODE_LENGTH || busy) return;
@@ -71,6 +74,19 @@ export default function PosCodeEntry({ tillId, onUnlocked, onUseOwnerSignIn, loc
   };
 
   const codesUnavailable = till?.access_codes === "unavailable";
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-3 bg-background px-6 text-center">
+        <Store className="size-10 text-muted-foreground" aria-hidden />
+        <p className="font-display text-xl font-semibold">Couldn&apos;t open this till</p>
+        <p className="max-w-sm text-sm text-muted-foreground">{loadError}</p>
+        <Button type="button" onClick={() => setAttempt((n) => n + 1)}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   if (tillMissing) {
     return (

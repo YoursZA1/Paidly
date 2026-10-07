@@ -182,10 +182,15 @@ export function rememberTillId(tillId) {
 /** Public till name + business for the code screen. Returns null when the link is not active. */
 export async function fetchTillInfo(tillId) {
   if (!tillId) return null;
-  const res = await posApiFetch(`/api/pos/till-info?id=${encodeURIComponent(tillId)}`);
+  const res = await posApiFetch(`/api/pos/till-info?id=${encodeURIComponent(tillId)}`, { cache: "no-store" });
   const raw = await res.text().catch(() => "");
   const json = parseJson(raw);
-  if (!res.ok || !json.ok) return null;
+  if (res.status === 404) return null;
+  if (!res.ok || !json.ok) {
+    const err = new Error(json.error || "Could not load this till. Try again.");
+    err.status = res.status;
+    throw err;
+  }
   return json;
 }
 

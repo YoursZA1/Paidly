@@ -268,11 +268,28 @@ export async function posCodeSummaries(orgId, membershipIds) {
 
 // ── Public: till info + code entry ────────────────────────────────────────────────
 
+function tillIdFromRequest(req) {
+  const fromQuery = String(req.query?.id || "").trim();
+  if (fromQuery) return fromQuery;
+  const raw = String(req.url || "");
+  const q = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : "";
+  try {
+    return String(new URLSearchParams(q).get("id") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 async function loadActiveTill(tillId) {
-  if (!isValidUuid(tillId)) return null;
-  const { data } = await supabaseAdmin.from("pos_registers").select("id, org_id, name, status, company_id").eq("id", tillId).maybeSingle();
-  if (!data || data.status !== "active") return null;
-  return data;
+  if (!isValidUuid(tillId)) return { till: null, error: null };
+  const { data, error } = await supabaseAdmin
+    .from("pos_registers")
+    .select("id, org_id, name, status, company_id")
+    .eq("id", tillId)
+    .maybeSingle();
+  if (error) return { till: null, error };
+  if (!data || data.status !== "active") return { till: null, error: null };
+  return { till: data, error: null };
 }
 
 async function tillBusinessName(till) {
@@ -308,10 +325,18 @@ function supportRef() {
 }
 
 export async function handlePosTillInfo(req, res) {
-  const tillId = String(req.query?.id || "").trim();
+  res.setHeader("Cache-Control", "private, no-store");
+  const tillId = tillIdFromRequest(req);
   try {
-    const till = await loadActiveTill(tillId);
-    if (!till || !(await orgHasPosCapability(till.org_id))) {
+    const loaded = await loadActiveTill(tillId);
+    if (loaded.error) {
+      console.error("[pos-till-info] register lookup", loaded.error.message || loaded.error);
+      return res.status(503).json({ error: "Could not load this till. Try again in a moment.", code: "TILL_INFO_ERROR" });
+    }
+    const till = loaded.till;
+    // An active till always shows the code screen. Business-type and plan checks run when the code is submitted,
+    // so a lookup hiccup is not reported as an expired link.
+    if (!till) {
       return res.status(404).json({ error: "This till link is not active. Ask your manager for a new one.", code: "TILL_NOT_FOUND" });
     }
     const readiness = await posAccessCodesReady(till.org_id);
@@ -357,7 +382,12 @@ export async function handlePosCodeUnlock(req, res) {
   const client = clientHash(req);
   const denied = (status, error, code) => res.status(status).json({ error, code });
   try {
-    const till = await loadActiveTill(tillId);
+    const loaded = await loadActiveTill(tillId);
+    if (loaded.error) {
+      console.error("[pos-code-unlock] register lookup", loaded.error.message || loaded.error);
+      return denied(503, "Could not load this till. Try again in a moment.", "TILL_INFO_ERROR");
+    }
+    const till = loaded.till;
     if (!till) return denied(404, "This till link is not active. Ask your manager for a new one.", "TILL_NOT_FOUND");
     if ((await recentFailures("register_id", till.id)) >= POS_CODE_MAX_FAILURES_PER_TILL || (await recentFailures("client_hash", client)) >= POS_CODE_MAX_FAILURES_PER_CLIENT) {
       return denied(429, "Too many incorrect codes. Wait 15 minutes or ask your manager.", "POS_CODE_RATE_LIMITED");
