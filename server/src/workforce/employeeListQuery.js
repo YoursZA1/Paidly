@@ -112,6 +112,7 @@ function shapeEmployeeRow({
   leaveStatus,
   actorMembershipId,
   canManagePayroll,
+  canEditIdentity = false,
   pendingInvite = null,
 }) {
   const managerName =
@@ -146,7 +147,7 @@ function shapeEmployeeRow({
           }
         : null,
     },
-    { actorMembershipId, canManagePayroll }
+    { actorMembershipId, canManagePayroll, canEditIdentity }
   );
   return {
     ...profile,
@@ -363,7 +364,7 @@ export async function listEligibleManagers(orgId, { excludeId = null, managerSco
   });
 }
 
-export async function getEmployee(orgId, employeeId, { actorUserId, actorMembershipId, canViewTeam, canManagePayroll = false } = {}) {
+export async function getEmployee(orgId, employeeId, { actorUserId, actorMembershipId, canViewTeam, canManagePayroll = false, canEditIdentity = false } = {}) {
   const membership = await loadMembershipById(orgId, employeeId);
   if (!membership) {
     const err = new Error("Employee not found");
@@ -375,16 +376,18 @@ export async function getEmployee(orgId, employeeId, { actorUserId, actorMembers
     ? await loadMembershipById(orgId, membership.manager_membership_id)
     : null;
   const userIds = [membership.user_id, managerMem?.user_id].filter(Boolean);
+  const isSelf = Boolean(actorMembershipId && actorMembershipId === membership.id);
+  const seePayIdentifiers = canManagePayroll || isSelf;
+  const payrollCols = seePayIdentifiers
+    ? `${PAYROLL_LIST_COLS}, banking, tax_identifiers`
+    : canEditIdentity
+      ? `${PAYROLL_LIST_COLS}, tax_identifiers`
+      : PAYROLL_LIST_COLS;
   const [byUser, payrollRows, pendingByMembership] = await Promise.all([
     loadPeopleByUserIds(userIds),
     supabaseAdmin
       .from("payroll_profiles")
-      // Tax / banking identifiers only for payroll managers or the employee themself.
-      .select(
-        canManagePayroll || (actorMembershipId && actorMembershipId === membership.id)
-          ? `${PAYROLL_LIST_COLS}, banking, tax_identifiers`
-          : PAYROLL_LIST_COLS
-      )
+      .select(payrollCols)
       .eq("org_id", orgId)
       .eq("membership_id", membership.id)
       .maybeSingle(),
@@ -402,6 +405,7 @@ export async function getEmployee(orgId, employeeId, { actorUserId, actorMembers
     leaveStatus: "none",
     actorMembershipId,
     canManagePayroll,
+    canEditIdentity,
     pendingInvite: pendingByMembership.get(membership.id) || null,
   });
   assertOwnEmployee({ userId: actorUserId, id: actorMembershipId }, row, { canViewTeam });

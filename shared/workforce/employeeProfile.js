@@ -18,6 +18,7 @@ import {
 } from "./employeeLifecycle.js";
 import { derivePortalStatus, portalStatusLabel } from "./portalAccess.js";
 import { publicPosPinState } from "../pos/posPin.js";
+import { employeeIdNumberOf } from "../payroll/saIdNumber.js";
 
 export const COMPENSATION_FIELDS = Object.freeze([
   "base_salary",
@@ -126,7 +127,7 @@ export function resolveEmployeeEmail(parts = {}) {
  *   pendingInvite?: { status?: unknown, revoked_at?: unknown, expires_at?: unknown } | null,
  *   posAccess?: boolean,
  * }} input
- * @param {{ canManagePayroll?: boolean, actorMembershipId?: string | null }} [opts]
+ * @param {{ canManagePayroll?: boolean, canEditIdentity?: boolean, actorMembershipId?: string | null }} [opts]
  */
 export function buildEmployeeProfile(input, opts = {}) {
   const membership = input?.membership || {};
@@ -203,8 +204,12 @@ export function buildEmployeeProfile(input, opts = {}) {
   row.manager_assignment = managerAssignmentState(row);
   row.attention_reasons = employeeAttentionReasons(row);
   row.needs_attention = row.attention_reasons.length > 0;
-  return redactEmployeeCompensation(row, {
+  const shaped = redactEmployeeCompensation(row, {
     canManagePayroll: opts.canManagePayroll,
     isSelf,
   });
+  if (payroll && "tax_identifiers" in payroll && (opts.canManagePayroll || isSelf || opts.canEditIdentity)) {
+    shaped.id_number = employeeIdNumberOf(payroll);
+  }
+  return shaped;
 }

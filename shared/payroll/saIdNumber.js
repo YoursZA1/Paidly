@@ -49,3 +49,16 @@ export function employeeIdNumberOf(profile) {
   }
   return "";
 }
+
+/**
+ * Keep every other tax identifier and set or clear the ID number the payslip PDF uses.
+ * @param {Record<string, unknown> | null | undefined} existing
+ * @param {unknown} idNumber
+ */
+export function taxIdentifiersWithIdNumber(existing, idNumber) {
+  const tax = existing && typeof existing === "object" ? { ...existing } : {};
+  const value = String(idNumber ?? "").trim();
+  if (value) tax.id_number = value;
+  else delete tax.id_number;
+  return tax;
+}

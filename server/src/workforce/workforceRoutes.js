@@ -127,6 +127,7 @@ export async function handleWorkforceEmployees(req, res) {
         actorMembershipId: gate.membership.id,
         canViewTeam,
         canManagePayroll: membershipHasPermission(gate.membership, PERMISSIONS.MANAGE_PAYROLL),
+        canEditIdentity: membershipHasPermission(gate.membership, PERMISSIONS.MANAGE_EMPLOYEES),
       };
       const includeProfile =
         String(req.query?.include || "").toLowerCase() === "profile" ||

@@ -37,6 +37,7 @@ import {
 import { clearPosPinPatch } from "../pos/posPinCrypto.js";
 import { PORTAL_STATUS, derivePortalStatus } from "../../../shared/workforce/portalAccess.js";
 import { employeePortalPath } from "../../../shared/workforce/portalSlug.js";
+import { taxIdentifiersWithIdNumber } from "../../../shared/payroll/saIdNumber.js";
 
 export {
   getEmployee,
@@ -428,6 +429,36 @@ export async function createEmployee(orgId, actor, payload = {}) {
   };
 }
 
+async function saveEmployeeIdNumber(orgId, membershipId, raw) {
+  const { data: profile, error } = await supabaseAdmin
+    .from("payroll_profiles")
+    .select("id, tax_identifiers")
+    .eq("org_id", orgId)
+    .eq("membership_id", membershipId)
+    .maybeSingle();
+  if (error) throw error;
+  let profileId = profile?.id || null;
+  let tax = profile?.tax_identifiers;
+  if (!profileId) {
+    const { getOrCreateProfileForEmployee } = await import("../leave/leaveService.js");
+    const created = await getOrCreateProfileForEmployee(orgId, membershipId);
+    profileId = created?.id || null;
+    tax = created?.tax_identifiers;
+  }
+  if (!profileId) {
+    const err = new Error("Could not save the ID number.");
+    err.status = 400;
+    throw err;
+  }
+  const next = taxIdentifiersWithIdNumber(tax, raw);
+  const updated = await supabaseAdmin
+    .from("payroll_profiles")
+    .update({ tax_identifiers: next })
+    .eq("id", profileId)
+    .eq("org_id", orgId);
+  if (updated.error) throw updated.error;
+}
+
 export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
   const id = parseUuid(employeeId);
   if (!id) {
@@ -503,6 +534,11 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
     }
   }
 
+  const wroteIdNumber = safe.id_number !== undefined || safe.idNumber !== undefined;
+  if (wroteIdNumber) {
+    await saveEmployeeIdNumber(orgId, existing.id, safe.id_number ?? safe.idNumber);
+  }
+
   if (existing.user_id && (safe.phone !== undefined || safe.full_name !== undefined || safe.fullName !== undefined)) {
     const profilePatch = {};
     if (safe.phone !== undefined) profilePatch.phone = String(safe.phone || "").trim() || null;
@@ -544,7 +580,7 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
     employeeId: id,
     eventType: WORKFORCE_EVENT_TYPES.EMPLOYEE_UPDATED,
     actorId: actor.userId,
-    payload: { fields: Object.keys(patch) },
+    payload: { fields: [...Object.keys(patch), ...(wroteIdNumber ? ["id_number"] : [])] },
     idempotencyKey: `membership:${id}:updated:${Date.now()}`,
   });
 
@@ -553,6 +589,7 @@ export async function updateEmployee(orgId, actor, employeeId, payload = {}) {
     actorMembershipId: actor.id,
     canViewTeam: true,
     canManagePayroll: membershipHasPermission(actor, PERMISSIONS.MANAGE_PAYROLL),
+    canEditIdentity: true,
   });
   if (lifecycleAction === "deactivate") {
     employee.reports_needing_reassignment = await countDirectReports(orgId, id);

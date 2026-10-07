@@ -19,6 +19,7 @@ import {
   isOwnPayslipRow,
   redactEmployeeCompensation,
 } from "../../shared/workforce/employeeProfile.js";
+import { taxIdentifiersWithIdNumber } from "../../shared/payroll/saIdNumber.js";
 import {
   buildCompanyAccessContext,
   canCreateDocumentType,
@@ -262,6 +263,32 @@ describe("employee compensation redaction", () => {
     expect(profile.department).toBe("Ops");
     expect(profile.base_salary).toBeUndefined();
     expect(profile.compensation_redacted).toBe(true);
+    expect(profile.id_number).toBeUndefined();
+  });
+
+  it("keeps the ID number on personal details and on the payslip tax record", () => {
+    const membershipId = "11111111-1111-4111-8111-111111111111";
+    const payrollProfile = {
+      id: "22222222-2222-4222-8222-222222222222",
+      tax_identifiers: taxIdentifiersWithIdNumber({ tax_number: "0123456789" }, "8001015009087"),
+      base_salary: 15000,
+    };
+    expect(payrollProfile.tax_identifiers).toEqual({ tax_number: "0123456789", id_number: "8001015009087" });
+    expect(taxIdentifiersWithIdNumber(payrollProfile.tax_identifiers, "").tax_number).toBe("0123456789");
+
+    const hr = buildEmployeeProfile(
+      { membership: { id: membershipId }, payrollProfile },
+      { canManagePayroll: false, canEditIdentity: true, actorMembershipId: "33333333-3333-4333-8333-333333333333" }
+    );
+    expect(hr.id_number).toBe("8001015009087");
+    expect(hr.tax_identifiers).toBeUndefined();
+    expect(hr.base_salary).toBeUndefined();
+
+    const stranger = buildEmployeeProfile(
+      { membership: { id: membershipId }, payrollProfile },
+      { canManagePayroll: false, actorMembershipId: "33333333-3333-4333-8333-333333333333" }
+    );
+    expect(stranger.id_number).toBeUndefined();
   });
 });
 

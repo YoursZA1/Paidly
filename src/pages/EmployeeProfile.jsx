@@ -52,6 +52,7 @@ export default function EmployeeProfile() {
   const [savingManager, setSavingManager] = useState(false);
   const [savingEmployment, setSavingEmployment] = useState(false);
   const [savingPersonal, setSavingPersonal] = useState(false);
+  const [identityLoaded, setIdentityLoaded] = useState(false);
   const [savingPayroll, setSavingPayroll] = useState(false);
   const [preview, setPreview] = useState(null);
   const [payType, setPayType] = useState("monthly_salary");
@@ -85,12 +86,13 @@ export default function EmployeeProfile() {
     setFullName(next.full_name || next.label || "");
     setPhone(next.phone || "");
     setDateOfBirth(next.date_of_birth || "");
-    if (next.tax_identifiers) {
+    if (next.tax_identifiers || Object.prototype.hasOwnProperty.call(next, "id_number")) {
       setTaxIds({
-        tax_number: next.tax_identifiers.tax_number || "",
-        id_number: next.tax_identifiers.id_number || "",
-        uif_number: next.tax_identifiers.uif_number || "",
+        tax_number: next.tax_identifiers?.tax_number || "",
+        id_number: next.tax_identifiers?.id_number || next.id_number || "",
+        uif_number: next.tax_identifiers?.uif_number || "",
       });
+      setIdentityLoaded(true);
     }
     if (next.banking) {
       setBanking({
@@ -201,6 +203,7 @@ export default function EmployeeProfile() {
         full_name: fullName.trim() || null,
         phone: phone.trim() || null,
         date_of_birth: dateOfBirth || null,
+        ...(identityLoaded ? { id_number: taxIds.id_number.trim() || null } : {}),
       });
       syncEmployee(updated);
       toast({ title: "Personal details updated" });
@@ -378,6 +381,18 @@ export default function EmployeeProfile() {
                           <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
                           <p className="text-xs text-muted-foreground">Used for People calendar birthday reminders.</p>
                         </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="employee-id-number">ID number</Label>
+                          <Input
+                            id="employee-id-number"
+                            value={taxIds.id_number}
+                            autoComplete="off"
+                            onChange={(e) => setTaxIds((current) => ({ ...current, id_number: e.target.value }))}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Opens this employee&apos;s payslip PDF. Payslips issued after you save print it masked.
+                          </p>
+                        </div>
                       </div>
                       <p>Email: {employee.email || employee.invited_email || "—"}</p>
                       <p>Employee number: {employee.employee_number || "—"}</p>
@@ -391,6 +406,7 @@ export default function EmployeeProfile() {
                       <p>Email: {employee.email || employee.invited_email || "—"}</p>
                       <p>Phone: {employee.phone || "—"}</p>
                       <p>Date of birth: {employee.date_of_birth || "—"}</p>
+                      <p>ID number: {employee.id_number || employee.tax_identifiers?.id_number || "—"}</p>
                       <p>Employee number: {employee.employee_number || "—"}</p>
                     </>
                   )}
