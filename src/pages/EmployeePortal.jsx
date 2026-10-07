@@ -237,13 +237,12 @@ export default function EmployeePortal() {
 
   if (!authUserId || accessToken) {
     return (
-      <Shell logoUrl={branding.logo_url} title={companyName} subtitle="Employee details">
-        <EmployeeAccessPass
-          slug={slug}
-          companyName={companyName}
-          passwordForm={<SignInForm companyName={companyName} />}
-        />
-      </Shell>
+      <EmployeeAccessPass
+        slug={slug}
+        companyName={companyName}
+        logoUrl={branding.logo_url}
+        passwordForm={<SignInForm companyName={companyName} />}
+      />
     );
   }
 

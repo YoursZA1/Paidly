@@ -123,7 +123,13 @@ async function membershipsForEmail(orgId, email) {
   return [...merged.values()];
 }
 
-function publicDetails(bundle, { companyName, expiresAt, email }) {
+function allowanceTotal(allowances) {
+  if (!Array.isArray(allowances)) return null;
+  const total = allowances.reduce((sum, row) => sum + (Number(row?.amount) || 0), 0);
+  return Number.isFinite(total) ? total : null;
+}
+
+function publicDetails(bundle, { companyName, expiresAt, email, avatarUrl }) {
   const employee = bundle?.employee || {};
   return {
     ok: true,
@@ -132,10 +138,13 @@ function publicDetails(bundle, { companyName, expiresAt, email }) {
     employee: {
       name: employee.full_name || employee.invited_name || employee.name || "Employee",
       email: email || employee.email || null,
+      phone: employee.phone || null,
+      avatar_url: avatarUrl || null,
       employee_number: employee.employee_number || null,
       job_title: employee.job_title || null,
       department: employee.department || null,
       employment_status: employee.employment_status || null,
+      employment_start_date: employee.employment_start_date || null,
     },
     payslips: (bundle?.payslips || []).map((row) => ({
       id: row.id,
@@ -143,8 +152,12 @@ function publicDetails(bundle, { companyName, expiresAt, email }) {
       pay_period_start: row.pay_period_start,
       pay_period_end: row.pay_period_end,
       pay_date: row.pay_date,
-      net_pay: row.net_pay ?? null,
+      basic_salary: row.basic_salary ?? null,
+      allowances: allowanceTotal(row.allowances),
       gross_pay: row.gross_pay ?? null,
+      tax_deduction: row.tax_deduction ?? null,
+      total_deductions: row.total_deductions ?? null,
+      net_pay: row.net_pay ?? null,
       status: row.status || null,
     })),
     leave_balances: (bundle?.leave_balances || []).map((row) => ({
@@ -153,6 +166,7 @@ function publicDetails(bundle, { companyName, expiresAt, email }) {
       available: row.available ?? null,
       used: row.used ?? null,
       pending: row.pending ?? null,
+      entitled: row.entitled ?? null,
     })),
     leave_requests: (bundle?.leave_requests || []).map((row) => ({
       id: row.id,
@@ -209,10 +223,18 @@ async function sessionPayload(grant) {
   } catch (err) {
     console.error("[employee-access] profile", err?.message || err);
   }
+  let avatarUrl = null;
+  const userId = bundle?.employee?.user_id || row.user_id;
+  if (userId) {
+    const { data: person } = await supabaseAdmin.from("profiles").select("avatar_url, phone").eq("id", userId).maybeSingle();
+    avatarUrl = person?.avatar_url || null;
+    if (person?.phone && bundle.employee && !bundle.employee.phone) bundle.employee.phone = person.phone;
+  }
   return publicDetails(bundle, {
     companyName: orgRes.data?.name || null,
     expiresAt: grant.expires_at,
     email: grant.email,
+    avatarUrl,
   });
 }
 

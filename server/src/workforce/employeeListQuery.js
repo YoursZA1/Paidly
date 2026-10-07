@@ -419,6 +419,10 @@ function redactPayslipRow(row, canSeePay) {
       pay_date: row.pay_date,
       net_pay: row.net_pay,
       gross_pay: row.gross_pay,
+      basic_salary: row.basic_salary ?? null,
+      total_deductions: row.total_deductions ?? null,
+      tax_deduction: row.tax_deduction ?? null,
+      allowances: row.allowances ?? null,
       status,
       raw_status: row.status || null,
       public_share_token: row.public_share_token || null,
@@ -495,7 +499,7 @@ export async function getEmployeeProfile(orgId, employeeId, access, { sections }
           supabaseAdmin
             .from("payslips")
             .select(
-              "id, payslip_number, pay_period_start, pay_period_end, pay_date, net_pay, gross_pay, locked, pay_run_id, membership_id, status, public_share_token"
+              "id, payslip_number, pay_period_start, pay_period_end, pay_date, basic_salary, allowances, gross_pay, tax_deduction, total_deductions, net_pay, locked, pay_run_id, membership_id, status, public_share_token"
             )
             .eq("org_id", orgId)
             .eq("membership_id", employee.id)
