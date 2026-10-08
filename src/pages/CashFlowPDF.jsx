@@ -12,7 +12,7 @@ import {
     listAllCashFlowRecords,
     sumEventsInRange,
 } from '@/utils/cashFlowTruth';
-import { listAllPosSalesEvents } from '@/utils/cashFlowData';
+import { listAllPosSalesEvents, listPayrollCashSources } from '@/utils/cashFlowData';
 
 export default function CashFlowPDF() {
     const location = useLocation();
@@ -23,6 +23,8 @@ export default function CashFlowPDF() {
     const [invoices, setInvoices] = useState([]);
     const [payments, setPayments] = useState([]);
     const [posSales, setPosSales] = useState([]);
+    const [payslips, setPayslips] = useState([]);
+    const [payRuns, setPayRuns] = useState([]);
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -32,17 +34,20 @@ export default function CashFlowPDF() {
 
     const loadData = async () => {
         try {
-            const [expensesData, invoicesData, paymentsData, posSalesData, userData] = await Promise.all([
+            const [expensesData, invoicesData, paymentsData, posSalesData, payrollData, userData] = await Promise.all([
                 listAllCashFlowRecords(Expense, "-date"),
                 listAllCashFlowRecords(Invoice, "-created_date"),
                 listAllCashFlowRecords(Payment, "-paid_at"),
                 listAllPosSalesEvents().catch(() => []),
+                listPayrollCashSources().catch(() => ({ payRuns: [], payslips: [] })),
                 User.me()
             ]);
             setExpenses(expensesData);
             setInvoices(invoicesData);
             setPayments(paymentsData);
             setPosSales(posSalesData || []);
+            setPayRuns(payrollData?.payRuns || []);
+            setPayslips(payrollData?.payslips || []);
             setUser(userData);
         } catch (error) {
             console.error("Error loading cash flow data:", error);
@@ -51,7 +56,7 @@ export default function CashFlowPDF() {
         }
     };
 
-    const snap = buildCashFlowSnapshot({ payments, expenses, invoices, posSales, now: new Date() });
+    const snap = buildCashFlowSnapshot({ payments, expenses, invoices, posSales, payslips, payRuns, now: new Date() });
 
     const calculateMetrics = () => ({
         currentMonthIncome: snap.monthlyIncome,
@@ -85,9 +90,9 @@ export default function CashFlowPDF() {
 
     const getCategoryBreakdown = () => {
         const breakdown = {};
-        expenses.filter(isCashExpense).forEach((exp) => {
-            const category = exp.category || "other";
-            breakdown[category] = (breakdown[category] || 0) + (Number(exp.amount) || 0);
+        snap.expenseEvents.forEach((row) => {
+            const category = row.category || "other";
+            breakdown[category] = (breakdown[category] || 0) + (Number(row.amount) || 0);
         });
         return Object.entries(breakdown)
             .map(([name, value]) => ({ name, value }))

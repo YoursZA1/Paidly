@@ -4,7 +4,8 @@
  * Income  = settled invoice payments (cash in), plus paid invoices that have no payment rows,
  *            plus completed POS till sales (minus till_cash refunds).
  *            POS tax-invoice copies (`pos_sale_event_id`) are excluded — till money stays on `pos_sales_events`.
- * Expenses = recorded expenses that were not rejected.
+ * Expenses = recorded expenses that were not rejected, plus issued payroll (net pay).
+ *           Salary expenses already matched to a pay run are left out so payroll is counted once.
  * Net     = income − expenses for the same period.
  *
  * Dates are compared as calendar days so `date` / `paid_at` / `payment_date` stay consistent.
@@ -31,6 +32,7 @@ import {
   isInvoiceVoidLike,
   isInvoiceOpenReceivable,
 } from "@shared/commercial/documentStatuses.js";
+import { isPayslipIssued } from "@shared/payroll/payslipStatus.js";
 
 const SETTLED_PAYMENT_STATUS = new Set(["", "completed", "complete", "paid", "success", "successful"]);
 const EXCLUDED_PAYMENT_STATUS = new Set(["pending", "processing", "failed", "cancelled", "canceled", "refunded", "void"]);
@@ -200,6 +202,130 @@ export function collectExpenseEvents(expenses = []) {
   }));
 }
 
+function isIssuedPayRun(run) {
+  if (!run?.id || run.cancelled_at) return false;
+  const status = String(run.status || "").trim().toLowerCase();
+  if (status === "cancelled" || status === "canceled" || status === "void") return false;
+  return Boolean(run.finalized_at) || status === "paid";
+}
+
+function payrollRunAmount(run) {
+  if (run?.bank_payment_amount != null && run.bank_payment_amount !== "") {
+    return moneyAmount(run.bank_payment_amount);
+  }
+  return moneyAmount(run?.net_total);
+}
+
+function payrollRunDate(run) {
+  return run?.bank_payment_date || run?.pay_date || run?.period_end || run?.paid_at || run?.finalized_at || null;
+}
+
+function payslipEvent(slip) {
+  return {
+    id: `payroll-${slip.id}`,
+    sourceId: slip.id,
+    kind: "expense",
+    date: slip.pay_date || slip.pay_period_end || slip.finalized_at || slip.created_at || null,
+    amount: moneyAmount(slip.net_pay),
+    name: slip.employee_name ? `Payroll — ${slip.employee_name}` : "Payroll",
+    category: "salary",
+    vendor: null,
+    payroll: slip,
+  };
+}
+
+/**
+ * Issued payroll as cash out. A finalized pay run with a recorded bank amount
+ * counts once (that amount). Otherwise each issued payslip counts as net pay.
+ * A finalized run with no payslips still counts as net_total.
+ * Standalone issued payslips (no pay run) count on their pay date.
+ */
+export function collectPayrollEvents({ payslips = [], payRuns = [] } = {}) {
+  const slips = Array.isArray(payslips) ? payslips : [];
+  const runs = Array.isArray(payRuns) ? payRuns : [];
+  const slipsByRun = new Map();
+  const standalone = [];
+
+  for (const slip of slips) {
+    if (!isPayslipIssued(slip) || moneyAmount(slip.net_pay) === 0) continue;
+    if (slip.pay_run_id) {
+      const key = String(slip.pay_run_id);
+      if (!slipsByRun.has(key)) slipsByRun.set(key, []);
+      slipsByRun.get(key).push(slip);
+    } else {
+      standalone.push(slip);
+    }
+  }
+
+  const events = [];
+  const coveredRuns = new Set();
+
+  for (const run of runs) {
+    if (!isIssuedPayRun(run)) continue;
+    const key = String(run.id);
+    coveredRuns.add(key);
+    const runSlips = slipsByRun.get(key) || [];
+    const bankRecorded = run.bank_payment_amount != null && run.bank_payment_amount !== "";
+    const amount = payrollRunAmount(run);
+    if (bankRecorded) {
+      if (amount === 0) continue;
+      events.push({
+        id: `payroll-run-${run.id}`,
+        sourceId: run.id,
+        kind: "expense",
+        date: payrollRunDate(run),
+        amount,
+        name: run.period_label ? `Payroll — ${run.period_label}` : "Payroll",
+        category: "salary",
+        vendor: null,
+        payroll: run,
+      });
+      continue;
+    }
+    if (runSlips.length) {
+      events.push(...runSlips.map(payslipEvent));
+      continue;
+    }
+    if (amount === 0) continue;
+    events.push({
+      id: `payroll-run-${run.id}`,
+      sourceId: run.id,
+      kind: "expense",
+      date: payrollRunDate(run),
+      amount,
+      name: run.period_label ? `Payroll — ${run.period_label}` : "Payroll",
+      category: "salary",
+      vendor: null,
+      payroll: run,
+    });
+  }
+
+  for (const [runId, runSlips] of slipsByRun) {
+    if (coveredRuns.has(runId)) continue;
+    events.push(...runSlips.map(payslipEvent));
+  }
+  events.push(...standalone.map(payslipEvent));
+  return events;
+}
+
+export function payrollLinkedExpenseIds(payRuns = []) {
+  const ids = new Set();
+  for (const run of Array.isArray(payRuns) ? payRuns : []) {
+    if (!isIssuedPayRun(run)) continue;
+    for (const id of run.bank_payment_expense_ids || []) {
+      if (id) ids.add(String(id));
+    }
+  }
+  return ids;
+}
+
+/** Recorded expenses, minus salary lines already matched to payroll, plus issued payroll. */
+export function collectCashOutEvents({ expenses = [], payslips = [], payRuns = [] } = {}) {
+  const linked = payrollLinkedExpenseIds(payRuns);
+  const recorded = collectExpenseEvents(expenses).filter((row) => !linked.has(String(row.sourceId)));
+  return recorded.concat(collectPayrollEvents({ payslips, payRuns }));
+}
+
 export function sumEventsInRange(events, start, end) {
   return (events || [])
     .filter((row) => inDayRange(row.date, start, end))
@@ -238,9 +364,10 @@ export function getReportPeriodBounds(range = "month", now = new Date(), from, t
 /**
  * Cash-basis money totals for a period (or all time when start/end omitted).
  */
-export function buildMoneyTotals({ payments = [], expenses = [], invoices = [], posSales = [], start, end } = {}) {
+export function buildMoneyTotals({ payments = [], expenses = [], invoices = [], posSales = [], payslips = [], payRuns = [], start, end } = {}) {
   const incomeEvents = collectIncomeEvents(payments, invoices, posSales);
-  const expenseEvents = collectExpenseEvents(expenses);
+  const expenseEvents = collectCashOutEvents({ expenses, payslips, payRuns });
+  const payrollEvents = expenseEvents.filter((row) => row.payroll);
   const bounded = Boolean(start && end);
   const income = bounded
     ? sumEventsInRange(incomeEvents, start, end)
@@ -250,9 +377,13 @@ export function buildMoneyTotals({ payments = [], expenses = [], invoices = [], 
     : expenseEvents.reduce((sum, row) => sum + moneyAmount(row.amount), 0);
   const profit = income - expenseTotal;
   const marginPercent = income > 0 ? Math.round((profit / income) * 100) : 0;
+  const payroll = bounded
+    ? sumEventsInRange(payrollEvents, start, end)
+    : payrollEvents.reduce((sum, row) => sum + moneyAmount(row.amount), 0);
   return {
     income,
     expenses: expenseTotal,
+    payroll,
     profit,
     marginPercent,
     incomeEvents,
@@ -288,9 +419,9 @@ export function collectOutstandingInvoices(invoices = [], payments = []) {
     .filter((row) => row.amount > 0);
 }
 
-export function buildCashFlowSnapshot({ payments = [], expenses = [], invoices = [], posSales = [], now = new Date() } = {}) {
+export function buildCashFlowSnapshot({ payments = [], expenses = [], invoices = [], posSales = [], payslips = [], payRuns = [], now = new Date() } = {}) {
   const incomeEvents = collectIncomeEvents(payments, invoices, posSales);
-  const expenseEvents = collectExpenseEvents(expenses);
+  const expenseEvents = collectCashOutEvents({ expenses, payslips, payRuns });
   const outstanding = collectOutstandingInvoices(invoices, payments);
 
   const thisStart = startOfMonth(now);

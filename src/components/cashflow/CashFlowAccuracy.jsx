@@ -7,7 +7,8 @@ import { formatCurrency } from '@/utils/currencyCalculations';
 import { AlertCircle, TrendingUp, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react';
 import PropTypes from 'prop-types';
 
-const CashFlowAccuracy = ({ payments = [], expenses = [], invoices = [], currency = 'USD' }) => {
+const CashFlowAccuracy = ({ payments = [], expenses = [], invoices = [], payslips = [], payRuns = [], currency = 'USD' }) => {
+  const payrollSources = useMemo(() => ({ payslips, payRuns }), [payslips, payRuns]);
   const analysis = useMemo(() => {
     if (!payments && !expenses) {
       return {
@@ -21,13 +22,13 @@ const CashFlowAccuracy = ({ payments = [], expenses = [], invoices = [], currenc
 
     return {
       validation: CashFlowService.validateData(payments, expenses),
-      metrics: CashFlowService.calculateMetrics(payments, expenses, invoices),
-      trends: CashFlowService.analyzeTrends(payments, expenses, 6, invoices),
-      margins: CashFlowService.calculateMargins(payments, expenses, invoices),
-      forecast: CashFlowService.generateForecast(payments, expenses, 3, invoices),
-      monthlyData: CashFlowService.generateMonthlyCashFlow(payments, expenses, 6, invoices)
+      metrics: CashFlowService.calculateMetrics(payments, expenses, invoices, payrollSources),
+      trends: CashFlowService.analyzeTrends(payments, expenses, 6, invoices, payrollSources),
+      margins: CashFlowService.calculateMargins(payments, expenses, invoices, payrollSources),
+      forecast: CashFlowService.generateForecast(payments, expenses, 3, invoices, payrollSources),
+      monthlyData: CashFlowService.generateMonthlyCashFlow(payments, expenses, 6, invoices, [], payrollSources)
     };
-  }, [payments, expenses, invoices]);
+  }, [payments, expenses, invoices, payrollSources]);
 
   const validationAlert = !analysis.validation.isValid ? (
     <Alert className="border-red-200 bg-red-50">
@@ -348,6 +349,8 @@ CashFlowAccuracy.propTypes = {
   payments: PropTypes.arrayOf(PropTypes.object),
   expenses: PropTypes.arrayOf(PropTypes.object),
   invoices: PropTypes.arrayOf(PropTypes.object),
+  payslips: PropTypes.arrayOf(PropTypes.object),
+  payRuns: PropTypes.arrayOf(PropTypes.object),
   currency: PropTypes.string
 };
 

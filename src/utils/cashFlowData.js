@@ -53,18 +53,64 @@ export async function listAllPosSalesEvents() {
   return Array.from(byId.values());
 }
 
+const PAY_RUN_SELECT =
+  "id, period_label, period_start, period_end, pay_date, status, net_total, finalized_at, paid_at, cancelled_at, bank_payment_amount, bank_payment_date, bank_payment_expense_ids";
+const PAY_RUN_SELECT_LEAN =
+  "id, period_label, period_start, period_end, pay_date, status, net_total, finalized_at, paid_at, cancelled_at";
+const PAYSLIP_CASH_SELECT =
+  "id, pay_run_id, employee_name, payslip_number, pay_date, pay_period_end, net_pay, status, locked, finalized_at";
+
+function isMissingPayrollColumn(message) {
+  return /bank_payment_|could not find the|does not exist|schema cache/i.test(String(message || ""));
+}
+
+/** Finalized pay runs and issued payslips for the active business. Empty when payroll is not readable. */
+export async function listPayrollCashSources() {
+  if (!isSupabaseConfigured) return { payRuns: [], payslips: [] };
+  const orgId = await resolveSessionActiveOrgId();
+  if (!orgId) return { payRuns: [], payslips: [] };
+
+  let runColumns = PAY_RUN_SELECT;
+  let payRuns = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { data, error } = await supabase.from("pay_runs").select(runColumns).eq("org_id", orgId);
+    if (!error) {
+      payRuns = Array.isArray(data) ? data : [];
+      break;
+    }
+    if (attempt === 0 && runColumns === PAY_RUN_SELECT && isMissingPayrollColumn(error.message)) {
+      runColumns = PAY_RUN_SELECT_LEAN;
+      continue;
+    }
+    payRuns = [];
+    break;
+  }
+
+  const { data: slips, error: slipError } = await supabase
+    .from("payslips")
+    .select(PAYSLIP_CASH_SELECT)
+    .eq("org_id", orgId);
+  return {
+    payRuns,
+    payslips: slipError ? [] : (Array.isArray(slips) ? slips : []),
+  };
+}
+
 export async function fetchCashFlowPageData(profile) {
-  const [expenses, invoices, payments, posSales] = await Promise.all([
+  const [expenses, invoices, payments, posSales, payroll] = await Promise.all([
     listAllCashFlowRecords(Expense, "-date"),
     listAllCashFlowRecords(Invoice, "-created_date"),
     listAllCashFlowRecords(Payment, "-paid_at"),
     listAllPosSalesEvents().catch(() => []),
+    listPayrollCashSources().catch(() => ({ payRuns: [], payslips: [] })),
   ]);
   return {
     expenses: expenses || [],
     invoices: invoices || [],
     payments: payments || [],
     posSales: posSales || [],
+    payRuns: payroll?.payRuns || [],
+    payslips: payroll?.payslips || [],
     user: profile || null,
   };
 }

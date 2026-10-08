@@ -5,6 +5,7 @@ import {
   buildCashLedger,
   buildMoneyTotals,
   collectIncomeEvents,
+  collectPayrollEvents,
   ledgerRowMatchesFilters,
   getReportPeriodBounds,
   inDayRange,
@@ -175,6 +176,39 @@ describe("cashFlowTruth", () => {
     expect(rows.filter((row) => ledgerRowMatchesFilters(row, { category: "office" }))).toHaveLength(1);
     expect(rows.filter((row) => ledgerRowMatchesFilters(row, { amountRange: "5000+" }))).toHaveLength(1);
     expect(rows.filter((row) => ledgerRowMatchesFilters(row, { dateFrom: "2026-10-01", dateTo: "2026-10-08" }))).toHaveLength(2);
+    const standing = buildMoneyTotals({
+      payments: [{ id: "p1", amount: 13200, status: "completed", paid_at: "2026-10-08" }],
+      expenses: [
+        { id: "e1", amount: 120, date: "2026-10-08", category: "office" },
+        { id: "e-salary", amount: 8000, date: "2026-10-25", category: "salary" },
+      ],
+      payslips: [
+        { id: "s1", pay_run_id: "run-1", employee_name: "A", net_pay: 7000, pay_date: "2026-10-25", status: "draft", locked: true },
+        { id: "s-draft", employee_name: "B", net_pay: 9000, pay_date: "2026-10-25", status: "draft", locked: false },
+      ],
+      payRuns: [{
+        id: "run-1",
+        period_label: "October 2026",
+        pay_date: "2026-10-25",
+        status: "paid",
+        finalized_at: "2026-10-25T08:00:00Z",
+        net_total: 7000,
+        bank_payment_amount: 7000,
+        bank_payment_expense_ids: ["e-salary"],
+      }],
+      start: new Date("2026-10-01T00:00:00"),
+      end: new Date("2026-10-31T00:00:00"),
+    });
+    expect(standing.payroll).toBe(7000);
+    expect(standing.expenses).toBe(7120);
+    expect(standing.profit).toBe(6080);
+    expect(collectPayrollEvents({
+      payslips: [{ id: "s2", employee_name: "A", net_pay: 5000, pay_date: "2026-10-25", status: "published" }],
+    })[0].name).toBe("Payroll — A");
+    expect(collectPayrollEvents({
+      payslips: [{ id: "s3", employee_name: "B", net_pay: 9000, pay_date: "2026-10-25", status: "draft", locked: false }],
+    })).toHaveLength(0);
+
     expect(collectIncomeEvents(
       [{ id: "p1", invoice_id: "inv-1", amount: 10, status: "completed", reference: "83ce79ba-a98d-42d7-a8e2-ca399c450bb8", paid_at: "2026-10-08" }],
       [{ id: "inv-1", client_name: "ABC Trading", invoice_number: "INV-1002", status: "paid" }]

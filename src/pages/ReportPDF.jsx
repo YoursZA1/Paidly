@@ -1,38 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Invoice, Expense, Payroll, Payment, User, Client } from '@/api/entities';
+import { Invoice, Expense, Payment, User, Client } from '@/api/entities';
 import { formatCurrency } from '../components/CurrencySelector';
 import { format, parseISO, isValid } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Printer, FileSpreadsheet } from 'lucide-react';
 import { DocumentPageSkeleton } from '../components/shared/PageSkeleton';
 import {
-    collectExpenseEvents,
+    collectCashOutEvents,
     collectIncomeEvents,
-    expenseOccurredAt,
     getReportPeriodBounds,
     inDayRange,
-    isCashExpense,
     listAllCashFlowRecords,
     moneyAmount,
     toDayKey,
 } from '@/utils/cashFlowTruth';
 import { invoiceStatusesMatch, isInvoicePaidLike } from '@shared/commercial/documentStatuses.js';
-import { listAllPosSalesEvents } from '@/utils/cashFlowData';
+import { listAllPosSalesEvents, listPayrollCashSources } from '@/utils/cashFlowData';
 
 function eventDate(value) {
     const key = toDayKey(value);
     if (!key) return null;
     const parsed = parseISO(`${key}T00:00:00`);
     return isValid(parsed) ? parsed : null;
-}
-
-function isCashPayroll(pay) {
-    const amount = moneyAmount(pay?.net_pay ?? pay?.amount);
-    if (amount <= 0) return false;
-    const status = String(pay?.status || '').trim().toLowerCase();
-    if (['draft', 'cancelled', 'canceled', 'void'].includes(status)) return false;
-    return true;
 }
 
 export default function ReportPDF() {
@@ -71,7 +61,7 @@ export default function ReportPDF() {
                 listAllCashFlowRecords(Payment, '-paid_at'),
                 User.me(),
                 listAllCashFlowRecords(Client, '-created_date'),
-                listAllCashFlowRecords(Payroll, '-pay_date'),
+                listPayrollCashSources(),
                 listAllPosSalesEvents(),
             ]);
 
@@ -80,7 +70,9 @@ export default function ReportPDF() {
             const payments = payrollResult[2].status === 'fulfilled' ? payrollResult[2].value || [] : [];
             const userData = payrollResult[3].status === 'fulfilled' ? payrollResult[3].value : null;
             const clients = payrollResult[4].status === 'fulfilled' ? payrollResult[4].value || [] : [];
-            const payrolls = payrollResult[5].status === 'fulfilled' ? payrollResult[5].value || [] : [];
+            const payrollSources = payrollResult[5].status === 'fulfilled' ? payrollResult[5].value || {} : {};
+            const payslips = payrollSources.payslips || [];
+            const payRuns = payrollSources.payRuns || [];
             const posSales = payrollResult[6].status === 'fulfilled' ? payrollResult[6].value || [] : [];
 
             if (payrollResult[0].status === 'rejected' || payrollResult[1].status === 'rejected') {
@@ -147,39 +139,23 @@ export default function ReportPDF() {
                 }
             }
 
-            for (const exp of expenses) {
-                if (!isCashExpense(exp)) continue;
-                if (categoryParam && exp.category !== categoryParam) continue;
-                if (vendorParam && exp.vendor !== vendorParam) continue;
-                const occurred = expenseOccurredAt(exp);
-                if (!inDayRange(occurred, start, end)) continue;
-                const date = eventDate(occurred);
+            for (const row of collectCashOutEvents({ expenses, payslips, payRuns })) {
+                if (categoryParam && row.category !== categoryParam) continue;
+                if (vendorParam && row.vendor !== vendorParam && row.expense?.vendor !== vendorParam) continue;
+                if (!inDayRange(row.date, start, end)) continue;
+                const date = eventDate(row.date);
                 if (!date) continue;
+                const amount = moneyAmount(row.amount);
                 allTxns.push({
                     date,
-                    type: 'EXPENSE',
-                    reference: exp.expense_number || '-',
-                    description: `${exp.vendor ? exp.vendor + ' - ' : ''}${exp.category || exp.description || 'Expense'}`,
-                    credit: 0,
-                    debit: moneyAmount(exp.amount),
+                    type: row.payroll ? 'PAYROLL' : 'EXPENSE',
+                    reference: row.payroll?.payslip_number || row.expense?.expense_number || '-',
+                    description: row.payroll
+                        ? row.name
+                        : `${row.vendor ? row.vendor + ' - ' : ''}${row.category || row.name || 'Expense'}`,
+                    credit: amount < 0 ? -amount : 0,
+                    debit: amount > 0 ? amount : 0,
                     status: 'paid',
-                });
-            }
-
-            for (const pay of payrolls) {
-                if (!isCashPayroll(pay)) continue;
-                const occurred = pay.pay_date || pay.created_date || pay.created_at;
-                if (!inDayRange(occurred, start, end)) continue;
-                const date = eventDate(occurred);
-                if (!date) continue;
-                allTxns.push({
-                    date,
-                    type: 'PAYROLL',
-                    reference: pay.payslip_number || '-',
-                    description: `Salary - ${pay.employee_name || 'Employee'}`,
-                    credit: 0,
-                    debit: moneyAmount(pay.net_pay ?? pay.amount),
-                    status: pay.status,
                 });
             }
 
@@ -189,7 +165,7 @@ export default function ReportPDF() {
                 ? { profit: 0 }
                 : {
                     profit: collectIncomeEvents(payments, invoices, posSales)
-                        .concat(collectExpenseEvents(expenses).map((row) => ({ ...row, amount: -moneyAmount(row.amount) })))
+                        .concat(collectCashOutEvents({ expenses, payslips, payRuns }).map((row) => ({ ...row, amount: -moneyAmount(row.amount) })))
                         .filter((row) => {
                             const key = toDayKey(row.date);
                             const startKey = toDayKey(start);
@@ -197,16 +173,7 @@ export default function ReportPDF() {
                         })
                         .reduce((sum, row) => sum + moneyAmount(row.amount), 0),
                 };
-            // Payroll before the period also affects opening cash.
-            const openingPayroll = payrolls
-                .filter(isCashPayroll)
-                .filter((pay) => {
-                    const key = toDayKey(pay.pay_date || pay.created_date || pay.created_at);
-                    const startKey = toDayKey(start);
-                    return key && startKey && key < startKey;
-                })
-                .reduce((sum, pay) => sum + moneyAmount(pay.net_pay ?? pay.amount), 0);
-            const openingBalance = range === 'all' ? 0 : openingTotals.profit - openingPayroll;
+            const openingBalance = range === 'all' ? 0 : openingTotals.profit;
 
             let runningBalance = openingBalance;
             const processedTxns = allTxns.map((txn) => {

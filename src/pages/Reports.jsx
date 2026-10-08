@@ -85,6 +85,8 @@ export default function Reports() {
   const expenses = storeExpenses ?? data?.expenses ?? [];
   const payments = data?.payments ?? storePayments ?? [];
   const posSales = data?.posSales ?? [];
+  const payRuns = data?.payRuns ?? [];
+  const payslips = data?.payslips ?? [];
   const user = data?.user ?? profile ?? storeUser ?? null;
 
   const openReport = (params) => {
@@ -99,16 +101,16 @@ export default function Reports() {
   const quarterBounds = getReportPeriodBounds('quarter', now);
 
   const monthTotals = useMemo(
-    () => buildMoneyTotals({ payments, expenses, invoices, posSales, ...monthBounds }),
-    [payments, expenses, invoices, posSales, monthBounds.start, monthBounds.end]
+    () => buildMoneyTotals({ payments, expenses, invoices, posSales, payslips, payRuns, ...monthBounds }),
+    [payments, expenses, invoices, posSales, payslips, payRuns, monthBounds.start, monthBounds.end]
   );
   const quarterTotals = useMemo(
-    () => buildMoneyTotals({ payments, expenses, invoices, posSales, ...quarterBounds }),
-    [payments, expenses, invoices, posSales, quarterBounds.start, quarterBounds.end]
+    () => buildMoneyTotals({ payments, expenses, invoices, posSales, payslips, payRuns, ...quarterBounds }),
+    [payments, expenses, invoices, posSales, payslips, payRuns, quarterBounds.start, quarterBounds.end]
   );
   const allTotals = useMemo(
-    () => buildMoneyTotals({ payments, expenses, invoices, posSales }),
-    [payments, expenses, invoices, posSales]
+    () => buildMoneyTotals({ payments, expenses, invoices, posSales, payslips, payRuns }),
+    [payments, expenses, invoices, posSales, payslips, payRuns]
   );
 
   const posMonth = useMemo(
@@ -132,16 +134,19 @@ export default function Reports() {
 
   const revenueAll = allTotals.income;
   const expensesAll = allTotals.expenses;
+  const payrollAll = allTotals.payroll;
   const profitAll = allTotals.profit;
   const marginPercentAll = allTotals.marginPercent;
 
   const revenueMonth = monthTotals.income;
   const expensesMonth = monthTotals.expenses;
+  const payrollMonth = monthTotals.payroll;
   const profitMonth = monthTotals.profit;
   const marginPercentMonth = monthTotals.marginPercent;
 
   const revenueQuarter = quarterTotals.income;
   const expensesQuarter = quarterTotals.expenses;
+  const payrollQuarter = quarterTotals.payroll;
   const profitQuarter = quarterTotals.profit;
   const marginPercentQuarter = quarterTotals.marginPercent;
 
@@ -172,12 +177,12 @@ export default function Reports() {
       setConsolidatedFallbackUrl(null);
     }
     const rows = [
-      { period: 'This month', revenue: revenueMonth, expenses: expensesMonth, profit: profitMonth, margin_percent: marginPercentMonth },
-      { period: 'This quarter', revenue: revenueQuarter, expenses: expensesQuarter, profit: profitQuarter, margin_percent: marginPercentQuarter },
-      { period: 'All time', revenue: revenueAll, expenses: expensesAll, profit: profitAll, margin_percent: marginPercentAll },
+      { period: 'This month', revenue: revenueMonth, expenses: expensesMonth, payroll: payrollMonth, profit: profitMonth, margin_percent: marginPercentMonth },
+      { period: 'This quarter', revenue: revenueQuarter, expenses: expensesQuarter, payroll: payrollQuarter, profit: profitQuarter, margin_percent: marginPercentQuarter },
+      { period: 'All time', revenue: revenueAll, expenses: expensesAll, payroll: payrollAll, profit: profitAll, margin_percent: marginPercentAll },
     ];
     const filename = `consolidated_report_${format(now, 'yyyy-MM-dd')}.csv`;
-    const { url } = exportToCsv(rows, filename, ['period', 'revenue', 'expenses', 'profit', 'margin_percent']);
+    const { url } = exportToCsv(rows, filename, ['period', 'revenue', 'expenses', 'payroll', 'profit', 'margin_percent']);
     if (url) {
       setConsolidatedFallbackUrl(url);
       setConsolidatedFallbackName(filename);
@@ -327,7 +332,7 @@ export default function Reports() {
                   Consolidated analytics
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Unified revenue, expenses, profit and margin across periods. Cash basis: settled invoice payments and till sales in, recorded expenses out. Optional POS tax-invoice copies are not counted twice.
+                  Unified revenue, expenses, profit and margin across periods. Cash basis: settled payments and till sales in. Recorded expenses and issued payroll (net pay) out. Payroll already matched to a salary expense is counted once.
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -358,6 +363,8 @@ export default function Reports() {
                     <span className="font-semibold tabular-nums">{formatCurrency(revenueMonth, userCurrency)}</span>
                     <span className="text-muted-foreground">Expenses</span>
                     <span className="font-semibold tabular-nums">{formatCurrency(expensesMonth, userCurrency)}</span>
+                    <span className="text-muted-foreground">Payroll included</span>
+                    <span className="font-semibold tabular-nums">{formatCurrency(payrollMonth, userCurrency)}</span>
                     <span className="text-muted-foreground">Profit</span>
                     <span className="font-semibold tabular-nums">{formatCurrency(profitMonth, userCurrency)}</span>
                     <span className="text-muted-foreground">Margin</span>
@@ -371,6 +378,8 @@ export default function Reports() {
                     <span className="font-semibold tabular-nums">{formatCurrency(revenueQuarter, userCurrency)}</span>
                     <span className="text-muted-foreground">Expenses</span>
                     <span className="font-semibold tabular-nums">{formatCurrency(expensesQuarter, userCurrency)}</span>
+                    <span className="text-muted-foreground">Payroll included</span>
+                    <span className="font-semibold tabular-nums">{formatCurrency(payrollQuarter, userCurrency)}</span>
                     <span className="text-muted-foreground">Profit</span>
                     <span className="font-semibold tabular-nums">{formatCurrency(profitQuarter, userCurrency)}</span>
                     <span className="text-muted-foreground">Margin</span>
@@ -384,6 +393,8 @@ export default function Reports() {
                     <span className="font-semibold tabular-nums">{formatCurrency(revenueAll, userCurrency)}</span>
                     <span className="text-muted-foreground">Expenses</span>
                     <span className="font-semibold tabular-nums">{formatCurrency(expensesAll, userCurrency)}</span>
+                    <span className="text-muted-foreground">Payroll included</span>
+                    <span className="font-semibold tabular-nums">{formatCurrency(payrollAll, userCurrency)}</span>
                     <span className="text-muted-foreground">Profit</span>
                     <span className="font-semibold tabular-nums">{formatCurrency(profitAll, userCurrency)}</span>
                     <span className="text-muted-foreground">Margin</span>

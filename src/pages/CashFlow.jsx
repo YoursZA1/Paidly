@@ -112,6 +112,8 @@ export default function CashFlowPage() {
     const payments = data?.payments ?? storePayments ?? [];
     const invoices = data?.invoices ?? storeInvoices ?? [];
     const posSales = data?.posSales ?? [];
+    const payRuns = data?.payRuns ?? [];
+    const payslips = data?.payslips ?? [];
     const user = data?.user ?? storeUser ?? null;
 
     useEffect(() => {
@@ -249,9 +251,11 @@ export default function CashFlowPage() {
                 expenses: storeExpenses || [],
                 invoices,
                 posSales,
+                payslips,
+                payRuns,
                 now: snapshotNow,
             }),
-        [payments, storeExpenses, invoices, posSales, snapshotNow]
+        [payments, storeExpenses, invoices, posSales, payslips, payRuns, snapshotNow]
     );
 
     const {
@@ -389,10 +393,21 @@ export default function CashFlowPage() {
       return rows.filter((row) => ledgerRowMatchesFilters(row, expenseFilters));
     }, [incomeEvents, expenseEvents, outstanding, kpiFilter, expenseFilters]);
 
-    const moneyOutExpenses = useMemo(
-      () => applyExpenseFilters(expenseEvents.map((row) => row.expense).filter(Boolean), expenseFilters),
-      [expenseEvents, expenseFilters]
-    );
+    const moneyOutExpenses = useMemo(() => {
+      const recorded = applyExpenseFilters(expenseEvents.map((row) => row.expense).filter(Boolean), expenseFilters);
+      const payrollRows = expenseEvents
+        .filter((row) => row.payroll && ledgerRowMatchesFilters(row, expenseFilters))
+        .map((row) => ({
+          id: row.id,
+          date: row.date,
+          description: row.name,
+          category: "salary",
+          vendor: "Payroll",
+          amount: row.amount,
+          readOnly: true,
+        }));
+      return [...payrollRows, ...recorded];
+    }, [expenseEvents, expenseFilters]);
 
     const handleSaveExpense = async (expenseData) => {
         try {
@@ -731,10 +746,12 @@ export default function CashFlowPage() {
                         className="space-y-6"
                     >
                         {/* Cash Flow Accuracy & Summary */}
-                        <CashFlowAccuracy 
+                            <CashFlowAccuracy 
                             payments={payments}
                             expenses={storeExpenses || []}
                             invoices={invoices}
+                            payslips={payslips}
+                            payRuns={payRuns}
                             currency={userCurrency}
                         />
 

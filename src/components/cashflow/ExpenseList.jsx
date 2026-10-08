@@ -105,12 +105,18 @@ const ExpenseRow = React.memo(function ExpenseRow({
                             <div className="w-px h-4 bg-border mx-1" />
                         </>
                     )}
+                    {expense.readOnly ? (
+                        <span className="text-xs text-muted-foreground">Payroll</span>
+                    ) : (
+                        <>
                     <Button variant="ghost" size="icon" onClick={() => onEdit(expense)}>
                         <Edit className="w-4 h-4" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => setDeleteExpenseId(expense.id)}>
                         <Trash2 className="w-4 h-4 text-red-600" />
                     </Button>
+                        </>
+                    )}
                 </div>
             </TableCell>
         </TableRow>
@@ -288,12 +294,18 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
                                                             </Button>
                                                         </>
                                                     )}
+                                                    {expense.readOnly ? (
+                                                        <span className="text-xs text-muted-foreground">Payroll</span>
+                                                    ) : (
+                                                        <>
                                                     <Button variant="ghost" size="icon" onClick={() => onEdit(expense)}>
                                                         <Edit className="w-4 h-4" />
                                                     </Button>
                                                     <Button variant="ghost" size="icon" onClick={() => setDeleteExpenseId(expense.id)}>
                                                         <Trash2 className="w-4 h-4 text-red-600" />
                                                     </Button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </div>
                                         </CardContent>

@@ -27,7 +27,7 @@ import {
   listAllCashFlowRecords,
   toDayKey,
 } from '@/utils/cashFlowTruth';
-import { listAllPosSalesEvents } from '@/utils/cashFlowData';
+import { listAllPosSalesEvents, listPayrollCashSources } from '@/utils/cashFlowData';
 import { summarizePosSales } from '@/utils/posSalesTruth';
 import PosSalesReportCard from '@/components/reports/PosSalesReportCard';
 
@@ -38,6 +38,8 @@ export default function AccountingDashboard({ user }) {
   const [expenses, setExpenses] = useState([]);
   const [payments, setPayments] = useState([]);
   const [posSales, setPosSales] = useState([]);
+  const [payslips, setPayslips] = useState([]);
+  const [payRuns, setPayRuns] = useState([]);
 
   const COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
   const userCurrency = user?.currency || 'USD';
@@ -46,16 +48,19 @@ export default function AccountingDashboard({ user }) {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const [invoiceData, expenseData, paymentData, posData] = await Promise.all([
+        const [invoiceData, expenseData, paymentData, posData, payrollData] = await Promise.all([
           listAllCashFlowRecords(Invoice, '-created_date'),
           listAllCashFlowRecords(Expense, '-date'),
           listAllCashFlowRecords(Payment, '-paid_at').catch(() => []),
           listAllPosSalesEvents().catch(() => []),
+          listPayrollCashSources().catch(() => ({ payRuns: [], payslips: [] })),
         ]);
         setInvoices(invoiceData || []);
         setExpenses(expenseData || []);
         setPayments(paymentData || []);
         setPosSales(posData || []);
+        setPayRuns(payrollData?.payRuns || []);
+        setPayslips(payrollData?.payslips || []);
       } catch (error) {
         console.error('Failed to load accounting data:', error);
       } finally {
@@ -66,8 +71,8 @@ export default function AccountingDashboard({ user }) {
   }, []);
 
   const cashSnap = useMemo(
-    () => buildCashFlowSnapshot({ payments, expenses, invoices, posSales, now: new Date() }),
-    [payments, expenses, invoices, posSales]
+    () => buildCashFlowSnapshot({ payments, expenses, invoices, posSales, payslips, payRuns, now: new Date() }),
+    [payments, expenses, invoices, posSales, payslips, payRuns]
   );
 
   const posSummary = useMemo(() => {
