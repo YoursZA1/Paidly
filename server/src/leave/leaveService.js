@@ -19,6 +19,7 @@ import {
 import { writeWorkforceAudit } from "../workforce/workforceAudit.js";
 import { isWorkforceEmployeeActive } from "../../../shared/workforce/employeeLifecycle.js";
 import { suppressForDemoOrg } from "../demo/demoMode.js";
+import { emailButtonRow } from "../../../shared/email/mailButtons.js";
 import {
   employeeLeaveNotificationPath,
   leaveNotificationPath,
@@ -660,11 +661,11 @@ async function notifyManagerOfLeaveRequest({ orgId, request, profile, leaveType,
         Duration: ${escapeHtml(String(check.workingDays))} working day(s)<br/>
         Current balance: ${escapeHtml(String(check.available))} day(s)<br/>
         Reason: ${escapeHtml(request.reason || "—")}</p>
-        <p>
-          <a href="${escapeHtml(approveUrl)}">View request</a> ·
-          <a href="${escapeHtml(approveUrl)}?action=approve">Approve</a> ·
-          <a href="${escapeHtml(approveUrl)}?action=decline">Decline</a>
-        </p>
+        ${emailButtonRow([
+          { href: approveUrl, label: "View request", variant: "primary" },
+          { href: approveUrl ? `${approveUrl}?action=approve` : "", label: "Approve", variant: "primary" },
+          { href: approveUrl ? `${approveUrl}?action=decline` : "", label: "Decline", variant: "danger" },
+        ])}
       `;
       await sendHtmlEmail(contact.email, `${employeeName} has requested leave`, html, "Paidly");
     }

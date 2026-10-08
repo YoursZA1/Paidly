@@ -27,6 +27,7 @@ import { selectPayslipIdProfile } from "../../../shared/payroll/saIdNumber.js";
 import { payslipNotificationPath } from "../../../shared/notifications/notificationTarget.js";
 import { claimPayRunForCalculate, commitPayRunCalculate } from "./payRunLockRpc.js";
 import { sendPayslipEmail, recordPayslipCreatedEvent } from "../documents/documentSendAdapter.js";
+import { payslipPortalLinks } from "../../../shared/email/payslipPortals.js";
 import { loadOutstandingAdjustmentSignals } from "../workforce/adjustmentSignals.js";
 import { throwIfMissingWorkforceColumn } from "../workforce/schemaGuard.js";
 import { isPayrollParticipationActive } from "../../../shared/workforce/employeeLifecycle.js";
@@ -1440,6 +1441,26 @@ async function securePdfForSlip(orgId, slip, { deliveryMethod, actorId = null })
   }
 }
 
+async function portalsForPayslipMail(orgId, membershipIds, origin) {
+  const ids = [...new Set((membershipIds || []).filter(Boolean))];
+  const orgRes = await supabaseAdmin.from("organizations").select("portal_slug").eq("id", orgId).maybeSingle();
+  const slug = orgRes.error && /portal_slug/i.test(orgRes.error.message || "") ? "" : orgRes.data?.portal_slug || "";
+  let members = [];
+  if (ids.length) {
+    let memberRes = await supabaseAdmin
+      .from("memberships")
+      .select("id, role, job_function, pos_register_id, pos_access_disabled_at, portal_revoked_at")
+      .eq("org_id", orgId)
+      .in("id", ids);
+    if (memberRes.error && /pos_access_disabled_at|portal_revoked_at|pos_register_id|job_function/i.test(memberRes.error.message || "")) {
+      memberRes = await supabaseAdmin.from("memberships").select("id, role").eq("org_id", orgId).in("id", ids);
+    }
+    members = memberRes.data || [];
+  }
+  const byId = new Map(members.map((row) => [row.id, row]));
+  return (membershipId) => payslipPortalLinks({ origin, portalSlug: slug, membership: byId.get(membershipId) || null });
+}
+
 export async function sendPayRunPayslips(orgId, actorId, runId, origin, options = {}) {
   const run = await getPayRun(orgId, runId);
   if (!run.finalized_at) {
@@ -1454,6 +1475,7 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
     .eq("pay_run_id", runId);
 
   const base = String(origin || "").replace(/\/$/, "") || "https://www.paidly.co.za";
+  const portalsFor = await portalsForPayslipMail(orgId, (payslips || []).map((slip) => slip.membership_id), base);
   const resend = Boolean(options.resend);
   let sent = 0;
   let skipped = 0;
@@ -1485,6 +1507,7 @@ export async function sendPayRunPayslips(orgId, actorId, runId, origin, options 
         payslipId: slip.id,
         sendAttempt,
         attachment: { filename: pdf.filename, content: pdf.content },
+        portals: portalsFor(slip.membership_id),
       });
     } catch (err) {
       failed += 1;
@@ -1605,6 +1628,7 @@ export async function sendEmployeePayslip(orgId, actorId, payslipId, origin = ""
   }
   const periodLabel = [slip.pay_period_start, slip.pay_period_end].filter(Boolean).join(" → ");
   const base = String(origin || "").replace(/\/$/, "") || "https://www.paidly.co.za";
+  const portalsFor = await portalsForPayslipMail(orgId, [slip.membership_id], base);
   // Throws PAYSLIP_ID_REQUIRED (422) before anything is sent when the employee has no valid ID number.
   const pdf = await securePdfForSlip(orgId, slip, { deliveryMethod: "email", actorId });
   await sendPayslipEmail({
@@ -1618,6 +1642,7 @@ export async function sendEmployeePayslip(orgId, actorId, payslipId, origin = ""
     orgId,
     payslipId: slip.id,
     sendAttempt: `${slip.id}:profile:${Date.now()}`,
+    portals: portalsFor(slip.membership_id),
   });
   await supabaseAdmin.from("payslips").update({ sent_to_email: to, status: "sent" }).eq("id", slip.id);
   await writePayrollAudit({

@@ -13,6 +13,7 @@ import {
   sanitizeDocumentEventMetadata,
 } from "../../../shared/documents/documentEngine.js";
 import { demoRestrictedError, suppressForDemoOrg } from "../demo/demoMode.js";
+import { emailButton, emailButtonRow } from "../../../shared/email/mailButtons.js";
 
 function escapeHtml(value) {
   return String(value || "")
@@ -22,8 +23,19 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-export function buildPayslipDeliveryEmail({ employeeName, periodLabel, payslipNumber, url, hasAttachment = false }) {
+export function buildPayslipDeliveryEmail({
+  employeeName,
+  periodLabel,
+  payslipNumber,
+  url,
+  hasAttachment = false,
+  portals = [],
+}) {
   // Never includes the ID number / PDF password — only how to open the file.
+  const actions = emailButtonRow([
+    { href: url, label: "View your payslip", variant: "primary" },
+    ...portals,
+  ]);
   return {
     subject: `Your Paidly payslip for ${periodLabel}`,
     html: `
@@ -35,7 +47,7 @@ export function buildPayslipDeliveryEmail({ employeeName, periodLabel, payslipNu
           ? "<p>The PDF is password protected for your security. Use your South African ID number to open it.</p>"
           : ""
       }
-      <p><a href="${escapeHtml(url)}">View your payslip</a> (sign-in or email verification may be required).</p>
+      ${actions || emailButton(url, "View your payslip")}
       <p>This link is for you only. Do not forward it.</p>
     `,
   };
@@ -63,6 +75,7 @@ export async function sendPayslipEmail({
   payslipId,
   sendAttempt,
   attachment = null,
+  portals = [],
   transport = sendHtmlEmail,
 } = {}) {
   if (attachment && !isEncryptedPdf(attachment.content)) {
@@ -98,6 +111,7 @@ export async function sendPayslipEmail({
     payslipNumber,
     url,
     hasAttachment: Boolean(attachment),
+    portals,
   });
   const result = attachment
     ? await transport(email, mail.subject, mail.html, "Paidly", {
