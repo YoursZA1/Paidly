@@ -492,10 +492,13 @@ describe("§17 — organogram API follows the Growth 'departments' gate", () => 
     expect(res.body).toMatchObject({ code: "UPGRADE_REQUIRED", feature: "departments" });
   });
 
-  it("expired Growth company → 403", async () => {
+  it("expired Growth company is view-only at the API", async () => {
     const { owner, org } = seedCompany();
     addSubscription({ user_id: owner, company_id: org, status: "expired", plan_slug: "growth_monthly", plan_family: "growth" });
-    expect((await organogramAs(owner, org)).statusCode).toBe(403);
+    const res = await organogramAs(owner, org);
+    expect(res.statusCode).toBe(402);
+    expect(res.body.code).toBe("SUBSCRIPTION_REQUIRED");
+    expect(res.body.error).toMatch(/view your data/i);
   });
 
   it("paid Growth company → 200 with data", async () => {

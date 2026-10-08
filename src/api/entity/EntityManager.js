@@ -7,7 +7,7 @@ import { runPostgrestWithResilience } from "@/lib/supabaseDataResilience";
 import { isAbortError, retryOnAbort } from "@/utils/retryOnAbort";
 import { readStoredAuthUser } from "@/utils/authStorage";
 import { assertRuntimeAllowsMutations } from "@/lib/runtimeMutationGuard";
-import { clientHasFeature, getClientEntitlementSnapshot } from "@/lib/clientEntitlement";
+import { assertClientBillingWritable, clientHasFeature } from "@/lib/clientEntitlement";
 import { catalogItemFeature } from "@shared/planFeatures.js";
 import { ensureUserHasOrganization as ensureUserHasOrganizationShared } from "@/api/auth/ensureUserOrganization.js";
 import {
@@ -190,9 +190,9 @@ export class EntityManager {
    */
   static assertSupabaseTableFeatureGate(supabaseTable, rowData = null) {
     if (!isSupabaseConfigured || !supabaseTable) return;
-    // Paid tables written straight to PostgREST from the browser. Server gates cover payroll,
-    // email, POS and integrations; these are the ones only the client can stop today, so an
-    // account without access (expired trial, suspended) cannot create through the read-only UI.
+    // Paid tables written straight to PostgREST from the browser. A lapsed company is already
+    // refused by assertClientBillingWritable; this gate still blocks a live plan that does not
+    // include the feature.
     const featureByTable = {
       invoices: "invoices",
       quotes: "quotes",
@@ -840,6 +840,7 @@ export class EntityManager {
     try {
       assertRuntimeAllowsMutations();
       assertSessionAuthorityAllowsMutations();
+      assertClientBillingWritable(this.entityName);
       const userId = await getAuthUserIdForWrites();
       if (!userId) {
         throw new Error('Not authenticated');
@@ -1479,6 +1480,7 @@ export class EntityManager {
     try {
       assertRuntimeAllowsMutations();
       assertSessionAuthorityAllowsMutations();
+      assertClientBillingWritable(this.entityName);
       const { data: sessionData } = await getSessionWithRetry();
       if (!sessionData?.session?.user) {
         throw new Error('Not authenticated');
@@ -1880,6 +1882,7 @@ export class EntityManager {
   async delete(id) {
     assertRuntimeAllowsMutations();
     assertSessionAuthorityAllowsMutations();
+    assertClientBillingWritable(this.entityName);
     // Simulated delete method with persistence
     if (this.data[id]) {
       delete this.data[id];

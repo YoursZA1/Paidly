@@ -127,6 +127,17 @@ function reset() {
   ];
   tables.payments = [];
   tables.payment_intents = [];
+  tables.subscriptions = [
+    {
+      id: "sub-active",
+      company_id: ORG,
+      status: "active",
+      plan: "business_monthly",
+      plan_slug: "business_monthly",
+      plan_family: "business",
+      updated_at: "2026-10-01T00:00:00.000Z",
+    },
+  ];
   tables.companies = [{ id: "co-own", org_id: ORG }, { id: "co-other", org_id: OTHER_ORG }];
   tables.clients = [{ id: "cl-other", org_id: OTHER_ORG }];
   gate.current = { ok: true, user: { id: "staff-1" }, membership: { orgId: ORG, companyRole: "admin" } };

@@ -8,8 +8,8 @@ import { MARKETING_PLANS } from "@shared/planMarketing.js";
  * Shown while a company's subscription no longer grants access.
  *
  * The account stays usable read-only: existing data, settings and billing remain reachable.
- * Creating and editing is refused by the entitlement layer (server gates + the client write gate),
- * not by hiding this banner's buttons.
+ * Creating, editing, deleting, and sending are refused until they subscribe or an admin
+ * extends the trial. The pay button on this banner stays available.
  */
 export default function BillingLockBanner({ plan, planLabel, statusLabel }) {
   const billingUrl = `${createPageUrl("Settings")}?tab=subscription`;
@@ -28,13 +28,14 @@ export default function BillingLockBanner({ plan, planLabel, statusLabel }) {
   return (
     <div
       role="status"
+      data-billing-allow
       className="mb-4 flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-4"
     >
       <Clock className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" aria-hidden />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">{heading}</p>
         <p className="text-xs text-muted-foreground sm:text-sm">
-          Your data is still here to view. Subscribe to continue creating and editing.
+          Your data is still here to view. Subscribe to create, edit, or send anything.
         </p>
       </div>
       <Button asChild size="sm" className="shrink-0 rounded-xl">

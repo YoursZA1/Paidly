@@ -36,9 +36,27 @@ export default function CreateSplitButton({
   collapsed = false,
   id = "create-invoice-btn",
   className = "",
+  viewOnly = false,
 }) {
   const navigate = useNavigate();
   const primary = OWNER_CREATE_ACTIONS[0];
+  const subscribeUrl = `${createPageUrl("Settings")}?tab=subscription`;
+
+  if (viewOnly) {
+    return (
+      <button
+        type="button"
+        id={id}
+        onClick={() => navigate(subscribeUrl)}
+        data-billing-allow
+        className={`inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/50 ${collapsed ? "h-10 rounded-xl" : "py-2.5 px-3.5 text-sm font-semibold"} ${className}`}
+        aria-label="Subscribe to continue"
+      >
+        <Plus className="size-4" strokeWidth={2.5} />
+        {collapsed ? null : "Subscribe"}
+      </button>
+    );
+  }
 
   const menuItems = OWNER_CREATE_ACTIONS.map((action) => (
     <DropdownMenuItem
@@ -118,5 +136,6 @@ export default function CreateSplitButton({
 CreateSplitButton.propTypes = {
   collapsed: PropTypes.bool,
   id: PropTypes.string,
+  viewOnly: PropTypes.bool,
   className: PropTypes.string,
 };

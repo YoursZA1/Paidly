@@ -39,7 +39,11 @@ async function denyWithoutFeature(res, gate, feature) {
     return null;
   } catch (err) {
     if (err instanceof UpgradeRequiredError) {
-      return jsonError(res, 403, "Upgrade required", { code: "UPGRADE_REQUIRED", feature: err.feature });
+      const lapsed = err.code === "SUBSCRIPTION_REQUIRED";
+      return jsonError(res, lapsed ? 402 : 403, err.message || "Upgrade required", {
+        code: lapsed ? "SUBSCRIPTION_REQUIRED" : "UPGRADE_REQUIRED",
+        feature: err.feature,
+      });
     }
     throw err;
   }

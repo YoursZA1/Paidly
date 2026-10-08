@@ -4,6 +4,7 @@
  */
 import { resolveEntitlement } from "./billing/entitlements.js";
 import { familyHasFeature, hasFeature } from "./subscriptionPlans.js";
+import { billingViewOnlyMessage } from "../../shared/billingViewOnly.js";
 
 export class UpgradeRequiredError extends Error {
   /**
@@ -57,7 +58,10 @@ export async function assertUserHasFeature(supabaseAdmin, userId, feature, opts 
   const companyId = opts.companyId != null ? String(opts.companyId).trim() || null : null;
   const ent = await resolveEntitlement(supabaseAdmin, userId, companyId);
   if (!ent.access) {
-    throw new UpgradeRequiredError(feature);
+    const err = new UpgradeRequiredError(feature);
+    err.message = billingViewOnlyMessage(ent.status);
+    err.code = "SUBSCRIPTION_REQUIRED";
+    throw err;
   }
   if (!familyHasFeature(ent.family, feature)) {
     throw new UpgradeRequiredError(feature);
@@ -74,7 +78,10 @@ export async function assertUserHasAnyFeature(supabaseAdmin, userId, features, o
   const companyId = opts.companyId != null ? String(opts.companyId).trim() || null : null;
   const ent = await resolveEntitlement(supabaseAdmin, userId, companyId);
   if (!ent.access) {
-    throw new UpgradeRequiredError(features?.[0] || "unknown");
+    const err = new UpgradeRequiredError(features?.[0] || "unknown");
+    err.message = billingViewOnlyMessage(ent.status);
+    err.code = "SUBSCRIPTION_REQUIRED";
+    throw err;
   }
   const list = Array.isArray(features) ? features : [];
   const ok = list.some((f) => familyHasFeature(ent.family, f));

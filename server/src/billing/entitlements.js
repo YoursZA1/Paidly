@@ -22,6 +22,7 @@ import {
   pickAccessSubscriptionRow,
   shouldExpireTrialRow,
 } from "../../../shared/subscriptionAccess.js";
+import { billingViewOnlyMessage } from "../../../shared/billingViewOnly.js";
 
 /**
  * One switch for every entitlement gate (server helpers here, the payroll/seat limits, and — via
@@ -265,7 +266,7 @@ async function ensureEntitlementOnRequest(req, res) {
 
 function denyBilling(req, res, ent, code, status, extra = {}) {
   const payload = {
-    error: code === "SUBSCRIPTION_REQUIRED" ? "Active subscription required" : "Plan upgrade required",
+    error: code === "SUBSCRIPTION_REQUIRED" ? billingViewOnlyMessage(ent.status) : "Plan upgrade required",
     code,
     family: ent.family,
     status: ent.status,

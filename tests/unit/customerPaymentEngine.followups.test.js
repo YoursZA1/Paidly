@@ -138,6 +138,17 @@ beforeEach(() => {
   tables.invoices = [
     { id: INVOICE, org_id: ORG, status: "sent", total_amount: 1000, currency: "ZAR", user_id: "owner-1", created_by: "owner-1" },
   ];
+  tables.subscriptions = [
+    {
+      id: "sub-active",
+      company_id: ORG,
+      status: "active",
+      plan: "business_monthly",
+      plan_slug: "business_monthly",
+      plan_family: "business",
+      updated_at: "2026-10-01T00:00:00.000Z",
+    },
+  ];
   gate.current = { ok: true, user: { id: "staff-1" }, membership: { orgId: ORG, companyRole: "admin" } };
   process.env.OZOW_SITE_CODE = "TSTSTE0001";
   process.env.OZOW_API_KEY = "key";

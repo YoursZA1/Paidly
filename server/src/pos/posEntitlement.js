@@ -2,6 +2,7 @@ import { entitlementsEnforceEnabled, requireFeature, resolveEntitlementForCompan
 import { getBillingSupabaseAdmin } from "../billing/supabaseAdmin.js";
 import { familyHasFeature } from "../subscriptionPlans.js";
 import { POS_PLAN_FEATURE } from "../../../shared/planFeatures.js";
+import { billingViewOnlyMessage } from "../../../shared/billingViewOnly.js";
 
 export { POS_PLAN_FEATURE };
 
@@ -31,7 +32,7 @@ export async function requirePosPlanForOrg(res, orgId) {
   }
   const ent = await resolveEntitlementForCompany(supabase, orgId);
   if (!ent.access) {
-    res.status(402).json({ error: "Active subscription required", code: "SUBSCRIPTION_REQUIRED" });
+    res.status(402).json({ error: billingViewOnlyMessage(ent.status), code: "SUBSCRIPTION_REQUIRED" });
     return false;
   }
   if (!familyHasFeature(ent.family, POS_PLAN_FEATURE)) {

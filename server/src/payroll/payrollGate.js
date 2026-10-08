@@ -54,10 +54,11 @@ export async function requirePayrollPermission(req, res, permission, opts = {}) 
         });
       } catch (err) {
         if (err instanceof UpgradeRequiredError) {
+          const lapsed = err.code === "SUBSCRIPTION_REQUIRED";
           return {
             ok: false,
-            response: jsonError(res, 403, "Upgrade required", {
-              code: "UPGRADE_REQUIRED",
+            response: jsonError(res, lapsed ? 402 : 403, err.message || "Upgrade required", {
+              code: lapsed ? "SUBSCRIPTION_REQUIRED" : "UPGRADE_REQUIRED",
               feature: err.feature,
             }),
           };

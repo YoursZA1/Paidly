@@ -71,6 +71,7 @@ import { isPosOnlyStaff, membershipIsPosEnabled } from "@shared/posStaffInvite.j
 import { businessTypeIncludesPos } from "@shared/businessType.js";
 import { describeEntitlementBadge, isEntitlementLapsed } from "@/lib/clientEntitlement";
 import BillingLockBanner from "@/components/subscription/BillingLockBanner";
+import BillingViewOnlyGuard from "@/components/subscription/BillingViewOnlyGuard";
 import PortalContextBanner from "@/components/workforce/PortalContextBanner";
 import { canonicalFeatureKey, hasFeatureAccess, getRequiredPlan, getUpgradeTarget } from "@/components/subscription/FeatureGate";
 import PaymentReminderService from "@/components/reminders/PaymentReminderService";
@@ -1324,17 +1325,12 @@ export default function Layout({ children, currentPageName }) {
     return <Navigate to={createPageUrl("POS")} replace />;
   }
 
-  // A lapsed subscription no longer blocks the whole app: the account stays readable and billing
-  // stays reachable, while creating and editing are refused by the entitlement layer (server gates
-  // and the client write gate). The banner explains why.
+  // A lapsed subscription stays readable. Creates, edits, deletes, sends, and payments are refused
+  // until they subscribe or an admin extends the trial. Settings and billing stay open so they can pay.
+  const billingViewOnly =
+    !demoMode.isDemo && expired && !billingBypassRole && !isAdminV2Route;
   const showBillingLockBanner =
-    !demoMode.isDemo &&
-    expired &&
-    !billingBypassRole &&
-    !isAdminV2Route &&
-    !isPosTerminal &&
-    !onSettingsRoute &&
-    !onBillingInvoicesRoute;
+    billingViewOnly && !onSettingsRoute && !onBillingInvoicesRoute;
 
   if (STANDALONE_PAGE_NAMES.includes(currentPageName) || isAdminV2Route) {
     return (
@@ -1462,7 +1458,7 @@ export default function Layout({ children, currentPageName }) {
           {/* Create CTA — solo org owners only (Invoice / Quote / Client / Product) */}
           {(!companyCtx?.companyId || isOrgOwner) && (
           <div className="mt-auto px-1 py-3">
-            <CreateSplitButton collapsed={isSidebarCollapsed} />
+            <CreateSplitButton collapsed={isSidebarCollapsed} viewOnly={billingViewOnly} />
           </div>
           )}
 
@@ -1692,6 +1688,10 @@ export default function Layout({ children, currentPageName }) {
           {showBillingLockBanner ? (
             <BillingLockBanner plan={planBadge.plan} planLabel={planBadge.planLabel} statusLabel={planBadge.statusLabel} />
           ) : null}
+          <BillingViewOnlyGuard
+            active={showBillingLockBanner}
+            className={lockListChrome ? "flex min-h-0 flex-1 flex-col" : "min-h-full w-full min-w-0"}
+          >
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname + location.search}
@@ -1707,6 +1707,7 @@ export default function Layout({ children, currentPageName }) {
               <PresenceLocationScope>{children}</PresenceLocationScope>
             </motion.div>
           </AnimatePresence>
+          </BillingViewOnlyGuard>
           </div>
 
           {/* Footer: grounded at bottom, theme-aligned, full width of content area */}

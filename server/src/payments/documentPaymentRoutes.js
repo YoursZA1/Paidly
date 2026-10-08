@@ -25,6 +25,8 @@ import { DOCUMENT_EVENT_ACTOR, DOCUMENT_EVENT_SOURCE, DOCUMENT_EVENT_TYPE } from
 import { appendDocumentEventBestEffort } from "../documents/documentEventService.js";
 import { DEMO_PAYMENT_NOTICE, demoPaymentNextAction, isDemoPaymentOutcome } from "../../../shared/demo/demoPayments.js";
 import { isDemoOrgId, logDemo } from "../demo/demoMode.js";
+import { entitlementsEnforceEnabled, resolveEntitlementForCompany } from "../billing/entitlements.js";
+import { billingViewOnlyMessage } from "../../../shared/billingViewOnly.js";
 
 function jsonError(res, status, message, extra = {}) {
   return res.status(status).json({ error: message, ...extra });
@@ -34,6 +36,15 @@ function schemaError(res, err) {
   return jsonError(res, err?.status || 500, mapPaymentIntentSchemaError(err?.message), {
     code: err?.code,
   });
+}
+
+async function refuseLapsedCompanyWrite(res, orgId) {
+  if (!entitlementsEnforceEnabled()) return false;
+  if (await isDemoOrgId(orgId)) return false;
+  const ent = await resolveEntitlementForCompany(supabaseAdmin, orgId);
+  if (ent?.access) return false;
+  jsonError(res, 402, billingViewOnlyMessage(ent?.status), { code: "SUBSCRIPTION_REQUIRED" });
+  return true;
 }
 
 function requestOrigin(req) {
@@ -133,6 +144,8 @@ export async function handleDocumentPay(req, res) {
     if (await isDemoOrgId(access.orgId)) {
       return handleDemoDocumentPay(res, access, body);
     }
+
+    if (!access.shareToken && (await refuseLapsedCompanyWrite(res, access.orgId))) return;
 
     const result = await createOrReuseDocumentPaymentIntent({
       orgId: access.orgId,
@@ -271,6 +284,7 @@ export async function handleDocumentRecord(req, res) {
         code: "PAYMENT_FORBIDDEN",
       });
     }
+    if (await refuseLapsedCompanyWrite(res, orgId)) return;
 
     const result = await recordOfflineDocumentPayment({
       orgId,
@@ -306,6 +320,7 @@ export async function handleDocumentRemind(req, res) {
   const gate = await requireOrgMember(req, res);
   if (!gate.ok) return gate.response;
   if (refusePosPassOutsideTill(gate, res)) return;
+  if (await refuseLapsedCompanyWrite(res, gate.membership.orgId)) return;
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const invoiceId = String(body.invoice_id || body.document_id || "").trim();
   if (!invoiceId) return jsonError(res, 422, "invoice_id is required");

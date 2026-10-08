@@ -3,14 +3,17 @@
  * UX / EntityManager only. Server assertUserHasFeature / requireFeature remain SoR.
  */
 import { familyForSlug, hasFeature } from "@/lib/plans";
+import { billingViewOnlyMessage } from "@shared/billingViewOnly.js";
 
-/** @type {{ ready: boolean, accessGranted: boolean | null, planSlug: string | null, planFamily: string | null, source: string }} */
+/** @type {{ ready: boolean, accessGranted: boolean | null, planSlug: string | null, planFamily: string | null, source: string, status: string | null, subscribedPlan: string | null }} */
 let snapshot = {
   ready: false,
   accessGranted: null,
   planSlug: null,
   planFamily: null,
   source: "unset",
+  status: null,
+  subscribedPlan: null,
 };
 
 /**
@@ -29,6 +32,8 @@ export function publishClientEntitlement(next) {
     planSlug: next?.planSlug != null ? String(next.planSlug).trim() || null : null,
     planFamily: next?.planFamily != null ? String(next.planFamily).trim() || null : null,
     source: String(next?.source || "subscription"),
+    status: next?.status != null ? String(next.status) : null,
+    subscribedPlan: next?.subscribedPlan != null ? String(next.subscribedPlan).trim() || null : null,
   };
 }
 
@@ -43,7 +48,34 @@ export function resetClientEntitlementForTests() {
     planSlug: null,
     planFamily: null,
     source: "unset",
+    status: null,
+    subscribedPlan: null,
   };
+}
+
+const VIEW_ONLY_WRITE_EXEMPT = new Set(["invoiceview", "invoiceviews", "invoice_views"]);
+
+/**
+ * True once the company subscription is loaded and no longer grants access
+ * (trial ended, expired, suspended, failed, cancelled, or past due after grace).
+ * An admin extending trial_ends_at, or an active payment, clears this.
+ */
+export function clientBillingViewOnly(opts = {}) {
+  return isEntitlementLapsed(opts.snapshot || snapshot);
+}
+
+/**
+ * Refuse creates, edits, and deletes while the company is view-only.
+ * Invoice view tracking is exempt so opening a document can still be recorded.
+ * @param {string | null | undefined} [entityOrTable]
+ */
+export function assertClientBillingWritable(entityOrTable) {
+  const key = String(entityOrTable || "").toLowerCase().replace(/[^a-z_]/g, "");
+  if (VIEW_ONLY_WRITE_EXEMPT.has(key)) return;
+  if (!clientBillingViewOnly()) return;
+  const err = new Error(billingViewOnlyMessage(snapshot.status));
+  err.code = "SUBSCRIPTION_REQUIRED";
+  throw err;
 }
 
 /**

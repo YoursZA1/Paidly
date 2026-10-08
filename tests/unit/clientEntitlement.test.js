@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  assertClientBillingWritable,
+  clientBillingViewOnly,
   clientHasFeature,
   deriveEntitlementFromSubscriptionCurrent,
   getClientEntitlementSnapshot,
@@ -43,6 +45,34 @@ describe("clientEntitlement", () => {
     expect(ent.planSlug).toBeNull();
     publishClientEntitlement(ent);
     expect(getClientEntitlementSnapshot().source).toBe("loading");
+  });
+
+  it("is view-only after the trial ends, and writable again when access is restored", () => {
+    const expired = deriveEntitlementFromSubscriptionCurrent({
+      entitlement: {
+        plan: "starter",
+        accessGranted: false,
+        status: "expired",
+        trialing: false,
+      },
+    });
+    publishClientEntitlement(expired);
+    expect(clientBillingViewOnly()).toBe(true);
+    expect(() => assertClientBillingWritable("Invoice")).toThrow(/trial has ended/i);
+    expect(() => assertClientBillingWritable("InvoiceView")).not.toThrow();
+
+    const extended = deriveEntitlementFromSubscriptionCurrent({
+      entitlement: {
+        plan: "starter",
+        accessGranted: true,
+        status: "trialing",
+        trialing: true,
+        trialEndsAt: "2099-01-01T00:00:00.000Z",
+      },
+    });
+    publishClientEntitlement(extended);
+    expect(clientBillingViewOnly()).toBe(false);
+    expect(() => assertClientBillingWritable("Invoice")).not.toThrow();
   });
 
   it("prefers the server entitlement block", () => {

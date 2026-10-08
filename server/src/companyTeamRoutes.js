@@ -29,6 +29,7 @@ import {
 } from "./companyTeamInviteDelivery.js";
 import { companyInviteShareUrl } from "./companyInviteAppUrl.js";
 import { entitlementsEnforceEnabled, resolveEntitlementForCompany } from "./billing/entitlements.js";
+import { billingViewOnlyMessage } from "../../shared/billingViewOnly.js";
 import { sendDemoRestricted } from "./demo/demoMode.js";
 
 function jsonError(res, status, message, extra = {}) {
@@ -325,7 +326,7 @@ export async function checkCompanyInviteSeat(companyId, email) {
     if (!entitlementsEnforceEnabled()) {
       console.warn("[entitlements] report-only would block team invite", { companyId, status: ent.status });
     } else {
-      return { status: 402, message: "Active subscription required", extra: { code: "SUBSCRIPTION_REQUIRED" } };
+      return { status: 402, message: billingViewOnlyMessage(ent.status), extra: { code: "SUBSCRIPTION_REQUIRED" } };
     }
   }
   const seats = ent.access ? ent.seats : null;
@@ -759,6 +760,14 @@ export async function handleCompanyTeamRolePatch(req, res) {
     const gate = await requireCompanyAdmin(req, res);
     if (!gate.ok) return gate.response;
     if (gate.membership?.isDemo) return sendDemoRestricted(res, "User and role management");
+    const roleEnt = await resolveEntitlementForCompany(supabaseAdmin, gate.membership.companyId);
+    if (!roleEnt.access) {
+      if (!entitlementsEnforceEnabled()) {
+        console.warn("[entitlements] report-only would block role change", { companyId: gate.membership.companyId });
+      } else {
+        return jsonError(res, 402, billingViewOnlyMessage(roleEnt.status), { code: "SUBSCRIPTION_REQUIRED" });
+      }
+    }
 
     const body = normalizeRequestBody(req);
     const userId = String(body.user_id || "").trim();

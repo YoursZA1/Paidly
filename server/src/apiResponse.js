@@ -32,9 +32,10 @@ export function sendUnauthorized(res, message = "Unauthorized") {
 export function sendUnexpectedError(res, err, logLabel = "api", bodyExtras = {}) {
   if (res.headersSent) return res;
   const requestId = res?.locals?.requestId || "n/a";
-  if (err?.name === "UpgradeRequiredError" || err?.code === "UPGRADE_REQUIRED") {
-    return sendApiError(res, 403, err?.message || "Upgrade required", {
-      code: "UPGRADE_REQUIRED",
+  if (err?.name === "UpgradeRequiredError" || err?.code === "UPGRADE_REQUIRED" || err?.code === "SUBSCRIPTION_REQUIRED") {
+    const lapsed = err?.code === "SUBSCRIPTION_REQUIRED";
+    return sendApiError(res, lapsed ? 402 : 403, err?.message || "Upgrade required", {
+      code: lapsed ? "SUBSCRIPTION_REQUIRED" : "UPGRADE_REQUIRED",
       ...(err?.feature != null ? { feature: err.feature } : {}),
       ...bodyExtras,
     });
