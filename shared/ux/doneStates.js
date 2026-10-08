@@ -200,6 +200,42 @@ export const PAYMENT_RETURN_OUTCOME = Object.freeze({
  * while the intent has not been confirmed yet.
  * @returns {{ outcome: string, tone: "success" | "pending" | "failed", event: string }}
  */
+const EXPENSE_CATEGORY_LABELS = Object.freeze({
+  office: "Office",
+  travel: "Travel",
+  utilities: "Utilities",
+  inventory: "Inventory / Stock",
+  supplies: "Supplies",
+  equipment: "Equipment",
+  salary: "Salary",
+  marketing: "Marketing",
+  software: "Software",
+  consulting: "Consulting",
+  legal: "Legal",
+  maintenance: "Maintenance",
+  vehicle: "Vehicle",
+  meals: "Meals",
+  other: "Other",
+});
+
+/**
+ * What the expense-added popup should say. The business outcome is that the
+ * spend is now in cash flow, not that a row was inserted.
+ */
+export function expenseAddedOutcome(expense = {}) {
+  const vendor = String(expense.vendor || "").trim();
+  const description = String(expense.description || "").trim();
+  const categoryKey = String(expense.category || "").trim().toLowerCase();
+  const category = EXPENSE_CATEGORY_LABELS[categoryKey] || "";
+  return {
+    title: "Expense added",
+    counterparty: vendor || description || "Expense",
+    detail: vendor && description ? description : "",
+    category,
+    amount: num(expense.amount),
+  };
+}
+
 export function paymentReturnOutcome({ intentStatus, resultParam = null }) {
   const status = String(intentStatus || "").trim().toLowerCase();
   const result = String(resultParam || "").trim().toLowerCase();

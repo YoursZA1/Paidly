@@ -23,6 +23,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { formatCurrency } from "@/components/CurrencySelector";
+import { expenseAddedOutcome } from "@shared/ux/doneStates.js";
 import {
   subMonths,
   startOfMonth,
@@ -30,6 +31,7 @@ import {
   startOfDay,
 } from "date-fns";
 import ExpenseForm from "@/components/cashflow/ExpenseForm";
+import ExpenseAddedDialog from "@/components/cashflow/ExpenseAddedDialog";
 import ExpenseList from "@/components/cashflow/ExpenseList";
 import ReceiptScanner from "@/components/cashflow/ReceiptScanner";
 import BankImportModal from "@/components/cashflow/BankImportModal";
@@ -127,6 +129,7 @@ export default function CashFlowPage() {
     const updateExpenseInStore = useAppStore((s) => s.updateExpense);
     const deleteExpenseFromStore = useAppStore((s) => s.deleteExpense);
     const [showExpenseForm, setShowExpenseForm] = useState(false);
+    const [addedExpense, setAddedExpense] = useState(null);
     // Cash flow is on every plan; recording expenses is Business+ (plan feature "expenses").
     const { hasFeature: planHasFeature } = useEntitlementAccess();
     const openUpgradeModal = useUpgradeModalStore((st) => st.openUpgradeModal);
@@ -405,20 +408,25 @@ export default function CashFlowPage() {
                 );
             } else {
                 const created = await addExpenseToStore(expenseData);
-                if (created?.id) {
+                const saved = { ...expenseData, ...(created || {}) };
+                if (saved?.id) {
                     patchCachedExpenses((list) => [
-                        created,
-                        ...list.filter((row) => row.id !== created.id),
+                        saved,
+                        ...list.filter((row) => row.id !== saved.id),
                     ]);
                 }
+                setAddedExpense(saved);
             }
             invalidateCashFlow();
             setShowExpenseForm(false);
             setEditingExpense(null);
-            toast({
-                title: editingExpense ? "Expense updated" : "Expense added",
-                variant: "default",
-            });
+            if (editingExpense?.id) {
+                const outcome = expenseAddedOutcome({ ...editingExpense, ...expenseData });
+                toast({
+                    title: "Expense updated",
+                    description: `${outcome.counterparty} · ${formatCurrency(outcome.amount, userCurrency)}`,
+                });
+            }
         } catch (error) {
             console.error("Error saving expense:", error);
             toast({
@@ -836,6 +844,23 @@ export default function CashFlowPage() {
                         onCancel={() => setShowImportModal(false)}
                     />
                 )}
+
+                <ExpenseAddedDialog
+                    expense={addedExpense}
+                    currency={userCurrency}
+                    onClose={() => setAddedExpense(null)}
+                    onAddAnother={() => {
+                        setAddedExpense(null);
+                        setEditingExpense(null);
+                        setShowExpenseForm(true);
+                    }}
+                    onView={() => {
+                        const saved = addedExpense;
+                        setAddedExpense(null);
+                        setEditingExpense(saved);
+                        setShowExpenseForm(true);
+                    }}
+                />
 
                 {showExpenseForm && (
                     <ExpenseForm

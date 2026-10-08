@@ -16,6 +16,7 @@ import {
   daysUntil,
   doneTierFor,
   dueFollowUpLabel,
+  expenseAddedOutcome,
   invoiceOutcome,
   paymentMilestone,
   paymentReturnOutcome,
@@ -160,5 +161,24 @@ describe("static guards — no generic success patterns on money flows", () => {
     const create = readFileSync(path.join(SRC, "pages/CreateDocument.jsx"), "utf8");
     expect(create).toMatch(/createdDoneUrl\(createViewDocumentUrl\("quote", createdQuote\.id\)\)/);
     expect(create).toMatch(/createdDoneUrl\(createViewDocumentUrl\("invoice", result\.id\)\)/);
+  });
+});
+
+describe("expense added", () => {
+  it("names the vendor, amount, and category", () => {
+    expect(
+      expenseAddedOutcome({
+        vendor: "Makro",
+        description: "Printer paper",
+        category: "office",
+        amount: "450.5",
+      })
+    ).toEqual({
+      title: "Expense added",
+      counterparty: "Makro",
+      detail: "Printer paper",
+      category: "Office",
+      amount: 450.5,
+    });
   });
 });
