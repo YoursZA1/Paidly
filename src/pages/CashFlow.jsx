@@ -66,6 +66,7 @@ import {
   buildCashFlowChartRows,
   buildCashFlowSnapshot,
   buildCashLedger,
+  ledgerRowMatchesFilters,
 } from "@/utils/cashFlowTruth";
 import { CASHFLOW_PAGE_QUERY_KEY, fetchCashFlowPageData } from "@/utils/cashFlowData";
 import { summarizePosSales } from "@/utils/posSalesTruth";
@@ -385,12 +386,8 @@ export default function CashFlowPage() {
         outstanding,
         filter: kpiFilter === "net" ? "all" : kpiFilter,
       });
-      const q = String(expenseFilters.search || "").trim().toLowerCase();
-      if (!q) return rows;
-      return rows.filter((row) =>
-        [row.name, row.category, row.vendor].some((part) => String(part || "").toLowerCase().includes(q))
-      );
-    }, [incomeEvents, expenseEvents, outstanding, kpiFilter, expenseFilters.search]);
+      return rows.filter((row) => ledgerRowMatchesFilters(row, expenseFilters));
+    }, [incomeEvents, expenseEvents, outstanding, kpiFilter, expenseFilters]);
 
     const moneyOutExpenses = useMemo(
       () => applyExpenseFilters(expenseEvents.map((row) => row.expense).filter(Boolean), expenseFilters),

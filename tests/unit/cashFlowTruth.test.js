@@ -5,6 +5,7 @@ import {
   buildCashLedger,
   buildMoneyTotals,
   collectIncomeEvents,
+  ledgerRowMatchesFilters,
   getReportPeriodBounds,
   inDayRange,
   isCashExpense,
@@ -162,5 +163,21 @@ describe("cashFlowTruth", () => {
     expect(totals.income).toBe(40);
     expect(totals.expenses).toBe(25);
     expect(totals.profit).toBe(15);
+  });
+
+  it("filters the transaction ledger by search, category, amount, and date", () => {
+    const rows = [
+      { kind: "income", name: "Payment received", category: "eft", amount: 13200, date: "2026-10-08" },
+      { kind: "expense", name: "Snack For Meeting", category: "office", vendor: "Cafe", amount: 120, date: "2026-10-08", expense: { category: "office", description: "Snack For Meeting", payment_method: "cash" } },
+      { kind: "expense", name: "New Tie", category: "travel", amount: 100, date: "2026-09-01", expense: { category: "travel", description: "New Tie" } },
+    ];
+    expect(rows.filter((row) => ledgerRowMatchesFilters(row, { search: "snack" }))).toHaveLength(1);
+    expect(rows.filter((row) => ledgerRowMatchesFilters(row, { category: "office" }))).toHaveLength(1);
+    expect(rows.filter((row) => ledgerRowMatchesFilters(row, { amountRange: "5000+" }))).toHaveLength(1);
+    expect(rows.filter((row) => ledgerRowMatchesFilters(row, { dateFrom: "2026-10-01", dateTo: "2026-10-08" }))).toHaveLength(2);
+    expect(collectIncomeEvents(
+      [{ id: "p1", invoice_id: "inv-1", amount: 10, status: "completed", reference: "83ce79ba-a98d-42d7-a8e2-ca399c450bb8", paid_at: "2026-10-08" }],
+      [{ id: "inv-1", client_name: "ABC Trading", invoice_number: "INV-1002", status: "paid" }]
+    )[0].name).toBe("ABC Trading — INV-1002");
   });
 });

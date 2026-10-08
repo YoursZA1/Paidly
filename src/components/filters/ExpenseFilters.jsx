@@ -82,7 +82,7 @@ export default function ExpenseFilters({ onFilterChange }) {
                     <Input
                         value={filters.search}
                         onChange={(e) => updateFilter('search', e.target.value)}
-                        placeholder="Search expenses..."
+                        placeholder="Search transactions..."
                         className="pl-10 h-10 rounded-xl"
                     />
                 </div>

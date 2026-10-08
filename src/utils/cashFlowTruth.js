@@ -116,6 +116,19 @@ function cashExpenses(expenses = []) {
   return (Array.isArray(expenses) ? expenses : []).filter(isCashExpense);
 }
 
+function humanPaymentLabel(payment, invoice) {
+  const candidates = [payment?.reference, payment?.reference_number, payment?.notes, payment?.client_name];
+  const text = candidates.find((value) => {
+    const label = String(value || "").trim();
+    return label && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(label);
+  });
+  if (text) return text;
+  if (invoice?.client_name && invoice?.invoice_number) return `${invoice.client_name} — ${invoice.invoice_number}`;
+  if (invoice?.client_name) return invoice.client_name;
+  if (invoice?.invoice_number) return `Invoice #${invoice.invoice_number}`;
+  return "Payment received";
+}
+
 /**
  * Cash-in rows: every settled payment, plus paid invoices with no payment rows,
  * plus completed POS till events (sales in, till_cash refunds out).
@@ -128,6 +141,10 @@ export function collectIncomeEvents(payments = [], invoices = [], posSales = [])
       .filter(Boolean)
   );
 
+  const invoiceById = new Map(
+    (Array.isArray(invoices) ? invoices : []).filter((invoice) => invoice?.id).map((invoice) => [invoice.id, invoice])
+  );
+
   const events = settledPayments(payments)
     .filter((payment) => !payment.invoice_id || !posInvoiceIds.has(payment.invoice_id))
     .map((payment) => ({
@@ -136,7 +153,7 @@ export function collectIncomeEvents(payments = [], invoices = [], posSales = [])
       kind: "income",
       date: paymentOccurredAt(payment),
       amount: moneyAmount(payment.amount),
-      name: payment.reference || payment.reference_number || payment.notes || "Payment received",
+      name: humanPaymentLabel(payment, invoiceById.get(payment.invoice_id)),
       category: payment.method || payment.payment_method || "Payment",
       vendor: null,
       invoiceId: payment.invoice_id || null,
@@ -352,6 +369,67 @@ export function buildCashFlowChartRows({ incomeEvents = [], expenseEvents = [], 
     });
   }
   return rows;
+}
+
+function filterDay(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) && !value.includes("T")) {
+    return value.slice(0, 10);
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return toDayKey(value);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function amountInRange(amount, range) {
+  if (!range || range === "all") return true;
+  const value = Math.abs(moneyAmount(amount));
+  if (String(range).includes("+")) return value >= parseInt(range, 10);
+  const [min, max] = String(range).split("-").map((part) => parseInt(part, 10));
+  return value >= min && value <= max;
+}
+
+/** Search, category, amount, payment method, and dates apply to income, expenses, and outstanding rows. */
+export function ledgerRowMatchesFilters(row, filters = {}) {
+  const search = String(filters.search || "").trim().toLowerCase();
+  if (search) {
+    const haystack = [
+      row?.name,
+      row?.category,
+      row?.vendor,
+      row?.kind,
+      row?.expense?.description,
+      row?.expense?.vendor,
+      row?.expense?.payment_method,
+      row?.invoice?.invoice_number,
+      row?.invoice?.client_name,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!haystack.includes(search)) return false;
+  }
+
+  if (filters.category && filters.category !== "all") {
+    const category = String(row?.expense?.category || (row?.kind === "expense" ? row?.category : "") || "").toLowerCase();
+    if (category !== String(filters.category).toLowerCase()) return false;
+  }
+
+  if (filters.paymentMethod && filters.paymentMethod !== "all") {
+    const method = String(row?.expense?.payment_method || (row?.kind === "income" ? row?.category : "") || "").toLowerCase();
+    if (method !== String(filters.paymentMethod).toLowerCase()) return false;
+  }
+
+  if (!amountInRange(row?.amount, filters.amountRange)) return false;
+
+  const day = filterDay(row?.date);
+  const from = filterDay(filters.dateFrom);
+  const to = filterDay(filters.dateTo);
+  if (from && (!day || day < from)) return false;
+  if (to && (!day || day > to)) return false;
+  return true;
 }
 
 export function buildCashLedger({ incomeEvents = [], expenseEvents = [], outstanding = [], filter = "all" } = {}) {
