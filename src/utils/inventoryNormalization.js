@@ -13,6 +13,14 @@ export function toQuantity(value, fallback = 0) {
   return Math.round(n * 100) / 100;
 }
 
+function firstPositive(...values) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
 function toTrimmedString(value, fallback = "") {
   if (value == null) return fallback;
   const s = String(value).trim();
@@ -121,8 +129,8 @@ export function normalizeCatalogTableRow(row) {
     stock_on_hand: null,
     stock_capacity: null,
     reorder_level: null,
-    cost: toNumber(row?.cost_rate ?? row?.cost_price, 0),
-    price: toNumber(row?.default_rate ?? row?.price ?? row?.unit_price, 0),
+    cost: firstPositive(row?.cost_rate, row?.cost_price),
+    price: firstPositive(row?.default_rate, row?.price, row?.unit_price),
     is_active: row?.is_active !== false,
     _raw: row,
   };

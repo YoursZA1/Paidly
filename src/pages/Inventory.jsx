@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import { resolveActiveOrgIdForUser } from "@/api/auth/orgCache.js";
 import { useAuth } from "@/contexts/AuthContext";
-import { Service } from "@/api/entities";
+import { deleteCatalogItem } from "@/services/catalogDelete";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppStore } from "@/stores/useAppStore";
 import { normalizeCatalogRows, normalizeInventoryRows, toQuantity } from "@/utils/inventoryNormalization";
@@ -348,24 +348,29 @@ export default function Inventory() {
 
   /** Catalog of the ACTIVE business only — RLS alone would return every business the user manages. */
   const loadProducts = useCallback(async (orgId) => {
-    const catalogSelect =
-      "id, org_id, name, description, sku, barcode, category, image_url, item_type, default_unit, min_quantity, stock_quantity, stock_capacity, low_stock_threshold, price, cost_price, is_active, company_id, created_at, updated_at";
-    const catalogSelectLegacy = catalogSelect.replace(", company_id", "");
-    let { data, error } = await supabase
-      .from("services")
-      .select(catalogSelect)
-      .eq("org_id", orgId)
-      .order("updated_at", { ascending: false })
-      .limit(500);
-    if (error && /company_id/i.test(error.message || "")) {
-      const retry = await supabase
+    const required =
+      "id, org_id, name, description, sku, barcode, category, image_url, item_type, default_unit, min_quantity, stock_quantity, stock_capacity, low_stock_threshold, price, cost_price, is_active, created_at, updated_at";
+    const optional = ["company_id", "default_rate", "unit_price", "cost_rate"];
+    let columns = `${required}, ${optional.join(", ")}`;
+    let data = null;
+    let error = null;
+    for (let attempt = 0; attempt <= optional.length; attempt += 1) {
+      const result = await supabase
         .from("services")
-        .select(catalogSelectLegacy)
+        .select(columns)
         .eq("org_id", orgId)
         .order("updated_at", { ascending: false })
         .limit(500);
-      data = retry.data;
-      error = retry.error;
+      data = result.data;
+      error = result.error;
+      if (!error) break;
+      const message = error.message || "";
+      const missing = optional.find((column) => columns.includes(column) && new RegExp(column, "i").test(message));
+      if (!missing) break;
+      columns = columns
+        .split(", ")
+        .filter((column) => column !== missing)
+        .join(", ");
     }
 
     if (error) throw error;
@@ -956,24 +961,27 @@ export default function Inventory() {
   const handleDeleteProduct = useCallback(
     async (product) => {
       try {
-        await Service.delete(product.id);
+        const membershipOrgId = await getOrgIdForCurrentUser();
+        const orgId = resolveInventoryProductOrgId(product, membershipOrgId);
+        const result = await deleteCatalogItem(supabase, { id: product.id, orgId });
+        const kind = product.item_type === "service" ? "Service" : "Product";
         toast({
-          title: "✓ Product Deleted",
-          description: `"${product.name}" was deleted.`,
-          variant: "success",
+          title: `${kind} removed`,
+          description: result.detached
+            ? `${product.name} was removed. Invoices and quotes that used it keep their line items.`
+            : `${product.name} was removed from your catalog.`,
         });
         await refetchAll();
       } catch (e) {
         console.error("Inventory: delete product failed", e);
-        alertSupabaseWriteFailure(e, "Delete inventory product");
         toast({
-          title: "✗ Delete Failed",
-          description: "Failed to delete product. Please try again.",
+          title: "Could not remove this item",
+          description: e?.message || "Try again.",
           variant: "destructive",
         });
       }
     },
-    [refetchAll, toast]
+    [getOrgIdForCurrentUser, refetchAll, toast]
   );
 
   // Deliveries handlers

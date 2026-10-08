@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeInventoryProductRow, toQuantity } from "@/utils/inventoryNormalization";
+import { normalizeCatalogTableRow, normalizeInventoryProductRow, toQuantity } from "@/utils/inventoryNormalization";
 
 describe("toQuantity", () => {
   it("keeps fractional stock such as 1.25 instead of truncating to 1", () => {
@@ -33,6 +33,30 @@ describe("normalizeInventoryProductRow", () => {
       price: 35,
     });
     expect(row.company_id).toBeNull();
+  });
+
+  it("shows a service selling price from default_rate", () => {
+    const row = normalizeCatalogTableRow({
+      id: "s1",
+      name: "Brand Guide Design",
+      item_type: "service",
+      default_rate: 3000,
+      price: 0,
+      cost_rate: 0,
+    });
+    expect(row.item_type).toBe("service");
+    expect(row.price).toBe(3000);
+  });
+
+  it("uses the product price column when a service rate was stored there", () => {
+    const row = normalizeCatalogTableRow({
+      id: "s2",
+      name: "Label Design",
+      item_type: "service",
+      default_rate: 0,
+      price: 1200,
+    });
+    expect(row.price).toBe(1200);
   });
 
   it("keeps brand ownership for POS scoping", () => {
