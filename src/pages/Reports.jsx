@@ -25,6 +25,8 @@ import { CASHFLOW_PAGE_QUERY_KEY, fetchCashFlowPageData } from '@/utils/cashFlow
 import { buildMoneyTotals, getReportPeriodBounds, inDayRange } from '@/utils/cashFlowTruth';
 import { summarizePosSales } from '@/utils/posSalesTruth';
 import PosSalesReportCard from '@/components/reports/PosSalesReportCard';
+import VatReportCard from '@/components/reports/VatReportCard';
+import { buildVatReport } from '@/utils/vatReport';
 import PurchasingReportCard from '@/components/reports/PurchasingReportCard';
 import { useEntitlementAccess } from '@/hooks/useEntitlementAccess';
 import { fetchPurchaseOrderHeaders, fetchSupplierPaymentsBetween } from '@/services/purchaseOrderQueries';
@@ -42,6 +44,7 @@ export default function Reports() {
   const setPaymentsInStore = useAppStore((s) => s.setPayments);
   const { profile, authUserId } = useAuth();
   const hasStoreData = (storeInvoices?.length > 0) || (storeExpenses?.length > 0) || (storePayments?.length > 0) || storeUser != null;
+  const [vatRange, setVatRange] = useState('month');
   const [consolidatedFallbackUrl, setConsolidatedFallbackUrl] = useState(null);
   const [consolidatedFallbackName, setConsolidatedFallbackName] = useState("");
   const consolidatedFallbackUrlRef = useRef(null);
@@ -111,6 +114,12 @@ export default function Reports() {
   const allTotals = useMemo(
     () => buildMoneyTotals({ payments, expenses, invoices, posSales, payslips, payRuns }),
     [payments, expenses, invoices, posSales, payslips, payRuns]
+  );
+
+  const vatBounds = getReportPeriodBounds(vatRange, now);
+  const vatReport = useMemo(
+    () => buildVatReport({ payments, expenses, invoices, posSales, ...vatBounds }),
+    [payments, expenses, invoices, posSales, vatBounds.start, vatBounds.end]
   );
 
   const posMonth = useMemo(
@@ -190,13 +199,32 @@ export default function Reports() {
     toast({ title: 'Report downloaded', description: 'Consolidated report (CSV) saved. Use the Download button if the file didn\'t save automatically.', variant: 'default' });
   };
 
+  const handleExportVat = () => {
+    const rows = [
+      { date: '', type: 'summary', reference: '', description: 'Output VAT', taxable: '', vat: vatReport.outputVat },
+      { date: '', type: 'summary', reference: '', description: 'Input VAT', taxable: '', vat: vatReport.inputVat },
+      { date: '', type: 'summary', reference: '', description: 'VAT due', taxable: '', vat: vatReport.vatDue },
+      ...vatReport.lines.map((row) => ({
+        date: row.date || '',
+        type: row.kind,
+        reference: row.reference,
+        description: row.description,
+        taxable: row.taxable,
+        vat: row.vat,
+      })),
+    ];
+    const filename = `vat_report_${vatRange}_${format(now, 'yyyy-MM-dd')}.csv`;
+    exportToCsv(rows, filename, ['date', 'type', 'reference', 'description', 'taxable', 'vat']);
+    toast({ title: 'VAT report downloaded', description: 'The VAT report CSV was saved.', variant: 'default' });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 page-header-sticky">
           <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-1 font-display">Reports</h1>
           <p className="text-sm text-muted-foreground">
-            View and download income, expense, till, and custom reports.
+            View and download income, expense, VAT, till, and custom reports.
           </p>
         </div>
 
@@ -301,6 +329,20 @@ export default function Reports() {
               )}
             </CardContent>
           </Card>
+        </div>
+
+        <div className="mt-8">
+          {isLoading ? (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          ) : (
+            <VatReportCard
+              report={vatReport}
+              currency={userCurrency}
+              range={vatRange}
+              onRangeChange={setVatRange}
+              onDownload={handleExportVat}
+            />
+          )}
         </div>
 
         <div className="mt-8">
