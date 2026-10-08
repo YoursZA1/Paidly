@@ -79,11 +79,11 @@ function normalizeIdempotencyKey(raw) {
 
 /**
  * Canonical document email dispatch.
- * Invoices, quotes, and hub documents go through POST /api/send-invoice (Resend on Vercel).
- * The Supabase `send-invoice-email` function is not deployed: a browser preflight gets HTTP 404,
- * which the console reports as a CORS failure, so the browser must not call it for those sends.
- * `invoiceApiFallback: false` keeps purchase orders on the edge function. That API route is gated
- * on the invoices feature and must not carry a purchase order.
+ * Invoices, quotes, hub documents, and purchase orders go through POST /api/send-invoice
+ * (Resend on Vercel). The Supabase `send-invoice-email` function is not deployed: a browser
+ * preflight gets HTTP 404, which the console reports as "Failed to fetch".
+ * Pass `kind: "purchase_order"` so the route checks the purchase-order feature.
+ * `invoiceApiFallback: false` is only for a caller that must stay on the edge function.
  */
 export async function dispatchDocumentEmail({
   pdfBase64,
@@ -98,6 +98,7 @@ export async function dispatchDocumentEmail({
   dueDate,
   idempotencyKey,
   invoiceApiFallback = true,
+  kind,
 } = {}) {
   // Demo Mode: nothing leaves Paidly (the edge function and /api/send-invoice refuse it as well).
   if (isDemoModeActive()) {
@@ -128,22 +129,30 @@ export async function dispatchDocumentEmail({
   const idempotency = normalizeIdempotencyKey(idempotencyKey);
 
   if (!invoiceApiFallback) {
-    const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-        ...(anonKey ? { apikey: anonKey } : {}),
-      },
-      body: JSON.stringify({
-        pdfBase64,
-        email,
-        subject,
-        html,
-        filename,
-        ...(idempotency ? { idempotencyKey: idempotency } : {}),
-      }),
-    });
+    let sendRes;
+    try {
+      sendRes = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          ...(anonKey ? { apikey: anonKey } : {}),
+        },
+        body: JSON.stringify({
+          pdfBase64,
+          email,
+          subject,
+          html,
+          filename,
+          ...(idempotency ? { idempotencyKey: idempotency } : {}),
+        }),
+      });
+    } catch {
+      throw new DocumentEngineError(
+        DOCUMENT_ENGINE_ERROR.EMAIL_PROVIDER_FAILED,
+        "The email could not be sent. Check your connection and try again."
+      );
+    }
     const body = await readFetchBody(sendRes);
     assertProviderAccepted(sendRes, body, "Email service");
     if (body.json?.demo) {
@@ -154,26 +163,35 @@ export async function dispatchDocumentEmail({
   }
 
   const apiBase = getPublicApiBase() || "";
-  const fallbackRes = await fetch(`${apiBase}/api/send-invoice`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      base64PDF: pdfBase64,
-      clientEmail: email,
-      invoiceNum: String(invoiceNum || ""),
-      fromName: String(fromName || "Paidly"),
-      clientName: String(clientName || "there"),
-      amountDue: String(amountDue ?? ""),
-      dueDate: String(dueDate || ""),
-      ...(subject ? { subject: String(subject) } : {}),
-      ...(html ? { html: String(html) } : {}),
-      ...(filename ? { filename: String(filename) } : {}),
-      ...(idempotency ? { idempotencyKey: idempotency } : {}),
-    }),
-  });
+  let fallbackRes;
+  try {
+    fallbackRes = await fetch(`${apiBase}/api/send-invoice`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        base64PDF: pdfBase64,
+        clientEmail: email,
+        invoiceNum: String(invoiceNum || ""),
+        fromName: String(fromName || "Paidly"),
+        clientName: String(clientName || "there"),
+        amountDue: String(amountDue ?? ""),
+        dueDate: String(dueDate || ""),
+        ...(subject ? { subject: String(subject) } : {}),
+        ...(html ? { html: String(html) } : {}),
+        ...(filename ? { filename: String(filename) } : {}),
+        ...(idempotency ? { idempotencyKey: idempotency } : {}),
+        ...(kind ? { kind: String(kind) } : {}),
+      }),
+    });
+  } catch {
+    throw new DocumentEngineError(
+      DOCUMENT_ENGINE_ERROR.EMAIL_PROVIDER_FAILED,
+      "The email could not be sent. Check your connection and try again."
+    );
+  }
   const fallbackBody = await readFetchBody(fallbackRes);
   assertProviderAccepted(fallbackRes, fallbackBody, "Email service");
   if (fallbackBody.json?.demo) {

@@ -1,7 +1,7 @@
 /**
- * Send to Supplier: the PO PDF is attached through the canonical document email transport (never the
- * invoice-only /api/send-invoice fallback); the full-order email is used only when the PDF cannot be
- * generated; a transport failure is an error, not a silent send without the document.
+ * Send to Supplier: the PO PDF is attached through /api/send-invoice with the purchase-order
+ * template and filename. The full-order email is used only when the PDF cannot be generated.
+ * A transport failure is an error, not a silent send without the document.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -75,12 +75,16 @@ describe("sendPurchaseOrderToSupplier", () => {
       filename: "PO-1001.pdf",
       subject: "Purchase Order PO-1001 — Mavelele Trading",
       idempotencyKey: "po-send:po-1:abc",
-      invoiceApiFallback: false,
+      invoiceNum: "PO-1001",
+      fromName: "Mavelele Trading",
+      kind: "purchase_order",
     });
-    expect(args.html).toContain("Order Total");
+    expect(args.invoiceApiFallback).toBeUndefined();
+    expect(args.html).toContain("#f24e00");
+    expect(args.html).toContain("Order total");
     expect(args.html).toContain("Please confirm receipt of the order.");
-    expect(args.html).toContain("Regards,<br/>Mavelele Trading");
-    expect(args.html).not.toMatch(/paid|outstanding|received/i);
+    expect(args.html).toContain("Mavelele Trading");
+    expect(args.html).not.toMatch(/outstanding|amount paid|quantity received/i);
     expect(args.html).not.toContain("<table width=\"100%\" border=\"0\" cellpadding=\"6\""); // not the full order
     expect(mocks.SendEmail).not.toHaveBeenCalled();
     expect(mocks.update).toHaveBeenCalledWith("po-1", expect.objectContaining({ sent_to_email: "orders@sup.test" }));

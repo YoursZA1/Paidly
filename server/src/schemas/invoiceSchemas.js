@@ -44,4 +44,5 @@ export const sendInvoiceBodySchema = z.object({
   subject: optionalLine(998),
   html: z.string().max(500_000).optional(),
   filename: optionalLine(180),
+  kind: z.enum(["invoice", "quote", "purchase_order"]).optional(),
 });

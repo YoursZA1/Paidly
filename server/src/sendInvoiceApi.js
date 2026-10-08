@@ -32,9 +32,6 @@ export default async function sendInvoiceHandler(req, res) {
       return res.status(401).json({ error: authErr || "Unauthorized" });
     }
 
-    await assertUserHasFeature(supabaseAdmin, user.id, "invoices");
-    await assertUserHasFeature(supabaseAdmin, user.id, "email");
-
     const parsed = parseBody(sendInvoiceBodySchema, req, res, () =>
       logSecurity("warn", "send_invoice_bad_request", {
         userId: user.id || null,
@@ -42,6 +39,10 @@ export default async function sendInvoiceHandler(req, res) {
       })
     );
     if (!parsed) return;
+
+    const documentKind = parsed.kind === "purchase_order" ? "purchase_orders" : "invoices";
+    await assertUserHasFeature(supabaseAdmin, user.id, documentKind);
+    await assertUserHasFeature(supabaseAdmin, user.id, "email");
 
     if (parsed.base64PDF) {
       const pdfCheck = validateBase64Pdf(parsed.base64PDF);

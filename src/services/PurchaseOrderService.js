@@ -273,8 +273,11 @@ export const sendPurchaseOrderToSupplier = async ({
       subject,
       html: buildPurchaseOrderAttachmentEmailHtml(context),
       filename,
+      invoiceNum: purchaseOrder.po_number,
+      fromName: business?.name || "Paidly",
+      clientName: supplier?.name || "there",
       idempotencyKey,
-      invoiceApiFallback: false,
+      kind: "purchase_order",
     });
   } else {
     result = await SendEmail({ to: recipient, subject, body: buildPurchaseOrderEmailHtml(context) });
