@@ -23,7 +23,9 @@ import {
   hasSubscriptionAccess,
   pickAccessSubscriptionRow,
 } from "../../../shared/subscriptionAccess.js";
-import { ENDING_SOON_DAYS } from "../../../shared/trialLifecycle.js";
+import { ENDING_SOON_DAYS, TRIAL_PHASE, deriveTrialPhase } from "../../../shared/trialLifecycle.js";
+import { partitionCurrentSubscriptions, pickCurrentSubscriptionRow } from "../../../shared/currentSubscription.js";
+import { insertSubscriptionRow, loadOwnerSubscriptionRows, reconcileOwnerCurrent } from "./subscriptionCurrent.js";
 import { MIGRATION_ACCESS_COLUMNS } from "../../../shared/trialMigration.js";
 import {
   getRevenueSince,
@@ -88,27 +90,123 @@ export async function buildSubscriptionOverview(supabase) {
   counts.adminGranted = adminGranted;
 
   const trialLifecycle = await countTrialLifecycle(supabase);
+  const currentView = await loadCurrentSubscriptionView(supabase);
+  const tallied = currentView ? tallyCurrentSubscriptions(currentView.partition.current) : null;
+
+  const active = tallied ? tallied.counts.active : counts.active || 0;
+  const pending = tallied ? tallied.counts.pending : counts.pending || 0;
+  const expired = tallied ? tallied.counts.expired : counts.expired || 0;
+  const cancelled = tallied ? tallied.counts.cancelled : counts.cancelled || 0;
+  const trial = tallied ? tallied.counts.trial : counts.trial || 0;
+  const pastDue = tallied ? tallied.counts.pastDue : counts.pastDue || 0;
+  const failed = tallied ? tallied.counts.failed : counts.failed || 0;
+  const granted = tallied ? tallied.adminGranted : adminGranted;
+  const bucketCounts = { active, pending, expired, cancelled, trial, pastDue, failed };
 
   return {
-    active: counts.active || 0,
-    pending: counts.pending || 0,
-    expired: counts.expired || 0,
-    cancelled: counts.cancelled || 0,
-    trial: counts.trial || 0,
-    pastDue: counts.pastDue || 0,
-    failed: counts.failed || 0,
-    adminGranted,
-    /** Sum of overview buckets (may be less than all rows when other statuses exist). */
-    bucketTotal: total,
-    /** All rows in `subscriptions`. */
-    total: allCount ?? total,
-    trialLifecycle,
+    active,
+    pending,
+    expired,
+    cancelled,
+    trial,
+    pastDue,
+    failed,
+    adminGranted: granted,
+    /** Sum of the current-subscription buckets. */
+    bucketTotal: tallied ? tallied.total : total,
+    /** Current subscriptions (one per business), not every historical row. */
+    total: tallied ? tallied.total : allCount ?? total,
+    /** Physical rows, including history. */
+    rowTotal: currentView ? currentView.rows.length : allCount ?? total,
+    trialLifecycle: tallied ? tallied.lifecycle : trialLifecycle,
+    dataHealth: currentView
+      ? {
+          duplicateCurrent: currentView.partition.duplicateCurrent,
+          multipleHistorical: currentView.partition.multipleHistorical,
+          invalid: currentView.partition.invalid,
+        }
+      : null,
     buckets: OVERVIEW_BUCKETS.filter((b) => b.key !== "adminGranted").map((b) => ({
       key: b.key,
       label: b.label,
-      count: counts[b.key] || 0,
+      count: bucketCounts[b.key] || 0,
     })),
   };
+}
+
+const CURRENT_VIEW_SELECTS = [
+  "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, free_access, free_access_until, created_at, updated_at, is_current",
+  "id, status, plan, current_plan, plan_slug, plan_family, amount, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, next_billing_date, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at, is_current",
+  "id, status, plan, current_plan, plan_slug, plan_family, amount, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, next_billing_date, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at",
+  "id, status, plan_slug, plan, amount, currency, billing_cycle, company_id, user_id, email, next_billing_date, cancelled_at, failure_count, created_at, updated_at",
+];
+
+async function fetchAllSubscriptionRows(supabase, cols) {
+  const pageSize = 1000;
+  const cap = 8000;
+  const rows = [];
+  for (let from = 0; from < cap; from += pageSize) {
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select(cols)
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) return { rows: [], error };
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return { rows, error: null };
+}
+
+/** Every subscription row, then the current one per business. Null when the table cannot be read. */
+async function loadCurrentSubscriptionView(supabase, now = new Date()) {
+  let loaded = null;
+  for (const cols of CURRENT_VIEW_SELECTS) {
+    loaded = await fetchAllSubscriptionRows(supabase, cols);
+    if (!loaded.error) break;
+  }
+  if (!loaded || loaded.error) {
+    console.warn("[admin/subscriptions] current view", loaded?.error?.message || loaded?.error);
+    return null;
+  }
+  return {
+    rows: loaded.rows,
+    partition: partitionCurrentSubscriptions(loaded.rows, now),
+    now,
+  };
+}
+
+function tallyCurrentSubscriptions(rows) {
+  const counts = { active: 0, pending: 0, expired: 0, cancelled: 0, trial: 0, pastDue: 0, failed: 0 };
+  const lifecycle = { active: 0, ending: 0, expired: 0, converted: 0, free: 0, subscribed: 0 };
+  let adminGranted = 0;
+  for (const row of rows) {
+    const st = coerceSubscriptionStatus(row.status);
+    if (st === SUBSCRIPTION_STATUS.ACTIVE) counts.active += 1;
+    else if (st === SUBSCRIPTION_STATUS.PENDING || st === SUBSCRIPTION_STATUS.PROCESSING) counts.pending += 1;
+    else if (st === SUBSCRIPTION_STATUS.EXPIRED) counts.expired += 1;
+    else if (st === SUBSCRIPTION_STATUS.CANCELLED) counts.cancelled += 1;
+    else if (st === SUBSCRIPTION_STATUS.TRIALING) counts.trial += 1;
+    else if (st === SUBSCRIPTION_STATUS.PAST_DUE) counts.pastDue += 1;
+    else if (st === SUBSCRIPTION_STATUS.FAILED) counts.failed += 1;
+    if (st === SUBSCRIPTION_STATUS.ACTIVE && row.subscription_source === SUBSCRIPTION_SOURCE.ADMIN) {
+      adminGranted += 1;
+    }
+    if (
+      st === SUBSCRIPTION_STATUS.ACTIVE &&
+      row.subscription_source === SUBSCRIPTION_SOURCE.PAYFAST &&
+      row.trial_started_at
+    ) {
+      lifecycle.converted += 1;
+    }
+    const phase = deriveTrialPhase(row).phase;
+    if (phase === TRIAL_PHASE.TRIAL_ACTIVE) lifecycle.active += 1;
+    else if (phase === TRIAL_PHASE.TRIAL_ENDING_SOON) lifecycle.ending += 1;
+    else if (phase === TRIAL_PHASE.TRIAL_EXPIRED) lifecycle.expired += 1;
+    else if (phase === TRIAL_PHASE.FREE_ACCESS) lifecycle.free += 1;
+    else if (phase === TRIAL_PHASE.SUBSCRIPTION_ACTIVE) lifecycle.subscribed += 1;
+  }
+  return { counts, adminGranted, lifecycle, total: rows.length };
 }
 
 async function countHead(supabase, apply) {
@@ -249,13 +347,6 @@ async function requireBillingAdmin(req, res) {
   }
   return { supabase, user: auth.user };
 }
-
-const LIST_SELECT_RICH =
-  "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at";
-const LIST_SELECT_FREE = `${LIST_SELECT_RICH}, free_access, free_access_until`;
-const LIST_SELECT_MIGRATION = `${LIST_SELECT_FREE}, ${MIGRATION_ACCESS_COLUMNS}, migration_exclusion_reason`;
-const LIST_SELECT_LEAN =
-  "id, status, plan_slug, plan, amount, currency, billing_cycle, company_id, user_id, email, next_billing_date, cancelled_at, failure_count, created_at, updated_at";
 
 /** Shape admin list rows like EntityManager Subscription so existing UI keeps working. */
 export function normalizeAdminSubscriptionListRow(row) {
@@ -778,7 +869,49 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
     invoices,
     eventTimeline,
     trialNotifications,
+    priorSubscriptions: await loadPriorSubscriptions(supabase, sub),
   });
+}
+
+async function loadPriorSubscriptions(supabase, sub) {
+  const selects = [
+    "id, status, plan, plan_slug, plan_family, amount, currency, billing_cycle, company_id, user_id, created_at, updated_at, cancelled_at",
+    "id, status, plan, amount, company_id, user_id, created_at, updated_at",
+  ];
+  const rows = [];
+  const pull = async (build) => {
+    for (const cols of selects) {
+      const { data, error } = await build(supabase.from("subscriptions").select(cols));
+      if (!error) return data || [];
+    }
+    return [];
+  };
+  if (sub.company_id) {
+    rows.push(...(await pull((q) => q.eq("company_id", sub.company_id))));
+  }
+  if (sub.user_id) {
+    const orphans = await pull((q) => q.eq("user_id", sub.user_id).is("company_id", null));
+    const seen = new Set(rows.map((row) => row.id));
+    for (const row of orphans) {
+      if (!seen.has(row.id)) rows.push(row);
+    }
+  }
+  return rows
+    .filter((row) => row.id && row.id !== sub.id)
+    .sort((a, b) => {
+      const tb = new Date(b.cancelled_at || b.updated_at || b.created_at || 0).getTime();
+      const ta = new Date(a.cancelled_at || a.updated_at || a.created_at || 0).getTime();
+      return tb - ta;
+    })
+    .map((row) => ({
+      id: row.id,
+      plan: row.plan_family || row.plan || row.plan_slug || null,
+      status: row.status || null,
+      amount: row.amount != null ? Number(row.amount) : null,
+      currency: String(row.currency || "ZAR").toUpperCase(),
+      billingCycle: row.billing_cycle || null,
+      at: row.cancelled_at || row.updated_at || row.created_at || null,
+    }));
 }
 
 /**
@@ -835,39 +968,26 @@ export async function handleAdminSubscriptionsList(req, res) {
   const limit = Math.min(500, Math.max(1, Number(q.limit) || 50));
   const offset = Math.max(0, Number(q.offset) || 0);
 
-  const runList = (selectCols) => {
-    let query = supabase
-      .from("subscriptions")
-      .select(selectCols, { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (status) query = query.eq("status", status);
-    return query;
-  };
-
-  let { data, error, count } = await runList(LIST_SELECT_MIGRATION);
-  if (error) {
-    ({ data, error, count } = await runList(LIST_SELECT_FREE));
-  }
-  if (error) {
-    ({ data, error, count } = await runList(LIST_SELECT_RICH));
-  }
-  if (error) {
-    ({ data, error, count } = await runList(LIST_SELECT_LEAN));
-  }
-  if (error) {
-    ({ data, error, count } = await runList("*"));
-  }
-  if (error) {
-    console.error("[admin/subscriptions]", error);
+  const view = await loadCurrentSubscriptionView(supabase);
+  if (!view) {
     return json(res, 500, { error: "Failed to list subscriptions" });
   }
 
-  const subscriptions = (data || []).map(normalizeAdminSubscriptionListRow);
+  const wanted = status ? coerceSubscriptionStatus(status) || status : "";
+  const currentRows = view.partition.current.filter((row) => {
+    if (!wanted) return true;
+    const st = coerceSubscriptionStatus(row.status);
+    if (wanted === "trialing") return st === SUBSCRIPTION_STATUS.TRIALING;
+    if (wanted === "pending") return st === SUBSCRIPTION_STATUS.PENDING || st === SUBSCRIPTION_STATUS.PROCESSING;
+    if (wanted === "cancelled") return st === SUBSCRIPTION_STATUS.CANCELLED;
+    return st === wanted;
+  });
+  const page = currentRows.slice(offset, offset + limit);
+  const subscriptions = page.map(normalizeAdminSubscriptionListRow);
   await attachLastNotifications(supabase, subscriptions);
   return json(res, 200, {
     subscriptions,
-    count: count ?? subscriptions.length,
+    count: currentRows.length,
     overview,
     reporting,
   });
@@ -968,11 +1088,35 @@ export async function handleAdminSubscriptionCreate(req, res) {
   await attachPlanId(supabase, row);
   await attachCompanyId(supabase, row);
 
-  const { data, error } = await supabase.from("subscriptions").insert(row).select("*").single();
+  const ownerRows = await loadOwnerSubscriptionRows(supabase, {
+    companyId: row.company_id,
+    userId: row.user_id,
+  });
+  const current = pickCurrentSubscriptionRow(ownerRows);
+  const currentStatus = coerceSubscriptionStatus(current?.status);
+  const replaceCurrent =
+    current?.id &&
+    currentStatus !== SUBSCRIPTION_STATUS.CANCELLED &&
+    currentStatus !== SUBSCRIPTION_STATUS.EXPIRED &&
+    currentStatus !== SUBSCRIPTION_STATUS.FAILED;
+
+  let data = null;
+  let error = null;
+  if (replaceCurrent) {
+    const patch = { ...row, updated_at: nowIso };
+    delete patch.created_at;
+    ({ data, error } = await supabase.from("subscriptions").update(patch).eq("id", current.id).select("*").single());
+  } else {
+    ({ data, error } = await insertSubscriptionRow(supabase, {
+      ...row,
+      is_current: ownerRows.length === 0,
+    }));
+  }
   if (error || !data) {
     console.error("[admin/subscriptions/create]", error);
     return json(res, 500, { error: error?.message || "Failed to create subscription" });
   }
+  await reconcileOwnerCurrent(supabase, { companyId: data.company_id, userId: data.user_id });
 
   await logAdminSubscriptionEvent(
     supabase,
@@ -1012,10 +1156,8 @@ export async function handleAdminSetCompanyPlan(res, supabase, actor, body) {
   if (loadErr) return json(res, 500, { error: "Failed to load subscription" });
 
   const now = new Date();
-  const existing = pickAccessSubscriptionRow(rows || [], now);
-  const reusable =
-    existing &&
-    ![SUBSCRIPTION_STATUS.PENDING, SUBSCRIPTION_STATUS.PROCESSING].includes(coerceSubscriptionStatus(existing.status));
+  const existing = pickCurrentSubscriptionRow(rows || [], now) || pickAccessSubscriptionRow(rows || [], now);
+  const reusable = Boolean(existing?.id);
 
   if (removeAccess) {
     if (!reusable || !hasSubscriptionAccess(existing, now)) {
@@ -1072,6 +1214,7 @@ export async function handleAdminSetCompanyPlan(res, supabase, actor, body) {
   await attachPlanId(supabase, row);
   const { data, error } = await supabase.from("subscriptions").insert(row).select("*").single();
   if (error || !data) return json(res, 500, { error: error?.message || "Failed to create subscription" });
+  await reconcileOwnerCurrent(supabase, { companyId: data.company_id, userId: data.user_id });
   await logAdminSubscriptionEvent(supabase, data.id, data.company_id, SUBSCRIPTION_EVENT_TYPE.SUBSCRIPTION_CREATED, {
     source: "admin",
     actor_id: actor?.id || null,
@@ -1174,6 +1317,7 @@ async function applyAdminPlanPatch(res, supabase, actor, existing, patch, action
     before: { status: existing.status, plan: existing.plan_family || existing.plan, trial_ends_at: existing.trial_ends_at || null },
     after: { status: data.status, plan: data.plan_family || data.plan, trial_ends_at: data.trial_ends_at || null },
   });
+  await reconcileOwnerCurrent(supabase, { companyId: data.company_id, userId: data.user_id });
   return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
 }
 
@@ -1368,6 +1512,7 @@ export async function handleAdminSubscriptionUpdate(req, res) {
     },
   });
 
+  await reconcileOwnerCurrent(supabase, { companyId: data.company_id, userId: data.user_id });
   return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(data) });
 }
 

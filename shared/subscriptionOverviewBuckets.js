@@ -1,9 +1,9 @@
 /**
  * Definitions behind the admin Subscriptions summary cards.
  *
- * The server counts rows with these exact status sets (buildSubscriptionOverview /
- * buildBillingReporting) and the table filters rows with the same sets, so a card's number and the
- * rows you get when you click it always mean the same thing.
+ * The server counts the current subscription per business with these status sets
+ * (buildSubscriptionOverview) and the table filters those same current rows, so a card's number
+ * and the rows you get when you click it mean the same thing. Historical rows are not extra cards.
  */
 
 import { SUBSCRIPTION_STATUS } from "./subscriptionStatuses.js";

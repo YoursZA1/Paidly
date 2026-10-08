@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Check, Loader2 } from "lucide-react";
@@ -210,6 +210,7 @@ function EventTimeline({ stages }) {
  */
 export default function SubscriptionDetailsSheet({
   subscriptionId,
+  section = "details",
   open,
   onOpenChange,
 }) {
@@ -235,8 +236,14 @@ export default function SubscriptionDetailsSheet({
     onError: (err) => toast.error(err?.message || "Update failed"),
   });
 
+  useEffect(() => {
+    if (!open || section !== "history" || !data?.subscription) return;
+    document.getElementById("subscription-history")?.scrollIntoView({ block: "nearest" });
+  }, [open, section, subscriptionId, data]);
+
   const sub = data?.subscription;
   const trialNotifications = data?.trialNotifications || [];
+  const priorSubscriptions = data?.priorSubscriptions || [];
   const history = data?.history || [];
   const logs = data?.logs || [];
   const invoices = data?.invoices || [];
@@ -323,6 +330,35 @@ export default function SubscriptionDetailsSheet({
                   ? ` · ${formatZar(sub.paymentsSummary.successfulAmount, sub.currency)}`
                   : ""}
               </DetailField>
+            </div>
+
+            <div id="subscription-history" className="rounded-xl border border-border p-4">
+              <h3 className="text-sm font-semibold">Current subscription</h3>
+              <p className="mt-1 text-sm">
+                {sub.planName || sub.plan || "—"}
+                {sub.planAmount != null
+                  ? ` · ${formatZar(sub.planAmount, sub.currency)}${sub.billingCycle ? `/${sub.billingCycle}` : ""}`
+                  : ""}
+              </p>
+              <p className="text-xs capitalize text-muted-foreground">{sub.status || "—"}</p>
+              <h3 className="mb-2 mt-4 text-sm font-semibold">Subscription history</h3>
+              {priorSubscriptions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No earlier subscriptions.</p>
+              ) : (
+                <>
+                  <p className="mb-2 text-xs text-muted-foreground">History available</p>
+                  <ul className="space-y-2">
+                    {priorSubscriptions.map((prior) => (
+                      <li key={prior.id} className="rounded-lg border border-border px-3 py-2">
+                        <p className="text-sm font-medium capitalize">
+                          {prior.plan || "—"} — {prior.status || "—"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{formatDate(prior.at)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
 
             <GrantAccessPanel

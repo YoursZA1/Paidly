@@ -34,6 +34,8 @@ import {
   describeAccessFacingState,
   isAdminManaged,
 } from "../../../shared/subscriptionAccess.js";
+import { findReusableCheckoutRow } from "../../../shared/currentSubscription.js";
+import { insertSubscriptionRow, loadOwnerSubscriptionRows, reconcileOwnerCurrent } from "./subscriptionCurrent.js";
 import { describeDashboardSubscriptionBanner } from "../../../shared/subscriptionDashboardCopy.js";
 import { describePayfastCheckoutSignature } from "../payfastCustomSignature.js";
 import { randomBytes } from "node:crypto";
@@ -381,14 +383,9 @@ export async function handleSubscriptionCreate(req, res) {
     200
   );
 
-  // Supersede prior pending only (never touch active agreements here)
-  await supabase
-    .from("subscriptions")
-    .update({ status: SUBSCRIPTION_STATUS.CANCELLED, updated_at: nowIso })
-    .eq("user_id", user.id)
-    .eq("status", SUBSCRIPTION_STATUS.PENDING);
-
-  // 3) Create pending subscription — save DB record (no payment success, no activation)
+  // 3) Pending checkout. Reuse this company's open checkout, or a token-less cancelled shell,
+  // instead of cancelling the previous attempt and inserting another row. A live trial stays
+  // the current subscription until PayFast actually activates this checkout.
   const insertRow = {
     email: email || `${user.id}@users.paidly.local`,
     full_name: fullName || null,
@@ -419,11 +416,53 @@ export async function handleSubscriptionCreate(req, res) {
   let reusedPending = false;
   const pendingSelect =
     "id, status, plan_slug, amount, currency, m_payment_id, pending_expires_at, company_id, user_id";
-  let { data: sub, error: insertErr } = await supabase
-    .from("subscriptions")
-    .insert(insertRow)
-    .select(pendingSelect)
-    .single();
+  const ownerRows = await loadOwnerSubscriptionRows(supabase, { companyId, userId: user.id });
+  const checkoutTarget = findReusableCheckoutRow(ownerRows, now);
+  const checkoutPatch = { ...insertRow };
+  delete checkoutPatch.created_at;
+  checkoutPatch.cancelled_at = null;
+
+  let sub = null;
+  let insertErr = null;
+  if (checkoutTarget.row?.id) {
+    reusedPending = checkoutTarget.mode === "pending";
+    const { data: updated, error: updErr } = await supabase
+      .from("subscriptions")
+      .update(checkoutPatch)
+      .eq("id", checkoutTarget.row.id)
+      .select(pendingSelect)
+      .maybeSingle();
+    if (updErr || !updated) {
+      console.error("[billing/subscriptions/create] checkout reuse failed", updErr);
+      return json(res, 500, {
+        success: false,
+        code: "SUBSCRIPTION_CREATE_FAILED",
+        error: "Unable to start the subscription. Please try again.",
+      });
+    }
+    slog(reusedPending ? "Reused pending subscription" : "Reused subscription row for checkout");
+    sub = updated;
+  } else {
+    ({ data: sub, error: insertErr } = await insertSubscriptionRow(supabase, {
+      ...insertRow,
+      // A second row must not become current until reconcile ranks it. Default true would
+      // collide with the live agreement once the one-current index exists.
+      is_current: ownerRows.length === 0,
+    }));
+    if (sub) {
+      sub = {
+        id: sub.id,
+        status: sub.status,
+        plan_slug: sub.plan_slug,
+        amount: sub.amount,
+        currency: sub.currency,
+        m_payment_id: sub.m_payment_id,
+        pending_expires_at: sub.pending_expires_at,
+        company_id: sub.company_id,
+        user_id: sub.user_id,
+      };
+    }
+  }
 
   if (insertErr || !sub) {
     const isUnique = String(insertErr?.code || "") === "23505";
@@ -498,6 +537,8 @@ export async function handleSubscriptionCreate(req, res) {
     console.error("[billing/subscriptions/create] refused non-pending status after insert", sub.status);
     return json(res, 500, { error: "Subscription create aborted: unexpected status" });
   }
+
+  await reconcileOwnerCurrent(supabase, { companyId, userId: user.id });
 
   if (!pendingCheckoutMatchesCatalogPlan(sub, plan)) {
     slog("Refusing PayFast sign: pending row does not match catalog plan", {
@@ -1375,6 +1416,7 @@ export async function handleSubscriptionAbandon(req, res) {
       reason: "checkout_abandoned",
       by: auth.user.id,
     });
+    await reconcileOwnerCurrent(supabase, { companyId: row.company_id, userId: auth.user.id });
   }
   return json(res, 200, { success: true, abandoned: (data || []).length });
 }

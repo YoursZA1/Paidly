@@ -141,10 +141,17 @@ function buildSubscriptionRows(users, subscriptions) {
     }
   }
 
+  const seenOwners = new Set(
+    rows
+      .map((row) => (row.company_id ? `company:${row.company_id}` : row.user_id ? `user:${row.user_id}` : null))
+      .filter(Boolean)
+  );
   for (const s of subscriptions) {
-    if (s.id && !assignedSubIds.has(s.id)) {
-      rows.push({ ...s, _rowKey: s.id });
-    }
+    if (!s.id || assignedSubIds.has(s.id)) continue;
+    const owner = s.company_id ? `company:${s.company_id}` : s.user_id ? `user:${s.user_id}` : null;
+    if (owner && seenOwners.has(owner)) continue;
+    rows.push({ ...s, _rowKey: s.id });
+    if (owner) seenOwners.add(owner);
   }
 
   return rows;
@@ -194,7 +201,7 @@ function LastNotificationLine({ sub }) {
   );
 }
 
-function SubscriptionActions({ sub, onView, onEdit, onRequest, extra = null }) {
+function SubscriptionActions({ sub, onView, onEdit, onHistory, onRequest, extra = null }) {
   if (sub._isSynthetic) {
     return (
       <DropdownMenu>
@@ -228,8 +235,9 @@ function SubscriptionActions({ sub, onView, onEdit, onRequest, extra = null }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
-        <DropdownMenuItem onClick={onView}>View account</DropdownMenuItem>
-        <DropdownMenuItem onClick={onEdit}>View subscription</DropdownMenuItem>
+        <DropdownMenuItem onClick={onView}>View subscription</DropdownMenuItem>
+        <DropdownMenuItem onClick={onHistory || onView}>Subscription history</DropdownMenuItem>
+        <DropdownMenuItem onClick={onEdit}>Edit subscription</DropdownMenuItem>
         {!paying && !suspended ? (
           <>
             <DropdownMenuSeparator />
@@ -587,6 +595,11 @@ export default function SubscriptionsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
   const [detailSubId, setDetailSubId] = useState(null);
+  const [detailSection, setDetailSection] = useState("details");
+  const openSubscription = (id, section = "details") => {
+    setDetailSection(section);
+    setDetailSubId(id);
+  };
   const [subsPage, setSubsPage] = useState(0);
   const [actionRequest, setActionRequest] = useState(null);
   const queryClient = useQueryClient();
@@ -800,6 +813,24 @@ export default function SubscriptionsPage() {
         ))}
       </div>
 
+      {subscriptionOverview?.dataHealth ? (
+        <div className="mb-4 rounded-xl border border-border bg-card px-3.5 py-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Subscription data health</p>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {[
+              ["Users with duplicate current subscriptions", subscriptionOverview.dataHealth.duplicateCurrent],
+              ["Users with multiple historical subscriptions", subscriptionOverview.dataHealth.multipleHistorical],
+              ["Invalid subscription records", subscriptionOverview.dataHealth.invalid],
+            ].map(([label, count]) => (
+              <div key={label}>
+                <p className="text-lg font-semibold tabular-nums">{count ?? 0}</p>
+                <p className="text-xs text-muted-foreground">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <TrialMigrationPanel
         renderActions={(row) => {
           const sub = row.subscriptionRow;
@@ -817,7 +848,8 @@ export default function SubscriptionsPage() {
           return (
             <SubscriptionActions
               sub={sub}
-              onView={() => setDetailSubId(sub.id)}
+              onView={() => openSubscription(sub.id)}
+              onHistory={() => openSubscription(sub.id, "history")}
               onEdit={() => {
                 setShowAdd(false);
                 setEditingSub(sub);
@@ -943,7 +975,8 @@ export default function SubscriptionsPage() {
                 </div>
                 <SubscriptionActions
                   sub={sub}
-                  onView={() => setDetailSubId(sub.id)}
+                  onView={() => openSubscription(sub.id)}
+                  onHistory={() => openSubscription(sub.id, "history")}
                   onEdit={() => {
                     setShowAdd(false);
                     setEditingSub(sub);
@@ -1033,7 +1066,8 @@ export default function SubscriptionsPage() {
                   <td className="px-4 py-2.5 text-right">
                     <SubscriptionActions
                       sub={sub}
-                      onView={() => setDetailSubId(sub.id)}
+                      onView={() => openSubscription(sub.id)}
+                      onHistory={() => openSubscription(sub.id, "history")}
                       onEdit={() => {
                         setShowAdd(false);
                         setEditingSub(sub);
@@ -1082,6 +1116,7 @@ export default function SubscriptionsPage() {
 
       <SubscriptionDetailsSheet
         subscriptionId={detailSubId}
+        section={detailSection}
         open={Boolean(detailSubId)}
         onOpenChange={(next) => {
           if (!next) setDetailSubId(null);

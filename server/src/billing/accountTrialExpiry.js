@@ -91,6 +91,7 @@ export async function applyAccountCreationTrials(supabase, opts = {}) {
     };
     if (decision.setStartedAt) patch.trial_started_at = decision.setStartedAt;
     if (decision.action === "expire") patch.status = "expired";
+    // Same subscription row. Trial expiry must not insert another record.
     const { error } = await supabase.from("subscriptions").update(patch).eq("id", row.id).eq("status", row.status);
     if (error) {
       console.warn("[account-trial] update failed:", error.message);

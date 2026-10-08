@@ -14,6 +14,7 @@ import {
 import { SUBSCRIPTION_STATUS } from "../../shared/subscriptionStatuses.js";
 import { addCalendarDaysIso, PAST_DUE_GRACE_DAYS } from "../../shared/subscriptionAccess.js";
 import { familyForSlug, normalizePlanSlug } from "./subscriptionPlans.js";
+import { insertSubscriptionRow, reconcileOwnerCurrent } from "./billing/subscriptionCurrent.js";
 
 function parsePayfastWhitelist(raw) {
   return String(raw || "")
@@ -276,6 +277,13 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
   };
 
   if (shouldStartNewSubscriptionRow) {
+    const { error: clearErr } = await supabase
+      .from("subscriptions")
+      .update({ is_current: false })
+      .eq("user_id", userId);
+    if (clearErr && !/column|schema cache|does not exist/i.test(String(clearErr.message || ""))) {
+      console.warn("[payfast-subscription-itn] clear current before replace", clearErr.message);
+    }
     const { error: rpcErr } = await supabase.rpc("payfast_itn_replace_user_subscription", {
       p_user_id: userId,
       p_new_row: insertRow,
@@ -291,7 +299,7 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
       throw new Error(updErr.message);
     }
   } else {
-    const { error: insErr } = await supabase.from("subscriptions").insert(insertRow);
+    const { error: insErr } = await insertSubscriptionRow(supabase, { ...insertRow, is_current: false });
     if (insErr) {
       console.error("[payfast-subscription-itn] subscriptions insert failed", insErr.message);
       throw new Error(insErr.message);
@@ -314,6 +322,17 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
       await q;
     } catch (e) {
       console.warn("[payfast-subscription-itn] leftover trial cleanup", e?.message || e);
+    }
+  }
+
+  if (userId) {
+    try {
+      await reconcileOwnerCurrent(supabase, {
+        companyId: hints.companyIdHint || row.company_id || null,
+        userId,
+      });
+    } catch (e) {
+      console.warn("[payfast-subscription-itn] current subscription", e?.message || e);
     }
   }
 

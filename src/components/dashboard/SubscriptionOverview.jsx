@@ -84,9 +84,9 @@ export default function SubscriptionOverview({
         <div>
           <h2 className="text-sm font-medium text-foreground">Billing &amp; subscriptions</h2>
           <p className="text-xs text-muted-foreground">
-            Live counts from the server. Revenue counts verified PayFast payments from 20 Aug 2026 (UTC).{" "}
+            Live counts from the server. One current subscription per business. Revenue counts verified PayFast payments from 20 Aug 2026 (UTC).{" "}
             {overview?.total != null ? (
-              <span className="tabular-nums">{overview.total} total rows</span>
+              <span className="tabular-nums">{overview.total} current</span>
             ) : null}
           </p>
         </div>
