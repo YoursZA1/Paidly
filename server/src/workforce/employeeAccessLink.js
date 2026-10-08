@@ -373,9 +373,11 @@ async function documentDownloadUrl(req, res, grant) {
   }
   if (!token) return json(res, 404, { error: "This document isn't available to download." });
   const origin = String(requestOrigin(req) || resolvePublicAppOrigin()).replace(/\/$/, "");
+  const preview = String(req.query?.view || "") === "1";
+  const download = preview ? "" : "&download=true";
   return json(res, 200, {
     ok: true,
-    url: `${origin}/DocumentPDF?token=${encodeURIComponent(token)}&download=true`,
+    url: `${origin}/DocumentPDF?token=${encodeURIComponent(token)}${download}`,
   });
 }
 

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Building2, Download, Loader2 } from "lucide-react";
+import { Building2, ChevronDown, Download, Eye, Loader2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -82,6 +83,228 @@ function saveBlob(blob, filename) {
   link.download = filename || "download";
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function PortalSection({ title, hint, defaultOpen = true, children }) {
+  return (
+    <Collapsible defaultOpen={defaultOpen} className="overflow-hidden rounded-xl border border-border bg-card">
+      <CollapsibleTrigger
+        type="button"
+        className="group flex w-full items-center justify-between gap-3 px-6 py-4 text-left hover:bg-muted/30"
+      >
+        <span className="min-w-0">
+          <span className="block font-display text-lg font-semibold text-foreground">{title}</span>
+          {hint ? <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span> : null}
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t border-border px-6 py-4">{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function isImageName(name) {
+  return /\.(png|jpe?g|gif|webp)$/i.test(String(name || ""));
+}
+
+function DocumentLibrary({ name, payslips, documents, downloading, runDownload, onError }) {
+  const [preview, setPreview] = useState(null);
+  const blobUrl = useRef("");
+
+  useEffect(() => () => {
+    if (blobUrl.current) URL.revokeObjectURL(blobUrl.current);
+  }, []);
+
+  const showPreview = (next) => {
+    if (blobUrl.current) {
+      URL.revokeObjectURL(blobUrl.current);
+      blobUrl.current = "";
+    }
+    if (next?.blobUrl) blobUrl.current = next.blobUrl;
+    setPreview(next);
+  };
+
+  const openPreview = async (key, title, build) => {
+    onError?.("");
+    showPreview({ kind: "loading", id: key, title, loading: true, url: "" });
+    try {
+      const next = await build();
+      showPreview(next);
+    } catch (err) {
+      showPreview(null);
+      onError?.(err?.message || "We couldn't open that preview.");
+    }
+  };
+
+  const openPayslip = (row) => {
+    const title = row.payslip_number || "Payslip";
+    void openPreview(`preview-${row.id}`, title, async () => {
+      const file = await downloadEmployeePayslip(row.id);
+      const url = URL.createObjectURL(file.blob);
+      return {
+        kind: "payslip",
+        id: row.id,
+        title,
+        loading: false,
+        url,
+        blobUrl: url,
+        note: "This payslip opens with your ID number.",
+      };
+    });
+  };
+
+  const openDocument = (row) => {
+    void openPreview(`preview-doc-${row.id}`, row.title, async () => {
+      const url = await employeeDocumentUrl(row.id, { preview: true });
+      return { kind: "document", id: row.id, title: row.title, loading: false, url };
+    });
+  };
+
+  const openFile = (file) => {
+    if (!isImageName(file.file_name)) return;
+    void openPreview(`preview-file-${file.id}`, file.file_name, async () => {
+      const url = await employeeAttachmentUrl(file.id);
+      return { kind: "file", id: file.id, title: file.file_name, loading: false, url };
+    });
+  };
+
+  const empty = !payslips.length && !documents.length;
+
+  return (
+    <div className="space-y-4">
+      <p className="font-medium text-foreground">{name}</p>
+      {empty ? <p className="text-sm text-muted-foreground">No documents yet.</p> : null}
+      {payslips.length ? (
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Payslips</p>
+          <ul className="mt-2 grid gap-3 sm:grid-cols-2">
+            {payslips.map((row) => (
+              <li key={row.id} className="rounded-xl border border-border bg-background p-3">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Payslip</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {row.payslip_number || "Payslip"} · {day(row.pay_period_start)} – {day(row.pay_period_end)}
+                </p>
+                <p className="mt-2 text-sm font-semibold tabular-nums text-foreground">{money(row.net_pay)}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    disabled={preview?.loading && preview.id === `preview-${row.id}`}
+                    onClick={() => openPayslip(row)}
+                  >
+                    {preview?.loading && preview.id === `preview-${row.id}` ? <Loader2 className="size-4 animate-spin" /> : <Eye className="size-4" />}
+                    Preview
+                  </Button>
+                  <DownloadButton
+                    busy={downloading === row.id}
+                    onClick={() =>
+                      runDownload(row.id, async () => {
+                        const file = await downloadEmployeePayslip(row.id);
+                        saveBlob(file.blob, file.filename);
+                      })
+                    }
+                  >
+                    PDF
+                  </DownloadButton>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {documents.length ? (
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Other documents</p>
+          <ul className="mt-2 space-y-3">
+            {documents.map((row) => (
+              <li key={row.id} className="rounded-xl border border-border bg-background p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{row.title}</p>
+                    <p className="text-xs capitalize text-muted-foreground">
+                      {name}
+                      {row.type ? ` · ${String(row.type).replace(/_/g, " ")}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={preview?.loading && preview.id === `preview-doc-${row.id}`}
+                      onClick={() => openDocument(row)}
+                    >
+                      {preview?.loading && preview.id === `preview-doc-${row.id}` ? <Loader2 className="size-4 animate-spin" /> : <Eye className="size-4" />}
+                      Preview
+                    </Button>
+                    <DownloadButton
+                      busy={downloading === `doc-${row.id}`}
+                      onClick={() =>
+                        runDownload(`doc-${row.id}`, async () => {
+                          const url = await employeeDocumentUrl(row.id);
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        })
+                      }
+                    >
+                      Download
+                    </DownloadButton>
+                  </div>
+                </div>
+                {Array.isArray(row.files) && row.files.length ? (
+                  <ul className="mt-2 space-y-2">
+                    {row.files.map((file) => (
+                      <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                        <span>{file.file_name}</span>
+                        <span className="flex gap-2">
+                          {isImageName(file.file_name) ? (
+                            <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => openFile(file)}>
+                              <Eye className="size-4" />
+                              Preview
+                            </Button>
+                          ) : null}
+                          <DownloadButton
+                            busy={downloading === `file-${file.id}`}
+                            onClick={() =>
+                              runDownload(`file-${file.id}`, async () => {
+                                const url = await employeeAttachmentUrl(file.id);
+                                window.open(url, "_blank", "noopener,noreferrer");
+                              })
+                            }
+                          >
+                            File
+                          </DownloadButton>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {preview ? (
+        <div className="overflow-hidden rounded-xl border border-border bg-muted/20">
+          <p className="border-b border-border px-3 py-2 text-sm font-medium text-foreground">{preview.title}</p>
+          {preview.loading ? (
+            <p className="flex items-center gap-2 px-3 py-8 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Preparing preview…
+            </p>
+          ) : preview.kind === "file" ? (
+            <img src={preview.url} alt="" className="max-h-[32rem] w-full object-contain bg-background" />
+          ) : (
+            <iframe title={preview.title} src={preview.url} className="h-[32rem] w-full bg-background" />
+          )}
+          {preview.note ? <p className="px-3 py-2 text-xs text-muted-foreground">{preview.note}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function DownloadButton({ children, onClick, busy }) {
@@ -322,13 +545,9 @@ function Details({ session, onEnded, onSession }) {
             </p>
           ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Time off balance</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <PortalSection title="Time off balance" hint={leave.length ? `${leave.length} types` : "No balances yet"}>
             {leave.length ? (
-              <div className="mt-4 flex gap-4 overflow-x-auto pb-1">
+              <div className="flex gap-4 overflow-x-auto pb-1">
                 {leave.map((row) => (
                   <div key={row.id} className="flex w-24 shrink-0 flex-col items-center text-center">
                     <div className="flex size-16 items-center justify-center rounded-full border border-border text-lg font-semibold tabular-nums text-foreground">
@@ -341,16 +560,11 @@ function Details({ session, onEnded, onSession }) {
             ) : (
               <p className="text-sm text-muted-foreground">No leave balances yet.</p>
             )}
-            </CardContent>
-          </Card>
+          </PortalSection>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Applied leave</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <PortalSection title="Applied leave" hint={requests.length ? `${requests.length} requests` : "No requests yet"}>
             {requests.length ? (
-              <div className="mt-4 overflow-x-auto">
+              <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
@@ -382,32 +596,27 @@ function Details({ session, onEnded, onSession }) {
               <p className="text-sm text-muted-foreground">No leave requests yet.</p>
             )}
             {session.can_apply_leave ? <ApplyLeave balances={leave} onSubmitted={refresh} /> : null}
-            </CardContent>
-          </Card>
+          </PortalSection>
 
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle className="text-lg">Payslip</CardTitle>
-              {latest ? (
-                <DownloadButton
-                  busy={downloading === latest.id}
-                  onClick={() =>
-                    runDownload(latest.id, async () => {
-                      const file = await downloadEmployeePayslip(latest.id);
-                      saveBlob(file.blob, file.filename);
-                    })
-                  }
-                >
-                  Download PDF
-                </DownloadButton>
-              ) : null}
-            </CardHeader>
-            <CardContent>
+          <PortalSection title="Payslip" hint={latest ? `${latest.payslip_number || "Latest"} · ${money(latest.net_pay)}` : "No payslips yet"}>
             {latest ? (
-              <div className="mt-4">
-                <p className="text-sm text-muted-foreground">
-                  {latest.payslip_number || "Payslip"} · {day(latest.pay_period_start)} – {day(latest.pay_period_end)}
-                </p>
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    {latest.payslip_number || "Payslip"} · {day(latest.pay_period_start)} – {day(latest.pay_period_end)}
+                  </p>
+                  <DownloadButton
+                    busy={downloading === latest.id}
+                    onClick={() =>
+                      runDownload(latest.id, async () => {
+                        const file = await downloadEmployeePayslip(latest.id);
+                        saveBlob(file.blob, file.filename);
+                      })
+                    }
+                  >
+                    Download PDF
+                  </DownloadButton>
+                </div>
                 <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                   <Fact label="Basic salary" value={money(latest.basic_salary)} />
                   <Fact label="Allowances" value={money(latest.allowances)} />
@@ -415,13 +624,11 @@ function Details({ session, onEnded, onSession }) {
                   <Fact label="Net pay" value={money(latest.net_pay)} />
                   <Fact label="Pay date" value={day(latest.pay_date)} />
                 </dl>
+                <p className="mt-3 text-xs text-muted-foreground">The PDF opens with your ID number.</p>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">No payslips yet.</p>
             )}
-            {latest ? (
-              <p className="mt-3 text-xs text-muted-foreground">The PDF opens with your ID number.</p>
-            ) : null}
             {payslips.length > 1 ? (
               <ul className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
                 {payslips.slice(1).map((row) => (
@@ -444,65 +651,21 @@ function Details({ session, onEnded, onSession }) {
                 ))}
               </ul>
             ) : null}
-            </CardContent>
-          </Card>
+          </PortalSection>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Documents</CardTitle>
-            </CardHeader>
-            <CardContent>
-            {documents.length ? (
-              <ul className="space-y-3 text-sm">
-                {documents.map((row) => (
-                  <li key={row.id} className="border-t border-border py-3 first:border-t-0 first:pt-0">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-foreground">{row.title}</p>
-                        <p className="text-xs capitalize text-muted-foreground">
-                          {[row.type, row.status].filter(Boolean).join(" · ").replace(/_/g, " ")}
-                        </p>
-                      </div>
-                      <DownloadButton
-                        busy={downloading === `doc-${row.id}`}
-                        onClick={() =>
-                          runDownload(`doc-${row.id}`, async () => {
-                            const url = await employeeDocumentUrl(row.id);
-                            window.open(url, "_blank", "noopener,noreferrer");
-                          })
-                        }
-                      >
-                        Download
-                      </DownloadButton>
-                    </div>
-                    {Array.isArray(row.files) && row.files.length ? (
-                      <ul className="mt-2 space-y-2">
-                        {row.files.map((file) => (
-                          <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 pl-3 text-muted-foreground">
-                            <span>{file.file_name}</span>
-                            <DownloadButton
-                              busy={downloading === `file-${file.id}`}
-                              onClick={() =>
-                                runDownload(`file-${file.id}`, async () => {
-                                  const url = await employeeAttachmentUrl(file.id);
-                                  window.open(url, "_blank", "noopener,noreferrer");
-                                })
-                              }
-                            >
-                              File
-                            </DownloadButton>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No documents yet.</p>
-            )}
-            </CardContent>
-          </Card>
+          <PortalSection
+            title="Documents"
+            hint={`${payslips.length + documents.length} under ${name}`}
+          >
+            <DocumentLibrary
+              name={name}
+              payslips={payslips}
+              documents={documents}
+              downloading={downloading}
+              runDownload={runDownload}
+              onError={setActionError}
+            />
+          </PortalSection>
         </main>
       </div>
     </div>

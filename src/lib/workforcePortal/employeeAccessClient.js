@@ -102,8 +102,8 @@ export async function downloadEmployeePayslip(id) {
   return { blob, filename: match?.[1] || "payslip.pdf" };
 }
 
-export async function employeeDocumentUrl(id) {
-  const res = await fetch(endpoint("document", { id }), { credentials: "include" });
+export async function employeeDocumentUrl(id, { preview = false } = {}) {
+  const res = await fetch(endpoint("document", preview ? { id, view: "1" } : { id }), { credentials: "include" });
   const json = await readJson(res);
   if (!res.ok || !json.url) {
     const err = new Error(json.error || "We couldn't open this document.");
