@@ -11,15 +11,28 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import StatusBadge from '@/components/dashboard/StatusBadge';
 import PlanBadge from '@/components/dashboard/PlanBadge';
 import SubscriptionOverview from '@/components/dashboard/SubscriptionOverview';
 import SubscriptionDetailsSheet from '@/components/subscriptions/SubscriptionDetailsSheet';
+import TrialMigrationPanel, { TRIAL_MIGRATION_QUERY_KEY } from '@/components/subscriptions/TrialMigrationPanel';
 import { fetchAdminSubscriptionOverview } from '@/api/fetchAdminSubscriptionOverview';
 import { fetchAdminSubscriptionsList } from '@/api/fetchAdminSubscriptionsList';
 import { updateAdminSubscription } from '@/api/mutateAdminSubscription';
@@ -40,6 +53,11 @@ import {
   TRIAL_PHASE_LABEL,
   deriveTrialPhase,
 } from '@shared/trialLifecycle.js';
+import {
+  MIGRATION_OVERRIDE_STATUSES,
+  MIGRATION_STATUS,
+  MIGRATION_STATUS_LABEL,
+} from '@shared/trialMigration.js';
 
 const STATUS_FILTER_LABELS = {
   [SUBSCRIPTION_STATUS_FILTER.ALL]: 'All',
@@ -150,7 +168,33 @@ function TrialPhaseLine({ sub }) {
   );
 }
 
-function SubscriptionActions({ sub, onView, onEdit, onUpdate }) {
+const NOTIFICATION_LABEL = {
+  TRIAL_ENDING_3_DAYS: 'Ending soon',
+  TRIAL_EXPIRED: 'Trial ended',
+  TRIAL_EXPIRED_FOLLOWUP: 'Follow-up',
+  TRIAL_REACTIVATION: 'Subscription prompt',
+  TRIAL_EXTENDED: 'Trial extended',
+  SUBSCRIPTION_CONFIRMED: 'Subscribed',
+};
+
+function LastNotificationLine({ sub }) {
+  const note = sub?.last_notification;
+  if (!note) return <span className="text-xs text-muted-foreground">—</span>;
+  const when = note.at ? format(new Date(note.at), 'dd MMM') : null;
+  const failed = note.status === 'failed';
+  return (
+    <div>
+      <p className={`text-xs font-medium ${failed ? 'text-destructive' : ''}`}>
+        {NOTIFICATION_LABEL[note.type] || 'Email'} {failed ? 'failed' : 'sent'}
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        {[when, note.source === 'admin' ? 'by admin' : null].filter(Boolean).join(' · ') || '—'}
+      </p>
+    </div>
+  );
+}
+
+function SubscriptionActions({ sub, onView, onEdit, onRequest, extra = null }) {
   if (sub._isSynthetic) {
     return (
       <DropdownMenu>
@@ -167,16 +211,14 @@ function SubscriptionActions({ sub, onView, onEdit, onUpdate }) {
   }
 
   const email = sub.user_email || 'this user';
-  const run = (data, confirmMessage) => {
-    if (confirmMessage && !window.confirm(confirmMessage)) return;
-    onUpdate({ id: sub.id, data });
-  };
+  const who = sub.company_name || sub.user_name || email;
+  const phase = deriveTrialPhase(sub).phase;
+  const paying = phase === TRIAL_PHASE.SUBSCRIPTION_ACTIVE || phase === TRIAL_PHASE.PAST_DUE;
+  const free = phase === TRIAL_PHASE.FREE_ACCESS || sub.free_access === true;
+  const suspended = phase === TRIAL_PHASE.SUSPENDED;
+  const ask = (request) => onRequest({ sub, ...request });
   const extend = (days) =>
-    run({
-      action: 'extend_trial',
-      days,
-      reason: `Admin extended trial by ${days} days`,
-    });
+    ask({ data: { action: 'extend_trial', days }, success: `Trial extended by ${days} days` });
 
   return (
     <DropdownMenu>
@@ -188,35 +230,29 @@ function SubscriptionActions({ sub, onView, onEdit, onUpdate }) {
       <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
         <DropdownMenuItem onClick={onView}>View account</DropdownMenuItem>
         <DropdownMenuItem onClick={onEdit}>View subscription</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {TRIAL_EXTEND_DAY_OPTIONS.map((days) => (
-          <DropdownMenuItem key={days} onClick={() => extend(days)}>
-            Extend trial +{days} days
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuItem
-          onClick={() => {
-            const raw = window.prompt('Extend trial by how many days? (1–365)');
-            if (raw == null || raw.trim() === '') return;
-            const days = Number(raw);
-            if (!Number.isFinite(days) || days < 1 || days > 365) {
-              toast.error('Enter a number of days between 1 and 365.');
-              return;
-            }
-            extend(days);
-          }}
-        >
-          Extend trial — custom
-        </DropdownMenuItem>
+        {!paying && !suspended ? (
+          <>
+            <DropdownMenuSeparator />
+            {TRIAL_EXTEND_DAY_OPTIONS.map((days) => (
+              <DropdownMenuItem key={days} onClick={() => extend(days)}>
+                Extend trial +{days} days
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuItem onClick={() => ask({ kind: 'extend_custom' })}>Extend trial — custom</DropdownMenuItem>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         {FREE_ACCESS_DAY_OPTIONS.map((days) => (
           <DropdownMenuItem
             key={days}
             onClick={() =>
-              run(
-                { action: 'grant_free_access', days, reason: `Admin granted free access for ${days} days` },
-                `Grant ${days} days of free access to:\n\n${email}`
-              )
+              ask({
+                data: { action: 'grant_free_access', days, reason: `Admin granted free access for ${days} days` },
+                title: `Grant ${days} days of free access?`,
+                body: `${who} (${email}) gets full access until the free period ends. Trial emails stop.`,
+                confirmLabel: 'Grant free access',
+                success: `Free access granted for ${days} days`,
+              })
             }
           >
             Free access — {days} days
@@ -224,53 +260,92 @@ function SubscriptionActions({ sub, onView, onEdit, onUpdate }) {
         ))}
         <DropdownMenuItem
           onClick={() =>
-            run(
-              { action: 'grant_free_access', indefinite: true, reason: 'Admin granted indefinite free access' },
-              `Grant indefinite free access to:\n\n${email}`
-            )
+            ask({
+              data: { action: 'grant_free_access', indefinite: true, reason: 'Admin granted indefinite free access' },
+              title: 'Grant indefinite free access?',
+              body: `${who} (${email}) keeps full access until you remove it. Trial emails stop.`,
+              confirmLabel: 'Grant free access',
+              success: 'Indefinite free access granted',
+            })
           }
         >
           Free access — indefinite
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() =>
-            run(
-              { action: 'remove_free_access', reason: 'Admin removed free access' },
-              `Remove free access for:\n\n${email}`
-            )
-          }
-        >
-          Remove free access
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => run({ action: 'send_trial_reminder' }, `Send notification to:\n\n${email}`)}
-        >
-          Send trial reminder
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => run({ action: 'send_subscription_prompt' }, `Send notification to:\n\n${email}`)}
-        >
-          Send subscription prompt
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() =>
-            run(
-              { action: 'activate', reason: 'Admin activated subscription' },
-              `Activate the subscription for:\n\n${email}`
-            )
-          }
-        >
-          Activate subscription
-        </DropdownMenuItem>
-        {sub.status === 'suspended' ? (
+        {free ? (
           <DropdownMenuItem
             onClick={() =>
-              run(
-                { action: 'activate', reason: 'Admin reactivated subscription' },
-                `Reactivate:\n\n${email}`
-              )
+              ask({
+                data: { action: 'remove_free_access', reason: 'Admin removed free access' },
+                title: 'Remove free access?',
+                body: `${who} (${email}) goes back to their trial or, if it has ended, to view-only until they subscribe. No data is deleted.`,
+                confirmLabel: 'Remove free access',
+                destructive: true,
+                success: 'Free access removed',
+              })
+            }
+          >
+            Remove free access
+          </DropdownMenuItem>
+        ) : null}
+        {!paying && !free && !suspended ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() =>
+                ask({
+                  data: { action: 'send_trial_reminder' },
+                  title: 'Send trial reminder',
+                  body: 'Send notification to:',
+                  recipient: email,
+                  confirmLabel: 'Send',
+                  success: `Trial reminder sent to ${email}`,
+                })
+              }
+            >
+              Send trial reminder
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                ask({
+                  data: { action: 'send_subscription_prompt' },
+                  title: 'Send subscription prompt',
+                  body: 'Send notification to:',
+                  recipient: email,
+                  confirmLabel: 'Send',
+                  success: `Subscription prompt sent to ${email}`,
+                })
+              }
+            >
+              Send subscription prompt
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        <DropdownMenuSeparator />
+        {!paying && !suspended ? (
+          <DropdownMenuItem
+            onClick={() =>
+              ask({
+                data: { action: 'activate', reason: 'Admin activated subscription' },
+                title: 'Activate subscription?',
+                body: `${who} (${email}) gets full access with no end date, managed by an administrator.`,
+                confirmLabel: 'Activate',
+                success: 'Subscription activated',
+              })
+            }
+          >
+            Activate subscription
+          </DropdownMenuItem>
+        ) : null}
+        {suspended ? (
+          <DropdownMenuItem
+            onClick={() =>
+              ask({
+                data: { action: 'activate', reason: 'Admin reactivated account' },
+                title: 'Reactivate account?',
+                body: `${who} (${email}) gets full access again.`,
+                confirmLabel: 'Reactivate',
+                success: 'Account reactivated',
+              })
             }
           >
             Reactivate account
@@ -278,10 +353,14 @@ function SubscriptionActions({ sub, onView, onEdit, onUpdate }) {
         ) : (
           <DropdownMenuItem
             onClick={() =>
-              run(
-                { action: 'suspend', reason: 'Admin suspended subscription' },
-                `Suspend ${email}? They stay signed in, but Paidly stays closed until you reactivate them.`
-              )
+              ask({
+                data: { action: 'suspend', reason: 'Admin suspended account' },
+                title: 'Suspend account?',
+                body: `${who} (${email}) can still sign in, but Paidly stays closed until you reactivate them. No data is deleted.`,
+                confirmLabel: 'Suspend',
+                destructive: true,
+                success: 'Account suspended',
+              })
             }
           >
             Suspend account
@@ -290,16 +369,212 @@ function SubscriptionActions({ sub, onView, onEdit, onUpdate }) {
         <DropdownMenuItem
           className="text-destructive"
           onClick={() =>
-            run(
-              { action: 'cancel', reason: 'Admin cancelled subscription' },
-              `Cancel the subscription for ${email}? Their invoices, customers, and other records stay.`
-            )
+            ask({
+              data: { action: 'cancel', reason: 'Admin cancelled subscription' },
+              title: 'Cancel subscription?',
+              body: `${who} (${email}) loses access. Their invoices, customers, and other records stay.`,
+              confirmLabel: 'Cancel subscription',
+              destructive: true,
+              success: 'Subscription cancelled',
+            })
           }
         >
           Cancel
         </DropdownMenuItem>
+        {extra ? (
+          <>
+            <DropdownMenuSeparator />
+            {extra}
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Existing-user migration items for one subscription row. */
+function MigrationMenuItems({ sub, onRequest }) {
+  const email = sub.user_email || 'this user';
+  const who = sub.company_name || sub.user_name || email;
+  const ask = (request) => onRequest({ sub, ...request });
+  return (
+    <>
+      <DropdownMenuItem
+        onClick={() =>
+          ask({
+            data: { action: 'migration_mark_reviewed' },
+            title: 'Mark as reviewed?',
+            body: `${who} keeps their current access. The migration will not email them or change their state again.`,
+            confirmLabel: 'Mark as reviewed',
+            success: 'Marked as reviewed',
+          })
+        }
+      >
+        Mark as reviewed
+      </DropdownMenuItem>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Set migration state</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          {MIGRATION_OVERRIDE_STATUSES.map((status) => (
+            <DropdownMenuItem
+              key={status}
+              onClick={() =>
+                ask({
+                  data: { action: 'migration_override', status },
+                  title: `Set to ${MIGRATION_STATUS_LABEL[status]}?`,
+                  body:
+                    status === MIGRATION_STATUS.MIGRATED_EXPIRED
+                      ? `${who} gets a 7-day grace period with full access and the existing-user emails, then becomes view-only until they subscribe. No data is deleted.`
+                      : `Records the migration state for ${who}. Their access does not change.`,
+                  confirmLabel: 'Set state',
+                  success: `Migration state set to ${MIGRATION_STATUS_LABEL[status]}`,
+                })
+              }
+            >
+              {MIGRATION_STATUS_LABEL[status]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      {sub.migration_excluded ? (
+        <DropdownMenuItem
+          onClick={() =>
+            ask({
+              data: { action: 'migration_include' },
+              title: 'Remove the migration exclusion?',
+              body: `${who} goes back to the normal trial rules. If their trial has ended, access follows those rules again.`,
+              confirmLabel: 'Remove exclusion',
+              success: 'Exclusion removed',
+            })
+          }
+        >
+          Remove migration exclusion
+        </DropdownMenuItem>
+      ) : (
+        <DropdownMenuItem
+          onClick={() =>
+            ask({
+              data: { action: 'migration_exclude' },
+              title: 'Exclude from trial migration?',
+              body: `${who} keeps full access, gets no trial or migration emails, and is never expired automatically until you remove the exclusion.`,
+              askReason: true,
+              confirmLabel: 'Exclude',
+              success: 'Excluded from the trial migration',
+            })
+          }
+        >
+          Exclude from trial migration
+        </DropdownMenuItem>
+      )}
+      {sub.trial_migration_status ? (
+        <DropdownMenuItem
+          className="text-destructive"
+          onClick={() =>
+            ask({
+              data: { action: 'migration_reset' },
+              title: 'Reset the migration for this account?',
+              body: `Removes ${who}'s migration state and any grace period. If their trial has ended, they become view-only now. No data is deleted.`,
+              confirmLabel: 'Reset migration',
+              destructive: true,
+              success: 'Migration reset',
+            })
+          }
+        >
+          Reset migration
+        </DropdownMenuItem>
+      ) : null}
+    </>
+  );
+}
+
+function AdminActionDialog({ request, pending, onClose, onConfirm }) {
+  const [days, setDays] = useState('');
+  const [reason, setReason] = useState('');
+  useEffect(() => {
+    if (request) {
+      setDays('');
+      setReason('');
+    }
+  }, [request]);
+  const open = Boolean(request);
+  const custom = request?.kind === 'extend_custom';
+  const dayCount = Number(days);
+  const validDays = Number.isInteger(dayCount) && dayCount >= 1 && dayCount <= 365;
+  const confirm = () => {
+    if (!request) return;
+    if (custom) {
+      if (!validDays) return;
+      onConfirm({ ...request, data: { action: 'extend_trial', days: dayCount }, success: `Trial extended by ${dayCount} days` });
+      return;
+    }
+    if (request.askReason) {
+      onConfirm({ ...request, data: { ...request.data, reason: reason.trim() || undefined } });
+      return;
+    }
+    onConfirm(request);
+  };
+  const email = request?.sub?.user_email || '';
+  return (
+    <AlertDialog open={open} onOpenChange={(next) => (!next && !pending ? onClose() : null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{custom ? 'Extend trial' : request?.title}</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              {custom ? (
+                <>
+                  <p>Add days to the trial for {email || 'this user'}. The start date stays the same.</p>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={365}
+                    autoFocus
+                    value={days}
+                    onChange={(e) => setDays(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') confirm();
+                    }}
+                    placeholder="Days (1–365)"
+                    aria-label="Days to add"
+                    className="h-11 md:h-9"
+                  />
+                  {days && !validDays ? (
+                    <p className="text-xs text-destructive">Enter a whole number of days between 1 and 365.</p>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <p>{request?.body}</p>
+                  {request?.recipient ? <p className="font-medium text-foreground">{request.recipient}</p> : null}
+                  {request?.askReason ? (
+                    <Input
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      maxLength={500}
+                      placeholder="Reason (optional)"
+                      aria-label="Reason"
+                      className="h-11 md:h-9"
+                    />
+                  ) : null}
+                </>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <Button
+            type="button"
+            variant={request?.destructive ? 'destructive' : 'default'}
+            disabled={pending || (custom && !validDays)}
+            onClick={confirm}
+          >
+            {pending ? 'Working…' : custom ? 'Extend trial' : request?.confirmLabel || 'Confirm'}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -313,6 +588,7 @@ export default function SubscriptionsPage() {
   const [editingSub, setEditingSub] = useState(null);
   const [detailSubId, setDetailSubId] = useState(null);
   const [subsPage, setSubsPage] = useState(0);
+  const [actionRequest, setActionRequest] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: subscriptions = [], isLoading: subsLoading, isError: subsError, error: subsErr, refetch } = useQuery({
@@ -357,14 +633,28 @@ export default function SubscriptionsPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateAdminSubscription(id, data),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['subscription-overview'] });
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
-      toast.success('Subscription updated');
+      queryClient.invalidateQueries({ queryKey: [TRIAL_MIGRATION_QUERY_KEY] });
+      setActionRequest(null);
+      toast.success(variables?.success || 'Subscription updated');
     },
-    onError: (err) => toast.error(err?.message || 'Update failed'),
+    onError: (err) => {
+      setActionRequest(null);
+      toast.error(err?.message || 'Update failed');
+    },
   });
+
+  // Actions with a title or custom input confirm first; quick trial extensions run directly.
+  const requestAction = (request) => {
+    if (request.kind || request.title) {
+      setActionRequest(request);
+      return;
+    }
+    updateMutation.mutate({ id: request.sub.id, data: request.data, success: request.success });
+  };
 
   useEffect(() => { setSubsPage(0); }, [search, planFilter, statusFilter, phaseFilter, sortBy]);
 
@@ -510,6 +800,35 @@ export default function SubscriptionsPage() {
         ))}
       </div>
 
+      <TrialMigrationPanel
+        renderActions={(row) => {
+          const sub = row.subscriptionRow;
+          if (!sub) {
+            return (
+              <SubscriptionActions
+                sub={{ _isSynthetic: true, user_id: row.userId, user_email: row.ownerEmail, user_name: row.ownerName }}
+                onEdit={() => {
+                  setShowAdd(false);
+                  setEditingSub({ _isSynthetic: true, user_id: row.userId, user_email: row.ownerEmail, user_name: row.ownerName });
+                }}
+              />
+            );
+          }
+          return (
+            <SubscriptionActions
+              sub={sub}
+              onView={() => setDetailSubId(sub.id)}
+              onEdit={() => {
+                setShowAdd(false);
+                setEditingSub(sub);
+              }}
+              onRequest={requestAction}
+              extra={<MigrationMenuItems sub={sub} onRequest={requestAction} />}
+            />
+          );
+        }}
+      />
+
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -618,7 +937,10 @@ export default function SubscriptionsPage() {
                 <StatusBadge status={sub.status} />
               </div>
               <div className="mt-2 flex items-center justify-between gap-2">
-                <TrialPhaseLine sub={sub} />
+                <div className="flex min-w-0 items-start gap-4">
+                  <TrialPhaseLine sub={sub} />
+                  <LastNotificationLine sub={sub} />
+                </div>
                 <SubscriptionActions
                   sub={sub}
                   onView={() => setDetailSubId(sub.id)}
@@ -626,7 +948,7 @@ export default function SubscriptionsPage() {
                     setShowAdd(false);
                     setEditingSub(sub);
                   }}
-                  onUpdate={(payload) => updateMutation.mutate(payload)}
+                  onRequest={requestAction}
                 />
               </div>
               <div className="mt-2 flex items-center justify-between gap-2 text-sm">
@@ -658,6 +980,7 @@ export default function SubscriptionsPage() {
                 <th className="px-4 py-2 text-left font-medium">Billing</th>
                 <th className="px-4 py-2 text-left font-medium">Status</th>
                 <th className="px-4 py-2 text-left font-medium">Trial</th>
+                <th className="px-4 py-2 text-left font-medium">Last notification</th>
                 <th className="px-4 py-2 text-left font-medium">Next Billing</th>
                 <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
@@ -699,6 +1022,9 @@ export default function SubscriptionsPage() {
                   <td className="px-4 py-2.5">
                     <TrialPhaseLine sub={sub} />
                   </td>
+                  <td className="px-4 py-2.5">
+                    <LastNotificationLine sub={sub} />
+                  </td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">
                     {sub.next_billing_date
                       ? format(new Date(sub.next_billing_date), 'dd MMM yyyy')
@@ -712,14 +1038,14 @@ export default function SubscriptionsPage() {
                         setShowAdd(false);
                         setEditingSub(sub);
                       }}
-                      onUpdate={(payload) => updateMutation.mutate(payload)}
+                      onRequest={requestAction}
                     />
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {isLoading ? 'Loading...' : emptyMessage}
                   </td>
                 </tr>
@@ -743,6 +1069,15 @@ export default function SubscriptionsPage() {
           setEditingSub(null);
         }}
         subscription={editingSub}
+      />
+
+      <AdminActionDialog
+        request={actionRequest}
+        pending={updateMutation.isPending}
+        onClose={() => setActionRequest(null)}
+        onConfirm={(request) =>
+          updateMutation.mutate({ id: request.sub.id, data: request.data, success: request.success })
+        }
       />
 
       <SubscriptionDetailsSheet

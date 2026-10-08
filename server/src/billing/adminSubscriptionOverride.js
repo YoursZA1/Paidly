@@ -6,6 +6,7 @@
 import { resolveCurrentCatalogAssignment } from "../subscriptionPlans.js";
 import { SUBSCRIPTION_STATUS, coerceSubscriptionStatus } from "../../../shared/subscriptionStatuses.js";
 import { addCalendarDaysIso, SUBSCRIPTION_SOURCE, TRIAL_DURATION_DAYS } from "../../../shared/subscriptionAccess.js";
+import { formatTrialEndDate } from "../../../shared/subscriptionDashboardCopy.js";
 
 export const ADMIN_SUBSCRIPTION_ACTIONS = Object.freeze([
   "start_trial",
@@ -78,10 +79,14 @@ function humanAction(action, extra = {}) {
       return extra.plan
         ? `Admin activated ${extra.plan} indefinitely`
         : "Admin activated access indefinitely";
-    case "extend_trial":
-      return extra.days
-        ? `Admin extended trial by ${extra.days} days`
-        : "Admin extended trial";
+    case "extend_trial": {
+      const head = extra.days ? `Admin extended trial by ${extra.days} days.` : "Admin extended trial.";
+      const from = formatTrialEndDate(extra.previousEnd);
+      const to = formatTrialEndDate(extra.nextEnd);
+      return [head, from ? `Previous expiry: ${from}.` : null, to ? `New expiry: ${to}.` : null]
+        .filter(Boolean)
+        .join(" ");
+    }
     case "restart_trial":
       return "Admin started/restarted trial";
     case "end_trial":
@@ -164,6 +169,17 @@ export function buildAdminOverridePatch(existing, body, opts = {}) {
     patch.trial_ends_at = null;
     if (!existing?.activated_at) patch.activated_at = nowIso;
   } else if (action === "extend_trial") {
+    // A trial extension on a paying PayFast agreement would turn it back into a trial.
+    const liveStatus = coerceSubscriptionStatus(existing?.status);
+    const payfastHeld =
+      Boolean(String(existing?.payfast_token || existing?.payfast_subscription_id || "").trim()) ||
+      existing?.subscription_source === SUBSCRIPTION_SOURCE.PAYFAST;
+    if (
+      payfastHeld &&
+      (liveStatus === SUBSCRIPTION_STATUS.ACTIVE || liveStatus === SUBSCRIPTION_STATUS.PAST_DUE)
+    ) {
+      throw httpError(409, "This company already pays for Paidly. There is no trial to extend.");
+    }
     const customEnd = parseIso(src.trial_end_at || src.trial_ends_at, "trial_end_at");
     let days = Number(src.days);
     if (!Number.isFinite(days) || days <= 0) days = TRIAL_DURATION_DAYS;
@@ -177,6 +193,8 @@ export function buildAdminOverridePatch(existing, body, opts = {}) {
     patch.trial_ends_at = nextEnd;
     if (!existing?.trial_started_at) patch.trial_started_at = nowIso;
     extra.days = customEnd ? null : days;
+    extra.previousEnd = existing?.trial_ends_at || null;
+    extra.nextEnd = nextEnd;
   } else if (action === "restart_trial") {
     const days = Number(src.days) > 0 ? Number(src.days) : TRIAL_DURATION_DAYS;
     patch.status = SUBSCRIPTION_STATUS.TRIALING;
@@ -264,7 +282,13 @@ export function buildAdminOverridePatch(existing, body, opts = {}) {
   return {
     patch,
     action,
-    description: reason || humanAction(action, extra),
+    // A trial extension always records the dates; a typed reason is kept after them.
+    description:
+      action === "extend_trial"
+        ? [humanAction(action, extra), reason && !/^Admin extended trial/i.test(reason) ? `Reason: ${reason}` : null]
+            .filter(Boolean)
+            .join(" ")
+        : reason || humanAction(action, extra),
   };
 }
 

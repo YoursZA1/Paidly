@@ -680,6 +680,8 @@ async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
     freeAccess: sub.free_access === true,
     free_access_until: sub.free_access_until || null,
     freeAccessUntil: sub.free_access_until || null,
+    trialMigrationStatus: sub.trial_migration_status || null,
+    migrationGraceEndsAt: sub.migration_grace_ends_at || null,
   };
 
   // PayFast Recurring Billing state. The token itself is never returned; only the

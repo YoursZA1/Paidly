@@ -24,6 +24,7 @@ import {
   pickAccessSubscriptionRow,
 } from "../../../shared/subscriptionAccess.js";
 import { ENDING_SOON_DAYS } from "../../../shared/trialLifecycle.js";
+import { MIGRATION_ACCESS_COLUMNS } from "../../../shared/trialMigration.js";
 import {
   getRevenueSince,
   reportingPaymentLabel,
@@ -252,6 +253,7 @@ async function requireBillingAdmin(req, res) {
 const LIST_SELECT_RICH =
   "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at";
 const LIST_SELECT_FREE = `${LIST_SELECT_RICH}, free_access, free_access_until`;
+const LIST_SELECT_MIGRATION = `${LIST_SELECT_FREE}, ${MIGRATION_ACCESS_COLUMNS}, migration_exclusion_reason`;
 const LIST_SELECT_LEAN =
   "id, status, plan_slug, plan, amount, currency, billing_cycle, company_id, user_id, email, next_billing_date, cancelled_at, failure_count, created_at, updated_at";
 
@@ -489,9 +491,13 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
 
   let { data: sub, error: subErr } = await supabase
     .from("subscriptions")
-    .select(detailSelect)
+    .select(`${detailSelect}, ${MIGRATION_ACCESS_COLUMNS}, trial_migration_previous_status, migration_exclusion_reason, migration_excluded_at`)
     .eq("id", id)
     .maybeSingle();
+
+  if (subErr) {
+    ({ data: sub, error: subErr } = await supabase.from("subscriptions").select(detailSelect).eq("id", id).maybeSingle());
+  }
 
   if (subErr) {
     ({ data: sub, error: subErr } = await supabase
@@ -839,7 +845,10 @@ export async function handleAdminSubscriptionsList(req, res) {
     return query;
   };
 
-  let { data, error, count } = await runList(LIST_SELECT_FREE);
+  let { data, error, count } = await runList(LIST_SELECT_MIGRATION);
+  if (error) {
+    ({ data, error, count } = await runList(LIST_SELECT_FREE));
+  }
   if (error) {
     ({ data, error, count } = await runList(LIST_SELECT_RICH));
   }
@@ -855,12 +864,50 @@ export async function handleAdminSubscriptionsList(req, res) {
   }
 
   const subscriptions = (data || []).map(normalizeAdminSubscriptionListRow);
+  await attachLastNotifications(supabase, subscriptions);
   return json(res, 200, {
     subscriptions,
     count: count ?? subscriptions.length,
     overview,
     reporting,
   });
+}
+
+/**
+ * Latest trial/subscription email per row for the admin table. Read in chunks so the id list
+ * stays well under URL limits. A missing table leaves last_notification null.
+ */
+async function attachLastNotifications(supabase, subscriptions) {
+  const ids = subscriptions.map((row) => row.id).filter(Boolean);
+  if (ids.length === 0) return;
+  const latest = new Map();
+  try {
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data, error } = await supabase
+        .from("subscription_notifications")
+        .select("subscription_id, notification_type, status, source, sent_at, created_at")
+        .in("subscription_id", ids.slice(i, i + 100))
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (error) return;
+      for (const row of data || []) {
+        if (!latest.has(row.subscription_id)) latest.set(row.subscription_id, row);
+      }
+    }
+  } catch {
+    return;
+  }
+  for (const row of subscriptions) {
+    const note = latest.get(row.id);
+    row.last_notification = note
+      ? {
+          type: note.notification_type,
+          status: note.status,
+          source: note.source,
+          at: note.sent_at || note.created_at,
+        }
+      : null;
+  }
 }
 
 /**
@@ -879,6 +926,24 @@ export async function handleAdminSubscriptionCreate(req, res) {
   }
   if (namedAction === "set_company_access") {
     return handleAdminSetCompanyAccess(res, supabase, user, body);
+  }
+  if (namedAction === "trial_migration_preview" || namedAction === "trial_migration_run") {
+    try {
+      const migration = await import("./trialMigration.js");
+      if (namedAction === "trial_migration_preview") {
+        return json(res, 200, await migration.previewTrialMigration(supabase, { graceDays: body.grace_days }));
+      }
+      if (body.confirm !== true) return json(res, 400, { error: "Confirm the migration to run it." });
+      const result = await migration.runTrialMigration(supabase, {
+        graceDays: body.grace_days,
+        fingerprint: body.fingerprint,
+        actor: user,
+      });
+      return json(res, 200, result);
+    } catch (e) {
+      console.error("[admin/subscriptions/trial-migration]", e);
+      return json(res, e.status || 500, { error: e.status ? e.message : "The trial migration could not finish." });
+    }
   }
 
   let row;
@@ -1139,6 +1204,48 @@ export async function handleAdminSubscriptionUpdate(req, res) {
   if (!existing) return json(res, 404, { error: "Subscription not found" });
 
   const requestedAction = String(body.action || "").trim().toLowerCase();
+  if (requestedAction.startsWith("migration_")) {
+    try {
+      const { buildMigrationAdminPatch, writeMigrationAudit } = await import("./trialMigration.js");
+      const built = buildMigrationAdminPatch(existing, body, { actorId: user?.id || null });
+      const { data: updated, error: migErr } = await supabase
+        .from("subscriptions")
+        .update(built.patch)
+        .eq("id", id)
+        .select("*")
+        .maybeSingle();
+      if (migErr) {
+        const missing = /migration|column/i.test(String(migErr.message || ""));
+        return json(res, missing ? 503 : 500, {
+          error: missing
+            ? "Apply the existing-user trial migration to the database first."
+            : "Could not update the migration state.",
+        });
+      }
+      const snapshot = (row) => ({
+        status: row?.status || null,
+        trial_migration_status: row?.trial_migration_status || null,
+        migration_grace_ends_at: row?.migration_grace_ends_at || null,
+        migration_excluded: row?.migration_excluded === true,
+      });
+      await writeMigrationAudit(supabase, {
+        actor: user,
+        action: built.auditAction,
+        description: built.description,
+        target: existing,
+        before: snapshot(existing),
+        after: snapshot(updated),
+        metadata: {
+          previous_state: existing.trial_migration_status || null,
+          new_state: updated?.trial_migration_status || null,
+          reason: body.reason || null,
+        },
+      });
+      return json(res, 200, { subscription: normalizeAdminSubscriptionListRow(updated) });
+    } catch (e) {
+      return json(res, e.status || 500, { error: e.message || "Could not update the migration state." });
+    }
+  }
   if (requestedAction === "send_trial_reminder" || requestedAction === "send_subscription_prompt") {
     try {
       const { sendAdminTrialNotification } = await import("./trialConversionCron.js");
@@ -1156,6 +1263,18 @@ export async function handleAdminSubscriptionUpdate(req, res) {
       });
       return json(res, 200, { notification });
     } catch (e) {
+      if (e.notification) {
+        await writeAdminSubscriptionAudit(supabase, {
+          actor: user,
+          target: existing,
+          action: `${requestedAction}_failed`,
+          description: `Admin ${
+            requestedAction === "send_subscription_prompt" ? "subscription prompt" : "trial reminder"
+          } to ${e.notification.to} failed: ${e.message}`,
+          before: { status: existing.status, plan: existing.plan || existing.plan_slug, trial_ends_at: existing.trial_ends_at || null },
+          after: { status: existing.status, plan: existing.plan || existing.plan_slug, trial_ends_at: existing.trial_ends_at || null },
+        });
+      }
       return json(res, e.status || 500, { error: e.message || "Could not send the notification" });
     }
   }

@@ -116,6 +116,12 @@ export function hasSubscriptionAccess(sub, now = new Date()) {
   if (!st) return false;
 
   if (st === SUBSCRIPTION_STATUS.SUSPENDED) return false;
+  // Same order as subscription_row_has_access: migration exclusion, then a running migration grace.
+  if (sub.migration_excluded === true) return true;
+  if (sub.migration_grace_ends_at) {
+    const graceEnd = new Date(sub.migration_grace_ends_at).getTime();
+    if (Number.isFinite(graceEnd) && graceEnd > now.getTime()) return true;
+  }
   // Complimentary access (free_access) restores writes even after the trial date.
   // Suspended above still denies. A missing flag changes nothing for existing rows.
   if (sub.free_access === true) {

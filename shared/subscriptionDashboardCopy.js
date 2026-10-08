@@ -22,6 +22,7 @@ export const DASHBOARD_BANNER_KIND = Object.freeze({
   PAST_DUE: "past_due",
   PENDING: "pending",
   FREE_ACCESS: "free_access",
+  MIGRATION_GRACE: "migration_grace",
   NONE: "none",
 });
 
@@ -185,6 +186,22 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
         planName: name,
       });
     }
+  }
+
+  // Existing account whose trial ended before the trial system: full access until the grace date.
+  const graceEnd = firstPresent(src, ["migrationGraceEndsAt", "migration_grace_ends_at"]);
+  if (graceEnd && status !== SUBSCRIPTION_STATUS.SUSPENDED && new Date(graceEnd).getTime() > now.getTime()) {
+    const graceLabel = formatTrialEndDate(graceEnd);
+    return banner({
+      kind: DASHBOARD_BANNER_KIND.MIGRATION_GRACE,
+      heading: "Your Paidly trial has ended",
+      supporting: graceLabel
+        ? `Your account and business information are still available. Choose a plan by ${graceLabel} to keep using Paidly's business tools.`
+        : "Your account and business information are still available. Choose a plan to keep using Paidly's business tools.",
+      ctaLabel: "View Paidly Plans",
+      tone: "warning",
+      planName: name,
+    });
   }
 
   if (admin && (status === SUBSCRIPTION_STATUS.ACTIVE || status === "active")) {

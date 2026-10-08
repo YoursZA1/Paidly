@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { hasSubscriptionAccess } from "../../shared/subscriptionAccess.js";
+import { buildAdminOverridePatch } from "../../server/src/billing/adminSubscriptionOverride.js";
 import {
   TRIAL_NOTIFY,
   TRIAL_PHASE,
+  adminTrialNotificationType,
   buildTrialEmail,
   companySkipsTrialNotifications,
   deriveTrialPhase,
@@ -185,5 +187,75 @@ describe("trial conversion migration", () => {
     expect(sql).toMatch(/free_access/);
     expect(sql).not.toMatch(/ADD CONSTRAINT.*status/i);
     expect(sql).toMatch(/WHEN lower\(trim\(coalesce\(s\.status, ''\)\)\) = 'suspended' THEN false/);
+  });
+});
+
+describe("admin manual sends", () => {
+  it("do not use up the automatic email for the same trial", () => {
+    const sub = trialRow({ trial_ends_at: "2026-10-05T10:00:00.000Z", status: "expired" });
+    const history = [
+      {
+        subscription_id: sub.id,
+        notification_type: TRIAL_NOTIFY.EXPIRED,
+        status: "sent",
+        source: "admin",
+        trial_ends_at: sub.trial_ends_at,
+      },
+    ];
+    expect(notificationAlreadySent(history, sub, TRIAL_NOTIFY.EXPIRED)).toBe(false);
+    expect(notificationAlreadySent([{ ...history[0], source: "system" }], sub, TRIAL_NOTIFY.EXPIRED)).toBe(true);
+  });
+
+  it("pick the copy from the trial phase", () => {
+    const open = trialRow();
+    const lapsed = trialRow({ status: "expired", trial_ends_at: "2026-10-05T10:00:00.000Z" });
+    expect(adminTrialNotificationType([open], open, "send_trial_reminder", NOW)).toEqual({ type: TRIAL_NOTIFY.ENDING });
+    expect(adminTrialNotificationType([lapsed], lapsed, "send_trial_reminder", NOW)).toEqual({ type: TRIAL_NOTIFY.EXPIRED });
+    expect(adminTrialNotificationType([lapsed], lapsed, "send_subscription_prompt", NOW)).toEqual({
+      type: TRIAL_NOTIFY.REACTIVATION,
+    });
+    expect(buildTrialEmail(TRIAL_NOTIFY.REACTIVATION).ctaLabel).toBe("Reactivate Paidly");
+  });
+
+  it("refuse a subscribed, free-access, or suspended company", () => {
+    const lapsed = trialRow({ status: "expired", trial_ends_at: "2026-10-05T10:00:00.000Z" });
+    const paid = { id: "sub-2", company_id: "co-1", status: "active", subscription_source: "payfast" };
+    expect(adminTrialNotificationType([lapsed, paid], lapsed, "send_trial_reminder", NOW).error).toMatch(/subscribed/);
+    const free = { ...lapsed, free_access: true, free_access_until: null };
+    expect(adminTrialNotificationType([free], free, "send_subscription_prompt", NOW).error).toMatch(/free access/);
+    const suspended = { ...lapsed, status: "suspended" };
+    expect(adminTrialNotificationType([suspended], suspended, "send_trial_reminder", NOW).error).toMatch(/suspended/);
+  });
+});
+
+describe("admin trial extension", () => {
+  it("keeps the start date and records previous and new expiry", () => {
+    const existing = trialRow({ trial_started_at: "2026-09-24T10:00:00.000Z", trial_ends_at: "2026-10-08T10:00:00.000Z", status: "expired" });
+    const { patch, description } = buildAdminOverridePatch(existing, { action: "extend_trial", days: 7 }, { now: NOW });
+    expect(patch.status).toBe("trialing");
+    expect(patch.trial_started_at).toBeUndefined();
+    expect(patch.trial_ends_at).toBe("2026-10-15T10:00:00.000Z");
+    expect(description).toMatch(/by 7 days/);
+    expect(description).toMatch(/Previous expiry: 8 October 2026/);
+    expect(description).toMatch(/New expiry: 15 October 2026/);
+  });
+
+  it("refuses to turn a paying PayFast subscription back into a trial", () => {
+    const paid = { id: "sub-2", status: "active", subscription_source: "payfast", payfast_token: "tok" };
+    expect(() => buildAdminOverridePatch(paid, { action: "extend_trial", days: 7 }, { now: NOW })).toThrow(
+      /already pays/
+    );
+  });
+});
+
+describe("system-only notification index", () => {
+  const sql = readFileSync(
+    new URL("../../supabase/migrations/20261008210000_trial_notifications_system_once.sql", import.meta.url),
+    "utf8"
+  );
+
+  it("limits the once-only rule to automatic sends", () => {
+    expect(sql).toMatch(/DROP INDEX IF EXISTS public\.subscription_notifications_sent_once/);
+    expect(sql).toMatch(/WHERE status = 'sent' AND source = 'system'/);
   });
 });
