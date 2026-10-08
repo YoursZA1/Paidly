@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasSubscriptionAccess } from "../../shared/subscriptionAccess.js";
+import { TRIAL_DURATION_DAYS, hasSubscriptionAccess } from "../../shared/subscriptionAccess.js";
 import {
   MIGRATION_STATUS,
   buildMigrationGroups,
@@ -41,18 +41,20 @@ describe("classifying existing accounts", () => {
     expect(classify([sub({ status: "suspended" })]).proposed).toBe(MIGRATION_STATUS.MIGRATED_SUSPENDED);
   });
 
-  it("gives an expired trial a grace period and one email, without touching its dates", () => {
+  it("marks an expired trial expired with one email and no grace, without touching its dates", () => {
     const row = sub();
-    const out = classify([row]);
+    const out = classify([row], { ownerEmail: "o@x.co" });
     expect(out.proposed).toBe(MIGRATION_STATUS.MIGRATED_EXPIRED);
     expect(out.notificationRequired).toBe(true);
-    expect(out.graceDays).toBe(7);
-    expect(out.graceEndsAt).toBe(at(7));
+    expect(out.graceDays).toBeNull();
+    expect(out.graceEndsAt).toBeNull();
     expect(row.trial_ends_at).toBe(at(-40));
+    // A grace length is still available when an admin sets one.
+    expect(classifyMigrationGroup(group([row], { ownerEmail: "o@x.co" }), { now: NOW, graceDays: 7 }).graceEndsAt).toBe(at(7));
   });
 
   it("never guesses: unclear accounts need review", () => {
-    expect(classify([]).reasons).toEqual(["No subscription record"]);
+    expect(classify([], { userId: null }).reasons).toEqual(["No subscription record and no owner account"]);
     expect(classify([sub({ status: "legacy_paid" })]).proposed).toBe(MIGRATION_STATUS.REQUIRES_REVIEW);
     expect(classify([sub({ trial_ends_at: "not a date" })]).proposed).toBe(MIGRATION_STATUS.REQUIRES_REVIEW);
     expect(classify([sub({ status: "trialing", trial_ends_at: null })]).reasons).toContain("Trial with no end date");
@@ -108,7 +110,49 @@ describe("classifying existing accounts", () => {
     expect(results.find((r) => r.companyId === "co-b").proposed).toBe(MIGRATION_STATUS.MIGRATED_EXPIRED);
     const summary = summarizeMigration(results);
     expect(summary.total).toBe(2);
-    expect(summary.notifications).toBe(1);
+    expect(summary.notifications).toBe(0); // no owner email in this fixture
+  });
+});
+
+describe("companies with no subscription row: trial from sign-up date", () => {
+  const owner = (createdDaysAgo, extra = {}) => ({
+    userId: "u-1",
+    ownerEmail: "o@x.co",
+    owner: { id: "u-1", plan: "individual" },
+    ownerAuth: { id: "u-1", created_at: at(-createdDaysAgo), invited_at: null, email_confirmed_at: at(-createdDaysAgo), ...extra },
+  });
+
+  it("expires a sign-up older than the trial length and creates the row signup would have", () => {
+    const out = classify([], owner(37));
+    expect(out.proposed).toBe(MIGRATION_STATUS.MIGRATED_EXPIRED);
+    expect(out.derivedFrom).toBe("signup_date");
+    expect(out.trialEndsAt).toBe(at(-30));
+    expect(out.willCreate).toBe(true);
+    expect(out.createRow).toMatchObject({ status: "expired", plan_family: "starter", trial_ends_at: at(-30) });
+    expect(out.notificationRequired).toBe(true);
+  });
+
+  it("keeps a recent sign-up in trial", () => {
+    expect(classify([], owner(2)).proposed).toBe(MIGRATION_STATUS.MIGRATED_ACTIVE);
+    expect(classify([], owner(5)).proposed).toBe(MIGRATION_STATUS.MIGRATED_ENDING_SOON);
+    expect(classify([], owner(5)).createRow.status).toBe("trialing");
+  });
+
+  it("expires but does not email an address that was never confirmed", () => {
+    const out = classify([], owner(37, { email_confirmed_at: null }));
+    expect(out.proposed).toBe(MIGRATION_STATUS.MIGRATED_EXPIRED);
+    expect(out.notificationRequired).toBe(false);
+    expect(out.notificationNote).toBe("Email never confirmed");
+  });
+
+  it("sends invited users and owners of a second company to review", () => {
+    expect(classify([], owner(37, { invited_at: at(-37) })).proposed).toBe(MIGRATION_STATUS.REQUIRES_REVIEW);
+    expect(classify([], { ...owner(37), ownerInOtherCompany: true }).proposed).toBe(MIGRATION_STATUS.REQUIRES_REVIEW);
+  });
+
+  it("uses the configured trial length from shared/subscriptionAccess.js", () => {
+    const out = classify([], owner(TRIAL_DURATION_DAYS));
+    expect(out.proposed).toBe(MIGRATION_STATUS.MIGRATED_EXPIRED);
   });
 });
 
@@ -137,8 +181,6 @@ describe("migration emails", () => {
     sub({
       trial_migration_status: "MIGRATED_EXPIRED",
       trial_migration_at: at(-1),
-      migration_grace_started_at: at(-1),
-      migration_grace_ends_at: at(6),
       ...overrides,
     });
   const sent = (row, type, daysAgo) => ({
@@ -146,7 +188,7 @@ describe("migration emails", () => {
     notification_type: type,
     status: "sent",
     source: "system",
-    trial_ends_at: row.migration_grace_started_at,
+    trial_ends_at: row.trial_migration_at,
     sent_at: at(-daysAgo),
   });
 
@@ -170,16 +212,22 @@ describe("migration emails", () => {
     expect(planTrialNotifications([[migrated({ migration_excluded: true })]], [], NOW)).toHaveLength(0);
   });
 
-  it("never sends the standard expiry email for a trial that ended long ago", () => {
+  it("sends the ended email once for a trial that ended long ago, without the follow-up", () => {
     const old = sub({ trial_ends_at: at(-40) });
-    expect(trialNotificationCandidates(old, NOW)).toEqual([]);
+    expect(trialNotificationCandidates(old, NOW)).toEqual([TRIAL_NOTIFY.EXPIRED]);
     const recent = sub({ trial_ends_at: at(-1) });
     expect(trialNotificationCandidates(recent, NOW)).toEqual([TRIAL_NOTIFY.EXPIRED]);
   });
 
   it("uses the existing-user copy", () => {
     expect(buildTrialEmail(TRIAL_NOTIFY.EXISTING_EXPIRED).subject).toBe("Your Paidly trial has ended");
-    expect(buildTrialEmail(TRIAL_NOTIFY.EXISTING_EXPIRED).ctaLabel).toBe("View Paidly Plans");
+    expect(buildTrialEmail(TRIAL_NOTIFY.EXISTING_EXPIRED).ctaLabel).toBe("Subscribe to Paidly");
+    expect(buildTrialEmail(TRIAL_NOTIFY.EXISTING_EXPIRED, { name: "Thandi Nkosi" }).paragraphs).toEqual([
+      "Hi Thandi,",
+      "Your Paidly trial has ended.",
+      "Your account and business information are still available.",
+      "Subscribe to Paidly to continue managing your business with invoicing, quotes, expenses, POS and more.",
+    ]);
     expect(buildTrialEmail(TRIAL_NOTIFY.EXISTING_FOLLOWUP).subject).toBe("Ready to continue with Paidly?");
     expect(buildTrialEmail(TRIAL_NOTIFY.EXISTING_FOLLOWUP).ctaLabel).toBe("Choose a Plan");
   });
@@ -199,9 +247,11 @@ describe("admin migration actions", () => {
     }
   });
 
-  it("starts a grace period only for an account without access", () => {
+  it("marks expired only an account without access, with no grace unless asked", () => {
     const { patch } = buildMigrationAdminPatch(sub(), { action: "migration_override", status: "MIGRATED_EXPIRED" }, { now: NOW });
-    expect(patch.migration_grace_ends_at).toBe(at(7));
+    expect(patch.migration_grace_ends_at).toBeUndefined();
+    const withGrace = buildMigrationAdminPatch(sub(), { action: "migration_override", status: "MIGRATED_EXPIRED", grace_days: 7 }, { now: NOW });
+    expect(withGrace.patch.migration_grace_ends_at).toBe(at(7));
     const live = sub({ status: "active", subscription_source: "payfast", payfast_token: "t" });
     expect(() =>
       buildMigrationAdminPatch(live, { action: "migration_override", status: "MIGRATED_EXPIRED" }, { now: NOW })

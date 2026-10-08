@@ -11,11 +11,14 @@
  */
 
 import {
+  TRIAL_DURATION_DAYS,
   hasSubscriptionAccess,
   isAdminManaged,
   pickAccessSubscriptionRow,
   addCalendarDaysIso,
+  trialRemainingBreakdown,
 } from "./subscriptionAccess.js";
+import { familyForSlug } from "./plans.js";
 import { coerceSubscriptionStatus, SUBSCRIPTION_STATUS } from "./subscriptionStatuses.js";
 import {
   TRIAL_PHASE,
@@ -25,7 +28,8 @@ import {
   pickNotifiableTrialRow,
 } from "./trialLifecycle.js";
 
-export const MIGRATION_GRACE_DEFAULT_DAYS = 7;
+/** No grace by default: an existing expired account is view-only once the migration runs. */
+export const MIGRATION_GRACE_DEFAULT_DAYS = 0;
 export const MIGRATION_GRACE_MAX_DAYS = 30;
 export const MIGRATION_FOLLOWUP_AFTER_DAYS = 3;
 
@@ -88,8 +92,9 @@ const PHASE_TO_STATUS = Object.freeze({
 
 /** Clamp an admin-supplied grace length. */
 export function normalizeGraceDays(raw) {
+  if (raw == null || raw === "") return MIGRATION_GRACE_DEFAULT_DAYS;
   const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1) return MIGRATION_GRACE_DEFAULT_DAYS;
+  if (!Number.isFinite(n) || n < 0) return MIGRATION_GRACE_DEFAULT_DAYS;
   return Math.min(MIGRATION_GRACE_MAX_DAYS, Math.floor(n));
 }
 
@@ -224,9 +229,7 @@ export function classifyMigrationGroup(group, opts = {}) {
   };
 
   if (group.isDemo) return { ...base, skipped: "demo", proposed: null };
-  if (rows.length === 0) {
-    return { ...base, reasons: ["No subscription record"], skipped: "no_row" };
-  }
+  if (rows.length === 0) return classifyFromSignupDate(group, base, now, graceDays);
 
   const accessRow = pickAccessSubscriptionRow(rows, now) || rows[0];
   const accessGranted = hasSubscriptionAccess(accessRow, now);
@@ -286,19 +289,90 @@ export function classifyMigrationGroup(group, opts = {}) {
     proposed,
     reasons,
     existingStatus: migrated?.trial_migration_status || null,
-    notificationRequired: expired,
-    graceDays: expired ? graceDays : null,
-    graceEndsAt: expired ? addCalendarDaysIso(now, graceDays) : null,
+    notificationRequired: expired && notifiable(group).ok,
+    notificationNote: expired ? notifiable(group).note : null,
+    graceDays: expired && graceDays > 0 ? graceDays : null,
+    graceEndsAt: expired && graceDays > 0 ? addCalendarDaysIso(now, graceDays) : null,
     willWrite: Boolean(target.id),
+  };
+}
+
+/** Whether the owner can be emailed: an address, and one they confirmed. */
+function notifiable(group) {
+  if (!group.ownerEmail) return { ok: false, note: "No email address" };
+  if (group.ownerAuth && !group.ownerAuth.email_confirmed_at) return { ok: false, note: "Email never confirmed" };
+  return { ok: true, note: null };
+}
+
+/** Sign-up time of the company owner: auth user, then profile, then the company itself. */
+function signupTime(group) {
+  for (const raw of [group.ownerAuth?.created_at, group.owner?.created_at, group.companyCreatedAt]) {
+    const t = new Date(raw || "").getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+/**
+ * A company with no subscription row at all: its trial is the default length from the owner's
+ * sign-up, exactly what start_owner_system_trial gives a new owner. The run creates that row.
+ * Invited users and owners who also belong to another company are not self-serve trials: review.
+ */
+function classifyFromSignupDate(group, base, now, graceDays) {
+  const review = (reason) => ({ ...base, reasons: [reason], skipped: "no_row" });
+  if (!group.userId || (!group.owner && !group.ownerAuth)) return review("No subscription record and no owner account");
+  if (group.ownerAuth?.invited_at) return review("No subscription record; owner was invited, not a self-signup");
+  if (group.ownerInOtherCompany) return review("No subscription record; owner also belongs to another company");
+  const start = signupTime(group);
+  if (start == null) return review("No subscription record and no sign-up date");
+
+  const startIso = new Date(start).toISOString();
+  const endIso = new Date(start + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const synthetic = { status: "trialing", trial_started_at: startIso, trial_ends_at: endIso };
+  const phase = deriveTrialPhase(synthetic, now);
+  const proposed = PHASE_TO_STATUS[phase.phase];
+  const expired = proposed === MIGRATION_STATUS.MIGRATED_EXPIRED;
+  const family = familyForSlug(group.owner?.plan) || "starter";
+  const contact = notifiable(group);
+  return {
+    ...base,
+    currentStatus: null,
+    currentPhase: phase.phase,
+    currentPhaseLabel: `${TRIAL_PHASE_LABEL[phase.phase] || "—"} (from sign-up date)`,
+    trialEndsAt: endIso,
+    daysRemaining: trialRemainingBreakdown(endIso, now).daysRemaining,
+    proposed,
+    reasons: [],
+    derivedFrom: "signup_date",
+    notificationRequired: expired && contact.ok,
+    notificationNote: expired ? contact.note : null,
+    graceDays: expired && graceDays > 0 ? graceDays : null,
+    graceEndsAt: expired && graceDays > 0 ? addCalendarDaysIso(now, graceDays) : null,
+    willCreate: true,
+    createRow: {
+      status: expired ? "expired" : "trialing",
+      plan_family: family,
+      trial_started_at: startIso,
+      trial_ends_at: endIso,
+    },
   };
 }
 
 /**
  * Group raw rows into accounts: each organization with its rows plus its owner's company-less rows
  * (the same set company_access_subscription reads), then any remaining company-less rows per user.
- * @param {{ organizations: object[], subscriptions: object[], profiles: object[], payments?: object[] }} data
+ * @param {{ organizations: object[], subscriptions: object[], profiles: object[], payments?: object[],
+ *   users?: object[], memberships?: object[] }} data  users: auth users (created_at, invited_at, email_confirmed_at)
  */
-export function buildMigrationGroups({ organizations = [], subscriptions = [], profiles = [], payments = [] }) {
+export function buildMigrationGroups({
+  organizations = [],
+  subscriptions = [],
+  profiles = [],
+  payments = [],
+  users = [],
+  memberships = [],
+}) {
+  const userById = new Map(users.map((u) => [u.id, u]));
   const paidKeys = new Set(
     payments
       .filter((p) => /^(completed?|paid|success(ful)?)$/i.test(String(p?.status || "")))
@@ -320,6 +394,9 @@ export function buildMigrationGroups({ organizations = [], subscriptions = [], p
       ownerName: owner?.full_name || null,
       ownerEmail: owner?.email || null,
       owner,
+      ownerAuth: userById.get(org.owner_id) || null,
+      ownerInOtherCompany: memberships.some((m) => m.user_id === org.owner_id && m.org_id !== org.id),
+      companyCreatedAt: org.created_at || null,
       isDemo: org.is_demo === true,
       rows: [],
     });
@@ -354,7 +431,7 @@ export function buildMigrationGroups({ organizations = [], subscriptions = [], p
 
 /** Count classifications into dashboard buckets. */
 export function summarizeMigration(results) {
-  const counts = { total: 0, excluded: 0, demo: 0, noRow: 0, alreadyMigrated: 0, notifications: 0 };
+  const counts = { total: 0, excluded: 0, demo: 0, noRow: 0, created: 0, alreadyMigrated: 0, notifications: 0 };
   for (const b of MIGRATION_BUCKETS) counts[b.key] = 0;
   counts.reviewed = 0;
   for (const r of results) {
@@ -372,6 +449,7 @@ export function summarizeMigration(results) {
       counts.review += 1;
       continue;
     }
+    if (r.willCreate) counts.created += 1;
     if (r.alreadyMigrated) counts.alreadyMigrated += 1;
     if (r.proposed === MIGRATION_STATUS.REVIEWED) counts.reviewed += 1;
     const bucket = MIGRATION_BUCKETS.find((b) => b.status === r.proposed);
@@ -384,8 +462,8 @@ export function summarizeMigration(results) {
 /** Stable fingerprint of a preview, so a run can refuse when accounts changed since the admin looked. */
 export function migrationFingerprint(results) {
   return results
-    .filter((r) => r.willWrite && !r.alreadyMigrated)
-    .map((r) => `${r.targetRowId}:${r.proposed}`)
+    .filter((r) => (r.willWrite || r.willCreate) && !r.alreadyMigrated)
+    .map((r) => `${r.targetRowId || r.key}:${r.proposed}:${r.notificationRequired ? 1 : 0}`)
     .sort()
     .join("|");
 }

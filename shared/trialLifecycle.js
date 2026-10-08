@@ -14,8 +14,8 @@ import { coerceSubscriptionStatus, SUBSCRIPTION_STATUS } from "./subscriptionSta
 export const ENDING_SOON_DAYS = 3;
 export const FOLLOWUP_AFTER_DAYS = 3;
 /**
- * The standard "trial has ended" email is only for a trial that ended recently. An account whose
- * trial ended long ago is an existing account: it gets the migration emails, never this one.
+ * Kept so older callers can read the historical window. The ended email itself is no longer
+ * limited to it: each expired trial is mailed once, however long ago it ended.
  */
 export const STANDARD_EXPIRY_WINDOW_DAYS = 7;
 export const STANDARD_FOLLOWUP_WINDOW_DAYS = 14;
@@ -97,15 +97,15 @@ export function accessWithoutMigration(sub, now = new Date()) {
  * An admin trial extension after the migration puts the row back on the normal trial path.
  */
 export function isMigratedExpiredRow(sub) {
-  if (!sub || sub.trial_migration_status !== "MIGRATED_EXPIRED" || !sub.migration_grace_started_at) return false;
+  if (!sub || sub.trial_migration_status !== "MIGRATED_EXPIRED" || !sub.trial_migration_at) return false;
   const end = new Date(sub.trial_ends_at || "").getTime();
-  const migratedAt = new Date(sub.trial_migration_at || sub.migration_grace_started_at).getTime();
+  const migratedAt = new Date(sub.trial_migration_at).getTime();
   return !(Number.isFinite(end) && Number.isFinite(migratedAt) && end > migratedAt);
 }
 
-/** The once-only key: the trial end for trial emails, the grace start for migration emails. */
+/** The once-only key: the trial end for trial emails, the migration time for migration emails. */
 export function notificationCycleKey(sub, type) {
-  return MIGRATION_TYPES.has(type) ? sub?.migration_grace_started_at || null : sub?.trial_ends_at || null;
+  return MIGRATION_TYPES.has(type) ? sub?.trial_migration_at || null : sub?.trial_ends_at || null;
 }
 
 function daysSince(iso, now) {
@@ -254,8 +254,10 @@ export function trialNotificationCandidates(sub, now = new Date()) {
     if (daysLeft > 0 && daysLeft <= ENDING_SOON_DAYS) out.push(TRIAL_NOTIFY.ENDING);
     return out;
   }
+  // The ended email goes once, however long ago the trial ended. The follow-up stays in its window
+  // so an old account is not also sent the "come back" mail on the same run.
+  out.push(TRIAL_NOTIFY.EXPIRED);
   const since = now.getTime() - end;
-  if (since <= STANDARD_EXPIRY_WINDOW_DAYS * MS_DAY) out.push(TRIAL_NOTIFY.EXPIRED);
   if (since >= FOLLOWUP_AFTER_DAYS * MS_DAY && since <= STANDARD_FOLLOWUP_WINDOW_DAYS * MS_DAY) {
     out.push(TRIAL_NOTIFY.FOLLOWUP);
   }
@@ -327,11 +329,11 @@ export function buildTrialEmail(type, opts = {}) {
       paragraphs: [
         hi,
         "Your Paidly trial has ended.",
-        "Your business data is still available, but your account is currently restricted.",
-        "Subscribe to Paidly to continue creating invoices, managing quotes, tracking expenses, using POS and running your business from one place.",
+        "Your account and business information are still available.",
+        "Subscribe to Paidly to continue managing your business with invoicing, quotes, expenses, POS and more.",
       ],
       ctaLabel: "Subscribe to Paidly",
-      note: "We're ready when you are. The Paidly Team",
+      note: "The Paidly Team",
     };
   }
   if (type === TRIAL_NOTIFY.EXISTING_EXPIRED) {
@@ -341,12 +343,12 @@ export function buildTrialEmail(type, opts = {}) {
       heading: "Your Paidly trial has ended",
       paragraphs: [
         hi,
-        "We wanted to let you know that your Paidly trial period has ended.",
-        "Your Paidly account and business information are still available.",
-        "To continue using Paidly's business management tools, choose a plan that works for your business.",
+        "Your Paidly trial has ended.",
+        "Your account and business information are still available.",
+        "Subscribe to Paidly to continue managing your business with invoicing, quotes, expenses, POS and more.",
       ],
-      ctaLabel: "View Paidly Plans",
-      note: "Thank you for using Paidly. The Paidly Team",
+      ctaLabel: "Subscribe to Paidly",
+      note: "The Paidly Team",
     };
   }
   if (type === TRIAL_NOTIFY.EXISTING_FOLLOWUP) {

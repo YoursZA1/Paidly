@@ -1,5 +1,7 @@
--- Existing-user trial migration: bookkeeping columns on the existing subscriptions row, a grace
--- period that the existing access check honours, an admin exclusion, and two notification types.
+-- Existing-user trial migration: bookkeeping columns on the existing subscriptions row, an optional
+-- grace period that the existing access check honours (default none), an admin exclusion, and two
+-- notification types. A company with no subscription row gets one when the admin runs the migration:
+-- the same trial row signup creates, dated from the owner's sign-up.
 --
 -- Nothing here classifies, locks, or emails anyone. The classification runs only when an admin
 -- confirms a dry run (POST /api/admin/subscriptions action trial_migration_run). Business data,
@@ -131,8 +133,8 @@ COMMENT ON FUNCTION public.expire_all_overdue_trials() IS
 REVOKE ALL ON FUNCTION public.expire_all_overdue_trials() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.expire_all_overdue_trials() TO service_role;
 
--- Migration emails. For these two types trial_ends_at holds the migration's grace start, so the
--- system once-only index means once per migration.
+-- Migration emails. For these two types trial_ends_at holds the migration time (trial_migration_at),
+-- so the system once-only index means once per migration.
 ALTER TABLE public.subscription_notifications
   DROP CONSTRAINT IF EXISTS subscription_notifications_notification_type_check;
 ALTER TABLE public.subscription_notifications
@@ -150,4 +152,4 @@ ALTER TABLE public.subscription_notifications
   );
 
 COMMENT ON COLUMN public.subscription_notifications.trial_ends_at IS
-  'Cycle key for once-only sends: the trial end for trial emails, the migration grace start for EXISTING_USER_* emails.';
+  'Cycle key for once-only sends: the trial end for trial emails, trial_migration_at for EXISTING_USER_* emails.';

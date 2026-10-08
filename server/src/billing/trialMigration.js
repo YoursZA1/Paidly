@@ -38,7 +38,22 @@ async function readAll(supabase, table, columns) {
   return { data: out, error: null };
 }
 
-/** Grace length from the request, then MIGRATION_GRACE_DAYS, then 7. */
+/** Sign-up, invite, and email-confirmation times. Without them nothing can be dated from sign-up. */
+async function listAuthUsers(supabase) {
+  const out = [];
+  for (let page = 1; page < 100; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw httpError(500, "Could not read user accounts");
+    const batch = data?.users || [];
+    for (const u of batch) {
+      out.push({ id: u.id, created_at: u.created_at, invited_at: u.invited_at || null, email_confirmed_at: u.email_confirmed_at || null });
+    }
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+/** Grace length from the request, then MIGRATION_GRACE_DAYS, then none. */
 export function resolveGraceDays(raw) {
   return normalizeGraceDays(raw ?? process.env.MIGRATION_GRACE_DAYS);
 }
@@ -49,8 +64,11 @@ async function loadGroups(supabase) {
   if (orgs.error) throw httpError(500, "Could not read companies");
   const subs = await readAll(supabase, "subscriptions", "*");
   if (subs.error) throw httpError(500, "Could not read subscriptions");
-  const profiles = await readAll(supabase, "profiles", "id, full_name, email, subscription_status");
+  const profiles = await readAll(supabase, "profiles", "id, full_name, email, subscription_status, plan, created_at");
   if (profiles.error) throw httpError(500, "Could not read profiles");
+  const memberships = await readAll(supabase, "memberships", "org_id, user_id");
+  if (memberships.error) throw httpError(500, "Could not read company members");
+  const users = await listAuthUsers(supabase);
   // Payment evidence only; an unreadable table counts as no payments, which can only add review flags.
   const payments = await readAll(supabase, "payment_history", "*");
   const migrationReady = subs.data.length === 0 || "trial_migration_status" in (subs.data[0] || {});
@@ -60,6 +78,8 @@ async function loadGroups(supabase) {
       subscriptions: subs.data,
       profiles: profiles.data,
       payments: payments.error ? [] : payments.data,
+      users,
+      memberships: memberships.data,
     }),
     subsById: new Map(subs.data.map((row) => [row.id, row])),
     migrationReady,
@@ -145,15 +165,33 @@ export async function runTrialMigration(supabase, opts) {
   await writeMigrationAudit(supabase, {
     actor: opts.actor,
     action: "trial_migration_started",
-    description: `Admin started the existing-user trial migration (${preview.rows.length} accounts, ${graceDays}-day grace)`,
+    description: `Admin started the existing-user trial migration (${preview.rows.length} accounts, ${
+      graceDays > 0 ? `${graceDays}-day grace` : "no grace period"
+    })`,
     metadata: { grace_days: graceDays, summary: preview.summary },
   });
 
   let written = 0;
+  let createdRows = 0;
   let unchanged = 0;
   const failures = [];
   const classified = [];
   for (const r of preview.rows) {
+    if (r.willCreate && !r.skipped && r.proposed) {
+      const created = await createSignupTrialRow(supabase, r, now, graceDays);
+      if (created.error) {
+        failures.push({ key: r.key, error: created.error });
+        continue;
+      }
+      if (!created.id) {
+        unchanged += 1;
+        continue;
+      }
+      written += 1;
+      createdRows += 1;
+      classified.push(classifiedAudit(r, opts.actor, created.id, created.graceEndsAt));
+      continue;
+    }
     if (!r.willWrite || r.alreadyMigrated || r.skipped || !r.proposed) {
       unchanged += 1;
       continue;
@@ -168,7 +206,7 @@ export async function runTrialMigration(supabase, opts) {
       trial_migration_previous_status: r.currentStatus,
       trial_migration_notes: r.reasons.length ? r.reasons.join("; ").slice(0, 1000) : null,
     };
-    if (r.proposed === MIGRATION_STATUS.MIGRATED_EXPIRED) {
+    if (r.proposed === MIGRATION_STATUS.MIGRATED_EXPIRED && graceDays > 0) {
       patch.migration_grace_started_at = nowIso;
       patch.migration_grace_ends_at = addCalendarDaysIso(now, graceDays);
     }
@@ -190,30 +228,7 @@ export async function runTrialMigration(supabase, opts) {
       continue;
     }
     written += 1;
-    classified.push({
-      category: "subscription",
-      action: "trial_migration_user_classified",
-      description: `${r.businessName || r.ownerEmail || r.key}: ${r.currentPhaseLabel} → ${r.proposed}`,
-      before: { status: r.currentStatus, trial_migration_status: r.existingStatus },
-      after: {
-        status: r.currentStatus,
-        trial_migration_status: r.proposed,
-        migration_grace_ends_at: patch.migration_grace_ends_at || null,
-      },
-      actor_id: opts.actor?.id || null,
-      actor_email: opts.actor?.email || null,
-      actor_name: opts.actor?.user_metadata?.full_name || opts.actor?.email || null,
-      actor_role: "admin",
-      target_label: r.ownerEmail || r.targetRowId,
-      metadata: {
-        subscription_id: r.targetRowId,
-        user_id: r.userId,
-        company_id: r.companyId,
-        previous_state: r.currentPhase,
-        new_state: r.proposed,
-        reasons: r.reasons,
-      },
-    });
+    classified.push(classifiedAudit(r, opts.actor, r.targetRowId, patch.migration_grace_ends_at || null));
   }
   if (classified.length) {
     for (let i = 0; i < classified.length; i += 200) {
@@ -230,7 +245,8 @@ export async function runTrialMigration(supabase, opts) {
     failures: failures.slice(0, 10),
     summary: preview.summary,
     graceDays,
-    // The run updates only migration columns, so these are structural guarantees, not estimates.
+    subscriptionRowsCreated: createdRows,
+    // The run updates only migration columns or adds a missing trial row; it never deletes or resets.
     dataRecordsDeleted: 0,
     subscriptionsReset: 0,
     accountsDeleted: 0,
@@ -243,6 +259,84 @@ export async function runTrialMigration(supabase, opts) {
     metadata: result,
   });
   return result;
+}
+
+function classifiedAudit(r, actor, subscriptionId, graceEndsAt) {
+  return {
+    category: "subscription",
+    action: "trial_migration_user_classified",
+    description: `${r.businessName || r.ownerEmail || r.key}: ${r.currentPhaseLabel} → ${r.proposed}`,
+    before: { status: r.currentStatus, trial_migration_status: r.existingStatus },
+    after: {
+      status: r.createRow?.status || r.currentStatus,
+      trial_migration_status: r.proposed,
+      trial_ends_at: r.trialEndsAt,
+      migration_grace_ends_at: graceEndsAt,
+    },
+    actor_id: actor?.id || null,
+    actor_email: actor?.email || null,
+    actor_name: actor?.user_metadata?.full_name || actor?.email || null,
+    actor_role: "admin",
+    target_label: r.ownerEmail || subscriptionId,
+    metadata: {
+      subscription_id: subscriptionId,
+      user_id: r.userId,
+      company_id: r.companyId,
+      previous_state: r.currentPhase,
+      new_state: r.proposed,
+      derived_from: r.derivedFrom || null,
+      created_subscription_row: Boolean(r.willCreate),
+      reasons: r.reasons,
+    },
+  };
+}
+
+/**
+ * The trial row signup would have created (start_owner_system_trial), dated from the owner's
+ * sign-up, already expired when that date has passed. Skipped if any row appeared since the preview.
+ */
+async function createSignupTrialRow(supabase, r, now, graceDays) {
+  const nowIso = now.toISOString();
+  const { data: existing, error: checkErr } = await supabase
+    .from("subscriptions")
+    .select("id")
+    .or(`company_id.eq.${r.companyId},and(company_id.is.null,user_id.eq.${r.userId})`)
+    .limit(1);
+  if (checkErr) return { error: checkErr.message };
+  if (existing?.length) return { id: null };
+  const family = r.createRow.plan_family;
+  const expired = r.proposed === MIGRATION_STATUS.MIGRATED_EXPIRED;
+  const graceEndsAt = expired && graceDays > 0 ? addCalendarDaysIso(now, graceDays) : null;
+  const row = {
+    user_id: r.userId,
+    company_id: r.companyId,
+    created_by: r.userId,
+    email: r.ownerEmail || null,
+    status: r.createRow.status,
+    plan: family,
+    current_plan: family,
+    plan_slug: `${family}_monthly`,
+    plan_family: family,
+    amount: 0,
+    currency: "ZAR",
+    billing_cycle: "monthly",
+    trial_started_at: r.createRow.trial_started_at,
+    trial_ends_at: r.createRow.trial_ends_at,
+    subscription_source: "system_trial",
+    admin_override: false,
+    provider: "system",
+    created_at: nowIso,
+    updated_at: nowIso,
+    trial_migration_status: r.proposed,
+    trial_migration_at: nowIso,
+    trial_migration_previous_status: null,
+    trial_migration_notes: "No subscription record before the migration; trial dated from sign-up",
+    migration_grace_started_at: graceEndsAt ? nowIso : null,
+    migration_grace_ends_at: graceEndsAt,
+  };
+  const { data, error } = await supabase.from("subscriptions").insert(row).select("id").maybeSingle();
+  if (error) return { error: error.message };
+  return { id: data?.id || null, graceEndsAt };
 }
 
 export const MIGRATION_ADMIN_ACTIONS = Object.freeze([
@@ -331,8 +425,10 @@ export function buildMigrationAdminPatch(existing, body, opts = {}) {
         );
       }
       const graceDays = resolveGraceDays(body?.grace_days);
-      patch.migration_grace_started_at = nowIso;
-      patch.migration_grace_ends_at = addCalendarDaysIso(now, graceDays);
+      if (graceDays > 0) {
+        patch.migration_grace_started_at = nowIso;
+        patch.migration_grace_ends_at = addCalendarDaysIso(now, graceDays);
+      }
     }
     return {
       patch,

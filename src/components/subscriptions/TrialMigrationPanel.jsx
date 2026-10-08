@@ -56,8 +56,14 @@ function MigrationStateCell({ row }) {
 
 function graceCell(row, graceDays) {
   if (row.alreadyMigrated) return row.graceEndsAt ? `Until ${shortDate(row.graceEndsAt)}` : '—';
-  if (row.proposed === MIGRATION_STATUS.MIGRATED_EXPIRED) return `${graceDays} days`;
+  if (row.proposed === MIGRATION_STATUS.MIGRATED_EXPIRED) return graceDays > 0 ? `${graceDays} days` : 'None';
   return '—';
+}
+
+function emailCell(row) {
+  if (row.alreadyMigrated) return '—';
+  if (row.notificationRequired) return 'Yes';
+  return row.notificationNote ? `No — ${row.notificationNote}` : 'No';
 }
 
 /**
@@ -75,7 +81,8 @@ export default function TrialMigrationPanel({ renderActions }) {
   const [result, setResult] = useState(null);
 
   const graceNumber = Number(graceInput);
-  const graceValid = Number.isInteger(graceNumber) && graceNumber >= 1 && graceNumber <= MIGRATION_GRACE_MAX_DAYS;
+  const graceValid =
+    graceInput.trim() !== '' && Number.isInteger(graceNumber) && graceNumber >= 0 && graceNumber <= MIGRATION_GRACE_MAX_DAYS;
 
   const preview = useQuery({
     queryKey: [TRIAL_MIGRATION_QUERY_KEY, requested],
@@ -110,7 +117,7 @@ export default function TrialMigrationPanel({ renderActions }) {
   });
   const pendingWrites = (data?.rows || []).filter(
     (row) =>
-      row.willWrite &&
+      (row.willWrite || row.willCreate) &&
       !row.alreadyMigrated &&
       !row.skipped &&
       !(row.existingStatus === MIGRATION_STATUS.REQUIRES_REVIEW && row.proposed === MIGRATION_STATUS.REQUIRES_REVIEW)
@@ -139,7 +146,10 @@ export default function TrialMigrationPanel({ renderActions }) {
           {result ? (
             <DoneState
               title="Migration complete"
-              reference={{ number: `${result.processed} users processed`, meta: `${result.graceDays}-day grace period` }}
+              reference={{
+                number: `${result.processed} users processed`,
+                meta: result.graceDays > 0 ? `${result.graceDays}-day grace period` : 'No grace period',
+              }}
               message={
                 <div className="space-y-1 text-sm">
                   <p>
@@ -151,7 +161,8 @@ export default function TrialMigrationPanel({ renderActions }) {
                     {result.accountsDeleted} Accounts Deleted
                   </p>
                   <p className="text-muted-foreground">
-                    {result.written} accounts classified now, {result.unchanged} already classified or unchanged
+                    {result.written} accounts classified now ({result.subscriptionRowsCreated} given the trial record signup
+                    creates), {result.unchanged} already classified or unchanged
                     {result.failed ? `, ${result.failed} could not be saved` : ''}.
                   </p>
                 </div>
@@ -177,11 +188,11 @@ export default function TrialMigrationPanel({ renderActions }) {
             <>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                 <label className="text-xs text-muted-foreground">
-                  Grace period for expired accounts (days)
+                  Grace period for expired accounts (days, 0 = none)
                   <Input
                     type="number"
                     inputMode="numeric"
-                    min={1}
+                    min={0}
                     max={MIGRATION_GRACE_MAX_DAYS}
                     value={graceInput}
                     onChange={(e) => setGraceInput(e.target.value)}
@@ -212,7 +223,7 @@ export default function TrialMigrationPanel({ renderActions }) {
                 ) : null}
               </div>
               {!graceValid ? (
-                <p className="text-xs text-destructive">Enter a whole number of days from 1 to {MIGRATION_GRACE_MAX_DAYS}.</p>
+                <p className="text-xs text-destructive">Enter a whole number of days from 0 to {MIGRATION_GRACE_MAX_DAYS}.</p>
               ) : null}
 
               {preview.isError ? (
@@ -317,6 +328,10 @@ export default function TrialMigrationPanel({ renderActions }) {
                             <span className="text-muted-foreground">Trial end: </span>
                             {shortDate(row.trialEndsAt)}
                           </p>
+                          <p className="col-span-2">
+                            <span className="text-muted-foreground">Email: </span>
+                            {emailCell(row)}
+                          </p>
                         </div>
                         <div className="mt-2">
                           <MigrationStateCell row={row} />
@@ -360,9 +375,7 @@ export default function TrialMigrationPanel({ renderActions }) {
                             <td className="px-3 py-2.5 text-xs">{graceCell(row, data.graceDays)}</td>
                             <td className="px-3 py-2.5 text-xs">{row.subscription}</td>
                             <td className="px-3 py-2.5 text-xs">{row.freeAccess}</td>
-                            <td className="px-3 py-2.5 text-xs">
-                              {row.notificationRequired && !row.alreadyMigrated ? 'Yes' : 'No'}
-                            </td>
+                            <td className="px-3 py-2.5 text-xs">{emailCell(row)}</td>
                             <td className="px-3 py-2.5 text-right">{renderActions(row)}</td>
                           </tr>
                         ))}
@@ -392,10 +405,13 @@ export default function TrialMigrationPanel({ renderActions }) {
                 <p className="font-medium text-foreground">{RUN_WARNING}</p>
                 {summary ? (
                   <p>
-                    {pendingWrites} accounts will be classified from the dry run you just reviewed. Expired accounts get a{' '}
-                    {data.graceDays}-day grace period with full access, and {summary.notifications} email
-                    {summary.notifications === 1 ? '' : 's'} will go out with the next daily run. Accounts that need review
-                    keep their current access.
+                    {pendingWrites} accounts will be classified from the dry run you just reviewed
+                    {summary.created ? `; ${summary.created} without a trial record get the one signup creates, dated from sign-up` : ''}.{' '}
+                    {data.graceDays > 0
+                      ? `Expired accounts keep full access for ${data.graceDays} days, then become view-only.`
+                      : 'Expired accounts become view-only straight away.'}{' '}
+                    {summary.notifications} email{summary.notifications === 1 ? '' : 's'} will go out with the next daily run.
+                    Accounts that need review keep their current access.
                   </p>
                 ) : null}
               </div>

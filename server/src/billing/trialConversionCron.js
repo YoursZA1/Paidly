@@ -125,6 +125,7 @@ export async function runTrialConversionBatch(supabase, opts = {}) {
   const errors = [];
 
   let demo = 0;
+  let unconfirmed = 0;
   for (const item of planned) {
     const sub = item.subscription;
     // Demo workspaces never receive real mail. Nothing is recorded, so nothing counts as sent.
@@ -146,6 +147,19 @@ export async function runTrialConversionBatch(supabase, opts = {}) {
         error: to ? "Unknown notification type" : "No email address",
       });
       continue;
+    }
+    // Migration mail goes only to an address the owner confirmed. Unconfirmed: never sent, not recorded.
+    if (MIGRATION_MAIL_TYPES.has(item.type) && sub.user_id) {
+      const { data: authUser, error: authErr } = await supabase.auth.admin.getUserById(sub.user_id);
+      if (authErr) {
+        failed += 1;
+        await record(supabase, { sub, type: item.type, status: "failed", to, subject: mail.subject, source: "system", error: "Could not verify the address" });
+        continue;
+      }
+      if (authUser?.user && !authUser.user.email_confirmed_at) {
+        unconfirmed += 1;
+        continue;
+      }
     }
     const rendered = renderTrialEmail(mail);
     let result;
@@ -174,7 +188,7 @@ export async function runTrialConversionBatch(supabase, opts = {}) {
     }
   }
 
-  return { sent, failed, demo, planned: planned.length, errors: errors.slice(0, 5) };
+  return { sent, failed, demo, unconfirmed, planned: planned.length, errors: errors.slice(0, 5) };
 }
 
 async function loadNames(supabase, userIds) {

@@ -64,6 +64,9 @@ import DashboardRevenueWidget from "@/components/dashboard/DashboardRevenueWidge
 import DashboardSubscriptionBanner from "@/components/dashboard/DashboardSubscriptionBanner";
 import FinancialSummary from "@/components/dashboard/FinancialSummary";
 import { useCurrentSubscriptionQuery } from "@/hooks/useCurrentSubscriptionQuery";
+import { useDemoMode } from "@/hooks/useDemoMode";
+import { deriveEntitlementFromSubscriptionCurrent, isEntitlementLapsed } from "@/lib/clientEntitlement";
+import { isStaffDashboardRole } from "@/lib/staffDashboard";
 import { startOfMonth, endOfMonth, format as formatDate, subMonths, startOfDay } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { computeDashboardFinancials } from "@/lib/dashboard/financialSummary";
@@ -265,6 +268,18 @@ function DashboardMain() {
     canQueryBusinessDashboard && !isAdmin && !storeIsLoading
   );
   const currentSubscriptionQuery = useCurrentSubscriptionQuery({ enabled: !isAdmin });
+  const demoMode = useDemoMode();
+  const subscriptionEntitlement = deriveEntitlementFromSubscriptionCurrent(
+    currentSubscriptionQuery.isFetched && !currentSubscriptionQuery.isError
+      ? currentSubscriptionQuery.data
+      : null
+  );
+  // The shell already shows the view-only notice when access has lapsed. A second banner here repeats it.
+  const shellShowsBillingLock =
+    !demoMode.isDemo &&
+    !isAdmin &&
+    !isStaffDashboardRole(userRole) &&
+    isEntitlementLapsed(subscriptionEntitlement);
   const invoices = isAdmin ? invoicesState : storeInvoices;
   const resolvedInvoices = isAdmin
     ? invoices
@@ -1121,10 +1136,12 @@ function DashboardMain() {
             </p>
         )}
 
-        <DashboardSubscriptionBanner
-          serverStatus={currentSubscriptionQuery.data || null}
-          isLoading={currentSubscriptionQuery.isLoading && !currentSubscriptionQuery.data}
-        />
+        {!shellShowsBillingLock ? (
+          <DashboardSubscriptionBanner
+            serverStatus={currentSubscriptionQuery.data || null}
+            isLoading={currentSubscriptionQuery.isLoading && !currentSubscriptionQuery.data}
+          />
+        ) : null}
 
         <div className="mb-8">
           <FinancialSummary

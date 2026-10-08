@@ -424,7 +424,7 @@ function MigrationMenuItems({ sub, onRequest }) {
                   title: `Set to ${MIGRATION_STATUS_LABEL[status]}?`,
                   body:
                     status === MIGRATION_STATUS.MIGRATED_EXPIRED
-                      ? `${who} gets a 7-day grace period with full access and the existing-user emails, then becomes view-only until they subscribe. No data is deleted.`
+                      ? `${who} becomes view-only until they subscribe and gets the existing-user emails. Only possible when their trial or subscription has already ended. No data is deleted.`
                       : `Records the migration state for ${who}. Their access does not change.`,
                   confirmLabel: 'Set state',
                   success: `Migration state set to ${MIGRATION_STATUS_LABEL[status]}`,

@@ -499,6 +499,13 @@ export default async function handler(req, res) {
     }
     if (job === "expire-trials") {
       const supabase = getSupabaseAdmin();
+      let accountTrials = null;
+      try {
+        const { applyAccountCreationTrials } = await import("../server/src/billing/accountTrialExpiry.js");
+        accountTrials = await applyAccountCreationTrials(supabase);
+      } catch (err) {
+        accountTrials = { error: err?.message || String(err) };
+      }
       const { data, error } = await supabase.rpc("expire_all_overdue_trials");
       if (error) throw error;
       const pending = await expirePendingSubscriptions(supabase);
@@ -530,6 +537,7 @@ export default async function handler(req, res) {
         rows: Number(data || 0),
         pendingExpiry: pending,
         workforceEvents,
+        accountTrials,
         trialConversion,
       });
     }
