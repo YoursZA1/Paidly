@@ -8,6 +8,13 @@
 
 import { coerceSubscriptionStatus, SUBSCRIPTION_STATUS } from "./subscriptionStatuses.js";
 import { isAdminManaged, trialRemainingBreakdown } from "./subscriptionAccess.js";
+import {
+  formatBillingDate,
+  nextPaymentCountdownDays,
+  nextPaymentCountdownLabel,
+  paymentHealthFor,
+  PAYMENT_HEALTH,
+} from "./subscriptionBillingPolicy.js";
 
 const MS_DAY = 24 * 60 * 60 * 1000;
 const MS_HOUR = 60 * 60 * 1000;
@@ -217,7 +224,23 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
   }
 
   if (status === SUBSCRIPTION_STATUS.ACTIVE) {
-    const endDate = formatTrialEndDate(nextBilling);
+    const periodEnd = firstPresent(src, ["currentPeriodEnd", "current_period_end", "expiresAt", "expires_at"]);
+    const cancelScheduled = src.cancelAtPeriodEnd === true || src.cancel_at_period_end === true;
+    if (cancelScheduled) {
+      const until = formatBillingDate(periodEnd);
+      return banner({
+        kind: DASHBOARD_BANNER_KIND.ACTIVE,
+        heading: "Your Paidly subscription is active",
+        supporting: until
+          ? `Paid features stay available until ${until}. PayFast will not charge again.`
+          : "Paid features stay available until the end of this billing period.",
+        ctaLabel: "Manage subscription",
+        ctaTo: "billing",
+        tone: "neutral",
+        planName: name,
+      });
+    }
+    const endDate = formatBillingDate(nextBilling) || formatTrialEndDate(nextBilling);
     const bits = [];
     if (name) bits.push(`You're subscribed to Paidly ${name}.`);
     if (endDate) bits.push(`Next billing date: ${endDate}.`);
@@ -225,6 +248,7 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
       kind: DASHBOARD_BANNER_KIND.ACTIVE,
       heading: "Your Paidly subscription is active",
       supporting: bits.join(" ") || "Your subscription is active.",
+      countdown: nextPaymentCountdownLabel(nextPaymentCountdownDays(nextBilling, now)),
       ctaLabel: "Manage subscription",
       ctaTo: "billing",
       tone: "positive",
@@ -265,6 +289,22 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
   }
 
   if (status === SUBSCRIPTION_STATUS.CANCELLED) {
+    const periodEnd = firstPresent(src, ["currentPeriodEnd", "current_period_end", "expiresAt", "expires_at"]);
+    const until = formatBillingDate(periodEnd);
+    const stillOpen = periodEnd && new Date(periodEnd).getTime() > now.getTime();
+    if (stillOpen) {
+      return banner({
+        kind: DASHBOARD_BANNER_KIND.CANCELLED,
+        heading: "Your Paidly subscription is active",
+        supporting: until
+          ? `Paid features stay available until ${until}. PayFast will not charge again.`
+          : "Paid features stay available until the end of this billing period.",
+        ctaLabel: "Manage subscription",
+        ctaTo: "billing",
+        tone: "neutral",
+        planName: name,
+      });
+    }
     return banner({
       kind: DASHBOARD_BANNER_KIND.CANCELLED,
       heading: "Your Paidly subscription has ended",
@@ -277,20 +317,28 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
   if (status === SUBSCRIPTION_STATUS.SUSPENDED) {
     return banner({
       kind: DASHBOARD_BANNER_KIND.SUSPENDED,
-      heading: "Your Paidly access is paused",
-      supporting: "Contact support or choose a plan to restore access.",
-      ctaLabel: "Choose a plan",
+      heading: "Your Paidly subscription is past due.",
+      supporting:
+        "Your business data is safe, but paid features are currently restricted. Resolve your payment to restore access.",
+      ctaLabel: "Resolve Payment",
+      ctaTo: "subscription",
       tone: "warning",
     });
   }
 
   if (status === SUBSCRIPTION_STATUS.PAST_DUE) {
+    const health = paymentHealthFor(src, now);
+    const warning = health === PAYMENT_HEALTH.GRACE_PERIOD || health === PAYMENT_HEALTH.SUSPENDED;
     return banner({
       kind: DASHBOARD_BANNER_KIND.PAST_DUE,
-      heading: "Your Paidly payment is past due",
-      supporting: name ? `You're on the ${name} plan. Update billing to stay on Paidly.` : "Update billing to stay on Paidly.",
-      ctaLabel: "Manage subscription",
-      ctaTo: "billing",
+      heading: warning
+        ? "Your Paidly subscription needs attention"
+        : "Your Paidly payment couldn't be processed",
+      supporting: warning
+        ? "Payment is still outstanding. Paid features may be restricted if it stays unpaid. Your business data remains safe."
+        : "Your Paidly account is still active for now. Resolve the payment before the grace period ends.",
+      ctaLabel: "Resolve Payment",
+      ctaTo: "subscription",
       tone: "warning",
       planName: name,
     });

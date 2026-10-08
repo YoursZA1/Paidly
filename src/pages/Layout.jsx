@@ -1686,7 +1686,12 @@ export default function Layout({ children, currentPageName }) {
           <div className={`max-w-7xl mx-auto w-full min-w-0 mobile-page flex-1 ${lockListChrome ? "flex min-h-0 flex-col" : ""}`}>
           <PortalContextBanner />
           {showBillingLockBanner ? (
-            <BillingLockBanner plan={planBadge.plan} planLabel={planBadge.planLabel} statusLabel={planBadge.statusLabel} />
+            <BillingLockBanner
+              plan={planBadge.plan}
+              planLabel={planBadge.planLabel}
+              statusLabel={planBadge.statusLabel}
+              status={companyEntitlement?.status}
+            />
           ) : null}
           <BillingViewOnlyGuard
             active={showBillingLockBanner}

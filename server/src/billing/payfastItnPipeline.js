@@ -139,6 +139,8 @@ async function loadSubscriptionForItn(supabase, payload) {
       SUBSCRIPTION_STATUS.PROCESSING,
       SUBSCRIPTION_STATUS.ACTIVE,
       SUBSCRIPTION_STATUS.PAST_DUE,
+      SUBSCRIPTION_STATUS.SUSPENDED,
+      SUBSCRIPTION_STATUS.CANCELLED,
       SUBSCRIPTION_STATUS.TRIALING,
     ])
     .order("updated_at", { ascending: false })
@@ -187,6 +189,31 @@ async function resolveExpectedAmount(supabase, sub) {
     console.warn("[payfast-itn] expected amount unresolved in production — refusing hardcoded fallback");
   }
   return null;
+}
+
+const PAYMENT_HISTORY_OPTIONAL = [
+  "user_id",
+  "plan_slug",
+  "provider",
+  "payment_type",
+  "attempted_at",
+  "completed_at",
+  "failure_reason",
+  "billing_period_start",
+  "billing_period_end",
+  "metadata",
+];
+
+async function insertPaymentHistory(supabase, row) {
+  let payload = { ...row };
+  let result = await supabase.from("payment_history").insert(payload).select("id").single();
+  while (result.error && /column|schema cache|does not exist/i.test(String(result.error.message || ""))) {
+    const drop = PAYMENT_HISTORY_OPTIONAL.find((key) => Object.prototype.hasOwnProperty.call(payload, key));
+    if (!drop) break;
+    delete payload[drop];
+    result = await supabase.from("payment_history").insert(payload).select("id").single();
+  }
+  return result;
 }
 
 function mapPaymentHistoryStatus(paymentStatusUpper) {
@@ -514,21 +541,35 @@ export function createPayfastItnProductionHandler(deps) {
           userIdHint: sub.user_id,
         });
 
-        const { data: phRow, error: phErr } = await supabase
-          .from("payment_history")
-          .insert({
-            subscription_id: sub.id,
-            company_id: sub.company_id,
-            payfast_payment_id: pfPaymentId || null,
-            amount: amountCheck.gross,
-            currency: String(payload.custom_str4 || sub.currency || "ZAR").toUpperCase(),
-            payment_status: phStatus,
-            payment_method: sanitizeOneLine(String(payload.payment_method || "payfast"), 64) || "payfast",
-            transaction_date: new Date().toISOString(),
-            raw_itn: payload,
-          })
-          .select("id")
-          .single();
+        const { data: phRow, error: phErr } = await insertPaymentHistory(supabase, {
+          subscription_id: sub.id,
+          company_id: sub.company_id,
+          user_id: sub.user_id || null,
+          plan_slug: sub.plan_slug || null,
+          provider: "payfast",
+          payment_type:
+            sub.status === SUBSCRIPTION_STATUS.ACTIVE ||
+            sub.status === SUBSCRIPTION_STATUS.PAST_DUE ||
+            sub.status === SUBSCRIPTION_STATUS.SUSPENDED
+              ? "renewal"
+              : "initial",
+          payfast_payment_id: pfPaymentId || null,
+          amount: amountCheck.gross,
+          currency: String(payload.custom_str4 || sub.currency || "ZAR").toUpperCase(),
+          payment_status: phStatus,
+          payment_method: sanitizeOneLine(String(payload.payment_method || "payfast"), 64) || "payfast",
+          transaction_date: new Date().toISOString(),
+          attempted_at: new Date().toISOString(),
+          completed_at: phStatus === PAYMENT_HISTORY_STATUS.COMPLETED ? new Date().toISOString() : null,
+          failure_reason:
+            phStatus === PAYMENT_HISTORY_STATUS.FAILED
+              ? sanitizeOneLine(String(payload.reason || payload.error || "PayFast could not collect this subscription payment"), 500)
+              : null,
+          billing_period_start: sub.current_period_start || null,
+          billing_period_end: sub.current_period_end || null,
+          raw_itn: payload,
+          metadata: { m_payment_id: payload.m_payment_id || null },
+        });
 
         if (phErr) {
           if (String(phErr.code) === "23505" || /duplicate/i.test(String(phErr.message || ""))) {
@@ -591,6 +632,24 @@ export function createPayfastItnProductionHandler(deps) {
         await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.PAYMENT_FAILED, {
           payment_history_id: phRowId,
         });
+        const firstFailure =
+          sub.status !== SUBSCRIPTION_STATUS.PAST_DUE && sub.status !== SUBSCRIPTION_STATUS.SUSPENDED;
+        if (firstFailure) {
+          try {
+            const { sendSubscriptionBillingEmail } = await import("./subscriptionBillingMail.js");
+            const { BILLING_NOTIFY } = await import("../../../shared/subscriptionBillingPolicy.js");
+            const { data: fresh } = await supabase
+              .from("subscriptions")
+              .select("id, user_id, company_id, email, user_email, full_name, user_name, grace_ends_at, status")
+              .eq("id", sub.id)
+              .maybeSingle();
+            if (fresh?.grace_ends_at) {
+              await sendSubscriptionBillingEmail(supabase, fresh, BILLING_NOTIFY.PAYMENT_FAILED);
+            }
+          } catch (mailErr) {
+            console.warn("[payfast-itn] payment failed email", mailErr?.message || mailErr);
+          }
+        }
       }
 
       await logWebhook(supabase, {

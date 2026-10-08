@@ -11,9 +11,13 @@ import { MARKETING_PLANS } from "@shared/planMarketing.js";
  * Creating, editing, deleting, and sending are refused until they subscribe or an admin
  * extends the trial. The pay button on this banner stays available.
  */
-export default function BillingLockBanner({ plan, planLabel, statusLabel }) {
+export default function BillingLockBanner({ plan, planLabel, statusLabel, status }) {
   const billingUrl = `${createPageUrl("Settings")}?tab=subscription`;
-  const heading = planLabel
+  const rawStatus = String(status || "").toLowerCase();
+  const paymentRestricted = rawStatus === "suspended" || rawStatus === "past_due" || rawStatus === "failed";
+  const heading = paymentRestricted
+    ? "Your Paidly subscription is past due."
+    : planLabel
     ? `Your ${planLabel} ${String(statusLabel || "").toLowerCase().includes("trial") ? "trial" : "subscription"} has ended`
     : "Your subscription has ended";
 
@@ -35,14 +39,15 @@ export default function BillingLockBanner({ plan, planLabel, statusLabel }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">{heading}</p>
         <p className="text-xs text-muted-foreground sm:text-sm">
-          {String(statusLabel || "").toLowerCase().includes("trial")
-            ? "Your Paidly trial has ended. Subscribe to continue using Paidly and managing your business."
-            : "Subscribe to continue using Paidly and managing your business."}{" "}
-          Your data is still here to view.
+          {paymentRestricted
+            ? "Your business data is safe, but paid features are currently restricted. Resolve your payment to restore access."
+            : String(statusLabel || "").toLowerCase().includes("trial")
+            ? "Your Paidly trial has ended. Subscribe to continue using Paidly and managing your business. Your data is still here to view."
+            : "Subscribe to continue using Paidly and managing your business. Your data is still here to view."}
         </p>
       </div>
       <Button asChild size="sm" className="shrink-0 rounded-xl">
-        <Link to={billingUrl}>{ctaLabel}</Link>
+        <Link to={billingUrl}>{paymentRestricted ? "Resolve Payment" : ctaLabel}</Link>
       </Button>
     </div>
   );

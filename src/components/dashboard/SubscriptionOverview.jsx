@@ -107,11 +107,36 @@ export default function SubscriptionOverview({
       ) : null}
 
       {showReporting ? (
-        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <StatCard
+            title="Payments Today"
+            value={isLoading ? "—" : reporting.paymentsToday ?? 0}
+            icon={Wallet}
+          />
           <StatCard
             title="Successful Payments"
             value={isLoading ? "—" : reporting.successfulPayments ?? 0}
             icon={Wallet}
+          />
+          <StatCard
+            title="Failed Payments"
+            value={isLoading ? "—" : reporting.failedPayments ?? 0}
+            icon={Ban}
+          />
+          <StatCard
+            title="Past Due"
+            value={isLoading ? "—" : reporting.pastDue ?? 0}
+            icon={AlertTriangle}
+          />
+          <StatCard
+            title="Suspended"
+            value={isLoading ? "—" : reporting.suspended ?? 0}
+            icon={Ban}
+          />
+          <StatCard
+            title="Upcoming Billing"
+            value={isLoading ? "—" : reporting.upcomingBilling ?? 0}
+            icon={Clock}
           />
           <StatCard
             title="Revenue"

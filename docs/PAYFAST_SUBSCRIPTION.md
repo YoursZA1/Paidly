@@ -78,9 +78,13 @@ Order: save raw → ITN signature (received field order) → IP (live) → PayFa
 
 The `/success` page only polls. It does not write `active`.
 
+## Failed renewal
+
+PayFast sends `payment_status=FAILED` on the ITN (insufficient funds, an expired card, or another payment-method problem). Paidly sets `past_due`, records a `payment_history` row, and keeps access until `grace_ends_at` (7 days). PayFast retries on its own schedule and sends another ITN. Paidly does not invent that schedule. After the grace date, cron sets `suspended`. A later `COMPLETE` ITN sets `active` again.
+
 ## Cancellation
 
-`POST /api/subscriptions/cancel` cancels the PayFast token via the Recurring Billing API, then sets DB status `cancelled`. Payment history is never deleted.
+`POST /api/subscriptions/cancel` cancels the PayFast token via the Recurring Billing API. If the paid period is still open, the row stays `active` with `cancel_at_period_end` until `current_period_end`, then cron sets `cancelled`. Payment history is never deleted. Business data is never deleted.
 
 ## Troubleshooting signature mismatch
 

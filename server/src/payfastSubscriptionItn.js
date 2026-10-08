@@ -12,7 +12,7 @@ import {
   sanitizeOneLine,
 } from "./inputValidation.js";
 import { SUBSCRIPTION_STATUS } from "../../shared/subscriptionStatuses.js";
-import { addCalendarDaysIso, PAST_DUE_GRACE_DAYS } from "../../shared/subscriptionAccess.js";
+import { failedRenewalPatch, payfastFailureReason } from "../../shared/subscriptionBillingPolicy.js";
 import { familyForSlug, normalizePlanSlug } from "./subscriptionPlans.js";
 import { insertSubscriptionRow, reconcileOwnerCurrent } from "./billing/subscriptionCurrent.js";
 
@@ -52,13 +52,6 @@ function monthsFromBillingCycle(cycle) {
   if (c === "biannual") return 6;
   if (c === "quarterly") return 3;
   return 1;
-}
-
-function addHoursIso(baseDate, hours) {
-  const d = new Date(baseDate);
-  if (!Number.isFinite(d.getTime())) return null;
-  d.setTime(d.getTime() + Math.max(1, Number(hours || 24)) * 60 * 60 * 1000);
-  return d.toISOString();
 }
 
 function parsePayfastYyyyMmDdToIso(raw) {
@@ -113,6 +106,19 @@ export const resolvePayfastSubscriptionUserIdForExport = resolvePayfastSubscript
  *   userIdHint?: string|null,
  * }} [hints]
  */
+async function updateSubscriptionTolerant(supabase, id, patch) {
+  const optional = ["last_payment_failure_reason", "cancel_at_period_end"];
+  let payload = { ...patch };
+  let { error } = await supabase.from("subscriptions").update(payload).eq("id", id);
+  while (error && /column|schema cache|does not exist/i.test(String(error.message || ""))) {
+    const drop = optional.find((key) => Object.prototype.hasOwnProperty.call(payload, key));
+    if (!drop) break;
+    delete payload[drop];
+    ({ error } = await supabase.from("subscriptions").update(payload).eq("id", id));
+  }
+  return error;
+}
+
 export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
   const hintedUser = String(hints.userIdHint || "").trim();
   const userId = isValidUuid(hintedUser) ? hintedUser : resolvePayfastSubscriptionUserId(payload);
@@ -145,7 +151,7 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
   const { data: userSubsRaw } = await supabase
     .from("subscriptions")
     .select(
-      "id, failure_count, payfast_token, payfast_subscription_id, retry_interval_hours, max_retry_attempts, last_payment_at, plan, m_payment_id, status, updated_at"
+      "id, failure_count, dunning_stage, payfast_token, payfast_subscription_id, last_payment_at, plan, m_payment_id, status, updated_at, started_at, activated_at, past_due_at, grace_ends_at, last_payment_failure_at"
     )
     .eq("user_id", userId)
     .order("updated_at", { ascending: false });
@@ -189,23 +195,8 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
   const rowTargetForMutation = sameAgreementRow || (!isSuccess && latest ? latest : null);
 
   const refRow = sameAgreementRow || latest;
-  const suspendAfter = Math.max(
-    1,
-    Number(refRow?.max_retry_attempts || process.env.PAYFAST_SUBSCRIPTION_SUSPEND_AFTER || 3)
-  );
-  const retryHours = Math.max(
-    1,
-    Number(refRow?.retry_interval_hours || process.env.PAYFAST_RETRY_INTERVAL_HOURS || 24)
-  );
-
-  const prevFailures = Number((!isSuccess ? rowTargetForMutation : sameAgreementRow)?.failure_count || 0);
-  const nextFailures = isSuccess ? 0 : prevFailures + 1;
-  // Allowed status vocabulary only (cancelled spelling)
-  const status = isSuccess
-    ? SUBSCRIPTION_STATUS.ACTIVE
-    : nextFailures >= suspendAfter
-      ? SUBSCRIPTION_STATUS.CANCELLED
-      : SUBSCRIPTION_STATUS.PAST_DUE;
+  const failure = isSuccess ? null : failedRenewalPatch(rowTargetForMutation || refRow, new Date(nowIso), payfastFailureReason(payload));
+  const status = isSuccess ? SUBSCRIPTION_STATUS.ACTIVE : failure.status;
 
   const shouldStartNewSubscriptionRow =
     isSuccess && !isSamePayfastAgreement && !matchedByPaymentId && !matchedByHint;
@@ -232,9 +223,9 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
       ? {
           last_payment_at: isFreeTrialEvent ? refRow?.last_payment_at || null : nowIso,
           next_billing_date: nextBilling,
-          started_at: nowIso,
-          activated_at: nowIso,
-          start_date: shouldStartNewSubscriptionRow || !sameAgreementRow?.id ? nowIso : undefined,
+          started_at: sameAgreementRow?.started_at || nowIso,
+          activated_at: sameAgreementRow?.activated_at || nowIso,
+          start_date: sameAgreementRow?.started_at ? undefined : nowIso,
           current_period_start: nowIso,
           current_period_end: nextBilling,
           next_retry_at: null,
@@ -243,21 +234,24 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
           grace_ends_at: null,
           canceled_at: null,
           cancelled_at: null,
+          cancel_at_period_end: false,
           last_payment_failure_at: null,
+          last_payment_failure_reason: null,
           subscription_source: "payfast",
           admin_override: false,
           trial_ends_at: null,
+          failure_count: 0,
         }
       : {
-          next_retry_at: addHoursIso(nowIso, retryHours) || nowIso,
-          dunning_stage: nextFailures,
-          past_due_at: nowIso,
-          // Same grace as the dunning cron: a failed renewal keeps access while PayFast retries.
-          // None once the agreement is cancelled for non-payment.
-          grace_ends_at: status === SUBSCRIPTION_STATUS.PAST_DUE ? addCalendarDaysIso(nowIso, PAST_DUE_GRACE_DAYS) : null,
-          last_payment_failure_at: nowIso,
+          // PayFast retries on its own and sends another ITN. Paidly does not schedule a charge.
+          next_retry_at: null,
+          dunning_stage: failure.dunning_stage,
+          past_due_at: failure.past_due_at,
+          grace_ends_at: failure.grace_ends_at,
+          last_payment_failure_at: failure.last_payment_failure_at,
+          last_payment_failure_reason: failure.last_payment_failure_reason,
+          failure_count: failure.failure_count,
         }),
-    failure_count: nextFailures,
   };
   Object.keys(row).forEach((k) => row[k] === undefined && delete row[k]);
 
@@ -293,7 +287,7 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
       throw new Error(rpcErr.message);
     }
   } else if (rowTargetForMutation?.id) {
-    const { error: updErr } = await supabase.from("subscriptions").update(row).eq("id", rowTargetForMutation.id);
+    const updErr = await updateSubscriptionTolerant(supabase, rowTargetForMutation.id, row);
     if (updErr) {
       console.error("[payfast-subscription-itn] subscriptions update failed", updErr.message);
       throw new Error(updErr.message);

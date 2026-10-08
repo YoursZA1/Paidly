@@ -3,8 +3,6 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { processQueuedBroadcastJobs } from "../server/src/adminBroadcastQueue.js";
-import { addCalendarDaysIso, PAST_DUE_GRACE_DAYS } from "../shared/subscriptionAccess.js";
-
 function isAuthorized(req) {
   const secret = process.env.CRON_SECRET;
   if (!secret || typeof secret !== "string" || secret.length < 8) {
@@ -30,13 +28,6 @@ function getSupabaseAdmin() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing");
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-}
-
-function addHoursIso(baseDate, hours) {
-  const d = new Date(baseDate);
-  if (!Number.isFinite(d.getTime())) return null;
-  d.setTime(d.getTime() + Math.max(1, Number(hours || 24)) * 60 * 60 * 1000);
-  return d.toISOString();
 }
 
 async function expirePendingSubscriptions(supabase) {
@@ -78,122 +69,13 @@ async function expirePendingSubscriptions(supabase) {
   return { scanned: (rows || []).length, expired };
 }
 
-async function insertDunningEvent(supabase, sub, eventType, attemptNo, details = {}) {
-  await supabase.from("subscription_dunning_events").insert({
-    subscription_id: sub.id,
-    user_id: sub.user_id || null,
-    event_type: eventType,
-    attempt_no: attemptNo,
-    details,
-  });
-}
-
 async function runSubscriptionDunningBatch() {
-  const supabase = getSupabaseAdmin();
-  const nowIso = new Date().toISOString();
-  const maxRows = Math.max(1, Number(process.env.SUBSCRIPTION_DUNNING_BATCH_SIZE || 200));
-
-  const { data: dueRows, error: dueErr } = await supabase
-    .from("subscriptions")
-    .select("id, user_id, status, failure_count, dunning_stage, max_retry_attempts, retry_interval_hours, next_billing_date")
-    .in("status", ["active", "past_due"])
-    .lte("next_billing_date", nowIso)
-    .order("next_billing_date", { ascending: true })
-    .limit(maxRows);
-  if (dueErr) throw dueErr;
-
-  const { data: retryRows, error: retryErr } = await supabase
-    .from("subscriptions")
-    .select("id, user_id, status, failure_count, dunning_stage, max_retry_attempts, retry_interval_hours, next_retry_at")
-    .eq("status", "past_due")
-    .lte("next_retry_at", nowIso)
-    .order("next_retry_at", { ascending: true })
-    .limit(maxRows);
-  if (retryErr) throw retryErr;
-
-  let movedToPastDue = 0;
-  let retriesScheduled = 0;
-  let canceled = 0;
-
-  for (const sub of dueRows || []) {
-    const prevFailures = Number(sub.failure_count || 0);
-    const nextFailures = prevFailures + 1;
-    const maxRetry = Math.max(1, Number(sub.max_retry_attempts || 3));
-    const retryHours = Math.max(1, Number(sub.retry_interval_hours || 24));
-    const nextStatus = nextFailures >= maxRetry ? "cancelled" : "past_due";
-    const graceEndsAt =
-      nextStatus === "past_due"
-        ? addCalendarDaysIso(new Date(), PAST_DUE_GRACE_DAYS)
-        : null;
-    const patch = {
-      status: nextStatus,
-      failure_count: nextFailures,
-      dunning_stage: nextFailures,
-      last_payment_failure_at: nowIso,
-      updated_at: nowIso,
-      next_retry_at: nextStatus === "past_due" ? addHoursIso(nowIso, retryHours) : null,
-      past_due_at: nowIso,
-      grace_ends_at: graceEndsAt,
-      canceled_at: nextStatus === "cancelled" ? nowIso : null,
-      cancelled_at: nextStatus === "cancelled" ? nowIso : null,
-    };
-    const { error } = await supabase.from("subscriptions").update(patch).eq("id", sub.id);
-    if (!error) {
-      if (nextStatus === "cancelled") canceled += 1;
-      else movedToPastDue += 1;
-      await insertDunningEvent(
-        supabase,
-        sub,
-        nextStatus === "cancelled" ? "canceled_for_nonpayment" : "payment_failed",
-        nextFailures,
-        { reason: "billing_due_without_confirmed_itn" }
-      );
-    }
-  }
-
-  for (const sub of retryRows || []) {
-    const prevFailures = Number(sub.failure_count || 0);
-    const nextFailures = prevFailures + 1;
-    const maxRetry = Math.max(1, Number(sub.max_retry_attempts || 3));
-    const retryHours = Math.max(1, Number(sub.retry_interval_hours || 24));
-    const nextStatus = nextFailures >= maxRetry ? "cancelled" : "past_due";
-    const graceEndsAt =
-      nextStatus === "past_due"
-        ? addCalendarDaysIso(new Date(), PAST_DUE_GRACE_DAYS)
-        : null;
-    const patch = {
-      status: nextStatus,
-      failure_count: nextFailures,
-      dunning_stage: nextFailures,
-      last_payment_failure_at: nowIso,
-      updated_at: nowIso,
-      next_retry_at: nextStatus === "past_due" ? addHoursIso(nowIso, retryHours) : null,
-      grace_ends_at: graceEndsAt,
-      canceled_at: nextStatus === "cancelled" ? nowIso : null,
-      cancelled_at: nextStatus === "cancelled" ? nowIso : null,
-    };
-    const { error } = await supabase.from("subscriptions").update(patch).eq("id", sub.id);
-    if (!error) {
-      if (nextStatus === "cancelled") canceled += 1;
-      else retriesScheduled += 1;
-      await insertDunningEvent(
-        supabase,
-        sub,
-        nextStatus === "cancelled" ? "canceled_for_nonpayment" : "retry_scheduled",
-        nextFailures,
-        { reason: "retry_window_elapsed_without_confirmed_itn" }
-      );
-    }
-  }
-
-  return {
-    ran: true,
-    scannedDue: (dueRows || []).length,
-    scannedRetry: (retryRows || []).length,
-    movedToPastDue,
-    retriesScheduled,
-    canceled,
-  };
+  const { runSubscriptionReconciliation } = await import("../server/src/billing/subscriptionReconciliation.js");
+  // PayFast ITN is the payment event. This job suspends expired grace, finishes
+  // cancel-at-period-end, and reports silence. It does not invent a retry charge.
+  return runSubscriptionReconciliation(getSupabaseAdmin(), {
+    limit: Math.max(1, Number(process.env.SUBSCRIPTION_DUNNING_BATCH_SIZE || 200)),
+  });
 }
 
 function toIsoDate(d) {

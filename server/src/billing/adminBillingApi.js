@@ -36,6 +36,7 @@ import {
   buildAdminOverridePatch,
   coerceAdminRequestedStatus,
 } from "./adminSubscriptionOverride.js";
+import { graceDaysRemaining, paymentHealthFor, paymentHealthLabel } from "../../../shared/subscriptionBillingPolicy.js";
 
 function json(res, status, body) {
   return res.status(status).json(body);
@@ -149,7 +150,7 @@ async function buildSubscriptionOverviewFromCounts(supabase) {
 }
 
 const CURRENT_VIEW_SELECTS = [
-  "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, free_access, free_access_until, created_at, updated_at, is_current",
+  "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, grace_ends_at, past_due_at, last_payment_at, last_payment_failure_at, trial_started_at, trial_ends_at, subscription_source, admin_override, free_access, free_access_until, created_at, updated_at, is_current",
   "id, status, plan, current_plan, plan_slug, plan_family, amount, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, next_billing_date, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at, is_current",
   "id, status, plan, current_plan, plan_slug, plan_family, amount, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, next_billing_date, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at",
   "id, status, plan_slug, plan, amount, currency, billing_cycle, company_id, user_id, email, next_billing_date, cancelled_at, failure_count, created_at, updated_at",
@@ -332,10 +333,46 @@ export async function buildBillingReporting(supabase, now = new Date()) {
     overdueTrials = 0;
   }
 
+  const dayStart = startOfBusinessDay(now);
+  const paymentsToday = sumAmountsInWindow(completedRows, { from: dayStart });
+  const upcomingUntil = addCalendarDaysIso(now, 7);
+  let failedPayments = 0;
+  let pastDue = 0;
+  let suspended = 0;
+  let upcomingBilling = 0;
+  try {
+    const [failedRes, pastDueCount, suspendedCount, upcomingRes] = await Promise.all([
+      supabase
+        .from("payment_history")
+        .select("id", { count: "exact", head: true })
+        .eq("payment_status", PAYMENT_HISTORY_STATUS.FAILED)
+        .gte("created_at", startIso),
+      countSubscriptionsInStatuses(supabase, [SUBSCRIPTION_STATUS.PAST_DUE]),
+      countSubscriptionsInStatuses(supabase, [SUBSCRIPTION_STATUS.SUSPENDED]),
+      supabase
+        .from("subscriptions")
+        .select("id", { count: "exact", head: true })
+        .eq("status", SUBSCRIPTION_STATUS.ACTIVE)
+        .gte("next_billing_date", nowIso)
+        .lte("next_billing_date", upcomingUntil),
+    ]);
+    if (!failedRes.error) failedPayments = failedRes.count ?? 0;
+    pastDue = pastDueCount;
+    suspended = suspendedCount;
+    if (!upcomingRes.error) upcomingBilling = upcomingRes.count ?? 0;
+  } catch (e) {
+    console.warn("[admin/subscriptions] payment health counts", e?.message || e);
+  }
+
   return {
     startDate: startIso,
-    timezone: "UTC",
+    timezone: "Africa/Johannesburg",
     successfulPayments: revenue.count,
+    paymentsToday: paymentsToday.count,
+    failedPayments,
+    pastDue,
+    suspended,
+    upcomingBilling,
     revenue: revenue.amount,
     currency: revenue.currency,
     activeSubscribers,
@@ -380,6 +417,9 @@ export function normalizeAdminSubscriptionListRow(row) {
     billing_cycle: row.billing_cycle || "monthly",
     next_billing_date: row.next_billing_date || null,
     created_date: row.created_date || row.created_at || null,
+    payment_health: paymentHealthFor(row),
+    payment_health_label: paymentHealthLabel(paymentHealthFor(row)),
+    grace_days_remaining: graceDaysRemaining(row),
     needs_plan_migration: isLegacyPlanSlug(row.plan || row.current_plan || row.plan_slug),
   };
 }
@@ -959,6 +999,11 @@ export async function handleAdminSubscriptionsList(req, res) {
     startDate: PAYMENT_REPORTING_START_ISO,
     timezone: "UTC",
     successfulPayments: 0,
+    paymentsToday: 0,
+    failedPayments: 0,
+    pastDue: 0,
+    suspended: 0,
+    upcomingBilling: 0,
     revenue: 0,
     currency: "ZAR",
     activeSubscribers: 0,

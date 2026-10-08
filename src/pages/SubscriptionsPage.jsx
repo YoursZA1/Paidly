@@ -201,6 +201,38 @@ function LastNotificationLine({ sub }) {
   );
 }
 
+function LastPaymentLine({ sub }) {
+  const paid = sub?.last_payment_at ? new Date(sub.last_payment_at) : null;
+  const failed = sub?.last_payment_failure_at ? new Date(sub.last_payment_failure_at) : null;
+  const paidOk = paid && Number.isFinite(paid.getTime());
+  const failedOk = failed && Number.isFinite(failed.getTime());
+  const showFailed = failedOk && (!paidOk || failed > paid);
+  if (!showFailed && !paidOk) return <span className="text-xs text-muted-foreground">—</span>;
+  const when = format(showFailed ? failed : paid, 'dd MMM yyyy');
+  return (
+    <div>
+      <p className="text-xs">{when}</p>
+      {showFailed ? <p className="text-[11px] text-destructive">Failed</p> : null}
+    </div>
+  );
+}
+
+function PaymentHealthLine({ sub }) {
+  const label = sub?.payment_health_label || 'Good';
+  const grace = sub?.grace_days_remaining;
+  const showGrace = (sub?.status === 'past_due' || sub?.status === 'suspended') && grace != null;
+  return (
+    <div>
+      <p className="text-xs font-medium">{label}</p>
+      {showGrace ? (
+        <p className="text-[11px] text-muted-foreground">
+          {grace > 0 ? `Grace: ${grace} day${grace === 1 ? '' : 's'} remaining` : 'Grace period ended'}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function SubscriptionActions({ sub, onView, onEdit, onHistory, onRequest, extra = null }) {
   if (sub._isSynthetic) {
     return (
@@ -972,6 +1004,8 @@ export default function SubscriptionsPage() {
                 <div className="flex min-w-0 items-start gap-4">
                   <TrialPhaseLine sub={sub} />
                   <LastNotificationLine sub={sub} />
+                  <LastPaymentLine sub={sub} />
+                  <PaymentHealthLine sub={sub} />
                 </div>
                 <SubscriptionActions
                   sub={sub}
@@ -1014,7 +1048,9 @@ export default function SubscriptionsPage() {
                 <th className="px-4 py-2 text-left font-medium">Status</th>
                 <th className="px-4 py-2 text-left font-medium">Trial</th>
                 <th className="px-4 py-2 text-left font-medium">Last notification</th>
+                <th className="px-4 py-2 text-left font-medium">Last Payment</th>
                 <th className="px-4 py-2 text-left font-medium">Next Billing</th>
+                <th className="px-4 py-2 text-left font-medium">Payment Health</th>
                 <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
             </thead>
@@ -1058,10 +1094,16 @@ export default function SubscriptionsPage() {
                   <td className="px-4 py-2.5">
                     <LastNotificationLine sub={sub} />
                   </td>
+                  <td className="px-4 py-2.5">
+                    <LastPaymentLine sub={sub} />
+                  </td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">
                     {sub.next_billing_date
                       ? format(new Date(sub.next_billing_date), 'dd MMM yyyy')
                       : '—'}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <PaymentHealthLine sub={sub} />
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <SubscriptionActions
@@ -1079,7 +1121,7 @@ export default function SubscriptionsPage() {
               ))}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {isLoading ? 'Loading...' : emptyMessage}
                   </td>
                 </tr>

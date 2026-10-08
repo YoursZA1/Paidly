@@ -16,6 +16,51 @@ import {
   marketingAnnualSavingsLabel,
   marketingSelfServeFamilies,
 } from "@shared/planMarketing.js";
+import {
+  formatBillingDate,
+  nextPaymentCountdownLabel,
+} from "@shared/subscriptionBillingPolicy.js";
+
+function BillingFacts({ status }) {
+  if (!status?.nextBillingDate && status?.amount == null) return null;
+  if (status.cancelAtPeriodEnd) {
+    const until = formatBillingDate(status.currentPeriodEnd || status.expiry);
+    return (
+      <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+        {until ? `Access until ${until}.` : "Access until the end of this billing period."} No further charges.
+      </p>
+    );
+  }
+  const next = formatBillingDate(status.nextBillingDate);
+  const amount = Number(status.amount);
+  const amountLabel = Number.isFinite(amount)
+    ? `R${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2)}`
+    : null;
+  const cycle = String(status.billingCycle || "monthly");
+  const cycleLabel = cycle.charAt(0).toUpperCase() + cycle.slice(1);
+  const countdown = nextPaymentCountdownLabel(status.nextPaymentInDays);
+  return (
+    <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-600 dark:text-slate-400">
+      {next ? (
+        <>
+          <dt>Next payment</dt>
+          <dd className="font-medium text-slate-900 dark:text-slate-100">{next}</dd>
+        </>
+      ) : null}
+      {amountLabel ? (
+        <>
+          <dt>Amount</dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{amountLabel}</dd>
+        </>
+      ) : null}
+      <dt>Billing</dt>
+      <dd className="font-medium text-slate-900 dark:text-slate-100">{cycleLabel}</dd>
+      {countdown ? (
+        <dd className="col-span-2 text-xs text-slate-500">{countdown}</dd>
+      ) : null}
+    </dl>
+  );
+}
 
 const CONTACT_SALES_EMAIL = (
   import.meta.env.VITE_CONTACT_SALES_EMAIL ||
@@ -155,6 +200,7 @@ export default function SubscriptionSettings() {
                             {badge.planLabel}
                         </h2>
                         <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{badge.statusLabel}</p>
+                        <BillingFacts status={billingStatus} />
                     </div>
                 </div>
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">

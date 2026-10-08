@@ -54,6 +54,13 @@ describe("BillingLockBanner", () => {
     expect(container.textContent).not.toMatch(/Pay .+ — R/);
   });
 
+  it("tells a suspended company their data is safe and how to pay", async () => {
+    await renderBanner({ plan: "business", planLabel: "Business", statusLabel: "Suspended", status: "suspended" });
+    expect(container.textContent).toContain("Your Paidly subscription is past due.");
+    expect(container.textContent).toContain("Your business data is safe, but paid features are currently restricted.");
+    expect(container.textContent).toContain("Resolve Payment");
+  });
+
   it("never quotes a self-serve price for Enterprise (contact-sales, no fixed price)", async () => {
     await renderBanner({ plan: "enterprise", planLabel: "Enterprise", statusLabel: "Payment failed" });
     expect(container.textContent).toContain("Choose a plan");

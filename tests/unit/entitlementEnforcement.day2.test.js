@@ -537,7 +537,7 @@ describe("§13 — a failed PayFast renewal keeps access for the same grace as t
       { subscriptionIdHint: row.id, userIdHint: owner, companyIdHint: org, planSlugHint: "business_monthly" }
     );
 
-  it("FAILED → past_due with a 7-day grace (access kept); COMPLETE clears it; 3rd failure → cancelled", async () => {
+  it("FAILED → past_due with a 7-day grace (access kept); COMPLETE clears it; further failures do not cancel", async () => {
     const { owner, org } = seedCompany();
     const row = addSubscription({
       user_id: owner,
@@ -553,20 +553,27 @@ describe("§13 — a failed PayFast renewal keeps access for the same grace as t
     expect(graceDays).toBeGreaterThan(PAST_DUE_GRACE_DAYS - 0.01);
     expect(graceDays).toBeLessThanOrEqual(PAST_DUE_GRACE_DAYS);
     expect(await serverAllows(owner, "payroll")).toBe(true); // was: immediate lockout
+    const grace = row.grace_ends_at;
+
+    await itn(row, owner, org, "FAILED");
+    expect(row.status).toBe("past_due");
+    expect(row.grace_ends_at).toBe(grace);
 
     await itn(row, owner, org, "COMPLETE");
     expect(row).toMatchObject({ status: "active", grace_ends_at: null, failure_count: 0 });
 
     row.current_period_end = iso(-60_000);
     for (let i = 0; i < 3; i += 1) await itn(row, owner, org, "FAILED");
-    expect(row).toMatchObject({ status: "cancelled", grace_ends_at: null });
-    expect(await serverAllows(owner, "payroll")).toBe(false);
+    expect(row.status).toBe("past_due");
+    expect(row.grace_ends_at).toBeTruthy();
+    expect(await serverAllows(owner, "payroll")).toBe(true);
   });
 
-  it("the dunning cron uses the same constant", async () => {
+  it("the dunning cron reconciles grace and does not cancel for a missed billing date", async () => {
     const { readFileSync } = await import("node:fs");
     const cron = readFileSync(new URL("../../api/cron.js", import.meta.url), "utf8");
-    expect(cron).toMatch(/addCalendarDaysIso\(new Date\(\), PAST_DUE_GRACE_DAYS\)/);
+    expect(cron).toMatch(/runSubscriptionReconciliation/);
+    expect(cron).not.toMatch(/canceled_for_nonpayment/);
     expect(cron).not.toMatch(/7 \* 24 \* 60 \* 60 \* 1000/);
   });
 });

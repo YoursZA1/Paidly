@@ -170,6 +170,14 @@ describe("describeDashboardSubscriptionBanner", () => {
     expect(copy.countdown).toBeNull();
   });
 
+  it("shows the suspended restriction, not a deleted account", () => {
+    const copy = describeDashboardSubscriptionBanner({ status: "suspended", planName: "Business" }, now);
+    expect(copy.kind).toBe(DASHBOARD_BANNER_KIND.SUSPENDED);
+    expect(copy.heading).toBe("Your Paidly subscription is past due.");
+    expect(copy.supporting).toMatch(/business data is safe/);
+    expect(copy.ctaLabel).toBe("Resolve Payment");
+  });
+
   it("shows cancelled copy", () => {
     const copy = describeDashboardSubscriptionBanner({ status: "cancelled" }, now);
     expect(copy.kind).toBe(DASHBOARD_BANNER_KIND.CANCELLED);

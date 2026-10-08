@@ -52,11 +52,11 @@ export function hasPaidAccessIncludingGrace(sub, now = new Date()) {
  * @param {string} userId
  */
 const ENTITLEMENT_SELECT_RICH =
-  "id, status, plan, current_plan, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, expires_at, cancelled_at, trial_ends_at, trial_started_at, admin_override, subscription_source, updated_at, created_at";
+  "id, status, plan, current_plan, plan_slug, plan_id, plan_family, company_id, grace_ends_at, past_due_at, amount, billing_cycle, next_billing_date, current_period_end, expires_at, cancelled_at, trial_ends_at, trial_started_at, admin_override, subscription_source, updated_at, created_at";
 const ENTITLEMENT_SELECT_FREE = `${ENTITLEMENT_SELECT_RICH}, free_access, free_access_until`;
 const ENTITLEMENT_SELECT_MIGRATION = `${ENTITLEMENT_SELECT_FREE}, ${MIGRATION_ACCESS_COLUMNS}`;
 const ENTITLEMENT_SELECT_LEAN =
-  "id, status, plan, current_plan, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, updated_at, created_at";
+  "id, status, plan, current_plan, plan_slug, plan_id, plan_family, company_id, grace_ends_at, past_due_at, amount, billing_cycle, next_billing_date, current_period_end, updated_at, created_at";
 
 export async function resolveEntitlementForCompany(supabase, companyId) {
   return resolveEntitlement(supabase, null, companyId);

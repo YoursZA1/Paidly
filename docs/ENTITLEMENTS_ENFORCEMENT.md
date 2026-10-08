@@ -37,7 +37,9 @@ UI and EntityManager read the same subscription current payload for chrome and c
 
 ## Failed renewals (grace)
 
-A failed renewal sets `past_due` with `grace_ends_at = now + PAST_DUE_GRACE_DAYS` (7 days,
-`shared/subscriptionAccess.js`), whether PayFast reports it (ITN `FAILED`) or the dunning cron notices the
-missed billing date. Access continues until `grace_ends_at`; a successful payment clears it; after
-`max_retry_attempts` failures (default 3) the agreement is `cancelled` with no grace.
+A failed PayFast renewal ITN sets `past_due` with `grace_ends_at = now + PAST_DUE_GRACE_DAYS` (7 days,
+`shared/subscriptionAccess.js`). Access continues until `grace_ends_at`. From day 3 the customer sees a
+stronger warning. When `grace_ends_at` has passed, the existing `subscription-dunning` cron sets
+`suspended`. It does not delete business data and it does not treat a missed `next_billing_date` as a
+failed payment — PayFast's ITN is the payment event. Repeat failure ITNs during an open grace do not
+restart the clock and do not cancel the agreement. A successful ITN returns the row to `active`.

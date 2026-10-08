@@ -37,6 +37,11 @@ import {
 import { findReusableCheckoutRow } from "../../../shared/currentSubscription.js";
 import { insertSubscriptionRow, loadOwnerSubscriptionRows, reconcileOwnerCurrent } from "./subscriptionCurrent.js";
 import { describeDashboardSubscriptionBanner } from "../../../shared/subscriptionDashboardCopy.js";
+import {
+  customerCancelPatch,
+  nextPaymentCountdownDays,
+  paymentHealthFor,
+} from "../../../shared/subscriptionBillingPolicy.js";
 import { describePayfastCheckoutSignature } from "../payfastCustomSignature.js";
 import { randomBytes } from "node:crypto";
 import { assertCallerForAdminRoute } from "../adminRouteAccess.js";
@@ -702,10 +707,33 @@ async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
   const remaining = trialRemainingBreakdown(sub.trial_ends_at, now);
   const managedByAdministrator =
     isAdminManaged(sub) && !["payfast"].includes(String(sub.subscription_source || ""));
+  let cancelAtPeriodEnd = false;
+  let billingCycle = sub.billing_cycle || null;
+  let pastDueAt = sub.past_due_at || null;
+  if (sub.id) {
+    const flag = await supabase
+      .from("subscriptions")
+      .select("cancel_at_period_end")
+      .eq("id", sub.id)
+      .maybeSingle();
+    if (!flag.error && flag.data) cancelAtPeriodEnd = flag.data.cancel_at_period_end === true;
+  }
+
   const statusPayloadBase = {
     status: currentStatus,
     plan: planSlug,
     planName,
+    amount: sub.amount != null ? Number(sub.amount) : null,
+    currency: sub.currency || "ZAR",
+    billingCycle: billingCycle || "monthly",
+    pastDueAt,
+    past_due_at: pastDueAt,
+    graceEndsAt: sub.grace_ends_at || null,
+    grace_ends_at: sub.grace_ends_at || null,
+    cancelAtPeriodEnd,
+    cancel_at_period_end: cancelAtPeriodEnd,
+    currentPeriodEnd: sub.current_period_end || null,
+    current_period_end: sub.current_period_end || null,
     trialStartAt: sub.trial_started_at || null,
     trialEndAt: sub.trial_ends_at || null,
     trialStartedAt: sub.trial_started_at || null,
@@ -743,7 +771,9 @@ async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
   }
   const payfastManaged =
     Boolean(pfToken) &&
-    [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.PAST_DUE].includes(String(sub.status || ""));
+    [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.PAST_DUE, SUBSCRIPTION_STATUS.SUSPENDED].includes(
+      String(sub.status || "")
+    );
 
   return {
     subscriptionId: sub.id,
@@ -772,6 +802,14 @@ async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
     nextBillingDate: renewDate,
     planFamily: familyForSlug(sub.plan_slug) || sub.plan_family || familyForSlug(planSlug) || null,
     graceEndsAt: sub.grace_ends_at || null,
+    pastDueAt,
+    amount: sub.amount != null ? Number(sub.amount) : null,
+    currency: String(sub.currency || "ZAR").toUpperCase(),
+    billingCycle: billingCycle || "monthly",
+    paymentHealth: paymentHealthFor({ ...sub, past_due_at: pastDueAt }, now),
+    nextPaymentInDays: nextPaymentCountdownDays(renewDate, now),
+    cancelAtPeriodEnd,
+    currentPeriodEnd: sub.current_period_end || null,
     accessGranted: hasPaidAccessIncludingGrace(sub, now),
     trialStartAt: sub.trial_started_at || null,
     trialEndAt: sub.trial_ends_at || null,
@@ -809,7 +847,7 @@ export async function handleSubscriptionStatus(req, res) {
     const { data, error } = await supabase
       .from("subscriptions")
       .select(
-        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, grace_ends_at, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
+        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, billing_cycle, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_start, current_period_end, expires_at, cancelled_at, grace_ends_at, past_due_at, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
       )
       .eq("id", subscriptionId)
       .maybeSingle();
@@ -822,7 +860,7 @@ export async function handleSubscriptionStatus(req, res) {
     let query = supabase
       .from("subscriptions")
       .select(
-        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_end, expires_at, cancelled_at, grace_ends_at, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
+        "id, status, plan, current_plan, plan_slug, plan_id, plan_family, amount, currency, billing_cycle, company_id, user_id, created_by, m_payment_id, activated_at, pending_expires_at, next_billing_date, current_period_start, current_period_end, expires_at, cancelled_at, grace_ends_at, past_due_at, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
       )
       .order("updated_at", { ascending: false })
       .limit(10);
@@ -944,13 +982,26 @@ export async function handleSubscriptionCancel(req, res) {
     return json(res, 404, { error: "No cancellable subscription found" });
   }
 
-  const { data: sub } = await supabase
+  let { data: sub, error: subErr } = await supabase
     .from("subscriptions")
     .select(
-      "id, user_id, created_by, company_id, status, payfast_token, payfast_subscription_id, m_payment_id"
+      "id, user_id, created_by, company_id, status, payfast_token, payfast_subscription_id, m_payment_id, current_period_end, expires_at, cancel_at_period_end"
     )
     .eq("id", subscriptionId)
     .maybeSingle();
+  if (subErr && /column|schema cache|cancel_at_period_end/i.test(String(subErr.message || ""))) {
+    ({ data: sub, error: subErr } = await supabase
+      .from("subscriptions")
+      .select(
+        "id, user_id, created_by, company_id, status, payfast_token, payfast_subscription_id, m_payment_id, current_period_end, expires_at"
+      )
+      .eq("id", subscriptionId)
+      .maybeSingle());
+  }
+  if (subErr) {
+    console.error("[billing/subscriptions/cancel]", subErr);
+    return json(res, 500, { error: "Failed to load subscription" });
+  }
 
   if (!sub) return json(res, 404, { error: "Subscription not found" });
 
@@ -961,15 +1012,18 @@ export async function handleSubscriptionCancel(req, res) {
     (isOwner && companyId && sub.company_id === companyId);
   if (!owns) return json(res, 403, { code: BILLING_OWNER_REQUIRED, error: BILLING_OWNER_MESSAGE });
 
-  if (sub.status === SUBSCRIPTION_STATUS.CANCELLED) {
+  if (sub.status === SUBSCRIPTION_STATUS.CANCELLED || sub.cancel_at_period_end === true) {
     return json(res, 200, {
       subscription: {
         id: sub.id,
         status: sub.status,
-        cancelled_at: null,
+        cancelAtPeriodEnd: sub.cancel_at_period_end === true,
+        currentPeriodEnd: sub.current_period_end || null,
       },
-      payfast: { skipped: true, reason: "already_cancelled" },
-      message: "Subscription already cancelled",
+      payfast: { skipped: true, reason: sub.cancel_at_period_end ? "already_scheduled" : "already_cancelled" },
+      message: sub.cancel_at_period_end
+        ? "Subscription already set to end at the close of this billing period"
+        : "Subscription already cancelled",
     });
   }
 
@@ -1008,21 +1062,32 @@ export async function handleSubscriptionCancel(req, res) {
     }
   }
 
-  // 4) Update DB
-  const nowIso = new Date().toISOString();
-  const { data: updated, error } = await supabase
+  // 4) Keep access until the paid period ends. PayFast will not charge again.
+  const decision = customerCancelPatch(sub, new Date());
+  let payload = decision.patch;
+  let { data: updated, error } = await supabase
     .from("subscriptions")
-    .update({
+    .update(payload)
+    .eq("id", subscriptionId)
+    .select("id, status, cancelled_at, plan_slug, company_id, current_period_end")
+    .single();
+  if (error && /column|schema cache|cancel_at_period_end/i.test(String(error.message || ""))) {
+    const nowIso = new Date().toISOString();
+    payload = {
       status: SUBSCRIPTION_STATUS.CANCELLED,
       cancelled_at: nowIso,
       canceled_at: nowIso,
       next_billing_date: null,
       next_retry_at: null,
       updated_at: nowIso,
-    })
-    .eq("id", subscriptionId)
-    .select("id, status, cancelled_at, plan_slug, company_id")
-    .single();
+    };
+    ({ data: updated, error } = await supabase
+      .from("subscriptions")
+      .update(payload)
+      .eq("id", subscriptionId)
+      .select("id, status, cancelled_at, plan_slug, company_id, current_period_end")
+      .single());
+  }
 
   if (error) {
     console.error("[billing/subscriptions/cancel]", error);
@@ -1040,15 +1105,20 @@ export async function handleSubscriptionCancel(req, res) {
     },
   });
 
+  const endsLater = decision.cancelAtPeriodEnd && updated?.status !== SUBSCRIPTION_STATUS.CANCELLED;
   return json(res, 200, {
     subscription: updated,
-    currentStatus: SUBSCRIPTION_STATUS.CANCELLED,
+    currentStatus: updated?.status || SUBSCRIPTION_STATUS.CANCELLED,
+    cancelAtPeriodEnd: endsLater,
+    currentPeriodEnd: sub.current_period_end || null,
     payfast: {
       cancelled: !payfastResult.skipped && payfastResult.ok,
       skipped: Boolean(payfastResult.skipped),
       reason: payfastResult.reason || null,
     },
-    message: "Subscription cancelled",
+    message: endsLater
+      ? "Subscription will end when this billing period closes. Paid features stay available until then."
+      : "Subscription cancelled",
   });
 }
 
