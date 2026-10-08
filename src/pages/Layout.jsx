@@ -426,13 +426,13 @@ function NavSection({
   children,
 }) {
   if (!group?.title) {
-    return <div className={collapsed && !mobile ? "space-y-2.5" : "space-y-1"}>{children}</div>;
+    return <div className="space-y-1">{children}</div>;
   }
 
   if (collapsed && !mobile) {
     return (
-      <div className="space-y-2.5">
-        <div className="my-2.5 mx-2 h-px bg-sidebar-border/50" aria-hidden />
+      <div className="space-y-1">
+        <div className="my-2 mx-auto h-px w-6 bg-sidebar-border/50" aria-hidden />
         {children}
       </div>
     );
@@ -442,7 +442,7 @@ function NavSection({
     return (
       <div className={mobile ? "space-y-1" : "mt-5 first:mt-1 space-y-1"}>
         <div
-          className={`px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${
+          className={`${mobile ? "px-4" : "px-2"} py-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${
             mobile ? "text-muted-foreground/50" : "text-sidebar-foreground/28"
           }`}
         >
@@ -459,7 +459,7 @@ function NavSection({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className={`group flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-colors ${
+        className={`group flex w-full items-center gap-2 rounded-lg py-1.5 text-left transition-colors ${mobile ? "px-4" : "px-2"} ${
           mobile
             ? "hover:bg-muted/60"
             : "hover:bg-white/[0.06]"
@@ -512,10 +512,10 @@ const LockedNavItem = ({ title, upgradeLabel: upgradeLabelProp, icon: Icon, coll
       aria-label={`${title} — ${upgradeLabel}`}
       className={`group flex items-center transition-all duration-150 ${
         isCollapsedRail
-          ? "justify-center px-2 py-2 rounded-xl hover:bg-white/[0.06]"
+          ? "mx-auto h-10 w-10 justify-center rounded-xl hover:bg-white/[0.06]"
           : mobile
             ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl hover:bg-muted/60"
-            : "py-2 gap-3 px-3 rounded-xl hover:bg-white/[0.06]"
+            : "py-2 gap-3 px-2 rounded-xl hover:bg-white/[0.06]"
       }`}
     >
       <span
@@ -633,7 +633,7 @@ const NavLink = memo(function NavLink({ item, onClick, collapsed = false, mobile
     const buttonEl = (
       <button
         type="button"
-        className={`group flex items-center w-full transition-all duration-150 ${collapsed && !mobile ? "justify-center px-2 py-2 rounded-xl hover:bg-white/[0.06]" : mobile ? "rounded-2xl" : "rounded-xl hover:bg-white/[0.06]"} ${mobile ? "min-h-[44px] py-3 gap-3 px-3 rounded-2xl" : (!collapsed ? "py-2 gap-3 px-3" : "")}`}
+        className={`group flex items-center w-full transition-all duration-150 ${collapsed && !mobile ? "mx-auto h-10 w-10 justify-center rounded-xl hover:bg-white/[0.06]" : mobile ? "rounded-2xl" : "rounded-xl hover:bg-white/[0.06]"} ${mobile ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl" : (!collapsed ? "py-2 gap-3 px-2" : "")}`}
         style={{ cursor: 'pointer' }}
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
@@ -690,7 +690,7 @@ const NavLink = memo(function NavLink({ item, onClick, collapsed = false, mobile
 
   return (
     <motion.div
-      whileHover={{ x: 2 }}
+      whileHover={isCollapsedRail ? undefined : { x: 2 }}
       whileTap={{ scale: 0.98 }}
       className={`sidebar-nav-item relative ${isCollapsedRail ? "rounded-xl" : "rounded-lg"} ${mobile && isActive ? "sidebar-nav-item-active" : ""}`}
     >
@@ -704,7 +704,7 @@ const NavLink = memo(function NavLink({ item, onClick, collapsed = false, mobile
               onPointerEnter={prefetchRouteData}
               onFocus={prefetchRouteData}
               aria-label={item.title}
-              className={`relative z-10 group flex items-center transition-all duration-150 justify-center px-2 py-2 rounded-xl ${isActive ? "bg-white/[0.12]" : "hover:bg-white/[0.06]"}`}
+              className={`relative z-10 group mx-auto flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${isActive ? "bg-white/[0.12]" : "hover:bg-white/[0.06]"}`}
             >
               <span
                 className={`sidebar-nav-icon inline-flex items-center justify-center h-9 w-9 rounded-xl transition-colors shrink-0 [&_svg]:size-[18px]
@@ -726,7 +726,7 @@ const NavLink = memo(function NavLink({ item, onClick, collapsed = false, mobile
           onClick={onClick}
           onPointerEnter={prefetchRouteData}
           onFocus={prefetchRouteData}
-          className={`relative z-10 group flex items-center transition-all duration-150 ${mobile ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl" : "py-2 gap-3 px-3 rounded-xl"} ${mobile ? (isActive ? "bg-orange-50" : "hover:bg-muted/60") : (isActive ? "bg-white/[0.1]" : "hover:bg-white/[0.06]")}`}
+          className={`relative z-10 group flex items-center transition-all duration-150 ${mobile ? "min-h-[44px] py-3 gap-3 px-4 rounded-2xl" : "py-2 gap-3 px-2 rounded-xl"} ${mobile ? (isActive ? "bg-orange-50" : "hover:bg-muted/60") : (isActive ? "bg-white/[0.1]" : "hover:bg-white/[0.06]")}`}
         >
           <span
             className={`sidebar-nav-icon inline-flex items-center justify-center h-8 w-8 rounded-lg transition-colors shrink-0 [&_svg]:size-[18px]
@@ -1367,71 +1367,65 @@ export default function Layout({ children, currentPageName }) {
         initial={{ opacity: 0, x: -16 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
-        className={`sidebar sidebar-panel hidden h-full min-h-0 lg:block text-sidebar-foreground py-6 ${
-          isSidebarCollapsed ? "pl-4 pr-1" : "px-4"
+        className={`sidebar sidebar-panel hidden h-full min-h-0 lg:block text-sidebar-foreground py-5 ${
+          isSidebarCollapsed ? "px-2" : "px-3"
         }`}
       >
         <div className="relative flex h-full flex-col">
-          {/* Collapse button — right edge of sidebar, tied to minimize function */}
-          <div className="absolute top-6 right-0 z-20 flex flex-col items-center">
+          {/* Logo and collapse — chevron sits on the header row, not over the icons */}
+          <div className={`flex shrink-0 ${isSidebarCollapsed ? "flex-col items-center gap-3" : "items-center justify-between gap-2 px-1"}`}>
+            <Link
+              to={createPageUrl("Dashboard")}
+              className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}
+              aria-label={isSidebarCollapsed ? "Paidly home" : undefined}
+            >
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+                <img
+                  src="/logo.svg"
+                  alt=""
+                  className="w-8 h-8"
+                  aria-hidden="true"
+                />
+              </div>
+              {!isSidebarCollapsed && (
+                <span className="text-[15px] font-bold text-sidebar-foreground tracking-tight truncate">
+                  Paidly
+                </span>
+              )}
+            </Link>
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
+                <button
+                  type="button"
                   onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-                  className="shrink-0 h-9 w-9 rounded-l-xl rounded-r-none border border-transparent border-r-0 bg-white/10 text-sidebar-foreground/90 hover:bg-white/15 hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:ring-offset-transparent active:scale-95 transition-all duration-200 ease-out"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/45 transition-colors hover:bg-white/10 hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                   title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                   aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
                   {isSidebarCollapsed ? (
-                    <ChevronsRight className="size-5" aria-hidden />
+                    <ChevronsRight className="size-4" strokeWidth={1.75} aria-hidden />
                   ) : (
-                    <ChevronsLeft className="size-5" aria-hidden />
+                    <ChevronsLeft className="size-4" strokeWidth={1.75} aria-hidden />
                   )}
-                </Button>
+                </button>
               </TooltipTrigger>
-              <TooltipContent side="left" sideOffset={8} className="font-medium">
+              <TooltipContent side="right" sideOffset={8} className="font-medium">
                 {isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               </TooltipContent>
             </Tooltip>
           </div>
 
-          {/* Logo — top, always visible when collapsed */}
-          <div className={`flex flex-col shrink-0 ${isSidebarCollapsed ? "px-0 items-center pr-9" : "pr-12"}`}>
-            <div className={isSidebarCollapsed ? "flex flex-col items-center gap-2" : "flex flex-col gap-2"}>
-              <Link
-                to={createPageUrl("Dashboard")}
-                className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}
-                aria-label={isSidebarCollapsed ? "Paidly home" : undefined}
-              >
-                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
-                  <img
-                    src="/logo.svg"
-                    alt=""
-                    className="w-8 h-8"
-                    aria-hidden="true"
-                  />
-                </div>
-                {!isSidebarCollapsed && (
-                  <span className="text-[15px] font-bold text-sidebar-foreground tracking-tight">
-                    Paidly
-                  </span>
-                )}
-              </Link>
-            </div>
-            <div className="mt-3" data-tour="dashboard-summary">
-              <NavLink
-                item={dashboardNavItem}
-                collapsed={isSidebarCollapsed}
-                isActive={isNavLinkActive(dashboardNavItem, location.pathname)}
-              />
-            </div>
+          <div className="mt-4" data-tour="dashboard-summary">
+            <NavLink
+              item={dashboardNavItem}
+              collapsed={isSidebarCollapsed}
+              isActive={isNavLinkActive(dashboardNavItem, location.pathname)}
+            />
           </div>
 
           {/* Navigation */}
-          <div className={`flex-1 py-4 overflow-auto sidebar-nav-scroll-area ${isSidebarCollapsed ? "px-0 pr-9" : "pl-4 pr-12"}`}>
-            <nav className={isSidebarCollapsed ? "space-y-2.5" : "space-y-0.5"} aria-label="App navigation">
+          <div className="flex-1 py-3 overflow-auto sidebar-nav-scroll-area">
+            <nav className="space-y-1" aria-label="App navigation">
               {navSections.map((group) => {
                 const active = sectionHasActiveRoute(group, location.pathname);
                 const collapsible = COLLAPSIBLE_NAV_SECTION_IDS.has(group.id);
@@ -1467,13 +1461,13 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Create CTA — solo org owners only (Invoice / Quote / Client / Product) */}
           {(!companyCtx?.companyId || isOrgOwner) && (
-          <div className={`mt-auto ${isSidebarCollapsed ? "px-2 py-3" : "p-4"}`}>
+          <div className="mt-auto px-1 py-3">
             <CreateSplitButton collapsed={isSidebarCollapsed} />
           </div>
           )}
 
           {/* User identity + logout */}
-          <div className={`mt-4 pt-4 border-t border-sidebar-border/40 ${isSidebarCollapsed ? "px-2 pb-4" : "px-3 pb-4"}`}>
+          <div className="mt-3 pt-3 border-t border-sidebar-border/40 px-1 pb-2">
             {isSidebarCollapsed ? (
               <Tooltip delayDuration={0}>
                 <TooltipTrigger asChild>
