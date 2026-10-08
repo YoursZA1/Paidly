@@ -60,7 +60,42 @@ async function countSubscriptionsInStatuses(supabase, statuses) {
 /**
  * Exact head counts per overview bucket (not derived from a limited list page).
  */
+function overviewFromCurrentView(currentView) {
+  const tallied = tallyCurrentSubscriptions(currentView.partition.current);
+  const bucketCounts = tallied.counts;
+  return {
+    active: bucketCounts.active,
+    pending: bucketCounts.pending,
+    expired: bucketCounts.expired,
+    cancelled: bucketCounts.cancelled,
+    trial: bucketCounts.trial,
+    pastDue: bucketCounts.pastDue,
+    failed: bucketCounts.failed,
+    adminGranted: tallied.adminGranted,
+    bucketTotal: tallied.total,
+    total: tallied.total,
+    rowTotal: currentView.rows.length,
+    trialLifecycle: tallied.lifecycle,
+    dataHealth: {
+      duplicateCurrent: currentView.partition.duplicateCurrent,
+      multipleHistorical: currentView.partition.multipleHistorical,
+      invalid: currentView.partition.invalid,
+    },
+    buckets: OVERVIEW_BUCKETS.filter((b) => b.key !== "adminGranted").map((b) => ({
+      key: b.key,
+      label: b.label,
+      count: bucketCounts[b.key] || 0,
+    })),
+  };
+}
+
 export async function buildSubscriptionOverview(supabase) {
+  const currentView = await loadCurrentSubscriptionView(supabase);
+  if (currentView) return overviewFromCurrentView(currentView);
+  return buildSubscriptionOverviewFromCounts(supabase);
+}
+
+async function buildSubscriptionOverviewFromCounts(supabase) {
   const counts = {};
   let total = 0;
   await Promise.all(
@@ -90,46 +125,25 @@ export async function buildSubscriptionOverview(supabase) {
   counts.adminGranted = adminGranted;
 
   const trialLifecycle = await countTrialLifecycle(supabase);
-  const currentView = await loadCurrentSubscriptionView(supabase);
-  const tallied = currentView ? tallyCurrentSubscriptions(currentView.partition.current) : null;
-
-  const active = tallied ? tallied.counts.active : counts.active || 0;
-  const pending = tallied ? tallied.counts.pending : counts.pending || 0;
-  const expired = tallied ? tallied.counts.expired : counts.expired || 0;
-  const cancelled = tallied ? tallied.counts.cancelled : counts.cancelled || 0;
-  const trial = tallied ? tallied.counts.trial : counts.trial || 0;
-  const pastDue = tallied ? tallied.counts.pastDue : counts.pastDue || 0;
-  const failed = tallied ? tallied.counts.failed : counts.failed || 0;
-  const granted = tallied ? tallied.adminGranted : adminGranted;
-  const bucketCounts = { active, pending, expired, cancelled, trial, pastDue, failed };
 
   return {
-    active,
-    pending,
-    expired,
-    cancelled,
-    trial,
-    pastDue,
-    failed,
-    adminGranted: granted,
-    /** Sum of the current-subscription buckets. */
-    bucketTotal: tallied ? tallied.total : total,
-    /** Current subscriptions (one per business), not every historical row. */
-    total: tallied ? tallied.total : allCount ?? total,
-    /** Physical rows, including history. */
-    rowTotal: currentView ? currentView.rows.length : allCount ?? total,
-    trialLifecycle: tallied ? tallied.lifecycle : trialLifecycle,
-    dataHealth: currentView
-      ? {
-          duplicateCurrent: currentView.partition.duplicateCurrent,
-          multipleHistorical: currentView.partition.multipleHistorical,
-          invalid: currentView.partition.invalid,
-        }
-      : null,
+    active: counts.active || 0,
+    pending: counts.pending || 0,
+    expired: counts.expired || 0,
+    cancelled: counts.cancelled || 0,
+    trial: counts.trial || 0,
+    pastDue: counts.pastDue || 0,
+    failed: counts.failed || 0,
+    adminGranted,
+    bucketTotal: total,
+    total: allCount ?? total,
+    rowTotal: allCount ?? total,
+    trialLifecycle,
+    dataHealth: null,
     buckets: OVERVIEW_BUCKETS.filter((b) => b.key !== "adminGranted").map((b) => ({
       key: b.key,
       label: b.label,
-      count: bucketCounts[b.key] || 0,
+      count: counts[b.key] || 0,
     })),
   };
 }
@@ -160,13 +174,18 @@ async function fetchAllSubscriptionRows(supabase, cols) {
 
 /** Every subscription row, then the current one per business. Null when the table cannot be read. */
 async function loadCurrentSubscriptionView(supabase, now = new Date()) {
-  let loaded = null;
-  for (const cols of CURRENT_VIEW_SELECTS) {
-    loaded = await fetchAllSubscriptionRows(supabase, cols);
-    if (!loaded.error) break;
+  let cols = null;
+  for (const candidate of CURRENT_VIEW_SELECTS) {
+    const { error } = await supabase.from("subscriptions").select(candidate).limit(1);
+    if (!error) {
+      cols = candidate;
+      break;
+    }
   }
-  if (!loaded || loaded.error) {
-    console.warn("[admin/subscriptions] current view", loaded?.error?.message || loaded?.error);
+  if (!cols) return null;
+  const loaded = await fetchAllSubscriptionRows(supabase, cols);
+  if (loaded.error) {
+    console.warn("[admin/subscriptions] current view", loaded.error?.message || loaded.error);
     return null;
   }
   return {
@@ -936,29 +955,49 @@ export async function handleAdminSubscriptionsList(req, res) {
     String(q.countsOnly || "").trim() === "1" ||
     String(q.overview || "").trim().toLowerCase() === "true";
 
+  const reportingFallback = {
+    startDate: PAYMENT_REPORTING_START_ISO,
+    timezone: "UTC",
+    successfulPayments: 0,
+    revenue: 0,
+    currency: "ZAR",
+    activeSubscribers: 0,
+    trialUsers: 0,
+    expiredTrials: 0,
+  };
+
+  // One subscription read for the cards and the table. Payment totals run beside it.
+  // Counting every status and then reading the table again ran past the function time limit.
+  const [view, reportingResult] = await Promise.all([
+    loadCurrentSubscriptionView(supabase),
+    buildBillingReporting(supabase).then(
+      (value) => ({ ok: true, value }),
+      (e) => {
+        console.warn("[admin/subscriptions] reporting", e?.message || e);
+        return { ok: false };
+      }
+    ),
+  ]);
+
   let overview = null;
-  let reporting = null;
-  try {
-    overview = await buildSubscriptionOverview(supabase);
-  } catch (e) {
-    console.error("[admin/subscriptions] overview", e);
-    return json(res, 500, { error: "Failed to load subscription overview" });
+  if (view) {
+    overview = overviewFromCurrentView(view);
+  } else {
+    try {
+      overview = await buildSubscriptionOverviewFromCounts(supabase);
+    } catch (e) {
+      console.error("[admin/subscriptions] overview", e);
+      return json(res, 500, { error: "Failed to load subscription overview" });
+    }
   }
-  try {
-    reporting = await buildBillingReporting(supabase);
-  } catch (e) {
-    console.warn("[admin/subscriptions] reporting", e?.message || e);
-    reporting = {
-      startDate: PAYMENT_REPORTING_START_ISO,
-      timezone: "UTC",
-      successfulPayments: 0,
-      revenue: 0,
-      currency: "ZAR",
-      activeSubscribers: overview.active || 0,
-      trialUsers: overview.trial || 0,
-      expiredTrials: overview.expired || 0,
-    };
-  }
+  const reporting = reportingResult.ok
+    ? reportingResult.value
+    : {
+        ...reportingFallback,
+        activeSubscribers: overview.active || 0,
+        trialUsers: overview.trial || 0,
+        expiredTrials: overview.expired || 0,
+      };
 
   if (overviewOnly) {
     return json(res, 200, { overview, reporting });
@@ -968,7 +1007,6 @@ export async function handleAdminSubscriptionsList(req, res) {
   const limit = Math.min(500, Math.max(1, Number(q.limit) || 50));
   const offset = Math.max(0, Number(q.offset) || 0);
 
-  const view = await loadCurrentSubscriptionView(supabase);
   if (!view) {
     return json(res, 500, { error: "Failed to list subscriptions" });
   }
