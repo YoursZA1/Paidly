@@ -100,6 +100,25 @@ describe("hasSubscriptionAccess", () => {
     ).toBe(true);
   });
 
+  it("grants timed free access on an expired trial and denies it after the date", () => {
+    const open = {
+      status: "expired",
+      free_access: true,
+      free_access_until: "2026-09-01T00:00:00.000Z",
+    };
+    expect(hasSubscriptionAccess(open, now)).toBe(true);
+    expect(hasSubscriptionAccess(open, new Date("2026-09-02T00:00:00.000Z"))).toBe(false);
+  });
+
+  it("denies free access when the account is suspended", () => {
+    expect(
+      hasSubscriptionAccess(
+        { status: "suspended", free_access: true, free_access_until: null },
+        now
+      )
+    ).toBe(false);
+  });
+
   it("denies admin suspension", () => {
     expect(
       hasSubscriptionAccess(
@@ -222,6 +241,44 @@ describe("admin override patch", () => {
     expect(patch.status).toBe("active");
     expect(patch.admin_override).toBe(true);
     expect(hasSubscriptionAccess({ ...existing, ...patch }, now)).toBe(true);
+  });
+
+  it("extends by 3 days without resetting the original trial start", () => {
+    const row = { ...existing, trial_started_at: "2026-08-20T00:00:00.000Z" };
+    const { patch } = buildAdminOverridePatch(row, { action: "extend_trial", days: 3 }, { now });
+    expect(patch.trial_ends_at).toBe("2026-08-30T14:30:00.000Z");
+    expect(patch.trial_started_at).toBeUndefined();
+    expect(patch.status).toBe("trialing");
+  });
+
+  it("grants 30 days of free access without marking the row active", () => {
+    const { patch } = buildAdminOverridePatch(
+      { ...existing, status: "expired" },
+      { action: "grant_free_access", days: 30 },
+      { now }
+    );
+    expect(patch.free_access).toBe(true);
+    expect(patch.status).toBeUndefined();
+    expect(patch.free_access_until).toBe("2026-09-21T12:00:00.000Z");
+    expect(hasSubscriptionAccess({ status: "expired", ...patch }, now)).toBe(true);
+  });
+
+  it("removes admin free access and returns an ended trial to expired", () => {
+    const { patch } = buildAdminOverridePatch(
+      {
+        status: "active",
+        subscription_source: "admin",
+        admin_override: true,
+        trial_ends_at: "2026-08-20T00:00:00.000Z",
+        free_access: true,
+      },
+      { action: "remove_free_access" },
+      { now }
+    );
+    expect(patch.free_access).toBe(false);
+    expect(patch.free_access_until).toBeNull();
+    expect(patch.status).toBe("expired");
+    expect(hasSubscriptionAccess({ ...patch }, now)).toBe(false);
   });
 
   it("maps suspend to suspended", () => {

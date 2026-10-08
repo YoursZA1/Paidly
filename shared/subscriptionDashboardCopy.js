@@ -21,6 +21,7 @@ export const DASHBOARD_BANNER_KIND = Object.freeze({
   SUSPENDED: "suspended",
   PAST_DUE: "past_due",
   PENDING: "pending",
+  FREE_ACCESS: "free_access",
   NONE: "none",
 });
 
@@ -78,7 +79,7 @@ function countdownLabel({ expired, remainingMs, daysRemaining, hoursRemaining })
 function trialUrgency({ remainingMs, daysRemaining }) {
   if (remainingMs == null) {
     return {
-      heading: "You're on a 7-day free trial",
+      heading: "You're currently on a Paidly trial",
       supportingPrefix: null,
     };
   }
@@ -101,7 +102,7 @@ function trialUrgency({ remainingMs, daysRemaining }) {
     };
   }
   return {
-    heading: daysRemaining != null && daysRemaining > 7 ? "You're on a free trial" : "You're on a 7-day free trial",
+    heading: "You're currently on a Paidly trial",
     supportingPrefix: null,
   };
 }
@@ -167,6 +168,25 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
       : computed.hoursRemaining;
   const expiredByTime = remainingMs != null ? remainingMs <= 0 : computed.expired;
 
+  const freeUntil = firstPresent(src, ["freeAccessUntil", "free_access_until"]);
+  const freeFlag = src.freeAccess === true || src.free_access === true;
+  if (freeFlag && status !== SUBSCRIPTION_STATUS.SUSPENDED) {
+    const untilLabel = formatTrialEndDate(freeUntil);
+    const stillFree = !freeUntil || (untilLabel && new Date(freeUntil).getTime() > now.getTime());
+    if (stillFree) {
+      return banner({
+        kind: DASHBOARD_BANNER_KIND.FREE_ACCESS,
+        heading: "Your account has free access",
+        supporting: untilLabel
+          ? `Your account has free access until ${untilLabel}.`
+          : "Your account has free access.",
+        ctaLabel: "View plans",
+        tone: "positive",
+        planName: name,
+      });
+    }
+  }
+
   if (admin && (status === SUBSCRIPTION_STATUS.ACTIVE || status === "active")) {
     return banner({
       kind: DASHBOARD_BANNER_KIND.ADMIN_GRANTED,
@@ -182,7 +202,7 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
   if (status === SUBSCRIPTION_STATUS.ACTIVE) {
     const endDate = formatTrialEndDate(nextBilling);
     const bits = [];
-    if (name) bits.push(`You're currently on the ${name} plan.`);
+    if (name) bits.push(`You're subscribed to Paidly ${name}.`);
     if (endDate) bits.push(`Next billing date: ${endDate}.`);
     return banner({
       kind: DASHBOARD_BANNER_KIND.ACTIVE,
@@ -268,11 +288,11 @@ export function describeDashboardSubscriptionBanner(src, now = new Date()) {
     // The package survives the trial: point back at it, never at a lower tier.
     return banner({
       kind: DASHBOARD_BANNER_KIND.EXPIRED,
-      heading: name ? `Your ${name} free trial has ended` : "Your free trial has ended",
+      heading: name ? `Your ${name} free trial has ended` : "Your trial has ended",
       supporting: name
-        ? `Subscribe to ${name} to continue using your account.`
-        : "Choose a Paidly plan to continue using your account.",
-      ctaLabel: name ? `Subscribe to ${name}` : "Choose a plan",
+        ? `Subscribe to continue using Paidly.`
+        : "Subscribe to continue using Paidly.",
+      ctaLabel: name ? `Subscribe to ${name}` : "View Plans",
       tone: "warning",
       planName: name,
     });

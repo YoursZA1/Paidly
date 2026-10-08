@@ -676,6 +676,10 @@ async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
     managedByAdministrator,
     subscription_source: sub.subscription_source || null,
     admin_override: sub.admin_override === true,
+    free_access: sub.free_access === true,
+    freeAccess: sub.free_access === true,
+    free_access_until: sub.free_access_until || null,
+    freeAccessUntil: sub.free_access_until || null,
   };
 
   // PayFast Recurring Billing state. The token itself is never returned; only the
@@ -730,6 +734,8 @@ async function buildSubscriptionStatusPayload(supabase, sub, opts = {}) {
     trialEndAt: sub.trial_ends_at || null,
     trialStartedAt: sub.trial_started_at || null,
     trialEndsAt: sub.trial_ends_at || null,
+    freeAccess: sub.free_access === true,
+    freeAccessUntil: sub.free_access_until || null,
     daysRemaining: remaining.daysRemaining ?? trialDaysRemaining(sub.trial_ends_at, now),
     hoursRemaining: remaining.hoursRemaining,
     remainingMs: remaining.remainingMs,

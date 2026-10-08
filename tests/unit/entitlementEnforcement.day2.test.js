@@ -498,7 +498,7 @@ describe("§17 — organogram API follows the Growth 'departments' gate", () => 
     const res = await organogramAs(owner, org);
     expect(res.statusCode).toBe(402);
     expect(res.body.code).toBe("SUBSCRIPTION_REQUIRED");
-    expect(res.body.error).toMatch(/view your data/i);
+    expect(res.body.error).toMatch(/Subscribe to a Paidly plan/i);
   });
 
   it("paid Growth company → 200 with data", async () => {

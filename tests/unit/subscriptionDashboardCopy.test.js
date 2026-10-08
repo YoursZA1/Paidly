@@ -50,7 +50,7 @@ describe("describeDashboardSubscriptionBanner", () => {
       now
     );
     expect(copy.kind).toBe(DASHBOARD_BANNER_KIND.TRIALING);
-    expect(copy.heading).toBe("You're on a 7-day free trial");
+    expect(copy.heading).toBe("You're currently on a Paidly trial");
     expect(copy.supporting).toContain("27 August 2026");
     expect(copy.countdown).toBe("7 days remaining");
     expect(copy.ctaLabel).toBe("Choose a plan");
@@ -69,7 +69,7 @@ describe("describeDashboardSubscriptionBanner", () => {
     );
     expect(copy.supporting).toContain("10 September 2026");
     expect(copy.kind).toBe(DASHBOARD_BANNER_KIND.TRIALING);
-    expect(copy.heading).toBe("You're on a free trial");
+    expect(copy.heading).toBe("You're currently on a Paidly trial");
   });
 
   it("tightens copy with 2 days remaining", () => {
@@ -119,9 +119,9 @@ describe("describeDashboardSubscriptionBanner", () => {
       now
     );
     expect(copy.kind).toBe(DASHBOARD_BANNER_KIND.EXPIRED);
-    expect(copy.heading).toBe("Your free trial has ended");
+    expect(copy.heading).toBe("Your trial has ended");
     expect(copy.countdown).toBeNull();
-    expect(copy.ctaLabel).toBe("Choose a plan");
+    expect(copy.ctaLabel).toBe("View Plans");
   });
 
   it("treats a still-trialing row past trial_ends_at as expired for display", () => {
@@ -133,7 +133,7 @@ describe("describeDashboardSubscriptionBanner", () => {
       now
     );
     expect(copy.kind).toBe(DASHBOARD_BANNER_KIND.EXPIRED);
-    expect(copy.heading).toBe("Your free trial has ended");
+    expect(copy.heading).toBe("Your trial has ended");
   });
 
   it("shows an active paid plan, not a subscribe CTA", () => {
@@ -179,7 +179,7 @@ describe("describeDashboardSubscriptionBanner", () => {
 
   it("never invents a trial end date from a missing timestamp", () => {
     const copy = describeDashboardSubscriptionBanner({ status: "trialing" }, now);
-    expect(copy.heading).toBe("You're on a 7-day free trial");
+    expect(copy.heading).toBe("You're currently on a Paidly trial");
     expect(copy.supporting).toBeNull();
   });
 });

@@ -10,6 +10,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
@@ -32,6 +33,13 @@ import {
   SUBSCRIPTION_STATUS_FILTER,
   subscriptionMatchesStatusFilter,
 } from '@shared/subscriptionOverviewBuckets.js';
+import {
+  FREE_ACCESS_DAY_OPTIONS,
+  TRIAL_EXTEND_DAY_OPTIONS,
+  TRIAL_PHASE,
+  TRIAL_PHASE_LABEL,
+  deriveTrialPhase,
+} from '@shared/trialLifecycle.js';
 
 const STATUS_FILTER_LABELS = {
   [SUBSCRIPTION_STATUS_FILTER.ALL]: 'All',
@@ -124,10 +132,183 @@ function buildSubscriptionRows(users, subscriptions) {
   return rows;
 }
 
+function TrialPhaseLine({ sub }) {
+  if (sub?._isSynthetic) return <span className="text-xs text-muted-foreground">—</span>;
+  const phase = deriveTrialPhase(sub);
+  const label = TRIAL_PHASE_LABEL[phase.phase] || '—';
+  let detail = null;
+  if (phase.phase === TRIAL_PHASE.TRIAL_ACTIVE || phase.phase === TRIAL_PHASE.TRIAL_ENDING_SOON) {
+    detail = `${phase.daysRemaining} day${phase.daysRemaining === 1 ? '' : 's'} left`;
+  } else if (phase.phase === TRIAL_PHASE.TRIAL_EXPIRED && phase.daysSinceExpiry != null) {
+    detail = phase.daysSinceExpiry === 0 ? 'Expired today' : `Expired ${phase.daysSinceExpiry} day${phase.daysSinceExpiry === 1 ? '' : 's'} ago`;
+  }
+  return (
+    <div>
+      <p className="text-xs font-medium">{label}</p>
+      {detail ? <p className="text-[11px] text-muted-foreground">{detail}</p> : null}
+    </div>
+  );
+}
+
+function SubscriptionActions({ sub, onView, onEdit, onUpdate }) {
+  if (sub._isSynthetic) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Manage subscription">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onEdit}>Create subscription</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  const email = sub.user_email || 'this user';
+  const run = (data, confirmMessage) => {
+    if (confirmMessage && !window.confirm(confirmMessage)) return;
+    onUpdate({ id: sub.id, data });
+  };
+  const extend = (days) =>
+    run({
+      action: 'extend_trial',
+      days,
+      reason: `Admin extended trial by ${days} days`,
+    });
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Manage subscription">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+        <DropdownMenuItem onClick={onView}>View account</DropdownMenuItem>
+        <DropdownMenuItem onClick={onEdit}>View subscription</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {TRIAL_EXTEND_DAY_OPTIONS.map((days) => (
+          <DropdownMenuItem key={days} onClick={() => extend(days)}>
+            Extend trial +{days} days
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuItem
+          onClick={() => {
+            const raw = window.prompt('Extend trial by how many days? (1–365)');
+            if (raw == null || raw.trim() === '') return;
+            const days = Number(raw);
+            if (!Number.isFinite(days) || days < 1 || days > 365) {
+              toast.error('Enter a number of days between 1 and 365.');
+              return;
+            }
+            extend(days);
+          }}
+        >
+          Extend trial — custom
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {FREE_ACCESS_DAY_OPTIONS.map((days) => (
+          <DropdownMenuItem
+            key={days}
+            onClick={() =>
+              run(
+                { action: 'grant_free_access', days, reason: `Admin granted free access for ${days} days` },
+                `Grant ${days} days of free access to:\n\n${email}`
+              )
+            }
+          >
+            Free access — {days} days
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuItem
+          onClick={() =>
+            run(
+              { action: 'grant_free_access', indefinite: true, reason: 'Admin granted indefinite free access' },
+              `Grant indefinite free access to:\n\n${email}`
+            )
+          }
+        >
+          Free access — indefinite
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() =>
+            run(
+              { action: 'remove_free_access', reason: 'Admin removed free access' },
+              `Remove free access for:\n\n${email}`
+            )
+          }
+        >
+          Remove free access
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => run({ action: 'send_trial_reminder' }, `Send notification to:\n\n${email}`)}
+        >
+          Send trial reminder
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => run({ action: 'send_subscription_prompt' }, `Send notification to:\n\n${email}`)}
+        >
+          Send subscription prompt
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() =>
+            run(
+              { action: 'activate', reason: 'Admin activated subscription' },
+              `Activate the subscription for:\n\n${email}`
+            )
+          }
+        >
+          Activate subscription
+        </DropdownMenuItem>
+        {sub.status === 'suspended' ? (
+          <DropdownMenuItem
+            onClick={() =>
+              run(
+                { action: 'activate', reason: 'Admin reactivated subscription' },
+                `Reactivate:\n\n${email}`
+              )
+            }
+          >
+            Reactivate account
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            onClick={() =>
+              run(
+                { action: 'suspend', reason: 'Admin suspended subscription' },
+                `Suspend ${email}? They stay signed in, but Paidly stays closed until you reactivate them.`
+              )
+            }
+          >
+            Suspend account
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          className="text-destructive"
+          onClick={() =>
+            run(
+              { action: 'cancel', reason: 'Admin cancelled subscription' },
+              `Cancel the subscription for ${email}? Their invoices, customers, and other records stay.`
+            )
+          }
+        >
+          Cancel
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export default function SubscriptionsPage() {
   const [search, setSearch] = useState('');
   const [planFilter, setPlanFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState(SUBSCRIPTION_STATUS_FILTER.ALL);
+  const [phaseFilter, setPhaseFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('newest');
   const [showAdd, setShowAdd] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
   const [detailSubId, setDetailSubId] = useState(null);
@@ -185,7 +366,7 @@ export default function SubscriptionsPage() {
     onError: (err) => toast.error(err?.message || 'Update failed'),
   });
 
-  useEffect(() => { setSubsPage(0); }, [search, planFilter, statusFilter]);
+  useEffect(() => { setSubsPage(0); }, [search, planFilter, statusFilter, phaseFilter, sortBy]);
 
   const filtered = rows.filter((s) => {
     const matchSearch =
@@ -202,19 +383,52 @@ export default function SubscriptionsPage() {
     // Same status definitions the summary cards are counted with, so a card's number and the rows
     // it filters to always agree.
     const matchStatus = subscriptionMatchesStatusFilter(s, statusFilter);
-    return matchSearch && matchPlan && matchStatus;
+    const matchPhase =
+      phaseFilter === 'all' ||
+      (!s._isSynthetic && deriveTrialPhase(s).phase === phaseFilter);
+    return matchSearch && matchPlan && matchStatus && matchPhase;
   });
+
+  const sorted = [...filtered].sort((a, b) => {
+    const time = (value) => {
+      const t = new Date(value || 0).getTime();
+      return Number.isFinite(t) ? t : 0;
+    };
+    if (sortBy === 'ending') {
+      const ae = a.trial_ends_at ? time(a.trial_ends_at) : Number.POSITIVE_INFINITY;
+      const be = b.trial_ends_at ? time(b.trial_ends_at) : Number.POSITIVE_INFINITY;
+      return ae - be;
+    }
+    if (sortBy === 'expired') return time(b.trial_ends_at) - time(a.trial_ends_at);
+    if (sortBy === 'subscribed') return time(b.activated_at || b.updated_at) - time(a.activated_at || a.updated_at);
+    return time(b.created_at || b.created_date) - time(a.created_at || a.created_date);
+  });
+
+  const trialCounts = rows.reduce(
+    (acc, row) => {
+      if (row._isSynthetic) return acc;
+      const phase = deriveTrialPhase(row).phase;
+      if (phase === TRIAL_PHASE.TRIAL_ACTIVE) acc.active += 1;
+      else if (phase === TRIAL_PHASE.TRIAL_ENDING_SOON) acc.ending += 1;
+      else if (phase === TRIAL_PHASE.TRIAL_EXPIRED) acc.expired += 1;
+      else if (phase === TRIAL_PHASE.FREE_ACCESS) acc.free += 1;
+      else if (phase === TRIAL_PHASE.SUBSCRIPTION_ACTIVE) acc.subscribed += 1;
+      if (row.subscription_source === 'payfast' && row.status === 'active' && row.trial_started_at) acc.converted += 1;
+      return acc;
+    },
+    { active: 0, ending: 0, expired: 0, converted: 0, free: 0, subscribed: 0 }
+  );
 
   const statusFilterLabel = STATUS_FILTER_LABELS[statusFilter] || statusFilter;
   const isFilteredView =
-    statusFilter !== SUBSCRIPTION_STATUS_FILTER.ALL || planFilter !== 'all' || Boolean(search.trim());
+    statusFilter !== SUBSCRIPTION_STATUS_FILTER.ALL || planFilter !== 'all' || phaseFilter !== 'all' || Boolean(search.trim());
   const emptyMessage =
     statusFilter === SUBSCRIPTION_STATUS_FILTER.ALL
       ? 'No subscriptions found'
       : `No ${statusFilterLabel.toLowerCase()} subscriptions found`;
 
   const totalSubsPages = Math.max(1, Math.ceil(filtered.length / SUBS_PAGE_SIZE));
-  const pagedFiltered = filtered.slice(subsPage * SUBS_PAGE_SIZE, (subsPage + 1) * SUBS_PAGE_SIZE);
+  const pagedFiltered = sorted.slice(subsPage * SUBS_PAGE_SIZE, (subsPage + 1) * SUBS_PAGE_SIZE);
 
   return (
     <div>
@@ -280,7 +494,23 @@ export default function SubscriptionsPage() {
         })}
       </div>
 
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {[
+          ['Active Trials', subscriptionOverview?.trialLifecycle?.active ?? trialCounts.active],
+          ['Ending Soon', subscriptionOverview?.trialLifecycle?.ending ?? trialCounts.ending],
+          ['Expired Trials', subscriptionOverview?.trialLifecycle?.expired ?? trialCounts.expired],
+          ['Converted Trials', subscriptionOverview?.trialLifecycle?.converted ?? trialCounts.converted],
+          ['Free Access', subscriptionOverview?.trialLifecycle?.free ?? trialCounts.free],
+          ['Active Subscribers', subscriptionOverview?.trialLifecycle?.subscribed ?? trialCounts.subscribed],
+        ].map(([label, count]) => (
+          <div key={label} className="rounded-xl border border-border bg-card px-3.5 py-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+            <p className="mt-0.5 text-lg font-semibold tabular-nums">{count}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -323,6 +553,31 @@ export default function SubscriptionsPage() {
             <SelectItem value="none">No subscription row</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={phaseFilter} onValueChange={setPhaseFilter}>
+          <SelectTrigger className="h-11 w-full bg-card text-xs sm:w-[160px] md:h-8">
+            <SelectValue placeholder="Trial" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All trials</SelectItem>
+            <SelectItem value={TRIAL_PHASE.TRIAL_ACTIVE}>Active Trial</SelectItem>
+            <SelectItem value={TRIAL_PHASE.TRIAL_ENDING_SOON}>Ending Soon</SelectItem>
+            <SelectItem value={TRIAL_PHASE.TRIAL_EXPIRED}>Expired</SelectItem>
+            <SelectItem value={TRIAL_PHASE.SUBSCRIPTION_ACTIVE}>Subscribed</SelectItem>
+            <SelectItem value={TRIAL_PHASE.FREE_ACCESS}>Free Access</SelectItem>
+            <SelectItem value={TRIAL_PHASE.SUSPENDED}>Suspended</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="h-11 w-full bg-card text-xs sm:w-[180px] md:h-8">
+            <SelectValue placeholder="Sort" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ending">Trial ending soonest</SelectItem>
+            <SelectItem value="expired">Recently expired</SelectItem>
+            <SelectItem value="subscribed">Recently subscribed</SelectItem>
+            <SelectItem value="newest">Newest users</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -342,6 +597,7 @@ export default function SubscriptionsPage() {
             onClick={() => {
               setStatusFilter(SUBSCRIPTION_STATUS_FILTER.ALL);
               setPlanFilter('all');
+              setPhaseFilter('all');
               setSearch('');
             }}
           >
@@ -360,6 +616,18 @@ export default function SubscriptionsPage() {
                   <p className="truncate text-xs text-muted-foreground">{sub.user_email}</p>
                 </div>
                 <StatusBadge status={sub.status} />
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <TrialPhaseLine sub={sub} />
+                <SubscriptionActions
+                  sub={sub}
+                  onView={() => setDetailSubId(sub.id)}
+                  onEdit={() => {
+                    setShowAdd(false);
+                    setEditingSub(sub);
+                  }}
+                  onUpdate={(payload) => updateMutation.mutate(payload)}
+                />
               </div>
               <div className="mt-2 flex items-center justify-between gap-2 text-sm">
                 <PlanBadge plan={sub.plan} />
@@ -389,6 +657,7 @@ export default function SubscriptionsPage() {
                 <th className="px-4 py-2 text-left font-medium">Amount</th>
                 <th className="px-4 py-2 text-left font-medium">Billing</th>
                 <th className="px-4 py-2 text-left font-medium">Status</th>
+                <th className="px-4 py-2 text-left font-medium">Trial</th>
                 <th className="px-4 py-2 text-left font-medium">Next Billing</th>
                 <th className="px-4 py-2 text-right font-medium">Actions</th>
               </tr>
@@ -427,106 +696,30 @@ export default function SubscriptionsPage() {
                   <td className="px-4 py-2.5">
                     <StatusBadge status={sub.status} />
                   </td>
+                  <td className="px-4 py-2.5">
+                    <TrialPhaseLine sub={sub} />
+                  </td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">
                     {sub.next_billing_date
                       ? format(new Date(sub.next_billing_date), 'dd MMM yyyy')
                       : '—'}
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {sub._isSynthetic ? (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setShowAdd(false);
-                              setEditingSub(sub);
-                            }}
-                          >
-                            Create subscription
-                          </DropdownMenuItem>
-                        ) : (
-                          <>
-                            <DropdownMenuItem onClick={() => setDetailSubId(sub.id)}>
-                              View details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setShowAdd(false);
-                                setEditingSub(sub);
-                              }}
-                            >
-                              Edit subscription
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                updateMutation.mutate({
-                                  id: sub.id,
-                                  data: { action: 'extend_trial', days: 7, reason: 'Admin extended trial by 7 days' },
-                                })
-                              }
-                            >
-                              Extend trial +7 days
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                updateMutation.mutate({
-                                  id: sub.id,
-                                  data: { action: 'grant', reason: 'Admin granted access' },
-                                })
-                              }
-                            >
-                              Grant access
-                            </DropdownMenuItem>
-                            {sub.status === 'active' ? (
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  updateMutation.mutate({
-                                    id: sub.id,
-                                    data: { action: 'suspend', reason: 'Admin suspended subscription' },
-                                  })
-                                }
-                              >
-                                Suspend
-                              </DropdownMenuItem>
-                            ) : null}
-                            {sub.status === 'paused' || sub.status === 'suspended' ? (
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  updateMutation.mutate({
-                                    id: sub.id,
-                                    data: { action: 'activate', reason: 'Admin activated subscription' },
-                                  })
-                                }
-                              >
-                                Reactivate
-                              </DropdownMenuItem>
-                            ) : null}
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() =>
-                                updateMutation.mutate({
-                                  id: sub.id,
-                                  data: { action: 'cancel', reason: 'Admin cancelled subscription' },
-                                })
-                              }
-                            >
-                              Cancel
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <SubscriptionActions
+                      sub={sub}
+                      onView={() => setDetailSubId(sub.id)}
+                      onEdit={() => {
+                        setShowAdd(false);
+                        setEditingSub(sub);
+                      }}
+                      onUpdate={(payload) => updateMutation.mutate(payload)}
+                    />
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {isLoading ? 'Loading...' : emptyMessage}
                   </td>
                 </tr>

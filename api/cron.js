@@ -515,6 +515,13 @@ export default async function handler(req, res) {
       } catch (err) {
         workforceEvents = { error: err?.message || String(err) };
       }
+      let trialConversion = null;
+      try {
+        const { runTrialConversionBatch } = await import("../server/src/billing/trialConversionCron.js");
+        trialConversion = await runTrialConversionBatch(supabase);
+      } catch (err) {
+        trialConversion = { error: err?.message || String(err) };
+      }
       return res.status(200).json({
         ok: true,
         at: new Date().toISOString(),
@@ -523,6 +530,7 @@ export default async function handler(req, res) {
         rows: Number(data || 0),
         pendingExpiry: pending,
         workforceEvents,
+        trialConversion,
       });
     }
     if (job === "workforce-events") {

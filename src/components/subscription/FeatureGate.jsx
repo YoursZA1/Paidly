@@ -8,6 +8,7 @@ import { requiredTierForFeature } from '@shared/planFeatures.js';
 import { resolveUpgradeTarget } from '@shared/planUpgrade.js';
 import { useEntitlementAccess } from '@/hooks/useEntitlementAccess';
 import { describeEntitlementBadge } from '@/lib/clientEntitlement';
+import { billingViewOnlyMessage } from '@shared/billingViewOnly.js';
 
 /**
  * Map UI feature keys → canonical plan feature keys (shared/planFeatures.js). Default-deny: a key
@@ -136,7 +137,9 @@ export default function FeatureGate({ children, feature, fallback }) {
               : 'Upgrade required'}
         </p>
         <p className="mt-1 text-sm text-zinc-500">
-          {target.action === 'renew'
+          {!ent.accessGranted
+            ? billingViewOnlyMessage(ent.subscriptionStatus || ent.entitlement?.status)
+            : target.action === 'renew'
             ? `This feature is included in ${target.planLabel}. You are on ${currentLabel}.`
             : target.action === 'none'
               ? `This feature is available on a custom Enterprise agreement. You are on ${currentLabel}.`

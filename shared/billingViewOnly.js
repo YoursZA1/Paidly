@@ -8,7 +8,7 @@
 export function billingViewOnlyMessage(status) {
   const st = String(status || "").toLowerCase();
   if (st === "trialing" || st === "expired" || st === "trial") {
-    return "Your trial has ended. You can view your data until you subscribe.";
+    return "Your trial has ended. Subscribe to a Paidly plan to continue using this feature.";
   }
   return "Your subscription is not active. You can view your data until you subscribe.";
 }

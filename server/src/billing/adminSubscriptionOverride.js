@@ -20,6 +20,8 @@ export const ADMIN_SUBSCRIPTION_ACTIONS = Object.freeze([
   "change_plan",
   "set_trial_end",
   "set_end_date",
+  "grant_free_access",
+  "remove_free_access",
 ]);
 
 function httpError(status, message) {
@@ -100,6 +102,12 @@ function humanAction(action, extra = {}) {
       return "Admin set trial end date";
     case "set_end_date":
       return "Admin set subscription end date";
+    case "grant_free_access":
+      return extra.indefinite
+        ? "Admin granted indefinite free access"
+        : `Admin granted free access for ${extra.days} days`;
+    case "remove_free_access":
+      return "Admin removed free access";
     default:
       return "Admin updated subscription";
   }
@@ -195,6 +203,40 @@ export function buildAdminOverridePatch(existing, body, opts = {}) {
     const end = parseIso(src.expires_at || src.subscription_ends_at || src.end_date, "expires_at");
     if (!end) throw httpError(400, "expires_at required");
     patch.expires_at = end;
+  } else if (action === "grant_free_access") {
+    const indefinite = src.indefinite === true || String(src.duration || "").toLowerCase() === "indefinite";
+    let days = Number(src.days);
+    if (!indefinite) {
+      if (![7, 30, 90].includes(days)) {
+        if (!Number.isFinite(days) || days < 1 || days > 365) {
+          throw httpError(400, "Free access must be 7, 30, or 90 days, or indefinite");
+        }
+      }
+    }
+    patch.free_access = true;
+    patch.free_access_until = indefinite ? null : addCalendarDaysIso(now, days);
+    extra.indefinite = indefinite;
+    extra.days = indefinite ? null : days;
+    if (indefinite) {
+      // Active with no dependency on the new columns, so access restores before the migration too.
+      patch.status = SUBSCRIPTION_STATUS.ACTIVE;
+      if (!existing?.activated_at) patch.activated_at = nowIso;
+    }
+  } else if (action === "remove_free_access") {
+    patch.free_access = false;
+    patch.free_access_until = null;
+    const payfast = String(existing?.payfast_token || existing?.payfast_subscription_id || "").trim();
+    const adminHeld =
+      !payfast &&
+      (existing?.subscription_source === "admin" || existing?.admin_override === true) &&
+      coerceSubscriptionStatus(existing?.status) === SUBSCRIPTION_STATUS.ACTIVE;
+    if (adminHeld) {
+      const trialEnd = existing?.trial_ends_at ? new Date(existing.trial_ends_at).getTime() : NaN;
+      patch.status =
+        Number.isFinite(trialEnd) && trialEnd > now.getTime()
+          ? SUBSCRIPTION_STATUS.TRIALING
+          : SUBSCRIPTION_STATUS.EXPIRED;
+    }
   } else if (action === "change_plan") {
     const planRaw = String(src.plan || src.current_plan || src.plan_slug || "")
       .trim()

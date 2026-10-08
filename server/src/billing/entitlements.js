@@ -52,6 +52,7 @@ export function hasPaidAccessIncludingGrace(sub, now = new Date()) {
  */
 const ENTITLEMENT_SELECT_RICH =
   "id, status, plan, current_plan, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, expires_at, cancelled_at, trial_ends_at, trial_started_at, admin_override, subscription_source, updated_at, created_at";
+const ENTITLEMENT_SELECT_FREE = `${ENTITLEMENT_SELECT_RICH}, free_access, free_access_until`;
 const ENTITLEMENT_SELECT_LEAN =
   "id, status, plan, current_plan, plan_slug, plan_id, plan_family, company_id, grace_ends_at, amount, billing_cycle, next_billing_date, current_period_end, updated_at, created_at";
 
@@ -102,7 +103,10 @@ export async function resolveEntitlement(supabase, userId, knownCompanyId = null
 
   const run = (cols) => loadCompanySubscriptionRows(supabase, { companyId, userId, columns: cols, limit: 10 });
 
-  let { data: rows, error } = await run(ENTITLEMENT_SELECT_RICH);
+  let { data: rows, error } = await run(ENTITLEMENT_SELECT_FREE);
+  if (error) {
+    ({ data: rows, error } = await run(ENTITLEMENT_SELECT_RICH));
+  }
   if (error) {
     ({ data: rows, error } = await run(ENTITLEMENT_SELECT_LEAN));
   }

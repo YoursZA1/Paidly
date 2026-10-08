@@ -35,7 +35,10 @@ export default function BillingLockBanner({ plan, planLabel, statusLabel }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">{heading}</p>
         <p className="text-xs text-muted-foreground sm:text-sm">
-          Your data is still here to view. Subscribe to create, edit, or send anything.
+          {String(statusLabel || "").toLowerCase().includes("trial")
+            ? "Your Paidly trial has ended. Subscribe to continue using Paidly and managing your business."
+            : "Subscribe to continue using Paidly and managing your business."}{" "}
+          Your data is still here to view.
         </p>
       </div>
       <Button asChild size="sm" className="shrink-0 rounded-xl">

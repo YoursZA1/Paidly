@@ -19,9 +19,11 @@ import { SUBSCRIPTION_OVERVIEW_BUCKETS } from "../../../shared/subscriptionOverv
 import {
   PAYMENT_REPORTING_START_ISO,
   SUBSCRIPTION_SOURCE,
+  addCalendarDaysIso,
   hasSubscriptionAccess,
   pickAccessSubscriptionRow,
 } from "../../../shared/subscriptionAccess.js";
+import { ENDING_SOON_DAYS } from "../../../shared/trialLifecycle.js";
 import {
   getRevenueSince,
   reportingPaymentLabel,
@@ -84,6 +86,8 @@ export async function buildSubscriptionOverview(supabase) {
   }
   counts.adminGranted = adminGranted;
 
+  const trialLifecycle = await countTrialLifecycle(supabase);
+
   return {
     active: counts.active || 0,
     pending: counts.pending || 0,
@@ -97,12 +101,73 @@ export async function buildSubscriptionOverview(supabase) {
     bucketTotal: total,
     /** All rows in `subscriptions`. */
     total: allCount ?? total,
+    trialLifecycle,
     buckets: OVERVIEW_BUCKETS.filter((b) => b.key !== "adminGranted").map((b) => ({
       key: b.key,
       label: b.label,
       count: counts[b.key] || 0,
     })),
   };
+}
+
+async function countHead(supabase, apply) {
+  let query = supabase.from("subscriptions").select("id", { count: "exact", head: true });
+  query = apply(query);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** Exact trial-lifecycle cards. Missing free-access columns leave those two counts at 0. */
+async function countTrialLifecycle(supabase) {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const soonIso = addCalendarDaysIso(now, ENDING_SOON_DAYS);
+  try {
+    const [ending, active, indefinite, expired, stillTrialing, converted, subscribers, adminActive] =
+      await Promise.all([
+        countHead(supabase, (q) =>
+          q.in("status", ["trialing", "trial"]).gt("trial_ends_at", nowIso).lte("trial_ends_at", soonIso)
+        ),
+        countHead(supabase, (q) => q.in("status", ["trialing", "trial"]).gt("trial_ends_at", soonIso)),
+        countHead(supabase, (q) =>
+          q.in("status", ["trialing", "trial"]).is("trial_ends_at", null).eq("subscription_source", SUBSCRIPTION_SOURCE.ADMIN)
+        ),
+        countHead(supabase, (q) => q.eq("status", "expired")),
+        countHead(supabase, (q) => q.in("status", ["trialing", "trial"]).lte("trial_ends_at", nowIso)),
+        countHead(supabase, (q) =>
+          q.eq("status", "active").eq("subscription_source", SUBSCRIPTION_SOURCE.PAYFAST).not("trial_started_at", "is", null)
+        ),
+        countHead(supabase, (q) => q.eq("status", "active").neq("subscription_source", SUBSCRIPTION_SOURCE.ADMIN)),
+        countHead(supabase, (q) => q.eq("status", "active").eq("subscription_source", SUBSCRIPTION_SOURCE.ADMIN)),
+      ]);
+    let freeTimed = 0;
+    let freeOpen = 0;
+    try {
+      [freeTimed, freeOpen] = await Promise.all([
+        countHead(supabase, (q) =>
+          q.eq("free_access", true).neq("status", "suspended").gt("free_access_until", nowIso)
+        ),
+        countHead(supabase, (q) =>
+          q.eq("free_access", true).neq("status", "suspended").neq("status", "active").is("free_access_until", null)
+        ),
+      ]);
+    } catch {
+      freeTimed = 0;
+      freeOpen = 0;
+    }
+    return {
+      active,
+      ending,
+      expired: expired + stillTrialing,
+      converted,
+      free: adminActive + indefinite + freeTimed + freeOpen,
+      subscribed: subscribers,
+    };
+  } catch (e) {
+    console.warn("[admin/subscriptions] trial lifecycle counts", e?.message || e);
+    return null;
+  }
 }
 
 /**
@@ -186,6 +251,7 @@ async function requireBillingAdmin(req, res) {
 
 const LIST_SELECT_RICH =
   "id, status, plan, current_plan, plan_slug, plan_family, amount, custom_price, currency, billing_cycle, company_id, user_id, email, user_email, user_name, full_name, start_date, next_billing_date, activated_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at";
+const LIST_SELECT_FREE = `${LIST_SELECT_RICH}, free_access, free_access_until`;
 const LIST_SELECT_LEAN =
   "id, status, plan_slug, plan, amount, currency, billing_cycle, company_id, user_id, email, next_billing_date, cancelled_at, failure_count, created_at, updated_at";
 
@@ -417,13 +483,23 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
   const id = String(subscriptionId || "").trim();
   if (!id) return json(res, 400, { error: "subscription id required" });
 
+  const detailSelect =
+    "id, status, plan_id, plan_slug, plan, current_plan, amount, currency, billing_cycle, company_id, user_id, email, payfast_token, payfast_subscription_id, payfast_payment_id, m_payment_id, next_billing_date, current_period_end, expires_at, activated_at, started_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, free_access, free_access_until, created_at, updated_at";
+  const detailSelectBase = detailSelect.replace(", free_access, free_access_until", "");
+
   let { data: sub, error: subErr } = await supabase
     .from("subscriptions")
-    .select(
-      "id, status, plan_id, plan_slug, plan, current_plan, amount, currency, billing_cycle, company_id, user_id, email, payfast_token, payfast_subscription_id, payfast_payment_id, m_payment_id, next_billing_date, current_period_end, expires_at, activated_at, started_at, cancelled_at, failure_count, trial_started_at, trial_ends_at, subscription_source, admin_override, created_at, updated_at"
-    )
+    .select(detailSelect)
     .eq("id", id)
     .maybeSingle();
+
+  if (subErr) {
+    ({ data: sub, error: subErr } = await supabase
+      .from("subscriptions")
+      .select(detailSelectBase)
+      .eq("id", id)
+      .maybeSingle());
+  }
 
   if (subErr) {
     // Older column surface: retry with a lean select
@@ -630,6 +706,19 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
     createdAt: inv.created_at,
   }));
 
+  let trialNotifications = [];
+  try {
+    const { data: notes, error: notesErr } = await supabase
+      .from("subscription_notifications")
+      .select("id, notification_type, channel, subject, status, source, sent_at, created_at, trial_ends_at, error")
+      .eq("subscription_id", sub.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (!notesErr) trialNotifications = notes || [];
+  } catch {
+    trialNotifications = [];
+  }
+
   const successfulHistory = history.filter(
     (h) => String(h.status || "").toLowerCase() === PAYMENT_HISTORY_STATUS.COMPLETED
   );
@@ -682,6 +771,7 @@ export async function handleAdminSubscriptionDetail(req, res, subscriptionId) {
     logs,
     invoices,
     eventTimeline,
+    trialNotifications,
   });
 }
 
@@ -749,7 +839,10 @@ export async function handleAdminSubscriptionsList(req, res) {
     return query;
   };
 
-  let { data, error, count } = await runList(LIST_SELECT_RICH);
+  let { data, error, count } = await runList(LIST_SELECT_FREE);
+  if (error) {
+    ({ data, error, count } = await runList(LIST_SELECT_RICH));
+  }
   if (error) {
     ({ data, error, count } = await runList(LIST_SELECT_LEAN));
   }
@@ -1045,6 +1138,28 @@ export async function handleAdminSubscriptionUpdate(req, res) {
   }
   if (!existing) return json(res, 404, { error: "Subscription not found" });
 
+  const requestedAction = String(body.action || "").trim().toLowerCase();
+  if (requestedAction === "send_trial_reminder" || requestedAction === "send_subscription_prompt") {
+    try {
+      const { sendAdminTrialNotification } = await import("./trialConversionCron.js");
+      const notification = await sendAdminTrialNotification(supabase, existing, requestedAction);
+      await writeAdminSubscriptionAudit(supabase, {
+        actor: user,
+        target: existing,
+        action: requestedAction,
+        description:
+          requestedAction === "send_subscription_prompt"
+            ? `Admin sent a subscription prompt to ${notification.to}`
+            : `Admin sent a trial reminder to ${notification.to}`,
+        before: { status: existing.status, plan: existing.plan || existing.plan_slug, trial_ends_at: existing.trial_ends_at || null },
+        after: { status: existing.status, plan: existing.plan || existing.plan_slug, trial_ends_at: existing.trial_ends_at || null },
+      });
+      return json(res, 200, { notification });
+    } catch (e) {
+      return json(res, e.status || 500, { error: e.message || "Could not send the notification" });
+    }
+  }
+
   let patch;
   let auditAction = "update";
   let auditDescription = "Admin updated subscription";
@@ -1076,12 +1191,23 @@ export async function handleAdminSubscriptionUpdate(req, res) {
 
   await attachPlanId(supabase, patch);
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("subscriptions")
     .update(patch)
     .eq("id", id)
     .select("*")
     .maybeSingle();
+
+  if (error && /free_access/i.test(String(error.message || "")) && patch.status === SUBSCRIPTION_STATUS.ACTIVE && patch.free_access_until == null) {
+    const { free_access: _freeAccess, free_access_until: _freeUntil, ...rest } = patch;
+    ({ data, error } = await supabase.from("subscriptions").update(rest).eq("id", id).select("*").maybeSingle());
+  }
+
+  if (error && /free_access/i.test(String(error.message || ""))) {
+    return json(res, 503, {
+      error: "Timed free access needs the trial conversion migration applied before it can be saved.",
+    });
+  }
 
   if (error) {
     console.error("[admin/subscriptions/update]", error);
@@ -1111,11 +1237,15 @@ export async function handleAdminSubscriptionUpdate(req, res) {
       status: existing.status,
       plan: existing.plan || existing.plan_slug,
       trial_ends_at: existing.trial_ends_at || null,
+      free_access: existing.free_access === true,
+      free_access_until: existing.free_access_until || null,
     },
     after: {
       status: data.status,
       plan: data.plan || data.plan_slug,
       trial_ends_at: data.trial_ends_at || null,
+      free_access: data.free_access === true,
+      free_access_until: data.free_access_until || null,
     },
   });
 
@@ -1145,6 +1275,10 @@ async function writeAdminSubscriptionAudit(supabase, { actor, target, action, de
         new_plan: after?.plan || null,
         previous_trial_end: before?.trial_ends_at || null,
         new_trial_end: after?.trial_ends_at || null,
+        previous_free_access: before?.free_access === true,
+        new_free_access: after?.free_access === true,
+        previous_free_access_until: before?.free_access_until || null,
+        new_free_access_until: after?.free_access_until || null,
       },
     });
   } catch (e) {

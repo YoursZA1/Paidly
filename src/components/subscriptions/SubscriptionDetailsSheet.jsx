@@ -236,6 +236,7 @@ export default function SubscriptionDetailsSheet({
   });
 
   const sub = data?.subscription;
+  const trialNotifications = data?.trialNotifications || [];
   const history = data?.history || [];
   const logs = data?.logs || [];
   const invoices = data?.invoices || [];
@@ -301,6 +302,18 @@ export default function SubscriptionDetailsSheet({
               <DetailField label="Renew Date">{formatDate(sub.renewDate)}</DetailField>
               <DetailField label="Trial start">{formatDate(sub.trialStartedAt)}</DetailField>
               <DetailField label="Trial end">{formatDate(sub.trialEndsAt)}</DetailField>
+              {trialNotifications.length ? (
+                <DetailField label="Notifications">
+                  <ul className="space-y-1">
+                    {trialNotifications.slice(0, 6).map((note) => (
+                      <li key={note.id} className="text-xs text-muted-foreground">
+                        {note.subject || note.notification_type} · {note.status}
+                        {note.source ? ` · ${note.source}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </DetailField>
+              ) : null}
               <DetailField label="Account created">
                 {formatDate(sub.owner?.createdAt || sub.createdAt)}
               </DetailField>

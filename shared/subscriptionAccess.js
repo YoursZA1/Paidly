@@ -116,6 +116,13 @@ export function hasSubscriptionAccess(sub, now = new Date()) {
   if (!st) return false;
 
   if (st === SUBSCRIPTION_STATUS.SUSPENDED) return false;
+  // Complimentary access (free_access) restores writes even after the trial date.
+  // Suspended above still denies. A missing flag changes nothing for existing rows.
+  if (sub.free_access === true) {
+    if (sub.free_access_until == null || sub.free_access_until === "") return true;
+    const until = new Date(sub.free_access_until).getTime();
+    if (Number.isFinite(until) && until > now.getTime()) return true;
+  }
   if (st === SUBSCRIPTION_STATUS.EXPIRED) return false;
   if (st === SUBSCRIPTION_STATUS.FAILED) return false;
   if (st === SUBSCRIPTION_STATUS.PENDING || st === SUBSCRIPTION_STATUS.PROCESSING) return false;
@@ -152,6 +159,8 @@ export function pickAccessSubscriptionRow(rows, now = new Date()) {
   const score = (s) => {
     const st = coerceSubscriptionStatus(s?.status);
     const access = hasSubscriptionAccess(s, now);
+    // Complimentary access on an otherwise expired row still wins over a pending checkout.
+    if (s?.free_access === true && access) return 100;
     // Every access-granting row scores the same; updated_at below breaks the tie, so the newest
     // agreement wins rather than a stale one of a "higher" status.
     if (access && st === SUBSCRIPTION_STATUS.ACTIVE) return 100;
@@ -227,6 +236,15 @@ export function describeAccessFacingState(subOrProfile, now = new Date()) {
   const trialEnd = subOrProfile.trial_ends_at;
   const days = trialDaysRemaining(trialEnd, now);
   const admin = isAdminManaged(subOrProfile);
+
+  if (subOrProfile.free_access === true && hasSubscriptionAccess(subOrProfile, now)) {
+    const until = subOrProfile.free_access_until;
+    return {
+      headline: "Free access",
+      detail: until ? `Free access until ${until}` : "Free access",
+      daysRemaining: null,
+    };
+  }
 
   if (admin && st === SUBSCRIPTION_STATUS.ACTIVE) {
     return {
