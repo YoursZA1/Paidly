@@ -223,6 +223,23 @@ export default function Inventory() {
   const [sortDirection, setSortDirection] = useState("asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const filtersActive =
+    Boolean(searchInput.trim()) ||
+    statusFilter !== "all" ||
+    typeFilter !== "all" ||
+    categoryFilter !== "all" ||
+    quantityFilter !== "all" ||
+    priceFilter !== "all";
+  const clearFilters = useCallback(() => {
+    setSearchInput("");
+    setSearch("");
+    setStatusFilter("all");
+    setTypeFilter("all");
+    setCategoryFilter("all");
+    setQuantityFilter("all");
+    setPriceFilter("all");
+    setPage(1);
+  }, []);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [toolsSheetOpen, setToolsSheetOpen] = useState(false);
   const [toolsView, setToolsView] = useState("actions");
@@ -1264,6 +1281,8 @@ export default function Inventory() {
         onQuantityFilterChange={setQuantityFilter}
         priceFilter={priceFilter}
         onPriceFilterChange={setPriceFilter}
+        filtersActive={filtersActive}
+        onClearFilters={clearFilters}
         onOpenTools={withInventory(() => {
           setToolsView("actions");
           setToolsSheetOpen(true);

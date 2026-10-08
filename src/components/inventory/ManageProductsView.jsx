@@ -37,6 +37,8 @@ export default function ManageProductsView({
   priceFilter,
   onPriceFilterChange,
   onOpenTools,
+  filtersActive,
+  onClearFilters,
   isLoading,
   loadError,
   onRetry,
@@ -175,6 +177,8 @@ export default function ManageProductsView({
             priceFilter={priceFilter}
             onPriceFilterChange={onPriceFilterChange}
             onOpenTools={onOpenTools}
+            filtersActive={filtersActive}
+            onClearFilters={onClearFilters}
           />
         </div>
       </header>

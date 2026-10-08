@@ -22,6 +22,8 @@ export default function InventoryFilterBar({
   priceFilter,
   onPriceFilterChange,
   onOpenTools,
+  filtersActive = false,
+  onClearFilters,
 }) {
   const showActiveChip = statusFilter === "active";
 
@@ -106,6 +108,19 @@ export default function InventoryFilterBar({
           <SelectItem value="over_200">Over 200</SelectItem>
         </SelectContent>
       </Select>
+
+      {filtersActive ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-9 shrink-0 gap-1.5 px-2.5 text-muted-foreground"
+          onClick={onClearFilters}
+        >
+          <X className="h-3.5 w-3.5" />
+          Clear filters
+        </Button>
+      ) : null}
     </div>
     </div>
   );
