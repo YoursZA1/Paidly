@@ -148,6 +148,26 @@ export function nextPaymentCountdownLabel(days) {
 export function failedRenewalPatch(existing, now = new Date(), failureReason = null) {
   const nowIso = now.toISOString();
   const st = coerceSubscriptionStatus(existing?.status);
+  const reasonText = String(failureReason || "").trim() || null;
+  // Only an agreement that was paying (active / past_due / suspended) can be past due. A failed
+  // first payment (pending checkout, trial, lapsed row) never starts a grace period, because
+  // past_due grants access during grace: the customer would get paid features without paying.
+  if (!isPaidAgreementStatus(st)) {
+    return {
+      status: st === SUBSCRIPTION_STATUS.PENDING || st === SUBSCRIPTION_STATUS.PROCESSING
+        ? SUBSCRIPTION_STATUS.FAILED
+        : st || SUBSCRIPTION_STATUS.FAILED,
+      past_due_at: existing?.past_due_at || null,
+      grace_ends_at: existing?.grace_ends_at || null,
+      last_payment_failure_at: nowIso,
+      last_payment_failure_reason: reasonText,
+      next_retry_at: null,
+      failure_count: Number(existing?.failure_count || 0) + 1,
+      dunning_stage: Number(existing?.dunning_stage || 0),
+      graceStarted: false,
+      initialFailure: true,
+    };
+  }
   if (st === SUBSCRIPTION_STATUS.SUSPENDED) {
     return {
       status: SUBSCRIPTION_STATUS.SUSPENDED,
@@ -179,6 +199,48 @@ export function failedRenewalPatch(existing, now = new Date(), failureReason = n
     dunning_stage: Number(existing?.dunning_stage || 0) + 1,
     graceStarted: !openGrace,
   };
+}
+
+/** Statuses of an agreement that has been paying. Only these can go past due. */
+export function isPaidAgreementStatus(status) {
+  const st = coerceSubscriptionStatus(status);
+  return (
+    st === SUBSCRIPTION_STATUS.ACTIVE ||
+    st === SUBSCRIPTION_STATUS.PAST_DUE ||
+    st === SUBSCRIPTION_STATUS.SUSPENDED
+  );
+}
+
+function addMonthsUtc(iso, months) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString();
+}
+
+/**
+ * Next charge date after a successful PayFast payment. Always after `now`.
+ *
+ * PayFast bills on the subscription's billing date and every cycle after it. The ITN's date
+ * (`next_run` when present, otherwise `billing_date`) is used only as that anchor: a date
+ * that is not in the future is rolled forward whole cycles from the anchor (no drift on
+ * month-end anchors). Without any date, one cycle from now.
+ *
+ * @param {string | null | undefined} anchorIso ISO date from the ITN, or null
+ * @param {number} cycleMonths 1 monthly, 3, 6, 12 annual
+ * @param {Date} [now]
+ */
+export function nextBillingAfterPayment(anchorIso, cycleMonths = 1, now = new Date()) {
+  const months = Math.max(1, Math.floor(Number(cycleMonths) || 1));
+  const nowMs = now.getTime();
+  const anchorMs = anchorIso ? new Date(anchorIso).getTime() : NaN;
+  if (!Number.isFinite(anchorMs)) return addMonthsUtc(now.toISOString(), months);
+  if (anchorMs > nowMs) return new Date(anchorMs).toISOString();
+  for (let k = 1; k <= 1200; k += 1) {
+    const next = addMonthsUtc(new Date(anchorMs).toISOString(), k * months);
+    if (next && new Date(next).getTime() > nowMs) return next;
+  }
+  return addMonthsUtc(now.toISOString(), months);
 }
 
 /**

@@ -12,7 +12,11 @@ import {
   sanitizeOneLine,
 } from "./inputValidation.js";
 import { SUBSCRIPTION_STATUS } from "../../shared/subscriptionStatuses.js";
-import { failedRenewalPatch, payfastFailureReason } from "../../shared/subscriptionBillingPolicy.js";
+import {
+  failedRenewalPatch,
+  nextBillingAfterPayment,
+  payfastFailureReason,
+} from "../../shared/subscriptionBillingPolicy.js";
 import { familyForSlug, normalizePlanSlug } from "./subscriptionPlans.js";
 import { insertSubscriptionRow, reconcileOwnerCurrent } from "./billing/subscriptionCurrent.js";
 
@@ -39,13 +43,6 @@ export function payfastSubscriptionItnIpAllowed(req, getClientIp) {
   return allowed.includes(ip);
 }
 
-function addMonthsIso(baseDate, months) {
-  const d = new Date(baseDate);
-  if (!Number.isFinite(d.getTime())) return null;
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d.toISOString();
-}
-
 function monthsFromBillingCycle(cycle) {
   const c = String(cycle || "monthly").toLowerCase();
   if (c === "annual") return 12;
@@ -60,6 +57,19 @@ function parsePayfastYyyyMmDdToIso(raw) {
   const d = new Date(`${s}T00:00:00.000Z`);
   if (!Number.isFinite(d.getTime())) return null;
   return d.toISOString();
+}
+
+/**
+ * Next charge date after this successful ITN, always in the future. The ITN's date is only the
+ * billing anchor; see nextBillingAfterPayment. Shared by the subscription update and the ledger.
+ * @param {object} payload
+ * @param {Date} [now]
+ */
+export function nextBillingFromItn(payload, now = new Date()) {
+  const cycle = String(payload?.custom_str3 || "monthly").toLowerCase();
+  const anchor =
+    parsePayfastYyyyMmDdToIso(payload?.next_run) || parsePayfastYyyyMmDdToIso(payload?.billing_date);
+  return nextBillingAfterPayment(anchor, monthsFromBillingCycle(cycle), now);
 }
 
 /**
@@ -137,10 +147,7 @@ export async function upsertSubscriptionFromItn(supabase, payload, hints = {}) {
   const amountNum = Number(payload.amount_gross ?? payload.amount ?? payload.recurring_amount ?? 0);
   const amount = Number.isFinite(amountNum) && amountNum > 0 ? amountNum : null;
   const nowIso = new Date().toISOString();
-  const nextBilling =
-    parsePayfastYyyyMmDdToIso(payload.next_run) ||
-    parsePayfastYyyyMmDdToIso(payload.billing_date) ||
-    addMonthsIso(nowIso, monthsFromBillingCycle(cycle));
+  const nextBilling = nextBillingFromItn(payload, new Date(nowIso));
 
   const mPaymentId = String(payload.m_payment_id || "").trim();
   const pfPaymentId = sanitizeOneLine(String(payload.pf_payment_id || ""), 128);

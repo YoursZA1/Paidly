@@ -15,6 +15,8 @@ const { memory, tables } = vi.hoisted(() => {
     const v = row[f.col];
     if (f.op === "eq") return String(v ?? "") === String(f.value ?? "");
     if (f.op === "in") return f.value.map(String).includes(String(v ?? ""));
+    if (f.op === "neq") return String(v ?? "") !== String(f.value ?? "");
+    if (f.op === "is") return f.value === null ? v == null : v === f.value;
     return true;
   };
   const memory = {
@@ -47,6 +49,8 @@ const { memory, tables } = vi.hoisted(() => {
         update(p) { st.action = "update"; st.payload = p; return api; },
         eq(col, value) { st.filters.push({ op: "eq", col, value }); return api; },
         in(col, value) { st.filters.push({ op: "in", col, value }); return api; },
+        neq(col, value) { st.filters.push({ op: "neq", col, value }); return api; },
+        is(col, value) { st.filters.push({ op: "is", col, value }); return api; },
         order(col, opts) { st.order = { col, asc: opts?.ascending !== false }; return api; },
         limit(n) { st.limit = n; return api; },
         async maybeSingle() { return { data: (run().data || [])[0] || null, error: null }; },

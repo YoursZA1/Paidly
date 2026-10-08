@@ -18,9 +18,11 @@ import {
 import { getPayfastItnPayload } from "../payfastItnBody.js";
 import { isValidUuid, sanitizeOneLine } from "../inputValidation.js";
 import {
+  nextBillingFromItn,
   upsertSubscriptionFromItn,
   resolvePayfastSubscriptionUserIdForExport,
 } from "../payfastSubscriptionItn.js";
+import { cancelPayfastRecurringBilling } from "./payfastRecurringApi.js";
 import { SUBSCRIPTION_STATUS } from "../../../shared/subscriptionStatuses.js";
 import { PAYMENT_HISTORY_STATUS } from "../../../shared/paymentHistoryStatuses.js";
 import { SUBSCRIPTION_EVENT_TYPE } from "../../../shared/subscriptionEventTypes.js";
@@ -100,13 +102,13 @@ async function loadSubscriptionForItn(supabase, payload) {
     const { data } = await supabase
       .from("subscriptions")
       .select(
-        "id, user_id, created_by, company_id, plan_id, plan_slug, plan, amount, currency, status, m_payment_id"
+        "id, user_id, created_by, company_id, plan_id, plan_slug, plan, amount, currency, status, m_payment_id, payfast_token"
       )
       .eq("m_payment_id", mPaymentId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (data?.id) return data;
+    if (data?.id) return { ...data, _matchedBy: "m_payment_id" };
   }
 
   // Recurring Billing: `token` is PayFast's canonical id for the agreement and is sent on
@@ -116,13 +118,13 @@ async function loadSubscriptionForItn(supabase, payload) {
     const { data } = await supabase
       .from("subscriptions")
       .select(
-        "id, user_id, created_by, company_id, plan_id, plan_slug, plan, amount, currency, status, m_payment_id"
+        "id, user_id, created_by, company_id, plan_id, plan_slug, plan, amount, currency, status, m_payment_id, payfast_token"
       )
       .eq("payfast_token", token)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (data?.id) return data;
+    if (data?.id) return { ...data, _matchedBy: "token" };
   }
 
   const userId = resolvePayfastSubscriptionUserIdForExport(payload);
@@ -131,7 +133,7 @@ async function loadSubscriptionForItn(supabase, payload) {
   const { data: rows } = await supabase
     .from("subscriptions")
     .select(
-      "id, user_id, created_by, company_id, plan_id, plan_slug, plan, amount, currency, status, m_payment_id"
+      "id, user_id, created_by, company_id, plan_id, plan_slug, plan, amount, currency, status, m_payment_id, payfast_token"
     )
     .eq("user_id", userId)
     .in("status", [
@@ -146,7 +148,19 @@ async function loadSubscriptionForItn(supabase, payload) {
     .order("updated_at", { ascending: false })
     .limit(1);
 
-  return rows?.[0] || null;
+  return rows?.[0] ? { ...rows[0], _matchedBy: "user" } : null;
+}
+
+/**
+ * An ITN found only through the user fallback, carrying a PayFast token different from the
+ * row's own, belongs to an older agreement that a newer checkout replaced. It must not cancel,
+ * fail, or renew the current subscription.
+ */
+export function isSupersededAgreementItn(sub, payload) {
+  if (!sub || sub._matchedBy !== "user") return false;
+  const itnToken = String(payload?.token || "").trim();
+  const rowToken = String(sub.payfast_token || "").trim();
+  return Boolean(itnToken && rowToken && itnToken !== rowToken);
 }
 
 /**
@@ -391,6 +405,10 @@ export function createPayfastItnProductionHandler(deps) {
       pf_payment_id: payload.pf_payment_id || null,
     });
 
+    if (isSupersededAgreementItn(sub, payload)) {
+      return handleSupersededAgreementItn(supabase, { sub, payload, itnLogId, validate, started, res });
+    }
+
     // 7a) Agreement cancelled on PayFast (buyer, merchant dashboard, or our cancel API call).
     // Not a payment: no amount check, no failure count — just end the agreement here.
     const statusUpperEarly = String(payload.payment_status || "").toUpperCase();
@@ -514,7 +532,8 @@ export function createPayfastItnProductionHandler(deps) {
           p_currency: String(payload.custom_str4 || sub.currency || "ZAR").toUpperCase(),
           p_payment_status: phStatus,
           p_raw: payload,
-          p_period_end: null,
+          // Same date the subscription row gets: the ledger records the period this charge paid for.
+          p_period_end: nextBillingFromItn(payload),
           p_status: SUBSCRIPTION_STATUS.ACTIVE,
           p_payfast_token: sanitizeOneLine(String(payload.token || ""), 128) || null,
           p_payfast_subscription_id:
@@ -565,8 +584,8 @@ export function createPayfastItnProductionHandler(deps) {
             phStatus === PAYMENT_HISTORY_STATUS.FAILED
               ? sanitizeOneLine(String(payload.reason || payload.error || "PayFast could not collect this subscription payment"), 500)
               : null,
-          billing_period_start: sub.current_period_start || null,
-          billing_period_end: sub.current_period_end || null,
+          billing_period_start: phStatus === PAYMENT_HISTORY_STATUS.COMPLETED ? new Date().toISOString() : null,
+          billing_period_end: phStatus === PAYMENT_HISTORY_STATUS.COMPLETED ? nextBillingFromItn(payload) : null,
           raw_itn: payload,
           metadata: { m_payment_id: payload.m_payment_id || null },
         });
@@ -617,6 +636,7 @@ export function createPayfastItnProductionHandler(deps) {
           payment_history_id: phRowId,
           payfast_payment_id: pfPaymentId,
         });
+        await cancelReplacedAgreement(supabase, sub, payload);
         if (sub.status === SUBSCRIPTION_STATUS.ACTIVE) {
           await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.RENEWED, {
             payfast_payment_id: pfPaymentId,
@@ -669,4 +689,84 @@ export function createPayfastItnProductionHandler(deps) {
       return res.status(500).send("Internal error");
     }
   };
+}
+
+/**
+ * A new checkout paid on a row that held an older PayFast agreement: stop the old agreement at
+ * PayFast so it can never charge again (it may only be locked after failed retries). Only when the
+ * ITN matched the new checkout by m_payment_id and carries a different token. Best effort.
+ */
+async function cancelReplacedAgreement(supabase, sub, payload) {
+  const oldToken = String(sub?.payfast_token || "").trim();
+  const newToken = String(payload?.token || "").trim();
+  if (sub?._matchedBy !== "m_payment_id" || !oldToken || !newToken || oldToken === newToken) return;
+  let result;
+  try {
+    result = await cancelPayfastRecurringBilling(oldToken);
+  } catch (err) {
+    result = { ok: false, error: err?.message || String(err) };
+  }
+  await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.CANCELLED, {
+    source: "replaced_payfast_agreement",
+    payfast_cancel_ok: Boolean(result?.ok),
+    payfast_cancel_error: result?.ok ? null : result?.error || null,
+  });
+  if (!result?.ok) {
+    console.warn("[payfast-itn] could not cancel the replaced PayFast agreement", result?.error || result);
+  }
+}
+
+/**
+ * ITN for an agreement a newer checkout replaced. Acknowledged so PayFast stops resending; the
+ * current subscription is untouched. A COMPLETE charge is still money received, so it is recorded
+ * in the ledger for an admin to refund.
+ */
+async function handleSupersededAgreementItn(supabase, { sub, payload, itnLogId, validate, started, res }) {
+  const statusUpper = String(payload.payment_status || "").toUpperCase();
+  await updateItnLog(supabase, itnLogId, {
+    verified: true,
+    verification_response: `${validate.responseText}|superseded_agreement`,
+  });
+  if (statusUpper === "COMPLETE") {
+    const pfPaymentId = sanitizeOneLine(String(payload.pf_payment_id || ""), 128) || null;
+    const gross = Number(payload.amount_gross ?? payload.amount ?? 0);
+    const { error } = await insertPaymentHistory(supabase, {
+      subscription_id: sub.id,
+      company_id: sub.company_id,
+      user_id: sub.user_id || null,
+      plan_slug: sub.plan_slug || null,
+      provider: "payfast",
+      payment_type: "superseded_agreement",
+      payfast_payment_id: pfPaymentId,
+      amount: Number.isFinite(gross) ? gross : null,
+      currency: String(payload.custom_str4 || sub.currency || "ZAR").toUpperCase(),
+      payment_status: PAYMENT_HISTORY_STATUS.COMPLETED,
+      payment_method: "payfast",
+      transaction_date: new Date().toISOString(),
+      attempted_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      raw_itn: payload,
+      metadata: { superseded_token: String(payload.token || ""), needs_admin_review: true },
+    });
+    if (error && !(String(error.code) === "23505" || /duplicate/i.test(String(error.message || "")))) {
+      console.error("[payfast-itn] superseded payment record failed", error.message);
+      return res.status(500).send("Internal error");
+    }
+  }
+  await logSubEvent(supabase, sub.id, sub.company_id, SUBSCRIPTION_EVENT_TYPE.WEBHOOK_FAILED, {
+    reason: "superseded_payfast_agreement",
+    payment_status: statusUpper || null,
+    pf_payment_id: payload.pf_payment_id || null,
+  });
+  console.warn("[payfast-itn] ITN for a replaced PayFast agreement; current subscription unchanged", {
+    subscription_id: sub.id,
+    payment_status: statusUpper,
+  });
+  await logWebhook(supabase, {
+    path: "/api/payfast/itn",
+    response: { ok: true, superseded: true, subscription_id: sub.id },
+    status_code: 200,
+    duration_ms: Date.now() - started,
+  });
+  return res.status(200).send("OK");
 }
