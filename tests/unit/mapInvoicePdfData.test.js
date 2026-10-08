@@ -86,7 +86,7 @@ describe("mapInvoicePdfData", () => {
     expect(data.discount_amount).toBe(50);
     expect(data.total).toBe(1100);
     expect(data.brandPrimary).toBe("#0f766e");
-    expect(data.statusLabel).toBe("Sent");
+    expect(data.statusLabel).toBe("");
     expect(data.items).toHaveLength(2);
     expect(data.items[0].description).toContain("Design");
     expect(data.bankingRows?.some((r) => r.label === "Bank")).toBe(true);
@@ -136,7 +136,7 @@ describe("mapInvoicePdfData", () => {
     expect(data.statusLabel).toBe("Partially Paid");
   });
 
-  it("maps draft / paid / overdue status labels", () => {
+  it("maps draft / paid / overdue status labels and leaves sent and viewed off the PDF", () => {
     expect(mapInvoicePdfData({ ...baseInvoice, status: "draft" }, client, user).statusLabel).toBe(
       "Draft"
     );
@@ -146,6 +146,9 @@ describe("mapInvoicePdfData", () => {
     expect(mapInvoicePdfData({ ...baseInvoice, status: "overdue" }, client, user).statusLabel).toBe(
       "Overdue"
     );
+    expect(mapInvoicePdfData({ ...baseInvoice, status: "sent" }, client, user).statusLabel).toBe("");
+    expect(mapInvoicePdfData({ ...baseInvoice, status: "viewed" }, client, user).statusLabel).toBe("");
+    expect(mapQuotePdfData({ ...baseInvoice, status: "viewed", quote_number: "QUO-1" }, client, user).statusLabel).toBe("");
   });
 
   it("handles long descriptions and many line items", () => {

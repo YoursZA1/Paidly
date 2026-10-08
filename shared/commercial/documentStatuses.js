@@ -312,6 +312,22 @@ export function invoiceStatusLabel(status) {
   return INVOICE_STATUS_LABELS[canonical] || String(status || "Draft").replace(/_/g, " ");
 }
 
+/**
+ * Status printed on a PDF the client downloads or receives.
+ * Sent and viewed are internal tracking — they must not appear on the file.
+ * Draft, paid, overdue, accepted, and the other outcome labels stay.
+ * @param {string | null | undefined} status
+ * @param {(status: string) => string} labelFor
+ */
+export function pdfCustomerStatusLabel(status, labelFor) {
+  const raw = String(status || "").trim().toLowerCase().replace(/\s+/g, "_");
+  if (raw === "sent" || raw === "viewed" || raw === "view") return "";
+  const label = labelFor(status);
+  const shown = String(label || "").trim().toLowerCase();
+  if (shown === "sent" || shown === "viewed" || shown === "view") return "";
+  return label;
+}
+
 /** Collection-facing invoice label. Does not change the stored status. */
 export function invoiceLifecycleLabel(invoice, now = new Date()) {
   const status = normalizeInvoiceStatus(invoice?.status);

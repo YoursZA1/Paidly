@@ -14,6 +14,7 @@ import {
 import {
   invoiceStatusLabel,
   normalizeInvoiceStatus,
+  pdfCustomerStatusLabel,
   quoteStatusLabel,
 } from "@shared/commercial/documentStatuses.js";
 
@@ -79,7 +80,7 @@ export function mapInvoicePdfData(invoice, client, user = null, bankingDetail = 
     str(invoice?.invoice_number) || str(invoice?.reference_number) || "—";
   const logo_url = getLogoUrl(issuerBrand.logo) || "";
   const status = normalizeInvoiceStatus(invoice?.status || "draft");
-  const statusLabel = invoiceStatusLabel(status);
+  const statusLabel = pdfCustomerStatusLabel(invoice?.status || status, () => invoiceStatusLabel(status));
 
   const clientObj = client && typeof client === "object" ? client : {};
   const clientName =
@@ -257,7 +258,7 @@ export function mapQuotePdfData(quote, client, user = null, bankingDetail = null
     documentTitle: "QUOTE",
     dueLabel: "Valid until",
     totalLabel: "Total",
-    statusLabel: quoteStatusLabel(quote?.status || "draft"),
+    statusLabel: pdfCustomerStatusLabel(quote?.status || "draft", quoteStatusLabel),
   };
 }
 

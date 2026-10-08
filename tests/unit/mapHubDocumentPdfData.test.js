@@ -49,5 +49,13 @@ describe("mapHubDocumentPdfData", () => {
     expect(data.sections.some((section) => section.title === "Content")).toBe(false);
     expect(data.sections.some((section) => section.body.includes("PROFESSIONAL SERVICES AGREEMENT"))).toBe(true);
     expect(data.footerLabel).toContain("Contract CON-1001");
+    expect(data.statusLabel).toBe("DRAFT");
+  });
+
+  it("leaves sent and viewed off the file a client downloads", () => {
+    const viewed = mapHubDocumentPdfData({ type: "proposal", status: "viewed", title: "Proposal" });
+    const sent = mapHubDocumentPdfData({ type: "proposal", status: "sent", title: "Proposal" });
+    expect(viewed.statusLabel).toBe("");
+    expect(sent.statusLabel).toBe("");
   });
 });

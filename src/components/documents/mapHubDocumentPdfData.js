@@ -47,6 +47,9 @@ function fieldText(field, raw) {
 }
 
 function statusLabel(status) {
+  const key = str(status).toLowerCase().replace(/\s+/g, "_");
+  // Sent and viewed are tracking states. A client downloading the file should not see them.
+  if (key === "sent" || key === "viewed" || key === "view") return "";
   const text = str(status).replace(/_/g, " ");
   return text ? text.toUpperCase() : "";
 }
