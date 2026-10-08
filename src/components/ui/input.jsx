@@ -31,7 +31,7 @@ const Input = React.forwardRef(({ className, type, id: idProp, name: nameProp, v
       lang={decimal ? "en-ZA" : undefined}
       id={id}
       name={name}
-      value={decimal ? (focused ? draft : formatDecimalNumber(value)) : value}
+      value={decimal ? (value === undefined ? undefined : focused ? draft : formatDecimalNumber(value)) : value}
       onFocus={(event) => {
         if (decimal) {
           setDraft(value == null || value === "" ? "" : formatDecimalNumber(value));
