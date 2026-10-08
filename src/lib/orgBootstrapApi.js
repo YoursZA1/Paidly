@@ -104,6 +104,35 @@ async function withOrgBootstrapLock(userId, fn) {
 }
 
 /**
+ * Save the signed-in user's own profile through the service role.
+ * A browser insert into profiles fails RLS unless the row id is auth.uid()
+ * and the request actually carries that JWT.
+ * @param {Record<string, unknown>} fields
+ */
+export async function saveOwnProfile(fields) {
+  const accessToken = await getSessionAccessTokenOrHandleUnauthorized("save_own_profile");
+  if (!accessToken) {
+    throw new Error("Please sign in again to save your profile.");
+  }
+  const apiBase = import.meta.env.DEV ? "" : getBackendBaseUrl();
+  const data = await apiRequestJson(`${apiBase}/api/auth/bootstrap-user`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      profile_only: true,
+      ...(fields && typeof fields === "object" ? fields : {}),
+    }),
+  });
+  if (!data || data.ok !== true) {
+    throw new Error("Couldn't save your profile. Sign in again and try once more.");
+  }
+  return data;
+}
+
+/**
  * Single-flight + cross-tab lock around POST /api/auth/bootstrap-user.
  * Idempotent on the server; callers should re-read membership after success.
  *

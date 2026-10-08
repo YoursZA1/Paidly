@@ -25,6 +25,16 @@ export async function deleteUser(userId) {
   return backendApi.delete(`/api/admin/users/${userId}`, { headers });
 }
 
+/**
+ * Create a directory user on the server. The browser cannot insert another person's profile.
+ * @param {{ email: string, full_name?: string, phone?: string, company_name?: string, company_address?: string, company_website?: string }} payload
+ */
+export async function createPlatformUser(payload) {
+  const headers = await adminAuthHeaders();
+  const response = await backendApi.post("/api/admin/users", payload, { headers });
+  return response.data;
+}
+
 // Add new user
 export async function addUser(email, fullName, role) {
   const headers = await adminAuthHeaders();

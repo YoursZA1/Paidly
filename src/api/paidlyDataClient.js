@@ -426,6 +426,9 @@ async function list(entityName, orderBy = '-created_date', limitOrOpts = 100) {
 }
 
 async function create(entityName, payload) {
+  if (entityName === "PlatformUser") {
+    throw new Error("Add users from the admin directory.");
+  }
   const tableCandidates = getTableCandidates(entityName);
   const toInsert = denormalizeEntity(entityName, payload);
   let data;

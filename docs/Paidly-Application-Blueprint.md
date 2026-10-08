@@ -173,7 +173,7 @@ These are the **real** architecture—not the sidebar.
 
 - Supabase Auth (sessions, JWT)
 - `profiles`, `organizations`, `memberships`, roles (`admin`, `management`, …)
-- RLS as the enforcement layer; client as the UX layer
+- RLS as the enforcement layer; client as the UX layer. A signed-in user saves their own `profiles` row through `POST /api/auth/bootstrap-user` with `profile_only` (service role) when the browser write cannot satisfy `profiles` RLS. Platform admins add another person through `POST /api/admin/users` on the existing admin function, which creates the Auth user and then the profile. The browser does not insert another user's `profiles` row.
 
 **Organisation vs company/brand vs team (do not confuse these):**
 

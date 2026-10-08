@@ -20,6 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { saveOwnProfile } from "@/lib/orgBootstrapApi";
+import { isProfilesRlsError } from "@/utils/supabaseErrorUtils";
 import { selectProfileByUserId } from "@/api/auth/profileSelect";
 import { getStableSession } from "@/core/auth/SessionCoordinator";
 import SettingsLogoPreviews from "@/components/settings/SettingsLogoPreviews";
@@ -72,6 +74,16 @@ import {
 } from "@/utils/documentBrandColors";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { DemoRestrictedPanel } from "@/components/demo/DemoRestricted";
+
+async function upsertOwnProfile(row) {
+    const { error } = await supabase.from("profiles").upsert(row, { onConflict: "id" });
+    if (!error) return;
+    if (!isProfilesRlsError(error)) throw error;
+    const fields = { ...(row || {}) };
+    delete fields.id;
+    delete fields.updated_at;
+    await saveOwnProfile(fields);
+}
 
 const SettingsCard = ({ title, description, children }) => (
     <section className="bg-card border border-border rounded-2xl p-4 sm:p-7 mb-4 sm:mb-5 shadow-sm min-w-0 overflow-x-hidden">
@@ -472,17 +484,11 @@ function CompanyProfileSettings() {
             // Defense in depth: always upsert current profile row so settings are replaced even when
             // local auth state/SDK write helpers are stale.
             if (authUser?.id) {
-                const directProfilePayload = {
+                await upsertOwnProfile({
                     id: authUser.id,
                     ...payload,
                     updated_at: new Date().toISOString(),
-                };
-                let { error: directSaveError } = await supabase
-                    .from("profiles")
-                    .upsert(directProfilePayload, { onConflict: "id" });
-                if (directSaveError) {
-                    throw directSaveError;
-                }
+                });
             }
             setFormData((prev) => ({
                 ...prev,
@@ -636,13 +642,11 @@ function CompanyProfileSettings() {
                         : parseDocumentBrandHex(formData.document_brand_secondary) ?? null,
             };
             await User.updateMyUserData(templatePayload);
-            const { error: directSaveError } = await supabase
-                .from("profiles")
-                .upsert(
-                    { id: userId, ...templatePayload, updated_at: new Date().toISOString() },
-                    { onConflict: "id" }
-                );
-            if (directSaveError) throw directSaveError;
+            await upsertOwnProfile({
+                id: userId,
+                ...templatePayload,
+                updated_at: new Date().toISOString(),
+            });
             setFormData((prev) => ({
                 ...prev,
                 ...templatePayload,
@@ -2011,13 +2015,11 @@ function PersonalAccountSettings() {
             const full_name = displayName.trim();
             await User.updateMyUserData({ full_name });
             if (authUser?.id) {
-                const { error } = await supabase
-                    .from("profiles")
-                    .upsert(
-                        { id: authUser.id, full_name, updated_at: new Date().toISOString() },
-                        { onConflict: "id" }
-                    );
-                if (error) throw error;
+                await upsertOwnProfile({
+                    id: authUser.id,
+                    full_name,
+                    updated_at: new Date().toISOString(),
+                });
             }
             await refreshUser();
             toast({

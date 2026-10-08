@@ -21,6 +21,17 @@ export function isUnsatisfiableRangeError(error) {
   return /range not satisfiable|requested range/.test(msg);
 }
 
+/**
+ * Postgres WITH CHECK failure on insert or update of public.profiles.
+ * @param {unknown} error
+ */
+export function isProfilesRlsError(error) {
+  const msg = String(
+    typeof error === "string" ? error : error?.message || error?.details || ""
+  );
+  return /row-level security/i.test(msg) && /profiles/i.test(msg);
+}
+
 /** User-visible copy when an operation was cancelled (navigation, Strict Mode teardown, timeout, duplicate in-flight). */
 export const SUPABASE_ABORT_USER_MESSAGE = "The request was interrupted. Please try again.";
 

@@ -2,7 +2,7 @@
  * Vercel serverless: /api/admin/:resource (Hobby plan: single function for many admin routes)
  *
  * GET: platform-users | platform-user-messages | sync-users | security-events
- * POST: invite-user | clean-orphaned-users | send-platform-message
+ * POST: users | invite-user | clean-orphaned-users | send-platform-message
  *
  * /api/security/events → vercel.json rewrite → /api/admin/security-events
  */
@@ -706,6 +706,7 @@ export default async function handler(req, res) {
       "directory",
     ]);
     const postResources = new Set([
+      "users",
       "invite-user",
       "invite-company",
       "clean-orphaned-users",
@@ -759,6 +760,10 @@ export default async function handler(req, res) {
             console.error("[POST /api/admin/clean-orphaned-users]", e?.message || e);
             return res.status(500).json({ error: e?.message || "Failed to clean orphaned profiles" });
           }
+        }
+        if (resource === "users") {
+          const { handleAdminCreatePlatformUser } = await import("../../server/src/adminCreatePlatformUser.js");
+          return handleAdminCreatePlatformUser(req, res);
         }
         if (resource === "invite-user") {
           await ensureInviteUserDeps();

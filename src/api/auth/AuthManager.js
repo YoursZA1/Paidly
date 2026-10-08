@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
-import { getSupabaseErrorMessage, alertSupabaseWriteFailure } from "@/utils/supabaseErrorUtils";
+import { getSupabaseErrorMessage, alertSupabaseWriteFailure, isProfilesRlsError } from "@/utils/supabaseErrorUtils";
 import { resolveUserRoleFromSessionAndProfile } from "@/lib/staffDashboard";
 import { clearStoredAuthUser, readStoredAuthUser, writeStoredAuthUser } from "@/utils/authStorage";
 import { DEFAULT_INVOICE_TEMPLATE } from "@/utils/invoiceTemplateData";
@@ -703,6 +703,11 @@ export class AuthManager {
 
       if (error) {
         if (isAbortError(error)) throw error;
+        if (isProfilesRlsError(error)) {
+          const { saveOwnProfile } = await import("@/lib/orgBootstrapApi");
+          await saveOwnProfile(profileData);
+          return;
+        }
         alertSupabaseWriteFailure(error, "Save profile failed");
         throw new Error(getSupabaseErrorMessage(error, "Save profile failed"));
       }

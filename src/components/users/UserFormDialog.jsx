@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { adminRowPrimaryId } from '@/utils/stableListKey';
-import { adminActionErrorMessage, setCompanyAccess, setCompanyPlan } from '@/api/userManagement';
+import { adminActionErrorMessage, createPlatformUser, setCompanyAccess, setCompanyPlan } from '@/api/userManagement';
 import StatusBadge from '@/components/dashboard/StatusBadge';
 import {
   ASSIGNABLE_PROFILE_PLAN_SLUGS,
@@ -133,14 +133,18 @@ export default function UserFormDialog({ open, onClose, user }) {
 
   const createMutation = useMutation({
     mutationFn: async ({ payload, plan }) => {
-      const created = await paidly.entities.PlatformUser.create(payload);
+      const created = await createPlatformUser(payload);
       await applyPlanIfChanged(adminRowPrimaryId(created) || created?.id, plan);
       return created;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
-      toast.success('User created');
+      toast.success(
+        created?.email_sent
+          ? 'User added. We emailed them a link to set a password.'
+          : 'User added. Ask them to use Forgot password on the login page.'
+      );
       onClose();
     },
     // Form values are kept on failure so the admin can retry without retyping.

@@ -28,6 +28,7 @@ import {
 } from "@/utils/signupRateLimit";
 import { getSupabaseErrorMessage, isAuthSignupEmailRateLimitError } from "@/utils/supabaseErrorUtils";
 import { supabase } from "@/lib/supabaseClient";
+import { saveOwnProfile } from "@/lib/orgBootstrapApi";
 
 function formatRetryMinutes(ms) {
   return Math.max(1, Math.ceil(ms / 60000));
@@ -89,8 +90,7 @@ async function persistSignupProfilePlan({
     updated_at: new Date().toISOString(),
   };
 
-  const { error: upsertError } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
-  if (upsertError) throw upsertError;
+  await saveOwnProfile(payload);
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
