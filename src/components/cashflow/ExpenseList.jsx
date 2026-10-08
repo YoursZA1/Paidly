@@ -1,5 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import React, { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +12,6 @@ import { useAppStore } from "@/stores/useAppStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-
-const ROW_HEIGHT = 56;
-const VIRTUAL_TABLE_MAX_HEIGHT = 480;
 
 const categoryColors = {
     office: "bg-primary/15 text-primary",
@@ -52,6 +48,15 @@ const statusConfig = {
     not_required: { color: "bg-muted text-muted-foreground", icon: null }
 };
 
+function expenseDateLabel(value) {
+    if (!value) return "—";
+    const raw = String(value);
+    const day = raw.slice(0, 10);
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(day) ? parseISO(day) : new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return format(parsed, "MMM d, yyyy");
+}
+
 const ExpenseRow = React.memo(function ExpenseRow({
     expense,
     currency,
@@ -59,13 +64,12 @@ const ExpenseRow = React.memo(function ExpenseRow({
     setDeleteExpenseId,
     handleApproval,
     isAdmin,
-    style,
 }) {
     const status = expense.approval_status || (expense.is_claimable ? "pending" : "not_required");
     const StatusIcon = statusConfig[status]?.icon;
     return (
-        <TableRow className="border-border absolute inset-x-0 w-full" style={style}>
-            <TableCell>{expense.date ? format(parseISO(expense.date), "MMM d, yyyy") : "N/A"}</TableCell>
+        <TableRow className="border-border">
+            <TableCell>{expenseDateLabel(expense.date)}</TableCell>
             <TableCell>
                 <Badge className={categoryColors[expense.category] || categoryColors.other}>
                     {expense.category}
@@ -113,57 +117,8 @@ const ExpenseRow = React.memo(function ExpenseRow({
     );
 });
 
-const VirtualizedExpenseTableBody = React.memo(function VirtualizedExpenseTableBody({
-    expenses,
-    parentRef,
-    currency,
-    onEdit,
-    setDeleteExpenseId,
-    handleApproval,
-    isAdmin,
-}) {
-    const rowVirtualizer = useVirtualizer({
-        count: expenses.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => ROW_HEIGHT,
-        overscan: 8,
-    });
-    const virtualRows = rowVirtualizer.getVirtualItems();
-    const totalSize = rowVirtualizer.getTotalSize();
-
-    return (
-        <>
-            {totalSize > 0 && (
-                <TableRow className="border-0 [&>td]:p-0 [&>td]:border-0" style={{ height: `${totalSize}px` }} aria-hidden>
-                    <TableCell colSpan={7} className="!p-0 !border-0 !h-0" style={{ height: `${totalSize}px`, lineHeight: 0, overflow: "hidden" }} />
-                </TableRow>
-            )}
-            {virtualRows.map((virtualRow) => {
-                const expense = expenses[virtualRow.index];
-                return (
-                    <ExpenseRow
-                        key={expense.id}
-                        expense={expense}
-                        currency={currency}
-                        onEdit={onEdit}
-                        setDeleteExpenseId={setDeleteExpenseId}
-                        handleApproval={handleApproval}
-                        isAdmin={isAdmin}
-                        style={{
-                            height: `${virtualRow.size}px`,
-                            transform: `translateY(${virtualRow.start}px)`,
-                            top: 0,
-                        }}
-                    />
-                );
-            })}
-        </>
-    );
-});
-
 function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", onActionSuccess }) {
     const [deleteExpenseId, setDeleteExpenseId] = useState(null);
-    const tableScrollRef = useRef(null);
     const { profile: currentUser } = useAuth();
     const updateExpenseInStore = useAppStore((s) => s.updateExpense);
 
@@ -249,12 +204,8 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
                                 </TableBody>
                             </Table>
                         ) : (
-                            <div
-                                ref={tableScrollRef}
-                                className="overflow-auto overflow-x-auto"
-                                style={{ maxHeight: VIRTUAL_TABLE_MAX_HEIGHT }}
-                            >
-                                <Table className="min-w-[640px] table-fixed">
+                            <div className="max-h-[480px] overflow-auto">
+                                <Table className="min-w-[640px]">
                                     <TableHeader>
                                         <TableRow className="bg-card sticky top-0 z-10 border-border">
                                             <TableHead>Date</TableHead>
@@ -266,16 +217,18 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
                                             <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
-                                    <TableBody style={{ position: "relative" }}>
-                                        <VirtualizedExpenseTableBody
-                                            expenses={expenses}
-                                            parentRef={tableScrollRef}
-                                            currency={currency}
-                                            onEdit={onEdit}
-                                            setDeleteExpenseId={setDeleteExpenseId}
-                                            handleApproval={handleApproval}
-                                            isAdmin={isAdmin}
-                                        />
+                                    <TableBody>
+                                        {expenses.map((expense) => (
+                                            <ExpenseRow
+                                                key={expense.id}
+                                                expense={expense}
+                                                currency={currency}
+                                                onEdit={onEdit}
+                                                setDeleteExpenseId={setDeleteExpenseId}
+                                                handleApproval={handleApproval}
+                                                isAdmin={isAdmin}
+                                            />
+                                        ))}
                                     </TableBody>
                                 </Table>
                             </div>
@@ -321,7 +274,7 @@ function ExpenseList({ expenses, isLoading, onEdit, onDelete, currency = "ZAR", 
                                                         {formatCurrency(expense.amount, currency)}
                                                     </p>
                                                     <p className="text-xs text-muted-foreground">
-                                                        {expense.date ? format(parseISO(expense.date), 'MMM d, yyyy') : 'N/A'}
+                                                        {expenseDateLabel(expense.date)}
                                                     </p>
                                                 </div>
                                                 <div className="flex gap-1">
