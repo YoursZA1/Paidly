@@ -20,6 +20,7 @@ import {
 } from "@/lib/authSessionReconnectToast";
 import { authFlowLog, sessionReadErrorType } from "@/lib/auth/authFlowLog";
 import { releasePreviousAccountContext, shouldExpireSessionAfterSignedOut } from "@/lib/auth/accountSwitch";
+import { settleWithin } from "@/lib/session/settleWithin";
 import {
   deferAfterAuthLock,
   isTransientSessionReadFailure,
@@ -80,6 +81,9 @@ import {
   dispatchWakeRecoveryLifecycleEvent,
   installWakeRecoveryLifecycleTelemetry,
 } from "@/core/session/wakeRecoveryLifecycleEvents";
+
+/** Longest any single logout cleanup step may take before logout moves on. */
+const LOGOUT_STEP_MS = 3000;
 
 /** Same shape as SupabaseAuthService.normalizeSession — used when the wrapper throws or returns null during races. */
 function normalizeSessionFromClient(session) {
@@ -1436,25 +1440,20 @@ export function AuthProvider({ children }) {
       const keepExpiredState = Boolean(opts?.keepExpiredState);
       refreshGenerationRef.current += 1;
       refreshUserInflightRef.current = null;
-      try {
-        await releasePreviousAccountContext();
-      } catch {
-        /* logout must still finish */
-      }
+      // A wake-recovery barrier must never outlive the session it was protecting.
+      useWakeRecoveryStore.getState().reset();
+      // Each step is bounded: an IndexedDB purge or API call that never settles must not stop
+      // logout from finishing (the caller's redirect waits on this promise).
+      await settleWithin(releasePreviousAccountContext, LOGOUT_STEP_MS);
       // 1. Clear app state immediately so the UI shows logged out and redirect is never blocked.
       clearNodeAuthUnreachable();
-      try {
-        await User.logout();
-      } catch {
-        // ignore
-      }
+      await settleWithin(() => User.logout(), LOGOUT_STEP_MS);
       patchAuthSession({
         session: null,
         user: null,
         loading: false,
         authLoadingTimedOut: false,
       });
-      useWakeRecoveryStore.getState().reset();
       if (!keepExpiredState) {
         connectionLifecycle.markManualLogoutReset();
       }
@@ -1484,11 +1483,7 @@ export function AuthProvider({ children }) {
         clearTimeout(timeoutId);
         // 3. Always remove Supabase auth keys after signOut (or if it failed / timed out).
         purgeSupabaseAuthStorage();
-        try {
-          await purgeQueryClientAfterLogout(getOrCreateAppQueryClient());
-        } catch {
-          /* ignore cache purge failures */
-        }
+        await settleWithin(() => purgeQueryClientAfterLogout(getOrCreateAppQueryClient()), LOGOUT_STEP_MS);
       }
     },
     [purgeSupabaseAuthStorage]
