@@ -287,6 +287,7 @@ export default function PublicInvoice() {
                         invoice={invoice}
                         client={client}
                         shareToken={shareTokenForPdf}
+                        bankingDetail={bankingDetail}
                         publicMode
                         variant="inline"
                         onAmountChange={handlePaymentAmount}

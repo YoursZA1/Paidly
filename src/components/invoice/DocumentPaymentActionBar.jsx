@@ -28,6 +28,7 @@ import { INVOICE_STATUS, normalizeInvoiceStatus } from "@shared/commercial/docum
 import { createPageUrl } from "@/utils";
 import { dueFollowUpLabel } from "@shared/ux/doneStates.js";
 import DemoInvoicePaymentDialog from "@/components/demo/DemoInvoicePaymentDialog";
+import EftPaymentNotice, { eftPaymentRows } from "@/components/invoice/EftPaymentNotice";
 import { notifyDemoNotSent } from "@/lib/demo/demoModeState";
 
 function isOverdue(invoice) {
@@ -39,6 +40,7 @@ export default function DocumentPaymentActionBar({
   invoice,
   client = null,
   shareToken = null,
+  bankingDetail = null,
   publicMode = false,
   variant = "bar",
   onAmountChange,
@@ -52,6 +54,7 @@ export default function DocumentPaymentActionBar({
   const [busy, setBusy] = useState("");
   const [demoPay, setDemoPay] = useState(null);
   const [recordOpen, setRecordOpen] = useState(false);
+  const [eftNotice, setEftNotice] = useState(null);
 
   const loadHistory = useCallback(async () => {
     if (!invoice?.id) return;
@@ -127,6 +130,10 @@ export default function DocumentPaymentActionBar({
         variant: "destructive",
       });
     } catch (err) {
+      if (publicMode && err?.code === "PROVIDER_NOT_CONFIGURED") {
+        setEftNotice(eftPaymentRows(err.eft || bankingDetail, invoice?.invoice_number));
+        return;
+      }
       toast({
         title: retry ? "Retry failed" : "Pay online failed",
         description: err?.message || "Try again in a moment.",
@@ -251,6 +258,7 @@ export default function DocumentPaymentActionBar({
           }}
         />
       )}
+      <EftPaymentNotice open={Boolean(eftNotice)} onOpenChange={(next) => (next ? null : setEftNotice(null))} rows={eftNotice || []} />
       <DemoInvoicePaymentDialog
         open={Boolean(demoPay)}
         onOpenChange={(next) => (next ? null : setDemoPay(null))}

@@ -21,6 +21,7 @@ import { resolveInvoiceTemplateKey, DEFAULT_INVOICE_TEMPLATE } from '@/utils/inv
 import { isValidShareToken } from '@/utils/inputSanitization';
 import { resolveIssuerBrand } from '@/lib/documentIssuerBrand';
 import DocumentPaymentActionBar from '@/components/invoice/DocumentPaymentActionBar';
+import EftPaymentNotice, { eftPaymentRows } from '@/components/invoice/EftPaymentNotice';
 import PublicDocumentPortal, {
   PublicDocumentSheet,
   PublicPortalMessage,
@@ -42,6 +43,7 @@ export default function InvoiceView() {
   const [invoice, setInvoice] = useState(null);
   const [client, setClient] = useState(null);
   const [bankingDetail, setBankingDetail] = useState(null);
+  const [eftNotice, setEftNotice] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [emailVerification, setEmailVerification] = useState('');
@@ -298,6 +300,7 @@ export default function InvoiceView() {
               invoice={invoice}
               client={client}
               shareToken={token}
+              bankingDetail={bankingDetail}
               publicMode
               variant="inline"
               onAmountChange={handlePaymentAmount}
@@ -322,8 +325,10 @@ export default function InvoiceView() {
                 try {
                   const result = await startDocumentPayment({ invoiceId: invoice.id, shareToken: token, retry: true });
                   if (result?.redirect_url) window.location.assign(result.redirect_url);
-                } catch {
-                  /* Pay online in the portal bar can be used again. */
+                } catch (err) {
+                  if (err?.code === "PROVIDER_NOT_CONFIGURED") {
+                    setEftNotice(eftPaymentRows(err.eft || bankingDetail, invoice.invoice_number));
+                  }
                 }
               }}
               onDismiss={() => {
@@ -334,6 +339,7 @@ export default function InvoiceView() {
             />
           </div>
         ) : null}
+        <EftPaymentNotice open={Boolean(eftNotice)} onOpenChange={(next) => (next ? null : setEftNotice(null))} rows={eftNotice || []} />
         <PublicDocumentSheet>
           <div className="overflow-x-auto p-3 sm:p-6">
             <InvoicePreview

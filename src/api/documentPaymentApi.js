@@ -35,6 +35,7 @@ async function parseJson(res, fallback) {
     const err = new Error(json.error || json.message || fallback);
     err.status = res.status;
     err.code = json.code;
+    err.eft = json.eft || null;
     err.retryAfterMs = json.retry_after_ms;
     throw err;
   }

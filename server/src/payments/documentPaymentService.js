@@ -66,6 +66,27 @@ export async function listConfirmedInvoicePayments(orgId, invoiceId) {
 
 export { invoiceAmountDue };
 
+async function eftDetailsForInvoice(invoice) {
+  const id = String(invoice?.banking_detail_id || "").trim();
+  if (!id) return null;
+  const { data, error } = await supabaseAdmin
+    .from("banking_details")
+    .select("bank_name, account_name, account_number, routing_number, swift_code")
+    .eq("id", id)
+    .eq("org_id", invoice.org_id)
+    .maybeSingle();
+  if (error || !data) return null;
+  const detail = {
+    bank_name: data.bank_name || "",
+    account_name: data.account_name || "",
+    account_number: data.account_number || "",
+    branch_code: data.routing_number || "",
+    swift_code: data.swift_code || "",
+    reference: invoice.invoice_number || "",
+  };
+  return detail.bank_name || detail.account_number ? detail : null;
+}
+
 export async function loadOrgInvoice(orgId, invoiceId) {
   const id = String(invoiceId || "").trim();
   if (!id) return null;
@@ -161,10 +182,13 @@ export async function createOrReuseDocumentPaymentIntent({
   } catch (err) {
     if (err?.code === "PROVIDER_NOT_CONFIGURED") {
       const error = new Error(
-        "No digital payment provider is connected. Connect a payment provider to accept online payments."
+        shareToken
+          ? "Please use EFT. Online payment is not available for this invoice."
+          : "No digital payment provider is connected. Connect a payment provider to accept online payments."
       );
       error.code = "PROVIDER_NOT_CONFIGURED";
       error.status = err.status || 422;
+      if (shareToken) error.eft = await eftDetailsForInvoice(invoice);
       throw error;
     }
     throw err;

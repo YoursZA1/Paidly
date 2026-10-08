@@ -160,7 +160,12 @@ export async function handleDocumentPay(req, res) {
       invoice_number: result.invoice.invoice_number,
     });
   } catch (err) {
-    if (err?.status) return jsonError(res, err.status, err.message, { code: err.code });
+    if (err?.status) {
+      return jsonError(res, err.status, err.message, {
+        code: err.code,
+        ...(err.eft ? { eft: err.eft } : {}),
+      });
+    }
     return schemaError(res, err);
   }
 }
