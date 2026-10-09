@@ -8,6 +8,7 @@
 import { ImportFileError, inspectImportFile, KIND_LABEL } from "@/lib/productImport/fileDetect.js";
 import { parseCsvBuffer, parseWorkbookBuffer, pickBestSheet } from "@/lib/productImport/tableParsing.js";
 import { extractPdfProductTable, looksScanned } from "@/lib/productImport/pdfTable.js";
+import { CLIENT_PDF_PROFILE, clientLooksLikeHeaderRow, promoteClientHeader } from "@shared/clients/clientImport.js";
 import { MAX_OCR_PAGES, MAX_PDF_PAGES, ocrPdfPages, openPdf, readPdfTextPages } from "@/lib/productImport/pdfReader.js";
 
 const SHEET_TIMEOUT_MS = 45_000;
@@ -77,6 +78,7 @@ async function parseSheets(kind, buffer) {
  */
 export async function readProductDocument(file, opts = {}) {
   const stage = opts.onStage || (() => {});
+  const clientProfile = opts.profile === "client";
   stage("Reading document…");
   const { kind, buffer } = await inspectImportFile(file);
   const notices = [];
@@ -90,9 +92,15 @@ export async function readProductDocument(file, opts = {}) {
       if (err?.code === "TIMEOUT") throw new ImportFileError("This file took too long to read. Try saving it as CSV and uploading again.", "TIMEOUT");
       throw new ImportFileError(`Could not read this ${KIND_LABEL[kind]} file.`, "UNREADABLE");
     }
-    const sheets = parsed?.sheets || [];
-    if (!sheets.length) throw new ImportFileError("This file doesn't contain any product rows.", "NO_ROWS");
-    if (sheets.some((s) => s.table.truncated)) notices.push("Only the first 5,000 rows were read. Split larger files into several imports.");
+    let sheets = parsed?.sheets || [];
+    if (clientProfile) sheets = sheets.map((s) => ({ ...s, table: promoteClientHeader(s.table) }));
+    if (!sheets.length) {
+      throw new ImportFileError(
+        clientProfile ? "This file doesn't contain any client rows." : "This file doesn't contain any product rows.",
+        "NO_ROWS"
+      );
+    }
+    if (sheets.some((s) => s.table.truncated)) notices.push("Only the first 5,000 rows were read. Split the file and import the rest separately.");
     return { kind, sheets, activeSheet: pickBestSheet(sheets), notices };
   }
 
@@ -102,16 +110,22 @@ export async function readProductDocument(file, opts = {}) {
   try {
     const { pages, pageCount, truncated } = await readPdfTextPages(pdfjs, doc);
     if (truncated) notices.push(`Only the first ${MAX_PDF_PAGES} pages were read.`);
-    const { table, textChars } = extractPdfProductTable(pages);
+    const { table, textChars } = extractPdfProductTable(pages, clientProfile ? { isHeader: clientLooksLikeHeaderRow, profile: CLIENT_PDF_PROFILE } : {});
     if (looksScanned(textChars, pageCount)) {
       return { kind, sheets: [], activeSheet: -1, notices, scanned: true, pdfBuffer: buffer };
     }
-    stage("Extracting products…");
+    stage(clientProfile ? "Extracting clients…" : "Extracting products…");
     if (!table || !table.rows.length) {
-      throw new ImportFileError("This PDF does not contain readable product data.", "NO_TABLE");
+      throw new ImportFileError(
+        clientProfile
+          ? "This PDF does not contain a readable client list. If it is scanned or password-protected, export it as Excel or CSV, or upload a text-based PDF."
+          : "This PDF does not contain readable product data.",
+        "NO_TABLE"
+      );
     }
     if (table.uncertain) notices.push("No column headings were found in this PDF, so Paidly guessed the columns. Check the mapping and every row.");
     if (table.tableCount > 1) notices.push(`${table.tableCount} tables were found in this PDF and combined.`);
+    if (clientProfile) notices.push("These clients were read from a PDF. Check names, emails and numbers before importing.");
     return { kind, sheets: [{ name: "PDF", table }], activeSheet: 0, notices };
   } finally {
     doc.destroy?.();
@@ -125,16 +139,17 @@ export async function readProductDocument(file, opts = {}) {
  * @returns {Promise<ReadResult>}
  */
 export async function readScannedPdf(buffer, opts = {}) {
+  const clientProfile = opts.profile === "client";
+  const scannedMessage = clientProfile
+    ? "This PDF appears to be scanned or image-based. Text could not be reliably extracted. Upload an Excel or CSV file, or a text-based PDF."
+    : "This PDF appears to be scanned/image-based. Text could not be reliably extracted. Please upload an Excel/CSV file or a text-based PDF.";
   const pdfjs = await loadPdfjs();
   const doc = await openPdf(pdfjs, buffer);
   try {
     const { pages, truncated, confidence } = await ocrPdfPages(doc, opts);
-    const { table } = extractPdfProductTable(pages);
+    const { table } = extractPdfProductTable(pages, clientProfile ? { isHeader: clientLooksLikeHeaderRow, profile: CLIENT_PDF_PROFILE } : {});
     if (!table || !table.rows.length) {
-      throw new ImportFileError(
-        "This PDF appears to be scanned/image-based. Text could not be reliably extracted. Please upload an Excel/CSV file or a text-based PDF.",
-        "SCANNED"
-      );
+      throw new ImportFileError(scannedMessage, "SCANNED");
     }
     const rowMeta = table.rowMeta.map((m) => ({ ...m, ocr: true }));
     const notices = ["This PDF was read with OCR (text recognition). Check every value before importing."];
@@ -143,10 +158,7 @@ export async function readScannedPdf(buffer, opts = {}) {
     return { kind: "pdf", sheets: [{ name: "PDF (OCR)", table: { ...table, rowMeta, uncertain: true } }], activeSheet: 0, notices };
   } catch (err) {
     if (err instanceof ImportFileError) throw err;
-    throw new ImportFileError(
-      "This PDF appears to be scanned/image-based. Text could not be reliably extracted. Please upload an Excel/CSV file or a text-based PDF.",
-      "SCANNED"
-    );
+    throw new ImportFileError(scannedMessage, "SCANNED");
   } finally {
     doc.destroy?.();
   }

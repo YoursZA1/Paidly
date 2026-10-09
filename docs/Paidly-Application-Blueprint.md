@@ -96,6 +96,8 @@ SHARED CORE (not duplicated per workplace)
 
 Nav copy: **Products** (catalog page `Services`), **Clients** (customers). Staff open the till from back-office **POS**; they do not run invoices from till chrome.
 
+**Client import:** Clients → Import (owner, admin or manager only — the same people who can see every client, so the duplicate check covers the whole business) reads CSV, Excel (.xlsx/.xls, worksheet picker) or a text PDF in the browser, up to 10 MB / 5,000 rows. Scanned PDFs can try on-device text recognition (tesseract.js); results are flagged row by row and are not guaranteed. Required fields match Add Client: name and a valid email. `POST /api/company/client-import?op=check|commit` on the existing company function re-validates every row and writes `public.clients` with the caller's JWT (RLS and the plan trigger apply) in batches of 100. `clients.import_ref` makes a retried batch idempotent. Duplicates match email, phone (last 9 digits) or VAT number inside one organisation — never the name alone — and nothing is updated unless the user picks a single reliable match; blank cells never erase existing values. `client_import_matches()` is SECURITY DEFINER with its own owner/admin/manager check so it can use expression indexes. `client_import_runs` stores filename, user, status and counts only; audit_logs gets counts, no customer data. Report CSVs escape formulas and re-import losslessly. Migration: `supabase/migrations/20261009140000_client_import.sql`.
+
 **Payment architecture — one customer engine, isolated SaaS billing:**
 
 ```

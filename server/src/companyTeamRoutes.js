@@ -1179,6 +1179,9 @@ export function registerCompanyTeamRoutes(app) {
   app.all("/api/company/product-import", (req, res) => {
     import("./catalog/productImportRoutes.js").then(({ handleProductImportRoute }) => handleProductImportRoute(req, res));
   });
+  app.all("/api/company/client-import", (req, res) => {
+    import("./clients/clientImportRoutes.js").then(({ handleClientImportRoute }) => handleClientImportRoute(req, res));
+  });
   app.all("/api/company/employees", (req, res) => {
     import("./workforce/workforceRoutes.js").then(({ handleWorkforceEmployees }) =>
       handleWorkforceEmployees(req, res)

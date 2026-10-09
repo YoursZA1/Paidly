@@ -100,7 +100,9 @@ export async function ocrPdfPages(doc, opts = {}) {
         const canvas = document.createElement("canvas");
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
-        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+        // "print" renders without requestAnimationFrame, which never fires in a background tab, so OCR
+        // keeps going if the person switches tabs while it runs.
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport, intent: "print" }).promise;
         const { data } = await worker.recognize(canvas, {}, { blocks: true, text: false });
         const items = [];
         for (const block of data?.blocks || []) {

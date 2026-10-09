@@ -987,6 +987,19 @@ body {
     }
   }
 
+  /*
+   * Radix Select keeps a 1px native <select aria-hidden> for autofill (position:absolute,
+   * margin:-1px, no top). Chrome uses that static position as the document's scroll height,
+   * so the window scrolls the app shell and the sidebar ends above a blank region.
+   * Pin it to the viewport so it cannot extend the page.
+   */
+  select[aria-hidden="true"] {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    margin: 0 !important;
+  }
+
   /* Dashboard: FinBank light (soft off-white) */
   .dashboard-fintech-wrap {
     background: var(--bg-main);

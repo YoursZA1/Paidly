@@ -96,7 +96,7 @@ export async function replaySupabaseSchema() {
 
 /**
  * Run SQL as a signed-in end user through RLS (like a PostgREST request).
- * @returns {Promise<{ ok: true, rows: any[] } | { ok: false, code?: string, message: string }>}
+ * @returns {Promise<{ ok: true, rows: any[] } | { ok: false, code?: string, message: string, hint?: string }>}
  */
 export async function runAs(db, userId, sql, params = [], { claims = {} } = {}) {
   await db.exec("begin");
@@ -111,6 +111,6 @@ export async function runAs(db, userId, sql, params = [], { claims = {} } = {}) 
     return { ok: true, rows: r.rows, affectedRows: r.affectedRows };
   } catch (err) {
     await db.exec("rollback");
-    return { ok: false, code: err.code, message: String(err.message || err) };
+    return { ok: false, code: err.code, message: String(err.message || err), hint: err.hint };
   }
 }

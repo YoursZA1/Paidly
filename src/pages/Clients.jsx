@@ -12,6 +12,7 @@ import {
   TrashIcon,
   ArrowPathIcon,
   ArrowTopRightOnSquareIcon,
+  ArrowUpTrayIcon,
 } from "@heroicons/react/24/outline";
 import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -19,6 +20,9 @@ import { formatCurrency } from "../components/CurrencySelector";
 import ConfirmationDialog from "../components/shared/ConfirmationDialog";
 import { createPageUrl } from "@/utils";
 import { useClientsQuery } from "@/hooks/useClientsQuery";
+import ClientImportDialog from "@/components/clients/import/ClientImportDialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCompanyContext } from "@/contexts/CompanyContext";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, parseISO, isValid } from "date-fns";
@@ -178,6 +182,13 @@ export default function Clients() {
   const showLoadingSkeleton = isLoading && clients.length === 0;
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const importTouchedRef = useRef(false);
+  const queryClient = useQueryClient();
+  // Owner, admin or manager — the server allows the same people (they can see every client, so the
+  // duplicate check covers the whole business).
+  const { dataScope } = useCompanyContext();
+  const canImportClients = dataScope?.scope === "company";
   const [activeClient, setActiveClient] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingClient, setDeletingClient] = useState(null);
@@ -385,6 +396,18 @@ export default function Clients() {
                   className={`w-5 h-5 text-muted-foreground ${isRefetching ? "animate-spin" : ""}`}
                 />
               </button>
+              {canImportClients ? (
+                <button
+                  type="button"
+                  onClick={() => setImportOpen(true)}
+                  className="flex min-h-11 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-sm font-medium text-foreground active:scale-95"
+                  aria-label="Import clients"
+                  data-testid="clients-import"
+                >
+                  <ArrowUpTrayIcon className="h-5 w-5" />
+                  Import
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => navigate(createPageUrl("EditClient"))}
@@ -483,6 +506,18 @@ export default function Clients() {
                   className={`w-5 h-5 ${isRefetching ? "animate-spin" : ""}`}
                 />
               </button>
+              {canImportClients ? (
+                <button
+                  type="button"
+                  onClick={() => setImportOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border px-2.5 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                  aria-label="Import clients"
+                  data-testid="clients-import"
+                >
+                  <ArrowUpTrayIcon className="h-4 w-4" />
+                  Import
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => navigate(createPageUrl("EditClient"))}
@@ -884,6 +919,22 @@ export default function Clients() {
           </>
         )}
       </main>
+
+      <ClientImportDialog
+        open={importOpen}
+        onOpenChange={(next) => {
+          setImportOpen(next);
+          if (!next && importTouchedRef.current) {
+            importTouchedRef.current = false;
+            // Every client list (invoice and quote pickers included) reloads with the imported rows.
+            void queryClient.invalidateQueries({ queryKey: ["clients"] });
+            void refetch();
+          }
+        }}
+        onImported={() => {
+          importTouchedRef.current = true;
+        }}
+      />
 
       <ConfirmationDialog
         isOpen={showDeleteConfirm}

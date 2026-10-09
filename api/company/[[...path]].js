@@ -18,6 +18,7 @@ import { resolveCompanyRoute } from "../../server/src/company/companyVercelRoute
 import { handleCompanyEmailTemplates } from "../../server/src/company/emailTemplatesRoute.js";
 import { handleReceiptScanRoute } from "../../server/src/expenses/receiptScanRoutes.js";
 import { handleProductImportRoute } from "../../server/src/catalog/productImportRoutes.js";
+import { handleClientImportRoute } from "../../server/src/clients/clientImportRoutes.js";
 
 /**
  * Vercel: /api/company/invite | /api/company/role | /api/company/context
@@ -70,6 +71,10 @@ export default async function handler(req, res) {
   // Product Import: /api/company/product-import?op=check|commit (one segment — Hobby-safe).
   if (pathHead === "product-import" || /\/api\/company\/product-import\/?$/i.test(String(req.url || "").split("?")[0])) {
     return handleProductImportRoute(req, res);
+  }
+  // Client Import: /api/company/client-import?op=check|commit|runs (one segment — Hobby-safe).
+  if (pathHead === "client-import" || /\/api\/company\/client-import\/?$/i.test(String(req.url || "").split("?")[0])) {
+    return handleClientImportRoute(req, res);
   }
   const timelineResolved = resolveClientTimelineRoute(req);
   if (pathHead === "timeline" || pathHead === "client-notes" || pathHead === "client-events" || timelineResolved) {

@@ -28,6 +28,13 @@ import {
 const KEY_FIELDS = ["sku", "price", "cost_price", "stock", "barcode", "vat"];
 const TEXT_FIELDS = ["name", "description", "category", "brand"];
 const NUMERIC_FIELDS = ["price", "cost_price", "stock"];
+
+/**
+ * How a header's columns are read. keyFields: a value there starts a new row. textFields: a line with
+ * only these may be a wrapped continuation of the row above. keepLoneKey: a line with a single key
+ * value is a row, not a section title (so a name-only client stays visible for review).
+ * @typedef {{ fieldFor: (label: string) => string | null, keyFields: string[], textFields: string[], numericFields: string[], keepLoneKey?: boolean }} TableProfile
+ */
 const PAGE_FOOTER = /^(page\s+\d+(\s+of\s+\d+)?|\d+\s*\/\s*\d+)$/i;
 
 /**
@@ -80,6 +87,15 @@ export function itemsToLines(items) {
   });
 }
 
+/** @type {TableProfile} */
+const PRODUCT_PROFILE = Object.freeze({
+  fieldFor: (label) => bestFieldFor(label),
+  keyFields: KEY_FIELDS,
+  textFields: TEXT_FIELDS,
+  numericFields: NUMERIC_FIELDS,
+  keepLoneKey: false,
+});
+
 function bestFieldFor(label) {
   let best = { field: null, score: 0 };
   for (const field of [...KEY_FIELDS, ...TEXT_FIELDS, "unit"]) {
@@ -116,13 +132,13 @@ function headerKey(cells) {
  * Tables anchored on header lines.
  * @param {Line[]} lines all pages, in reading order
  */
-export function tablesFromHeaders(lines) {
+export function tablesFromHeaders(lines, isHeader = looksLikeHeaderRow, profile = PRODUCT_PROFILE) {
   const tables = [];
   let current = null;
   for (const line of lines) {
     const texts = line.cells.map((c) => c.text);
     if (!texts.length) continue;
-    if (line.cells.length >= 2 && looksLikeHeaderRow(texts)) {
+    if (line.cells.length >= 2 && isHeader(texts)) {
       const key = headerKey(line.cells);
       if (current && current.key === key) {
         current.lastLine = null; // same header repeated on the next page
@@ -135,7 +151,7 @@ export function tablesFromHeaders(lines) {
         const next = headerCells[i + 1];
         return {
           label: c.text,
-          field: bestFieldFor(c.text),
+          field: profile.fieldFor(c.text),
           left: prev ? (prev.x1 + c.x0) / 2 : -Infinity,
           right: next ? (c.x1 + next.x0) / 2 : Infinity,
           center: (c.x0 + c.x1) / 2,
@@ -158,7 +174,7 @@ export function tablesFromHeaders(lines) {
     // Text that drifted into a number column ("Hot drinks R185.00"): give the text back to the empty
     // column on its left and keep the number — and flag the row for a closer look.
     current.columns.forEach((col, i) => {
-      if (!NUMERIC_FIELDS.includes(col.field) || !values[i]) return;
+      if (!profile.numericFields.includes(col.field) || !values[i]) return;
       const parse = col.field === "stock" ? parseImportStock : parseImportMoney;
       if (parse(values[i]) != null) return;
       messy = true;
@@ -169,19 +185,19 @@ export function tablesFromHeaders(lines) {
       }
     });
     const filled = values.filter(Boolean).length;
-    const hasKey = current.columns.some((col, i) => values[i] && KEY_FIELDS.includes(col.field));
-    const tableHasKeys = current.columns.some((col) => KEY_FIELDS.includes(col.field));
+    const hasKey = current.columns.some((col, i) => values[i] && profile.keyFields.includes(col.field));
+    const tableHasKeys = current.columns.some((col) => profile.keyFields.includes(col.field));
     const prevLine = current.lastLine;
     const gap = prevLine && prevLine.page === line.page ? line.y - prevLine.y : Infinity;
     const typicalGap = current.gaps.length ? current.gaps.slice().sort((a, b) => a - b)[Math.floor(current.gaps.length / 2)] : line.h * 1.6;
 
     // One lone value in a wide table is a section title or a note, not a product.
-    if (filled === 1 && current.columns.length >= 3 && !(current.rows.length && gap <= Math.max(typicalGap * 1.25, line.h * 1.8) && !hasKey)) {
+    if (filled === 1 && current.columns.length >= 3 && !(profile.keepLoneKey && hasKey) && !(current.rows.length && gap <= Math.max(typicalGap * 1.25, line.h * 1.8) && !hasKey)) {
       continue;
     }
     if (!hasKey && tableHasKeys) {
       // A wrapped description directly under its row joins that row; anything else ends the table.
-      const onlyText = current.columns.every((col, i) => !values[i] || TEXT_FIELDS.includes(col.field) || col.field == null);
+      const onlyText = current.columns.every((col, i) => !values[i] || profile.textFields.includes(col.field) || col.field == null);
       if (onlyText && current.rows.length && gap <= Math.max(typicalGap * 1.25, line.h * 1.8)) {
         const target = current.rows[current.rows.length - 1];
         values.forEach((v, i) => {
@@ -326,14 +342,16 @@ export function mergeTables(tables) {
  * @param {Array<{ pageNumber: number, items: PdfTextItem[] }>} pages
  * @returns {{ table: ReturnType<typeof mergeTables> | null, textChars: number }}
  */
-export function extractPdfProductTable(pages) {
+export function extractPdfProductTable(pages, opts = {}) {
+  const isHeader = opts.isHeader || looksLikeHeaderRow;
+  const profile = opts.profile || PRODUCT_PROFILE;
   const lines = [];
   let textChars = 0;
   for (const p of pages || []) {
     for (const it of p.items || []) textChars += String(it.str || "").replace(/\s/g, "").length;
     lines.push(...itemsToLines((p.items || []).map((it) => ({ ...it, page: p.pageNumber }))));
   }
-  let tables = tablesFromHeaders(lines);
+  let tables = tablesFromHeaders(lines, isHeader, profile);
   if (!tables.length) {
     const fallback = tableFromPatterns(lines);
     tables = fallback ? [fallback] : [];
