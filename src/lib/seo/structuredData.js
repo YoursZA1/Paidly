@@ -96,12 +96,12 @@ export function buildHomeStructuredDataGraph() {
     offers,
     publisher: { "@id": ORG_ID },
     featureList: [
-      "Invoices",
-      "Quotes",
-      "Client management",
-      "Payment tracking",
-      "Email delivery",
-      "Reports",
+      "Invoices and quotes",
+      "Clients",
+      "Get paid",
+      "Products and the till",
+      "Payroll and leave",
+      "Cash flow",
     ],
   };
 
